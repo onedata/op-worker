@@ -36,7 +36,6 @@
     hardlink_file_deleted_link_deleted_test/1,
 
     %% --- symlinks ---
-    symlink_is_ignored_by_initial_scan_test/1,
     symlink_is_ignored_by_continuous_scan_test/1
 ]).
 
@@ -53,7 +52,6 @@ all() -> [
     hardlink_file_deleted_link_deleted_test,
 
     %% --- symlinks ---
-    %% TODO VFS-13687 symlink_is_ignored_by_initial_scan_test - blocked on a deferred-initial-scan util
     symlink_is_ignored_by_continuous_scan_test
 ].
 
@@ -88,7 +86,6 @@ hardlink_file_deleted_link_deleted_test(_Config) -> ?run_test().
 %% --- symlinks ---
 
 
-symlink_is_ignored_by_initial_scan_test(_Config) -> ?run_test().
 symlink_is_ignored_by_continuous_scan_test(_Config) -> ?run_test().
 
 

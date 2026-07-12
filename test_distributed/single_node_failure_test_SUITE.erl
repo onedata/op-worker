@@ -253,9 +253,9 @@ prepare_import(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
 
     % check whether initial scan has been finished
-    storage_import_test_base:assertInitialScanFinished(ImportingOpNode, SpaceId, ?ATTEMPTS),
-    storage_import_test_base:assertNoScanInProgress(ImportingOpNode, SpaceId, ?ATTEMPTS),
-    FinishedScans = storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId),
+    assert_initial_scan_finished(ImportingOpNode, SpaceId),
+    assert_no_scan_in_progress(ImportingOpNode, SpaceId),
+    FinishedScans = get_finished_scans_num(ImportingOpNode, SpaceId),
 
     % wait for new files to occur on storage
     % the storage supporting the space is a nulldevice storage with simulated filesystem that grows with the time
@@ -263,7 +263,7 @@ prepare_import(InitialData, TestData) ->
     % mock importing process to block
     block_import(ImportingOpNode),
     % forcefully start import scan
-    storage_import_test_base:start_scan(ImportingOpNode, SpaceId),
+    start_scan(ImportingOpNode, SpaceId),
 
     TestData#{finished_scans => FinishedScans}.
 
@@ -459,7 +459,7 @@ verify_import(InitialData, TestData) ->
     % get last finished scan
     Scans0 = kv_utils:get(finished_scans, TestData),
     % wait till next scan is finished
-    ?assertEqual(Scans0 + 1, storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId), ?ATTEMPTS).
+    ?assertEqual(Scans0 + 1, get_finished_scans_num(ImportingOpNode, SpaceId), ?ATTEMPTS).
 
 
 verify_auto_cleaning(InitialData, TestData) ->
@@ -583,6 +583,31 @@ verify_incoming_migration_transfer(InitialData, TestData) ->
 
 get_application_closing_status(Worker) ->
     rpc:call(Worker, datastore_worker, get_application_closing_status, []).
+
+
+assert_initial_scan_finished(OpwNode, SpaceId) ->
+    ?assertEqual(true, try
+        rpc:call(OpwNode, storage_import_monitoring, is_initial_scan_finished, [SpaceId])
+    catch _:_ ->
+        error
+    end, ?ATTEMPTS).
+
+
+assert_no_scan_in_progress(OpwNode, SpaceId) ->
+    ?assertEqual(false, try
+        rpc:call(OpwNode, storage_import_monitoring, is_scan_in_progress, [SpaceId])
+    catch _:_ ->
+        error
+    end, ?ATTEMPTS).
+
+
+get_finished_scans_num(OpwNode, SpaceId) ->
+    #{<<"scans">> := Scans} = rpc:call(OpwNode, storage_import_monitoring, describe, [SpaceId]),
+    Scans.
+
+
+start_scan(OpwNode, SpaceId) ->
+    ok = rpc:call(OpwNode, storage_import, start_auto_scan, [SpaceId]).
 
 
 block_import(OpwNode) ->

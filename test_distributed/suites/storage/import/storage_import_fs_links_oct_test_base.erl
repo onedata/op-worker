@@ -60,7 +60,6 @@
     hardlink_file_deleted_link_deleted_test/1,
 
     %% --- symlinks ---
-    symlink_is_ignored_by_initial_scan_test/1,
     symlink_is_ignored_by_continuous_scan_test/1
 ]).
 
@@ -167,19 +166,6 @@ hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeleti
 %%%===================================================================
 %%% Symlink tests
 %%%===================================================================
-
-
-symlink_is_ignored_by_initial_scan_test(_SuiteCtx) ->
-    %% TODO VFS-13687 - blocked on a helper we do not have yet. The legacy test
-    %% creates the symlink and only THEN runs the very first scan, asserting that
-    %% the initial import does not delete a logical symlink that has no storage
-    %% counterpart. In the oct framework storage_import_test_utils:init_testcase/3
-    %% auto-triggers scan 1 as soon as the space support is set up, so the symlink
-    %% (which needs the space to exist first) cannot be created before scan 1.
-    %% Agreed approach: add a util that sets the space up with the initial scan
-    %% deferred, then create the symlink and force scan 1 - to be implemented as a
-    %% separate task; this body is pending that util.
-    error(not_yet_implemented).
 
 
 symlink_is_ignored_by_continuous_scan_test(SuiteCtx) ->

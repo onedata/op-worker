@@ -38,6 +38,7 @@
     replace_file_with_dir_test/1,
     replace_empty_dir_with_file_test/1,
     replace_non_empty_dir_with_file_test/1,
+    replace_remotely_created_non_empty_dir_with_file_test/1,
     update_timestamps_file_import_test/1,
     create_file_in_dir_update_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
@@ -103,6 +104,7 @@ all() -> [
     replace_file_with_dir_test,
     replace_empty_dir_with_file_test,
     replace_non_empty_dir_with_file_test,
+    replace_remotely_created_non_empty_dir_with_file_test,
     update_timestamps_file_import_test,
     create_file_in_dir_update_test,
     create_file_in_dir_exceed_batch_update_test,
@@ -184,6 +186,7 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(_Config
 replace_file_with_dir_test(_Config) -> ?run_test().
 replace_empty_dir_with_file_test(_Config) -> ?run_test().
 replace_non_empty_dir_with_file_test(_Config) -> ?run_test().
+replace_remotely_created_non_empty_dir_with_file_test(_Config) -> ?run_test().
 update_timestamps_file_import_test(_Config) -> ?run_test().
 create_file_in_dir_update_test(_Config) -> ?run_test().
 create_file_in_dir_exceed_batch_update_test(_Config) -> ?run_test().

@@ -66,6 +66,7 @@
     replace_file_with_dir_test/1,
     replace_empty_dir_with_file_test/1,
     replace_non_empty_dir_with_file_test/1,
+    replace_remotely_created_non_empty_dir_with_file_test/1,
     update_timestamps_file_import_test/1,
     create_file_in_dir_update_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
@@ -782,6 +783,104 @@ replace_non_empty_dir_with_file_test(SuiteCtx) ->
         <<"deleted">> => 2,
         <<"unmodified">> => RootUnmodified,
         created_hist => 1 + Scan1Created,
+        modified_hist => RootModified,
+        deleted_hist => 2
+    }).
+
+
+%% Like replace_non_empty_dir_with_file_test, but the replaced directory and its
+%% child file originate from the REMOTE provider via LFM instead of from the
+%% storage: reading the child on the importing provider replicates its content,
+%% which materializes the file (and, on POSIX, the directory) on the imported
+%% storage. Both are then replaced, directly on the storage, by a regular file
+%% under the directory's name - the scan must delete the whole logical subtree
+%% (invalidating the old guids on both providers, with no counterparts left on
+%% the remote one) and import the file in its place.
+replace_remotely_created_non_empty_dir_with_file_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector,
+        storage_type = StorageType
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+    ChildFileName = ?RAND_STR(),
+    ChildContent = ?RAND_STR(),
+    NewContent = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, DirName]),
+    ChildStorageFileId = filepath_utils:join([StorageFileId, ChildFileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx = #provider_ctx{
+            node = ImportingProviderNode, session_id = ImportingProviderSessionId
+        },
+        non_importing_provider_ctx = #provider_ctx{
+            node = NonImportingProviderNode, session_id = NonImportingProviderSessionId
+        }
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
+
+    #object{guid = DirGuid, children = [#object{guid = ChildFileGuid}]} =
+        storage_import_test_utils:create_file_tree_via_remote_provider(
+            TestCaseCtx, #dir_spec{name = DirName, children = [
+                #file_spec{name = ChildFileName, content = ChildContent}
+            ]}
+        ),
+    %% reading on the importing provider replicates the child's content,
+    %% materializing it on the imported storage
+    storage_import_test_utils:assert_file_content(
+        ImportingProviderCtx,
+        filepath_utils:join([SpacePath, DirName, ChildFileName]),
+        ChildContent
+    ),
+    ?assertMatch(
+        {ok, _},
+        storage_file_setup_utils:stat(ImportingProviderSelector, ImportedStorageId, ChildStorageFileId),
+        ?ATTEMPTS
+    ),
+
+    %% replace the dir with a same-named regular file, directly on the storage
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_file_setup_utils:delete_file(
+        ImportingProviderSelector, ImportedStorageId, ChildStorageFileId, byte_size(ChildContent)
+    ),
+    storage_file_setup_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, NewContent
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = DirName, content = NewContent}
+    ),
+    %% the replaced entities must be gone by guid on both providers
+    lists:foreach(fun(Guid) ->
+        ?assertMatch(
+            {error, ?ENOENT},
+            lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(Guid)),
+            ?ATTEMPTS
+        ),
+        ?assertMatch(
+            {error, ?ENOENT},
+            lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, ?FILE_REF(Guid)),
+            ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
+        )
+    end, [DirGuid, ChildFileGuid]),
+
+    %% the root's logical mtime (stamped by the remote LFM creates) predates the
+    %% storage-side replace by at least the ensure_mtime_progression second, so
+    %% the root verdict is deterministic despite the LFM-arranged layout
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => RootModified,
+        %% the dir + its child, on both storage types; the LFM-created originals
+        %% were never counted "created" (scan 1 ran on an empty storage)
+        <<"deleted">> => 2,
+        <<"unmodified">> => RootUnmodified,
+        created_hist => 1,
         modified_hist => RootModified,
         deleted_hist => 2
     }).
