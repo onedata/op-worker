@@ -31,6 +31,8 @@
 -include("storage_import_oct_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/datastore/datastore_models.hrl").
@@ -64,6 +66,7 @@
     replace_file_with_dir_test/1,
     replace_empty_dir_with_file_test/1,
     replace_non_empty_dir_with_file_test/1,
+    replace_remotely_created_non_empty_dir_with_file_test/1,
     update_timestamps_file_import_test/1,
     create_file_in_dir_update_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
@@ -78,7 +81,10 @@
     update_syncs_files_after_previous_update_failed_test/1,
 
     %% --- suffixes ---
-    %% TODO VFS-13687 port the suffix tests (e.g. storage_import_test_base:create_delete_import2_test/1)
+    should_not_import_recreated_file_with_suffix_on_storage_test/1,
+    should_update_blocks_of_recreated_file_with_suffix_on_storage_test/1,
+    should_not_import_replicated_file_with_suffix_on_storage_test/1,
+    should_update_replicated_file_with_suffix_on_storage_test/1,
 
     %% --- config ---
     changing_max_depth_test/1,
@@ -86,15 +92,28 @@
     force_stop_test/1,
 
     %% --- protection ---
-    %% TODO VFS-13687 port the *_protection_should_not_be_* tests from storage_import_test_base
+    file_with_data_protection_should_not_be_updated_test/1,
+    file_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    file_with_data_protection_should_not_be_deleted_test/1,
+    file_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    empty_dir_with_data_protection_should_not_be_updated_test/1,
+    empty_dir_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    empty_dir_with_data_protection_should_not_be_deleted_test/1,
+    empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test/1,
 
     %% --- not reimported ---
     should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test/1,
     should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test/1,
+    should_not_reimport_deleted_but_still_opened_file_test/1,
     should_not_delete_not_replicated_file_created_in_remote_provider_test/1,
     should_not_delete_dir_created_in_remote_provider_test/1,
     should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test/1,
-    should_not_sync_file_during_replication_test/1
+    should_not_sync_file_during_replication_test/1,
+    should_not_invalidate_file_after_replication_test/1
 ]).
 
 
@@ -128,6 +147,14 @@ init_per_testcase(Case = force_stop_test, TestSuiteCtx = #storage_import_test_su
     ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, 1),
     Config2 = [{old_storage_import_dir_batch_size, OldDirBatchSize} | Config],
     init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config2);
+
+init_per_testcase(Case, TestSuiteCtx, Config) when
+    Case =:= should_not_import_recreated_file_with_suffix_on_storage_test;
+    Case =:= should_update_blocks_of_recreated_file_with_suffix_on_storage_test;
+    Case =:= should_not_reimport_deleted_but_still_opened_file_test
+->
+    storage_import_test_utils:mock_opened_file_deletion_to_use_deletion_marker(TestSuiteCtx),
+    init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 init_per_testcase(_Case, _TestSuiteCtx, Config) ->
     lfm_proxy:init(Config).
@@ -182,6 +209,14 @@ end_per_testcase(Case = force_stop_test, TestSuiteCtx = #storage_import_test_sui
     Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
     OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
     ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+end_per_testcase(Case, TestSuiteCtx, Config) when
+    Case =:= should_not_import_recreated_file_with_suffix_on_storage_test;
+    Case =:= should_update_blocks_of_recreated_file_with_suffix_on_storage_test;
+    Case =:= should_not_reimport_deleted_but_still_opened_file_test
+->
+    storage_import_test_utils:unmock_fslogic_delete(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(Case, TestSuiteCtx, Config) when
@@ -545,15 +580,21 @@ change_file_content_update_test(SuiteCtx) ->
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
-%% A file's content is overwritten on the storage at (deliberately forced to be)
-%% the EXACT same timestamp as storage_import's own last recorded stat of that
-%% file - exercising the boundary of the "already handled" fast-path shortcut in
-%% storage_import_engine:maybe_update_file_location/4, which requires the stored
-%% last_stat to be STRICTLY greater than the storage mtime to skip re-checking a
-%% file (if it used >= instead of >, this test's real content change would be
-%% incorrectly skipped). The change is same-size, so the fast-path is the only
-%% thing standing between this test and a false "unmodified". POSIX-only
-%% (relies on forcing the storage mtime).
+%% A file's content is overwritten on the storage with a same-size change while
+%% its storage_sync_info is forced into the EXACT boundary of the "already
+%% handled" fast-path shortcut in
+%% storage_import_engine:maybe_update_file_location/4: the recorded mtime and
+%% last_stat are both set equal to the file's storage mtime. That shortcut skips
+%% re-checking a file only when the recorded last_stat is STRICTLY greater than
+%% the storage mtime, so sitting exactly on the boundary the scan must NOT skip
+%% and must still detect the real content change (were the guard '>=' instead of
+%% '>', the change would be wrongly skipped and the content assertion below would
+%% fail). The change is same-size, so this shortcut is the only thing standing
+%% between the test and a false "unmodified". The boundary value is chosen
+%% strictly above the file's logical mtime, so that - once the shortcut is
+%% (correctly) not taken - the same-size change is still detectable, its storage
+%% mtime being newer than the logical one. POSIX-only (relies on forcing the
+%% storage mtime).
 change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     FileName = ?RAND_STR(),
@@ -568,22 +609,24 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
 
-    %% overwrite the content, then force the file's storage mtime to be EQUAL
-    %% (not smaller) to storage_sync_info's recorded last_stat - the exact
-    %% boundary of the fast-path guard described in the doc above
-    LastStatTime = ?rpc(ImportingProviderSelector, begin
-        {ok, #document{value = #storage_sync_info{last_stat = LastStat}}} =
-            storage_sync_info:get(StorageFileId, SpaceId),
-        LastStat
-    end),
+    %% read the file's storage mtime (equal to its logical mtime right after
+    %% import) and derive a boundary timestamp strictly above it (see the doc
+    %% above): the same-size overwrite stays detectable via mtime, while forcing
+    %% the recorded mtime AND last_stat to that same value lands scan 2 exactly
+    %% on the fast-path guard
+    FileMtime = storage_file_setup_utils:get_mtime(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId
+    ),
+    BoundaryTime = FileMtime + 1,
     ok = ?rpc(ImportingProviderSelector, storage_sync_info:create_or_update(
-        StorageFileId, SpaceId, fun(SSI) -> {ok, SSI#storage_sync_info{last_stat = LastStatTime}} end
+        StorageFileId, SpaceId,
+        fun(SSI) -> {ok, SSI#storage_sync_info{mtime = BoundaryTime, last_stat = BoundaryTime}} end
     )),
     storage_file_setup_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, ChangedContent
     ),
     storage_file_setup_utils:set_mtime(
-        ImportingProviderSelector, ImportedStorageId, StorageFileId, LastStatTime
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, BoundaryTime
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
@@ -740,6 +783,104 @@ replace_non_empty_dir_with_file_test(SuiteCtx) ->
         <<"deleted">> => 2,
         <<"unmodified">> => RootUnmodified,
         created_hist => 1 + Scan1Created,
+        modified_hist => RootModified,
+        deleted_hist => 2
+    }).
+
+
+%% Like replace_non_empty_dir_with_file_test, but the replaced directory and its
+%% child file originate from the REMOTE provider via LFM instead of from the
+%% storage: reading the child on the importing provider replicates its content,
+%% which materializes the file (and, on POSIX, the directory) on the imported
+%% storage. Both are then replaced, directly on the storage, by a regular file
+%% under the directory's name - the scan must delete the whole logical subtree
+%% (invalidating the old guids on both providers, with no counterparts left on
+%% the remote one) and import the file in its place.
+replace_remotely_created_non_empty_dir_with_file_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector,
+        storage_type = StorageType
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+    ChildFileName = ?RAND_STR(),
+    ChildContent = ?RAND_STR(),
+    NewContent = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, DirName]),
+    ChildStorageFileId = filepath_utils:join([StorageFileId, ChildFileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx = #provider_ctx{
+            node = ImportingProviderNode, session_id = ImportingProviderSessionId
+        },
+        non_importing_provider_ctx = #provider_ctx{
+            node = NonImportingProviderNode, session_id = NonImportingProviderSessionId
+        }
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
+
+    #object{guid = DirGuid, children = [#object{guid = ChildFileGuid}]} =
+        storage_import_test_utils:create_file_tree_via_remote_provider(
+            TestCaseCtx, #dir_spec{name = DirName, children = [
+                #file_spec{name = ChildFileName, content = ChildContent}
+            ]}
+        ),
+    %% reading on the importing provider replicates the child's content,
+    %% materializing it on the imported storage
+    storage_import_test_utils:assert_file_content(
+        ImportingProviderCtx,
+        filepath_utils:join([SpacePath, DirName, ChildFileName]),
+        ChildContent
+    ),
+    ?assertMatch(
+        {ok, _},
+        storage_file_setup_utils:stat(ImportingProviderSelector, ImportedStorageId, ChildStorageFileId),
+        ?ATTEMPTS
+    ),
+
+    %% replace the dir with a same-named regular file, directly on the storage
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_file_setup_utils:delete_file(
+        ImportingProviderSelector, ImportedStorageId, ChildStorageFileId, byte_size(ChildContent)
+    ),
+    storage_file_setup_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, NewContent
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = DirName, content = NewContent}
+    ),
+    %% the replaced entities must be gone by guid on both providers
+    lists:foreach(fun(Guid) ->
+        ?assertMatch(
+            {error, ?ENOENT},
+            lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(Guid)),
+            ?ATTEMPTS
+        ),
+        ?assertMatch(
+            {error, ?ENOENT},
+            lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, ?FILE_REF(Guid)),
+            ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
+        )
+    end, [DirGuid, ChildFileGuid]),
+
+    %% the root's logical mtime (stamped by the remote LFM creates) predates the
+    %% storage-side replace by at least the ensure_mtime_progression second, so
+    %% the root verdict is deterministic despite the LFM-arranged layout
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => RootModified,
+        %% the dir + its child, on both storage types; the LFM-created originals
+        %% were never counted "created" (scan 1 ran on an empty storage)
+        <<"deleted">> => 2,
+        <<"unmodified">> => RootUnmodified,
+        created_hist => 1,
         modified_hist => RootModified,
         deleted_hist => 2
     }).
@@ -1230,7 +1371,160 @@ update_syncs_files_after_previous_update_failed_test(SuiteCtx) ->
 
 
 %% --- suffixes ---
-%% TODO VFS-13687 port the suffix tests (e.g. storage_import_test_base:create_delete_import2_test/1)
+%%
+%% When a storage file cannot be created under its plain name - the name being
+%% still occupied by the storage file of a deleted-but-still-opened file
+%% (guarded by a deletion marker), or by a same-named file of another provider
+%% - it is created under a name with the conflicting-file suffix
+%% (?CONFLICTING_STORAGE_FILE_NAME). Scans must recognize both kinds of entries
+%% as belonging to already-known logical files: never import them as new files
+%% (each is counted "unmodified"; the deletion-marker-guarded one is skipped
+%% via the marker, the suffixed one is mapped back to its logical file by the
+%% uuid embedded in the name - storage_import_engine:sync_file/2), yet still
+%% detect their storage-side modifications and update the right logical file.
+%% The suffixed layouts are arranged via LFM after an initial scan of an empty
+%% storage, so it is the continuous scans that face them.
+
+
+should_not_import_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
+
+    #{
+        file_name := FileName,
+        space_file_path := SpaceFilePath,
+        old_file_handle := OldFileHandle,
+        old_content := OldContent,
+        recreated_file_guid := RecreatedFileGuid,
+        recreated_content := RecreatedContent
+    } = setup_recreated_file_with_suffix_on_storage(TestCaseCtx),
+
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% only the recreated file is visible in the space
+    ?assertMatch({ok, [{RecreatedFileGuid, FileName}]}, lfm_proxy:get_children(
+        ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
+    )),
+    %% the deleted file's still-open handle reads its original content
+    ?assertEqual({ok, OldContent}, lfm_proxy:read(
+        ImportingProviderNode, OldFileHandle, 0, byte_size(OldContent)
+    )),
+    ok = lfm_proxy:close(ImportingProviderNode, OldFileHandle),
+    %% while the path resolves to the recreated file
+    storage_import_test_utils:assert_file_content(
+        ImportingProviderCtx, SpaceFilePath, RecreatedContent
+    ),
+    %% the recreated file is LFM-created, the deleted-but-open one marker-guarded
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 0).
+
+
+should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
+    TestCaseCtx = #storage_import_test_case_ctx{
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
+
+    #{
+        recreated_file_guid := RecreatedFileGuid,
+        recreated_content := RecreatedContent,
+        suffixed_storage_file_id := SuffixedStorageFileId
+    } = setup_recreated_file_with_suffix_on_storage(TestCaseCtx),
+
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 0),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    ChangedContent = change_one_byte_of_storage_file(
+        TestCaseCtx, SuffixedStorageFileId, RecreatedContent
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    %% the change made to the suffixed storage file is reflected in the
+    %% recreated logical file, on both providers
+    assert_file_content_by_guid(
+        ImportingProviderCtx, RecreatedFileGuid, ChangedContent, ?ATTEMPTS
+    ),
+    assert_file_content_by_guid(
+        NonImportingProviderCtx, RecreatedFileGuid, ChangedContent,
+        ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
+    ),
+    assert_suffixed_storage_file_update_detected(TestCaseCtx, _LfmCreated = 1, _Replicated = 0).
+
+
+should_not_import_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
+
+    #{
+        local_file_guid := LocalFileGuid,
+        local_content := LocalContent,
+        remote_file_guid := RemoteFileGuid,
+        remote_content := RemoteContent
+    } = setup_replicated_file_with_suffix_on_storage(TestCaseCtx),
+
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% still exactly the two name-conflicting logical files in the space,
+    %% each with its content intact
+    ?assertMatch({ok, [_, _]}, lfm_proxy:get_children(
+        ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
+    )),
+    assert_file_content_by_guid(ImportingProviderCtx, LocalFileGuid, LocalContent, ?ATTEMPTS),
+    assert_file_content_by_guid(ImportingProviderCtx, RemoteFileGuid, RemoteContent, ?ATTEMPTS),
+    %% the local file is LFM-created, the remote one lands on storage as a replica
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 1).
+
+
+should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
+    TestCaseCtx = #storage_import_test_case_ctx{
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
+
+    #{
+        remote_file_guid := RemoteFileGuid,
+        remote_content := RemoteContent,
+        suffixed_storage_file_id := SuffixedStorageFileId
+    } = setup_replicated_file_with_suffix_on_storage(TestCaseCtx),
+
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 1),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    ChangedContent = change_one_byte_of_storage_file(
+        TestCaseCtx, SuffixedStorageFileId, RemoteContent
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    %% the change made to the suffixed replica is reflected in the remotely
+    %% created logical file - also back on its origin provider, whose replica
+    %% is invalidated and re-fetched
+    assert_file_content_by_guid(
+        ImportingProviderCtx, RemoteFileGuid, ChangedContent, ?ATTEMPTS
+    ),
+    assert_file_content_by_guid(
+        NonImportingProviderCtx, RemoteFileGuid, ChangedContent,
+        ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
+    ),
+    assert_suffixed_storage_file_update_detected(TestCaseCtx, _LfmCreated = 1, _Replicated = 1).
 
 
 %% --- config ---
@@ -1375,7 +1669,7 @@ force_start_test(SuiteCtx) ->
     }).
 
 
-%% The initial scan of a large tree (1110 nodes, traversed with
+%% The initial scan of a large tree (280 nodes, traversed with
 %% storage_import_dir_batch_size = 1 - see init_per_testcase) is aborted via
 %% storage_import:stop_auto_scan/1 as soon as the first file import is
 %% observed (through a passthrough mock signalling this process): the scan
@@ -1383,8 +1677,8 @@ force_start_test(SuiteCtx) ->
 %% failures; the next (continuous) scan must then import the remainder.
 force_stop_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
-    %% [10, 10, 10] => 10 dirs x 10 subdirs x 10 files = 1110 nodes
-    FileTreeSpec = storage_import_test_utils:gen_nested_tree_spec([10, 10, 10], ?RAND_STR()),
+    %% [5, 5, 10] => 5 dirs x 5 subdirs x 10 files = 280 nodes
+    FileTreeSpec = storage_import_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR()),
 
     %% set up before init_testcase, as the initial scan auto-runs on space setup
     mock_import_file_started_notification(SuiteCtx, self()),
@@ -1412,9 +1706,16 @@ force_stop_test(SuiteCtx) ->
         <<"modified">> := Scan1Modified,
         <<"unmodified">> := Scan1Unmodified
     } = storage_import_test_utils:get_storage_import_monitoring_state(TestCaseCtx),
+    %% bound expressed relative to the imported-entry count (expected_created_count/1
+    %% - dirs + files on POSIX, files only on S3): at most a single full pass (all
+    %% entries + the space root) on POSIX, and strictly fewer than all files on S3
+    %% (at least one must be left for the next scan). A COMPLETED batch-size-1 scan
+    %% inflates far past either (re-listing each dir once per one-entry batch), so
+    %% this cleanly separates an aborted scan from a completed one
+    ExpectedCreated = storage_import_test_utils:expected_created_count(TestCaseCtx),
     MaxProcessedByAbortedScan = case StorageType of
-        posix -> 1111;
-        s3 -> 999
+        posix -> ExpectedCreated + 1;
+        s3 -> ExpectedCreated - 1
     end,
     ?assert(Scan1Created + Scan1Modified + Scan1Unmodified =< MaxProcessedByAbortedScan),
 
@@ -1422,11 +1723,6 @@ force_stop_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2, #{}, ?LARGE_IMPORT_SCAN_ATTEMPTS),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    TotalCreated = case StorageType of
-        posix -> 1110;
-        %% only the 1000 files count on s3
-        s3 -> 1000
-    end,
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => skip,
@@ -1434,12 +1730,588 @@ force_stop_test(SuiteCtx) ->
         <<"createdMinHist">> => skip,
         <<"createdHourHist">> => skip,
         %% cumulative over both scans: the whole tree, imported exactly once
-        <<"createdDayHist">> => TotalCreated
+        <<"createdDayHist">> => ExpectedCreated
     }).
 
 
 %% --- protection ---
-%% TODO VFS-13687 port the *_protection_should_not_be_* tests from storage_import_test_base
+%%
+%% Entries under a dataset with protection flags set must be left alone by
+%% continuous scans: neither a storage-side modification (content/mode) nor a
+%% storage-side deletion may be reflected in the space while the flags are set.
+%% Each scenario runs 3 scans: initial import, mutation under protection (scan
+%% 2 must detect but suppress the change) and a re-scan after unsetting the
+%% flags (scan 3 must finally apply it). Scan 3 re-detects the change with NO
+%% further storage mutation: on suppressing a protected change the scan marks
+%% the parent's storage_sync_info (any_protected_child_changed), which withholds
+%% committing the parent's children-attrs hashes and mtime
+%% (storage_sync_info:mark_processed_batch/8) - so the next scan sees the same
+%% storage-vs-space difference again.
+%%
+%% Counter-wise the suppression shows up as follows (all worked out from
+%% storage_sync_traverse:do_update_master_job/2,
+%% storage_import_engine:maybe_update_attrs/4 and
+%% storage_import_deletion:maybe_delete_file_and_update_counters/3):
+%%  * a suppressed file modification counts as "unmodified";
+%%  * a protected DIRECTORY is not counted at all (its master job returns
+%%    before the counter update) and jobs for its children are never scheduled;
+%%  * a protected entry found missing from the storage by deletion detection is
+%%    skipped without touching the created/modified/unmodified/deleted counters.
+
+
+file_with_data_protection_should_not_be_updated_test(SuiteCtx) ->
+    file_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+file_with_data_and_metadata_protection_should_not_be_updated_test(SuiteCtx) ->
+    file_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A protected file is appended to and (on POSIX) chmod-ed directly on the
+%% storage - scan 2 must suppress both, scan 3 (after the flags are unset) must
+%% apply them in full. The chmod half is POSIX-only: object storages hold no
+%% per-object POSIX mode (the helper's chmod is a no-op there), so on S3 only
+%% the appended content/size is exercised.
+-spec file_with_protection_flags_should_not_be_updated_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+file_with_protection_flags_should_not_be_updated_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        storage_type = StorageType,
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    FileName = ?RAND_STR(),
+    InitialContent = ?RAND_STR(),
+    AppendedContent = ?RAND_STR(),
+    NewMode = 8#777,
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
+    ),
+
+    SpaceFilePath = filepath_utils:join([SpacePath, FileName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceFilePath, ProtectionFlags
+    ),
+
+    storage_file_setup_utils:write_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId,
+        byte_size(InitialContent), AppendedContent
+    ),
+    ?IF_POSIX(StorageType, storage_file_setup_utils:chmod(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, NewMode
+    )),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the change must not have been applied
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceFilePath,
+        with_posix_mode(StorageType, ?DEFAULT_FILE_PERMS, #{size => byte_size(InitialContent)})
+    ),
+    storage_import_test_utils:assert_file_content(
+        ImportingProviderCtx, SpaceFilePath, InitialContent
+    ),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        %% the space root + the file (a suppressed modification counts as "unmodified")
+        <<"unmodified">> => 2
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    UpdatedContent = <<InitialContent/binary, AppendedContent/binary>>,
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = UpdatedContent}
+    ),
+    %% with the flags unset, the append is applied on both storages; the chmod is
+    %% POSIX-only (a no-op on object storage), so its effect is asserted there only
+    ExpectedAttrs = with_posix_mode(
+        StorageType, NewMode, #{size => byte_size(UpdatedContent)}
+    ),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceFilePath, ExpectedAttrs),
+    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceFilePath, ExpectedAttrs),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"unmodified">> => 1,
+        modified_hist => 1,
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, 1}
+    }).
+
+
+file_with_data_protection_should_not_be_deleted_test(SuiteCtx) ->
+    file_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+file_with_data_and_metadata_protection_should_not_be_deleted_test(SuiteCtx) ->
+    file_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A protected file is removed directly from the storage - scan 2 must not
+%% delete it from the space (its metadata stays intact, although reading the
+%% data genuinely fails, as it is already gone from the storage); scan 3 (after
+%% the flags are unset) must finally delete it.
+-spec file_with_protection_flags_should_not_be_deleted_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+file_with_protection_flags_should_not_be_deleted_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        storage_type = StorageType,
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        file_tree_spec = FileTreeSpec,
+        importing_provider_ctx = ImportingProviderCtx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #file_spec{name = FileName, content = Content}, SuiteCtx
+    ),
+
+    SpaceFilePath = filepath_utils:join([SpacePath, FileName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceFilePath, ProtectionFlags
+    ),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_import_test_utils:delete_file_tree_from_storage(
+        ImportingProviderSelector, ImportedStorageId, FileTreeSpec
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the file must have stayed in the space with its metadata intact...
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceFilePath,
+        with_posix_mode(StorageType, ?DEFAULT_FILE_PERMS, #{size => byte_size(Content)})
+    ),
+    %% ...but its data is genuinely gone from the storage: opening the file
+    %% still succeeds (its metadata is intact and the storage file is not
+    %% touched until the data is actually accessed - lazily on object storages,
+    %% and via direct IO on POSIX), yet reading its data fails, as the backing
+    %% storage file has been removed
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(
+        ImportingProviderNode, ImportingProviderSessionId, {path, SpaceFilePath}, read
+    )),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:read(
+        ImportingProviderNode, Handle, 0, byte_size(Content)
+    )),
+    ok = lfm_proxy:close(ImportingProviderNode, Handle),
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified,
+        modified_hist => RootModified
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        <<"deleted">> => 1,
+        <<"unmodified">> => 1,
+        deleted_hist => 1,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified,
+        <<"modifiedMinHist">> => {range, 0, RootModified},
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, 1}
+    }).
+
+
+empty_dir_with_data_protection_should_not_be_updated_test(SuiteCtx) ->
+    empty_dir_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+empty_dir_with_data_and_metadata_protection_should_not_be_updated_test(SuiteCtx) ->
+    empty_dir_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A protected empty directory is chmod-ed directly on the storage - scan 2
+%% must suppress the change, scan 3 (after the flags are unset) must apply it.
+%% A directory's mode change is (re)detected by comparing its own storage attrs
+%% against the logical ones on every scan (every visited directory gets its own
+%% master job), independently of the children-hash/mtime machinery. POSIX-only
+%% (an empty directory has no storage object on S3, nor a mode to change).
+-spec empty_dir_with_protection_flags_should_not_be_updated_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+empty_dir_with_protection_flags_should_not_be_updated_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+    NewMode = 8#777,
+    StorageDirId = filepath_utils:join([<<"/">>, DirName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #dir_spec{name = DirName}, SuiteCtx
+    ),
+
+    SpaceDirPath = filepath_utils:join([SpacePath, DirName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceDirPath, ProtectionFlags
+    ),
+
+    storage_file_setup_utils:chmod(
+        ImportingProviderSelector, ImportedStorageId, StorageDirId, NewMode
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the change must not have been applied
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{
+        mode => ?DEFAULT_DIR_PERMS
+    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        %% the space root only - a protected directory is not counted at all
+        <<"unmodified">> => 1
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{mode => NewMode}),
+    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceDirPath, #{mode => NewMode}),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"unmodified">> => 1,
+        modified_hist => 1,
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, 1}
+    }).
+
+
+empty_dir_with_data_protection_should_not_be_deleted_test(SuiteCtx) ->
+    empty_dir_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test(SuiteCtx) ->
+    empty_dir_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A protected empty directory is removed directly from the storage - scan 2
+%% must not delete it from the space, scan 3 (after the flags are unset) must.
+%% POSIX-only (an empty directory has no storage object on S3 to remove).
+-spec empty_dir_with_protection_flags_should_not_be_deleted_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+empty_dir_with_protection_flags_should_not_be_deleted_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        file_tree_spec = FileTreeSpec,
+        importing_provider_ctx = ImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #dir_spec{name = DirName}, SuiteCtx
+    ),
+
+    SpaceDirPath = filepath_utils:join([SpacePath, DirName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceDirPath, ProtectionFlags
+    ),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_import_test_utils:delete_file_tree_from_storage(
+        ImportingProviderSelector, ImportedStorageId, FileTreeSpec
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the directory must have stayed in the space
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{
+        mode => ?DEFAULT_DIR_PERMS
+    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        %% the removal of the root's direct child bumps the root's mtime
+        <<"modified">> => 1,
+        <<"unmodified">> => 0,
+        modified_hist => 1
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        <<"deleted">> => 1,
+        <<"unmodified">> => 1,
+        deleted_hist => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"modifiedMinHist">> => {range, 0, 1},
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, 1}
+    }).
+
+
+dir_and_its_child_with_data_protection_should_not_be_updated_test(SuiteCtx) ->
+    dir_and_its_child_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(SuiteCtx) ->
+    dir_and_its_child_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A directory holding a file is protected (the file inherits the flags via the
+%% effective dataset), then both are mutated directly on the storage (the dir is
+%% chmod-ed; the file is appended to and chmod-ed). Scan 2 must suppress all of
+%% it - having detected the dir's own change, it does not even schedule jobs for
+%% the protected dir's children, so the file's mutation stays invisible; scan 3
+%% (after the flags are unset) must apply everything.
+%%
+%% POSIX-only: on a flat (object) storage the re-application half breaks down
+%% for entries nested under a directory - the suppressed-change marker lands on
+%% the storage_sync_info of the file's direct parent (a virtual directory whose
+%% document no flat-storage scan ever consults), while the space root's
+%% children-attrs hash - the only change-detection input on a flat storage -
+%% gets committed by the suppressing scan, so a later scan bulk-skips the file
+%% and the suppressed change is never applied.
+-spec dir_and_its_child_with_protection_flags_should_not_be_updated_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+dir_and_its_child_with_protection_flags_should_not_be_updated_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+    FileName = ?RAND_STR(),
+    InitialContent = ?RAND_STR(),
+    AppendedContent = ?RAND_STR(),
+    NewMode = 8#777,
+    StorageDirId = filepath_utils:join([<<"/">>, DirName]),
+    StorageFileId = filepath_utils:join([StorageDirId, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #dir_spec{name = DirName, children = [
+            #file_spec{name = FileName, content = InitialContent}
+        ]}, SuiteCtx
+    ),
+
+    SpaceDirPath = filepath_utils:join([SpacePath, DirName]),
+    SpaceFilePath = filepath_utils:join([SpaceDirPath, FileName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceDirPath, ProtectionFlags
+    ),
+
+    storage_file_setup_utils:write_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId,
+        byte_size(InitialContent), AppendedContent
+    ),
+    storage_file_setup_utils:chmod(
+        ImportingProviderSelector, ImportedStorageId, StorageDirId, NewMode
+    ),
+    storage_file_setup_utils:chmod(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, NewMode
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% neither the dir nor the file must have been modified
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{
+        mode => ?DEFAULT_DIR_PERMS
+    }),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceFilePath, #{
+        size => byte_size(InitialContent), mode => ?DEFAULT_FILE_PERMS
+    }),
+    storage_import_test_utils:assert_file_content(
+        ImportingProviderCtx, SpaceFilePath, InitialContent
+    ),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        %% the space root only - the protected directory is not counted at all
+        %% and its child never even gets a job
+        <<"unmodified">> => 1
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    UpdatedContent = <<InitialContent/binary, AppendedContent/binary>>,
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #dir_spec{name = DirName, children = [
+            #file_spec{name = FileName, content = UpdatedContent}
+        ]}
+    ),
+    lists:foreach(fun(ProviderCtx) ->
+        storage_import_test_utils:assert_attrs(ProviderCtx, SpaceDirPath, #{mode => NewMode}),
+        storage_import_test_utils:assert_attrs(ProviderCtx, SpaceFilePath, #{
+            size => byte_size(UpdatedContent), mode => NewMode
+        })
+    end, [ImportingProviderCtx, NonImportingProviderCtx]),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        %% the dir + the file
+        <<"modified">> => 2,
+        <<"unmodified">> => 1,
+        modified_hist => 2,
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, 2}
+    }).
+
+
+dir_and_its_child_with_data_protection_should_not_be_deleted_test(SuiteCtx) ->
+    dir_and_its_child_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(SuiteCtx) ->
+    dir_and_its_child_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A protected directory holding a file is removed (whole) directly from the
+%% storage - scan 2 must not delete it from the space (deletion detection skips
+%% the protected dir without ever descending to the child), scan 3 (after the
+%% flags are unset) must delete the whole subtree.
+-spec dir_and_its_child_with_protection_flags_should_not_be_deleted_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+dir_and_its_child_with_protection_flags_should_not_be_deleted_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        storage_type = StorageType,
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        file_tree_spec = FileTreeSpec,
+        importing_provider_ctx = ImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #dir_spec{name = DirName, children = [
+            #file_spec{name = FileName, content = Content}
+        ]}, SuiteCtx
+    ),
+
+    SpaceDirPath = filepath_utils:join([SpacePath, DirName]),
+    SpaceFilePath = filepath_utils:join([SpaceDirPath, FileName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceDirPath, ProtectionFlags
+    ),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_import_test_utils:delete_file_tree_from_storage(
+        ImportingProviderSelector, ImportedStorageId, FileTreeSpec
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% both entries must have stayed in the space with their metadata intact
+    %% (the file's data itself is gone from the storage, so it is not read here)
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath,
+        with_posix_mode(StorageType, ?DEFAULT_DIR_PERMS, #{})
+    ),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceFilePath,
+        with_posix_mode(StorageType, ?DEFAULT_FILE_PERMS, #{size => byte_size(Content)})
+    ),
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified,
+        modified_hist => RootModified
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    %% the (emulated/real) directory + its child are deleted on both storage types
+    Deleted = storage_import_test_utils:expected_deleted_count(TestCaseCtx),
+    Scan1Created = storage_import_test_utils:expected_created_count(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        <<"deleted">> => Deleted,
+        <<"unmodified">> => 1,
+        deleted_hist => Deleted,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified,
+        <<"modifiedMinHist">> => {range, 0, RootModified},
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, Scan1Created}
+    }).
 
 
 %% --- not reimported ---
@@ -1502,9 +2374,10 @@ should_not_reimport_leftover_entry_test_base(TestCaseName, SuiteCtx, EntryType) 
             );
         file ->
             mock_storage_helper_error(SuiteCtx, unlink, ?EBUSY),
-            lfm_proxy:rm_recursive(
+            %% the storage-side failure propagates to the LFM caller
+            ?assertEqual({error, ?EBUSY}, lfm_proxy:unlink(
                 ImportingProviderNode, ImportingProviderSessionId, {path, SpaceEntryPath}
-            )
+            ))
     end,
     %% the deletion may originate on the non-importing provider (directory
     %% variant), so awaiting it on the importing provider must tolerate the
@@ -1551,6 +2424,87 @@ should_not_reimport_leftover_entry_test_base(TestCaseName, SuiteCtx, EntryType) 
     }).
 
 
+%% A file created and opened on the importing provider is deleted via LFM while
+%% still open: its storage file survives under the plain name, guarded by a
+%% deletion marker (forced via init_per_testcase's fslogic_delete mock - the
+%% natural behaviour on object storages, whose helpers cannot rename). The next
+%% scan must recognize the marker-guarded storage file as belonging to the
+%% already-deleted logical file and must NOT reimport it into the space.
+should_not_reimport_deleted_but_still_opened_file_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        storage_type = StorageType,
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
+
+    SpaceFilePath = filepath_utils:join([SpacePath, FileName]),
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    {ok, FileGuid} = lfm_proxy:create(
+        ImportingProviderNode, ImportingProviderSessionId, SpaceFilePath
+    ),
+    write_file_via_lfm(ImportingProviderNode, ImportingProviderSessionId, FileGuid, Content),
+    %% the still-open handle is what keeps the storage file alive (under the plain
+    %% name, guarded by a deletion marker) past the LFM deletion below
+    {ok, OpenHandle} = lfm_proxy:open(
+        ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(FileGuid), read
+    ),
+    ok = lfm_proxy:unlink(ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(FileGuid)),
+
+    %% the file is already gone from the space, yet its storage file is still there
+    ?assertMatch({ok, []}, lfm_proxy:get_children(
+        ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
+    )),
+    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId
+    )),
+
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the scan must not have reimported the marker-guarded storage file
+    ?assertMatch({ok, []}, lfm_proxy:get_children(
+        ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
+    )),
+    %% the still-open handle still reads the original content (the storage file
+    %% was genuinely kept alive) - release it afterwards
+    ?assertEqual({ok, Content}, lfm_proxy:read(
+        ImportingProviderNode, OpenHandle, 0, byte_size(Content)
+    )),
+    ok = lfm_proxy:close(ImportingProviderNode, OpenHandle),
+
+    %% created => 0 / deleted => 0 is the crux: the deleted-but-open storage file,
+    %% skipped via its deletion marker, was neither reimported nor re-deleted. The
+    %% marker-guarded file is always "unmodified"; the space root, arranged via LFM
+    %% (create + delete bump its storage and logical mtimes together, possibly
+    %% within the same second), is racy on POSIX and deterministically "unmodified"
+    %% on the (mocked-statbuf) flat storage - see the "Mtime granularity and
+    %% root-verdict races" section of storage_import_test_utils.
+    {Modified, Unmodified, ModifiedHist} = case StorageType of
+        posix -> {{range, 0, 1}, {range, 1, 2}, {range, 0, 1}};
+        s3 -> {0, 2, 0}
+    end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"modified">> => Modified,
+        <<"unmodified">> => Unmodified,
+        modified_hist => ModifiedHist
+    }).
+
+
 should_not_delete_not_replicated_file_created_in_remote_provider_test(SuiteCtx) ->
     should_not_delete_remote_entries_test_base(
         ?FUNCTION_NAME, SuiteCtx, #file_spec{content = ?RAND_STR()}
@@ -1583,11 +2537,13 @@ should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test(Sui
 should_not_delete_remote_entries_test_base(TestCaseName, SuiteCtx, RemoteFileTreeSpec) ->
     #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
 
-    TestCaseCtx = storage_import_test_utils:init_testcase(TestCaseName, undefined, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+    TestCaseCtx = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, undefined, SuiteCtx
+    ),
 
-    RemoteEntries = create_file_tree_via_remote_provider(TestCaseCtx, RemoteFileTreeSpec),
+    RemoteEntries = storage_import_test_utils:create_file_tree_via_remote_provider(
+        TestCaseCtx, RemoteFileTreeSpec
+    ),
 
     %% load-bearing - opens the deletion-detection gate: the remote entries can
     %% only be (wrongly) deleted by deletion detection, so without this call the
@@ -1624,11 +2580,11 @@ should_not_sync_file_during_replication_test(SuiteCtx) ->
             node = NonImportingProviderNode,
             session_id = NonImportingProviderSessionId
         }
-    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
 
-    #object{guid = FileGuid} = create_file_tree_via_remote_provider(
+    #object{guid = FileGuid} = storage_import_test_utils:create_file_tree_via_remote_provider(
         TestCaseCtx, #file_spec{content = Content}
     ),
 
@@ -1674,6 +2630,82 @@ should_not_sync_file_during_replication_test(SuiteCtx) ->
     ).
 
 
+%% A file created via the non-importing provider is fully replicated to the
+%% importing provider, materializing its storage file (a replica). A subsequent
+%% scan must recognize the replicated storage file as belonging to the
+%% already-known logical file and must NOT invalidate the freshly-written replica
+%% blocks - both providers must still hold the full replica afterwards.
+should_not_invalidate_file_after_replication_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
+    Content = ?RAND_STR(),
+    ContentSize = byte_size(Content),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        },
+        non_importing_provider_ctx = #provider_ctx{
+            node = NonImportingProviderNode,
+            session_id = NonImportingProviderSessionId
+        }
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
+
+    #object{guid = FileGuid} = storage_import_test_utils:create_file_tree_via_remote_provider(
+        TestCaseCtx, #file_spec{content = Content}
+    ),
+
+    %% replicate the remotely-created file onto the importing provider's storage
+    %% by reading it there
+    {ok, ReadHandle} = ?assertMatch({ok, _}, lfm_proxy:open(
+        ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(FileGuid), read
+    ), ?ATTEMPTS),
+    ?assertEqual({ok, Content}, lfm_proxy:read(
+        ImportingProviderNode, ReadHandle, 0, ContentSize
+    ), ?ATTEMPTS),
+    ok = lfm_proxy:close(ImportingProviderNode, ReadHandle),
+    file_test_utils:await_distribution(
+        [ImportingProviderNode, NonImportingProviderNode], FileGuid, [
+            {ImportingProviderNode, ContentSize},
+            {NonImportingProviderNode, ContentSize}
+        ]
+    ),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the scan must not have invalidated the replica - both providers still hold
+    %% the full file
+    file_test_utils:await_distribution(
+        [ImportingProviderNode, NonImportingProviderNode], FileGuid, [
+            {ImportingProviderNode, ContentSize},
+            {NonImportingProviderNode, ContentSize}
+        ]
+    ),
+    ?assertMatch(
+        {ok, #file_attr{size = ContentSize}},
+        lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, ?FILE_REF(FileGuid))
+    ),
+
+    %% created => 0 / deleted => 0 is the crux: the replicated storage file was
+    %% recognized as the already-known logical file, not reimported. The replica -
+    %% its blocks written to the storage after the remotely-stamped logical mtime -
+    %% is reliably "modified"; the space root follows the deterministic
+    %% root_scan_verdict/1 (its storage entry restamped by the replication after
+    %% the remote create).
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"modified">> => RootModified + 1,
+        <<"unmodified">> => RootUnmodified,
+        modified_hist => RootModified + 1
+    }).
+
+
 %%%===================================================================
 %%% Internal functions - shared test steps
 %%%===================================================================
@@ -1681,64 +2713,383 @@ should_not_sync_file_during_replication_test(SuiteCtx) ->
 
 %% @private
 %% @doc
-%% Creates the given file tree in the space via the NON-importing (remote)
-%% provider - purely logically, so nothing materializes on the imported storage
-%% (a remotely-created file's data stays remote until replicated; a directory
-%% gets no storage counterpart until a file is written into it on the importing
-%% provider). Awaits the metadata propagation to the importing provider and
-%% returns the created tree with all names concretized.
+%% Arranges, via LFM on the importing provider, the "recreated file" suffixed
+%% storage layout: a file is created and opened, then deleted - the open handle
+%% keeps its storage file alive under the plain name, guarded by a deletion
+%% marker (the method is enforced via init_per_testcase's fslogic_delete mock)
+%% - and a new file is created at the same path, landing on the storage under
+%% a name with the conflicting-file suffix. Asserts both files exist on the
+%% storage and returns the layout's details (the old file's handle is returned
+%% still open - it is what keeps the plain-named storage file alive).
 %% @end
--spec create_file_tree_via_remote_provider(
-    storage_import_test_utils:case_ctx(), onenv_file_test_utils:object_spec()
-) ->
-    onenv_file_test_utils:object().
-create_file_tree_via_remote_provider(#storage_import_test_case_ctx{
+-spec setup_recreated_file_with_suffix_on_storage(storage_import_test_utils:case_ctx()) ->
+    #{atom() => term()}.
+setup_recreated_file_with_suffix_on_storage(TestCaseCtx = #storage_import_test_case_ctx{
     suite_ctx = #storage_import_test_suite_ctx{
-        non_importing_provider_selector = NonImportingProviderSelector,
-        space_owner_selector = SpaceOwnerSelector
+        importing_provider_selector = ImportingProviderSelector
     },
-    space_id = SpaceId,
+    imported_storage_id = ImportedStorageId,
     space_path = SpacePath,
     importing_provider_ctx = #provider_ctx{
         node = ImportingProviderNode,
         session_id = ImportingProviderSessionId
     }
-}, FileTreeSpec) ->
-    Object = onenv_file_test_utils:create_file_tree(
-        oct_background:get_user_id(SpaceOwnerSelector),
-        space_dir:guid(SpaceId),
-        NonImportingProviderSelector,
-        FileTreeSpec
+}) ->
+    FileName = ?RAND_STR(),
+    OldContent = ?RAND_STR(),
+    RecreatedContent = ?RAND_STR(),
+    SpaceFilePath = filepath_utils:join([SpacePath, FileName]),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+
+    {ok, OldFileGuid} = lfm_proxy:create(
+        ImportingProviderNode, ImportingProviderSessionId, SpaceFilePath
     ),
-    lists:foreach(fun({PathSegments, _}) ->
-        ?assertMatch(
-            {ok, #file_attr{}},
-            lfm_proxy:stat(
-                ImportingProviderNode, ImportingProviderSessionId,
-                {path, filepath_utils:join([SpacePath | PathSegments])}
-            ),
-            ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
-        )
-    end, flatten_objects(Object)),
-    Object.
+    write_file_via_lfm(ImportingProviderNode, ImportingProviderSessionId, OldFileGuid, OldContent),
+    {ok, OldFileHandle} = lfm_proxy:open(
+        ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(OldFileGuid), read
+    ),
+    ok = lfm_proxy:unlink(
+        ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(OldFileGuid)
+    ),
+
+    {ok, RecreatedFileGuid} = lfm_proxy:create(
+        ImportingProviderNode, ImportingProviderSessionId, SpaceFilePath
+    ),
+    write_file_via_lfm(
+        ImportingProviderNode, ImportingProviderSessionId, RecreatedFileGuid, RecreatedContent
+    ),
+
+    PlainStorageFileId = filepath_utils:join([<<"/">>, FileName]),
+    RecreatedFileUuid = file_id:guid_to_uuid(RecreatedFileGuid),
+    SuffixedStorageFileId = ?CONFLICTING_STORAGE_FILE_NAME(PlainStorageFileId, RecreatedFileUuid),
+    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+        ImportingProviderSelector, ImportedStorageId, PlainStorageFileId
+    ), ?ATTEMPTS),
+    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+        ImportingProviderSelector, ImportedStorageId, SuffixedStorageFileId
+    ), ?ATTEMPTS),
+
+    #{
+        file_name => FileName,
+        space_file_path => SpaceFilePath,
+        old_file_handle => OldFileHandle,
+        old_content => OldContent,
+        recreated_file_guid => RecreatedFileGuid,
+        recreated_content => RecreatedContent,
+        suffixed_storage_file_id => SuffixedStorageFileId
+    }.
 
 
 %% @private
-%% Flattens a created file tree into a list of every node (the declared root
-%% included) tagged with its path segments relative to the tree's parent.
--spec flatten_objects(onenv_file_test_utils:object()) ->
-    [{[file_meta:name()], onenv_file_test_utils:object()}].
-flatten_objects(Object = #object{name = Name, children = Children}) ->
-    [{[Name], Object} | [
-        {[Name | DescendantSegments], Descendant}
-        || Child <- utils:ensure_defined(Children, []),
-           {DescendantSegments, Descendant} <- flatten_objects(Child)
-    ]].
+%% @doc
+%% Arranges the "replicated file" suffixed storage layout: a file is created
+%% via the importing provider (its storage file taking the plain name) and a
+%% same-named file is created via the non-importing provider; reading the
+%% latter on the importing provider replicates its data onto the imported
+%% storage, where - its plain name being taken - it lands under a name with
+%% the conflicting-file suffix. Asserts both files exist on the storage and
+%% returns the layout's details.
+%% @end
+-spec setup_replicated_file_with_suffix_on_storage(storage_import_test_utils:case_ctx()) ->
+    #{atom() => term()}.
+setup_replicated_file_with_suffix_on_storage(TestCaseCtx = #storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    },
+    imported_storage_id = ImportedStorageId,
+    space_path = SpacePath,
+    importing_provider_ctx = #provider_ctx{
+        node = ImportingProviderNode,
+        session_id = ImportingProviderSessionId
+    },
+    non_importing_provider_ctx = #provider_ctx{
+        node = NonImportingProviderNode,
+        session_id = NonImportingProviderSessionId
+    }
+}) ->
+    FileName = ?RAND_STR(),
+    LocalContent = ?RAND_STR(),
+    RemoteContent = ?RAND_STR(),
+    SpaceFilePath = filepath_utils:join([SpacePath, FileName]),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+
+    {ok, LocalFileGuid} = lfm_proxy:create(
+        ImportingProviderNode, ImportingProviderSessionId, SpaceFilePath
+    ),
+    write_file_via_lfm(ImportingProviderNode, ImportingProviderSessionId, LocalFileGuid, LocalContent),
+
+    {ok, RemoteFileGuid} = lfm_proxy:create(
+        NonImportingProviderNode, NonImportingProviderSessionId, SpaceFilePath
+    ),
+    write_file_via_lfm(
+        NonImportingProviderNode, NonImportingProviderSessionId, RemoteFileGuid, RemoteContent
+    ),
+
+    %% reading the remotely created file on the importing provider replicates
+    %% its data onto the imported storage
+    {ok, ReadHandle} = ?assertMatch({ok, _}, lfm_proxy:open(
+        ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(RemoteFileGuid), read
+    ), ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS),
+    ?assertEqual({ok, RemoteContent}, lfm_proxy:read(
+        ImportingProviderNode, ReadHandle, 0, byte_size(RemoteContent)
+    ), ?ATTEMPTS),
+    ok = lfm_proxy:close(ImportingProviderNode, ReadHandle),
+
+    PlainStorageFileId = filepath_utils:join([<<"/">>, FileName]),
+    RemoteFileUuid = file_id:guid_to_uuid(RemoteFileGuid),
+    SuffixedStorageFileId = ?CONFLICTING_STORAGE_FILE_NAME(PlainStorageFileId, RemoteFileUuid),
+    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+        ImportingProviderSelector, ImportedStorageId, PlainStorageFileId
+    ), ?ATTEMPTS),
+    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+        ImportingProviderSelector, ImportedStorageId, SuffixedStorageFileId
+    ), ?ATTEMPTS),
+
+    #{
+        file_name => FileName,
+        space_file_path => SpaceFilePath,
+        local_file_guid => LocalFileGuid,
+        local_content => LocalContent,
+        remote_file_guid => RemoteFileGuid,
+        remote_content => RemoteContent,
+        suffixed_storage_file_id => SuffixedStorageFileId
+    }.
+
+
+%% @private
+-spec write_file_via_lfm(oct_background:node(), session:id(), file_id:file_guid(), binary()) ->
+    ok.
+write_file_via_lfm(Node, SessionId, FileGuid, Content) ->
+    {ok, WriteHandle} = lfm_proxy:open(Node, SessionId, ?FILE_REF(FileGuid), write),
+    {ok, _} = lfm_proxy:write(Node, WriteHandle, 0, Content),
+    ok = lfm_proxy:close(Node, WriteHandle).
+
+
+%% @private
+%% @doc
+%% Overwrites a single byte of the given storage file (directly on the storage)
+%% and returns the expected content of the file after the change - the file's
+%% size (and content prefix up to the changed byte) stays intact, so the scan
+%% can detect the change only via the file's storage mtime.
+%% @end
+-spec change_one_byte_of_storage_file(
+    storage_import_test_utils:case_ctx(), helpers:file_id(), binary()
+) ->
+    binary().
+change_one_byte_of_storage_file(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    },
+    imported_storage_id = ImportedStorageId
+}, StorageFileId, CurrentContent) ->
+    Offset = 4,
+    ChangedByte = <<"-">>,
+    storage_file_setup_utils:write_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, Offset, ChangedByte
+    ),
+    <<Prefix:Offset/binary, _:1/binary, Suffix/binary>> = CurrentContent,
+    <<Prefix/binary, ChangedByte/binary, Suffix/binary>>.
+
+
+%% @private
+%% Establishes a dataset with the given protection flags on the entry at the
+%% given path, via the importing provider. The flags take effect (also on the
+%% entry's descendants, through the effective dataset) as soon as the call
+%% returns.
+-spec establish_dataset_with_protection_flags(
+    #provider_ctx{}, file_meta:path(), data_access_control:bitmask()
+) ->
+    dataset:id().
+establish_dataset_with_protection_flags(#provider_ctx{
+    node = Node,
+    session_id = SessionId
+}, Path, ProtectionFlags) ->
+    {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(
+        Node, SessionId, {path, Path}, ProtectionFlags
+    )),
+    DatasetId.
+
+
+%% @private
+-spec unset_dataset_protection_flags(
+    #provider_ctx{}, dataset:id(), data_access_control:bitmask()
+) ->
+    ok.
+unset_dataset_protection_flags(#provider_ctx{
+    node = Node,
+    session_id = SessionId
+}, DatasetId, ProtectionFlags) ->
+    ok = opt_datasets:update(Node, SessionId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags).
+
+
+%% @private
+%% @doc
+%% Builds an expected-attrs map (for assert_attrs/3) that carries the given POSIX
+%% mode ONLY on block storages. Object (flat) storages hold no per-object POSIX
+%% mode - imported entries take the storage's default mode, not ?DEFAULT_*_PERMS -
+%% and none of these tests chmod on S3 (the helper's chmod is a no-op there), so
+%% the mode is asserted on POSIX only while the remaining attrs (size, ...) are
+%% checked on both storage types.
+%% @end
+-spec with_posix_mode(posix | s3, file_meta:mode(), #{atom() => term()}) ->
+    #{atom() => term()}.
+with_posix_mode(posix, Mode, Attrs) -> Attrs#{mode => Mode};
+with_posix_mode(s3, _Mode, Attrs) -> Attrs.
 
 
 %%%===================================================================
 %%% Internal functions - shared assertions
 %%%===================================================================
+
+
+%% @private
+%% @doc
+%% Number of the two arranged storage files that the scan facing a freshly
+%% arranged suffixed layout is CERTAIN to classify "modified". A file guarded by a
+%% deletion marker is always skipped via its marker (never "modified"); the rest
+%% split by storage type:
+%%  * a replicated file - its blocks written to the imported storage at
+%%    replication time, strictly after the remotely-stamped logical mtime - is
+%%    "modified" on ANY storage;
+%%  * a locally LFM-created file matches its storage mtime on POSIX (same clock,
+%%    one operation) so it stays "unmodified" there, but on flat storage the
+%%    object store re-stamps the written object with its own (later) mtime, so it
+%%    comes out "modified" too.
+%% @end
+-spec suffixed_layout_modified_file_count(posix | s3, non_neg_integer(), non_neg_integer()) ->
+    non_neg_integer().
+suffixed_layout_modified_file_count(posix, _LfmCreatedFileCount, ReplicatedFileCount) ->
+    ReplicatedFileCount;
+suffixed_layout_modified_file_count(s3, LfmCreatedFileCount, ReplicatedFileCount) ->
+    LfmCreatedFileCount + ReplicatedFileCount.
+
+
+%% @private
+%% @doc
+%% Asserts that the scan facing a freshly arranged suffixed storage layout (see
+%% the setup_*_file_with_suffix_on_storage helpers) neither imported nor deleted
+%% anything: both storage files were recognized as belonging to already-known
+%% logical files (created => 0, deleted => 0 - the crux of these tests).
+%%
+%% The {modified, unmodified} split among the three scanned entries (the space
+%% root + the two arranged storage files) is incidental and asserted only within
+%% tolerances. It is driven by the layout's file composition - given here as the
+%% counts of LFM-created and replicated files (see
+%% suffixed_layout_modified_file_count/3) - plus the space root's own verdict.
+%% The root is racy on POSIX: the layout is arranged via LFM, so the root's
+%% storage and logical mtimes are bumped by the same operations and may land in
+%% the same second - the root goes either way (see the "Mtime granularity and
+%% root-verdict races" section of storage_import_test_utils), hence the
+%% {range, ...} tolerances. On flat storage the mocked root statbuf is
+%% deterministically "unmodified", so everything is exact.
+%% @end
+-spec assert_scan_recognized_suffixed_layout_as_known(
+    storage_import_test_utils:case_ctx(), non_neg_integer(), non_neg_integer()
+) ->
+    ok.
+assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx = #storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{storage_type = StorageType}
+}, LfmCreatedFileCount, ReplicatedFileCount) ->
+    ModifiedFileCount = suffixed_layout_modified_file_count(
+        StorageType, LfmCreatedFileCount, ReplicatedFileCount
+    ),
+    RootVerdictOverrides = case StorageType of
+        posix -> #{
+            <<"modified">> => {range, ModifiedFileCount, ModifiedFileCount + 1},
+            <<"unmodified">> => {range, 2 - ModifiedFileCount, 3 - ModifiedFileCount},
+            modified_hist => {range, ModifiedFileCount, ModifiedFileCount + 1}
+        };
+        s3 -> #{
+            <<"modified">> => ModifiedFileCount,
+            <<"unmodified">> => 3 - ModifiedFileCount,
+            modified_hist => ModifiedFileCount
+        }
+    end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, maps:merge(
+        #{
+            <<"scans">> => 2,
+            <<"created">> => 0,
+            <<"deleted">> => 0
+        },
+        RootVerdictOverrides
+    )).
+
+
+%% @private
+%% @doc
+%% Asserts that the scan following change_one_byte_of_storage_file/3 detected the
+%% change as a modification of the (single) mapped-back logical file - nothing was
+%% imported or deleted. This scan reliably reports modified => 1 (only the changed
+%% suffixed file; the direct storage write touches no directory listing, so the
+%% root stays "unmodified") and unmodified => 2 (the root and the other, untouched
+%% storage file - reconciled by scan 2).
+%%
+%% The cumulative modified*Hist additionally carries scan 2's events: the files it
+%% classified "modified" (suffixed_layout_modified_file_count/3) plus, on POSIX,
+%% that LFM-arranged scan's racy root verdict (0 or 1) - hence the tolerance. On
+%% flat storage the root is deterministically "unmodified", so the histogram is
+%% exact.
+%% @end
+-spec assert_suffixed_storage_file_update_detected(
+    storage_import_test_utils:case_ctx(), non_neg_integer(), non_neg_integer()
+) ->
+    ok.
+assert_suffixed_storage_file_update_detected(TestCaseCtx = #storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{storage_type = StorageType}
+}, LfmCreatedFileCount, ReplicatedFileCount) ->
+    Scan2ModifiedFileCount = suffixed_layout_modified_file_count(
+        StorageType, LfmCreatedFileCount, ReplicatedFileCount
+    ),
+    ModifiedHistOverrides = case StorageType of
+        posix -> #{
+            modified_hist => {range, Scan2ModifiedFileCount + 1, Scan2ModifiedFileCount + 2}
+        };
+        s3 -> #{
+            modified_hist => Scan2ModifiedFileCount + 1
+        }
+    end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, maps:merge(
+        #{
+            <<"scans">> => 3,
+            <<"created">> => 0,
+            <<"deleted">> => 0,
+            <<"modified">> => 1,
+            <<"unmodified">> => 2
+        },
+        ModifiedHistOverrides
+    )).
+
+
+%% @private
+%% Like storage_import_test_utils:assert_file_content/3, but addresses the file
+%% by guid - required where a path would be ambiguous (name-conflicting files)
+%% - and with an explicit retry budget (a content change propagates to the
+%% other provider via block invalidation and re-replication, which may take
+%% longer than the default).
+-spec assert_file_content_by_guid(
+    #provider_ctx{}, file_id:file_guid(), binary(), non_neg_integer()
+) ->
+    ok.
+assert_file_content_by_guid(#provider_ctx{
+    node = Node,
+    session_id = SessionId
+}, FileGuid, ExpectedContent, Attempts) ->
+    ReadContent = fun() ->
+        case lfm_proxy:open(Node, SessionId, ?FILE_REF(FileGuid), read) of
+            {ok, Handle} ->
+                Result = lfm_proxy:check_size_and_read(
+                    Node, Handle, 0, max(byte_size(ExpectedContent), 1)
+                ),
+                ok = lfm_proxy:close(Node, Handle),
+                Result;
+            OpenError ->
+                OpenError
+        end
+    end,
+    ?assertEqual({ok, ExpectedContent}, ReadContent(), Attempts),
+    ok.
 
 
 %% @private
@@ -1788,7 +3139,7 @@ assert_remote_entries_not_affected_by_scan(#storage_import_test_case_ctx{
                     NonImportingProviderNode, NonImportingProviderSessionId, {path, SpaceEntryPath}
                 ))
         end
-    end, flatten_objects(RemoteEntries)).
+    end, storage_import_test_utils:flatten_objects(RemoteEntries)).
 
 
 %% @private

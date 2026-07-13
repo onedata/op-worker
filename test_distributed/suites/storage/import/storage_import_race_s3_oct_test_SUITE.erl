@@ -6,12 +6,15 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module tests how storage import detects and propagates deletions made
-%%% directly on S3 storage; see storage_import_delete_oct_test_base for the shared
-%%% bodies.
+%%% This module tests how storage import scans on S3 storage behave when
+%%% racing with concurrent filesystem operations and time warps; see
+%%% storage_import_race_oct_test_base for the shared bodies.
+%%%
+%%% NOTE: create_remote_dir_import_race_test is POSIX-only (object storages
+%%% hold no directories to import).
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_delete_s3_oct_test_SUITE).
+-module(storage_import_race_s3_oct_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("storage_import_oct_test.hrl").
@@ -25,25 +28,33 @@
 
 %% tests
 -export([
-    non_empty_directory_deletion_test/1,
-    import_continues_after_deletion_test/1,
-    recreate_file_deleted_by_sync_test/1,
-    imported_file_delete_recreate_lifecycle_test/1,
-    file_deletion_purges_metadata_test/1,
-    nested_file_deletion_test/1,
-    bulk_deletion_test/1,
-    create_subfiles_and_delete_before_import_is_finished_test/1
+    create_remote_file_import_conflict_test/1,
+    create_remote_file_import_race_test/1,
+    create_file_import_race_test/1,
+    close_file_import_race_test/1,
+    delete_file_reimport_race_test/1,
+    remote_delete_file_reimport_race_test/1,
+    remote_delete_file_reimport_race2_test/1,
+    delete_opened_file_reimport_race_test/1,
+    create_delete_race_test/1,
+    create_list_race_test/1,
+    time_warp_between_scans_test/1,
+    time_warp_during_scan_test/1
 ]).
 
 all() -> [
-    non_empty_directory_deletion_test,
-    file_deletion_purges_metadata_test,
-    nested_file_deletion_test,
-    bulk_deletion_test,
-    create_subfiles_and_delete_before_import_is_finished_test,
-    import_continues_after_deletion_test,
-    recreate_file_deleted_by_sync_test,
-    imported_file_delete_recreate_lifecycle_test
+    create_remote_file_import_conflict_test,
+    create_remote_file_import_race_test,
+    create_file_import_race_test,
+    close_file_import_race_test,
+    delete_file_reimport_race_test,
+    remote_delete_file_reimport_race_test,
+    remote_delete_file_reimport_race2_test,
+    delete_opened_file_reimport_race_test,
+    create_delete_race_test,
+    create_list_race_test,
+    time_warp_between_scans_test,
+    time_warp_during_scan_test
 ].
 
 -define(IMPORTING_PROVIDER_SELECTOR, krakow).
@@ -54,7 +65,7 @@ all() -> [
     non_importing_provider_selector = paris,
     space_owner_selector = space_owner
 }).
--define(run_test(), storage_import_delete_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
+-define(run_test(), storage_import_race_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
 
 
 %%%==================================================================
@@ -62,14 +73,18 @@ all() -> [
 %%%===================================================================
 
 
-non_empty_directory_deletion_test(_Config) -> ?run_test().
-import_continues_after_deletion_test(_Config) -> ?run_test().
-recreate_file_deleted_by_sync_test(_Config) -> ?run_test().
-imported_file_delete_recreate_lifecycle_test(_Config) -> ?run_test().
-file_deletion_purges_metadata_test(_Config) -> ?run_test().
-nested_file_deletion_test(_Config) -> ?run_test().
-bulk_deletion_test(_Config) -> ?run_test().
-create_subfiles_and_delete_before_import_is_finished_test(_Config) -> ?run_test().
+create_remote_file_import_conflict_test(_Config) -> ?run_test().
+create_remote_file_import_race_test(_Config) -> ?run_test().
+create_file_import_race_test(_Config) -> ?run_test().
+close_file_import_race_test(_Config) -> ?run_test().
+delete_file_reimport_race_test(_Config) -> ?run_test().
+remote_delete_file_reimport_race_test(_Config) -> ?run_test().
+remote_delete_file_reimport_race2_test(_Config) -> ?run_test().
+delete_opened_file_reimport_race_test(_Config) -> ?run_test().
+create_delete_race_test(_Config) -> ?run_test().
+create_list_race_test(_Config) -> ?run_test().
+time_warp_between_scans_test(_Config) -> ?run_test().
+time_warp_during_scan_test(_Config) -> ?run_test().
 
 
 %%===================================================================
@@ -80,7 +95,7 @@ create_subfiles_and_delete_before_import_is_finished_test(_Config) -> ?run_test(
 init_per_suite(Config) ->
     ModulesToLoad = [
         ?MODULE, sd_test_utils, storage_file_setup_utils,
-        storage_import_test_utils, storage_import_delete_oct_test_base
+        storage_import_test_utils, storage_import_race_oct_test_base
     ],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op_s3",
@@ -104,8 +119,8 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(Case, Config) ->
-    storage_import_delete_oct_test_base:init_per_testcase(Case, ?SUITE_CTX, Config).
+    storage_import_race_oct_test_base:init_per_testcase(Case, ?SUITE_CTX, Config).
 
 
 end_per_testcase(Case, Config) ->
-    storage_import_delete_oct_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).
+    storage_import_race_oct_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).

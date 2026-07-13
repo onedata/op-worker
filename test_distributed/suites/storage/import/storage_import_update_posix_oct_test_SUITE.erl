@@ -38,6 +38,7 @@
     replace_file_with_dir_test/1,
     replace_empty_dir_with_file_test/1,
     replace_non_empty_dir_with_file_test/1,
+    replace_remotely_created_non_empty_dir_with_file_test/1,
     update_timestamps_file_import_test/1,
     create_file_in_dir_update_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
@@ -51,18 +52,40 @@
     update_syncs_files_after_import_failed_test/1,
     update_syncs_files_after_previous_update_failed_test/1,
 
+    %% --- suffixes ---
+    should_not_import_recreated_file_with_suffix_on_storage_test/1,
+    should_update_blocks_of_recreated_file_with_suffix_on_storage_test/1,
+    should_not_import_replicated_file_with_suffix_on_storage_test/1,
+    should_update_replicated_file_with_suffix_on_storage_test/1,
+
     %% --- config ---
     changing_max_depth_test/1,
     force_start_test/1,
     force_stop_test/1,
 
+    %% --- protection ---
+    file_with_data_protection_should_not_be_updated_test/1,
+    file_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    file_with_data_protection_should_not_be_deleted_test/1,
+    file_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    empty_dir_with_data_protection_should_not_be_updated_test/1,
+    empty_dir_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    empty_dir_with_data_protection_should_not_be_deleted_test/1,
+    empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+
     %% --- not reimported ---
     should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test/1,
     should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test/1,
+    should_not_reimport_deleted_but_still_opened_file_test/1,
     should_not_delete_not_replicated_file_created_in_remote_provider_test/1,
     should_not_delete_dir_created_in_remote_provider_test/1,
     should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test/1,
-    should_not_sync_file_during_replication_test/1
+    should_not_sync_file_during_replication_test/1,
+    should_not_invalidate_file_after_replication_test/1
 ]).
 
 all() -> [
@@ -81,6 +104,7 @@ all() -> [
     replace_file_with_dir_test,
     replace_empty_dir_with_file_test,
     replace_non_empty_dir_with_file_test,
+    replace_remotely_created_non_empty_dir_with_file_test,
     update_timestamps_file_import_test,
     create_file_in_dir_update_test,
     create_file_in_dir_exceed_batch_update_test,
@@ -94,19 +118,40 @@ all() -> [
     update_syncs_files_after_import_failed_test,
     update_syncs_files_after_previous_update_failed_test,
 
+    %% --- suffixes ---
+    should_not_import_recreated_file_with_suffix_on_storage_test,
+    should_update_blocks_of_recreated_file_with_suffix_on_storage_test,
+    should_not_import_replicated_file_with_suffix_on_storage_test,
+    should_update_replicated_file_with_suffix_on_storage_test,
+
     %% --- config ---
     changing_max_depth_test,
     force_start_test,
     force_stop_test,
 
+    %% --- protection ---
+    file_with_data_protection_should_not_be_updated_test,
+    file_with_data_and_metadata_protection_should_not_be_updated_test,
+    file_with_data_protection_should_not_be_deleted_test,
+    file_with_data_and_metadata_protection_should_not_be_deleted_test,
+    empty_dir_with_data_protection_should_not_be_updated_test,
+    empty_dir_with_data_and_metadata_protection_should_not_be_updated_test,
+    empty_dir_with_data_protection_should_not_be_deleted_test,
+    empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test,
+    dir_and_its_child_with_data_protection_should_not_be_updated_test,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test,
+    dir_and_its_child_with_data_protection_should_not_be_deleted_test,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test,
+
     %% --- not reimported ---
     should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test,
-    %% TODO VFS-13687 - debug failing test
-%%    should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test,
+    should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test,
+    should_not_reimport_deleted_but_still_opened_file_test,
     should_not_delete_not_replicated_file_created_in_remote_provider_test,
     should_not_delete_dir_created_in_remote_provider_test,
     should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test,
-    should_not_sync_file_during_replication_test
+    should_not_sync_file_during_replication_test,
+    should_not_invalidate_file_after_replication_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -140,6 +185,7 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(_Config
 replace_file_with_dir_test(_Config) -> ?run_test().
 replace_empty_dir_with_file_test(_Config) -> ?run_test().
 replace_non_empty_dir_with_file_test(_Config) -> ?run_test().
+replace_remotely_created_non_empty_dir_with_file_test(_Config) -> ?run_test().
 update_timestamps_file_import_test(_Config) -> ?run_test().
 create_file_in_dir_update_test(_Config) -> ?run_test().
 create_file_in_dir_exceed_batch_update_test(_Config) -> ?run_test().
@@ -160,6 +206,15 @@ update_syncs_files_after_import_failed_test(_Config) -> ?run_test().
 update_syncs_files_after_previous_update_failed_test(_Config) -> ?run_test().
 
 
+%% --- suffixes ---
+
+
+should_not_import_recreated_file_with_suffix_on_storage_test(_Config) -> ?run_test().
+should_update_blocks_of_recreated_file_with_suffix_on_storage_test(_Config) -> ?run_test().
+should_not_import_replicated_file_with_suffix_on_storage_test(_Config) -> ?run_test().
+should_update_replicated_file_with_suffix_on_storage_test(_Config) -> ?run_test().
+
+
 %% --- config ---
 
 
@@ -168,15 +223,34 @@ force_start_test(_Config) -> ?run_test().
 force_stop_test(_Config) -> ?run_test().
 
 
+%% --- protection ---
+
+
+file_with_data_protection_should_not_be_updated_test(_Config) -> ?run_test().
+file_with_data_and_metadata_protection_should_not_be_updated_test(_Config) -> ?run_test().
+file_with_data_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+file_with_data_and_metadata_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+empty_dir_with_data_protection_should_not_be_updated_test(_Config) -> ?run_test().
+empty_dir_with_data_and_metadata_protection_should_not_be_updated_test(_Config) -> ?run_test().
+empty_dir_with_data_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+dir_and_its_child_with_data_protection_should_not_be_updated_test(_Config) -> ?run_test().
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(_Config) -> ?run_test().
+dir_and_its_child_with_data_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+
+
 %% --- not reimported ---
 
 
 should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test(_Config) -> ?run_test().
 should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test(_Config) -> ?run_test().
+should_not_reimport_deleted_but_still_opened_file_test(_Config) -> ?run_test().
 should_not_delete_not_replicated_file_created_in_remote_provider_test(_Config) -> ?run_test().
 should_not_delete_dir_created_in_remote_provider_test(_Config) -> ?run_test().
 should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test(_Config) -> ?run_test().
 should_not_sync_file_during_replication_test(_Config) -> ?run_test().
+should_not_invalidate_file_after_replication_test(_Config) -> ?run_test().
 
 
 %%===================================================================

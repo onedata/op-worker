@@ -175,6 +175,10 @@ create({uuid, ParentUuid}, FileDoc = #document{
                                     end,
                                     case {Deleted, TreeId} of
                                         {true, LocalTreeId} ->
+                                            ?warning(
+                                                "Stalled file_meta link ~tp from parent ~tp pointing to deleted uuid ~tp "
+                                                "detected while creating uuid ~tp. The link will be deleted",
+                                                [FileName, ParentUuid, Uuid, FileUuid]),
                                             file_meta_forest:delete_local(ParentUuid, ParentScopeId, FileName, Rev),
                                             false;
                                         _ ->
