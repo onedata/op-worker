@@ -356,8 +356,10 @@ route_to_proper_handler(#op_req{operation = Operation, gri = #gri{
     (Operation == create andalso As == child);
     (Operation == create andalso As == content);
     (Operation == get andalso As == content);
+    (Operation == head andalso As == content);
     (Operation == create andalso As == file_at_path);
     (Operation == get andalso As == file_at_path);
+    (Operation == head andalso As == file_at_path);
     (Operation == delete andalso As == file_at_path)
 ->
     file_content_rest_handler:handle_request(OpReq, Req);

@@ -15,11 +15,13 @@
 -include("global_definitions.hrl").
 -include("http/rest.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
     download_single_file/3, download_single_file/5, download_single_file/6,
+    provide_single_file_download_headers/3,
     download_tarball/6
 ]).
 
@@ -85,6 +87,27 @@ download_single_file(SessionId, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttr
     download_single_regular_file(SessionId, FileAttr, FileName, OnStartedCallback, OnFinishedCallback, Req0);
 download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE} = FileAttr, FileName, OnStartedCallback, OnFinishedCallback, Req0) ->
     download_single_symlink(SessionId, FileAttr, FileName, OnStartedCallback, OnFinishedCallback, Req0).
+
+
+-spec provide_single_file_download_headers(session:id(), lfm_attrs:file_attributes(), cowboy_req:req()) ->
+    cowboy_req:req().
+provide_single_file_download_headers(_SessionId, #file_attr{
+    type = ?REGULAR_FILE_TYPE,
+    name = FileName,
+    size = FileSize
+}, Req0) ->
+    reply_with_download_headers(FileName, FileSize, Req0);
+provide_single_file_download_headers(SessionId, #file_attr{
+    type = ?SYMLINK_TYPE,
+    guid = Guid,
+    name = FileName
+}, Req0) ->
+    case lfm:read_symlink(SessionId, ?FILE_REF(Guid, false)) of
+        {ok, LinkPath} ->
+            reply_with_download_headers(FileName, byte_size(LinkPath), Req0);
+        {error, Errno} ->
+            http_req:send_error(?ERR_POSIX(?err_ctx(), Errno), Req0)
+    end.
 
 
 -spec download_tarball(
@@ -192,6 +215,26 @@ download_single_symlink(SessionId, #file_attr{guid = Guid}, FileName, OnStartedC
             ?catch_exceptions(OnFinishedCallback(Error)),
             http_req:send_error(Error, Req0)
     end.
+
+
+%% @private
+%% NOTE: only ever called while handling an HTTP HEAD request. The content-length
+%% header cannot simply be set explicitly and replied with an empty body, because
+%% cowboy_req:reply/4 unconditionally overwrites content-length with the size of the
+%% given body (0 for an empty body). Passing a {sendfile, 0, FileSize, _} body instead
+%% makes cowboy derive content-length from FileSize; for a HEAD request cowboy then
+%% strips the body before ever touching the file, so the (empty) path is never opened
+%% and no data is read (see cowboy_req:reply/4 and cowboy_req:do_reply/4).
+-spec reply_with_download_headers(file_meta:name(), file_meta:size(), cowboy_req:req()) ->
+    cowboy_req:req().
+reply_with_download_headers(FileName, FileSize, Req0) ->
+    Req1 = http_download_utils:set_file_download_headers(Req0, FileName),
+    cowboy_req:reply(
+        ?HTTP_200_OK,
+        #{?HDR_ACCEPT_RANGES => <<"bytes">>},
+        {sendfile, 0, FileSize, <<>>},
+        Req1
+    ).
 
 
 %% @private

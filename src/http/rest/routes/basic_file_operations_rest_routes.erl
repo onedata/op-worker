@@ -79,6 +79,17 @@ routes() -> [
             scope = private
         }
     }},
+    %% Get file content headers
+    {<<"/data/:id/content">>, rest_handler, #rest_req{
+        method = 'HEAD',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = content, 
+            scope = private
+        }
+    }},
     %% Update file content
     {<<"/data/:id/content">>, rest_handler, #rest_req{
         method = 'PUT',
@@ -171,6 +182,17 @@ routes() -> [
     %% Download file content by path
     {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
         method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = file_at_path, 
+            scope = private
+        }
+    }},
+    %% Get file content headers by path
+    {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
+        method = 'HEAD',
         produces = [<<"application/octet-stream">>],
         b_gri = #b_gri{
             type = op_file, 
