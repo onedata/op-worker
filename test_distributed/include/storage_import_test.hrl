@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Katarzyna Such
-%%% @copyright (C) 2026 Onedata (onedata.org)
+%%% @copyright (C) 2024 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -9,8 +9,8 @@
 %%% Macros used in tests of storage import.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(STORAGE_IMPORT_OCT_TEST_HRL).
--define(STORAGE_IMPORT_OCT_TEST_HRL, 1).
+-ifndef(STORAGE_IMPORT_TEST_HRL).
+-define(STORAGE_IMPORT_TEST_HRL, 1).
 
 
 -include("onenv_test_utils.hrl").

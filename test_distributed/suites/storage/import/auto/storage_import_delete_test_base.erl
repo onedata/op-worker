@@ -17,10 +17,10 @@
 %%% (it opens the deletion-detection gate - see its doc).
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_delete_oct_test_base).
+-module(storage_import_delete_test_base).
 -author("Bartosz Walkowicz").
 
--include("storage_import_oct_test.hrl").
+-include("storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").

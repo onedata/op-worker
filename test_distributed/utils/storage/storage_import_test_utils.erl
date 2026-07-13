@@ -163,7 +163,7 @@
 -module(storage_import_test_utils).
 -author("Bartosz Walkowicz").
 
--include("storage_import_oct_test.hrl").
+-include("storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
@@ -883,10 +883,10 @@ verify_dir_stats(#storage_import_test_case_ctx{
     % the space root is not a declared node - assert it explicitly, with the
     % expectation aggregated over the whole declared tree
     SpaceRootSpec = #dir_spec{children = TopLevelSpecs},
-    %% TODO VFS-13529 remove debug logging before merge to develop
-    ct:pal("Asserting dir_size_stats for space root ~tp, expected (whole-tree) state:~n~tp", [
-        SpacePath, expected_dir_stats(SpaceRootSpec)
-    ]),
+    %% NOTE: uncomment when debugging
+%%    ct:pal("Asserting dir_size_stats for space root ~tp, expected (whole-tree) state:~n~tp", [
+%%        SpacePath, expected_dir_stats(SpaceRootSpec)
+%%    ]),
     DirNodes = [{SpacePath, SpaceRootSpec} | [
         {Path, Spec} || {Path, #dir_spec{} = Spec} <- flatten_nodes(SpacePath, TopLevelSpecs)
     ]],
@@ -1026,10 +1026,10 @@ assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
         <<"queueLengthDayHist">> => 0
     },
     Expected = maps:merge(Default, Overrides),
-    %% TODO VFS-13529 remove debug logging before merge to develop
-    ct:pal("Asserting storage_import_monitoring for space ~tp, expected state:~n~tp", [
-        SpaceId, Expected
-    ]),
+    %% NOTE: uncomment when debugging
+%%    ct:pal("Asserting storage_import_monitoring for space ~tp, expected state:~n~tp", [
+%%        SpaceId, Expected
+%%    ]),
     assert_monitoring_state(ImportingProviderSelector, SpaceId, Expected, 1).
 
 

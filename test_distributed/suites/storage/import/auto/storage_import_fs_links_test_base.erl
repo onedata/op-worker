@@ -32,10 +32,10 @@
 %%% (root_verdict_overrides/2, initial_scan_monitoring_overrides/1).
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_fs_links_oct_test_base).
+-module(storage_import_fs_links_test_base).
 -author("Bartosz Walkowicz").
 
--include("storage_import_oct_test.hrl").
+-include("storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/posix/errno.hrl").

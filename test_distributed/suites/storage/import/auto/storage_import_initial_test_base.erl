@@ -10,10 +10,10 @@
 %%% import scan.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_initial_oct_test_base).
+-module(storage_import_initial_test_base).
 -author("Katarzyna Such").
 
--include("storage_import_oct_test.hrl").
+-include("storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/storage/helpers/helpers.hrl").

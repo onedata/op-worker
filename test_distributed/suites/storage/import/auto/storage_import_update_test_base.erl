@@ -9,7 +9,7 @@
 %%% This module contains base test functions for testing storage import
 %%% continuous (update) scans.
 %%%
-%%% While storage_import_initial_oct_test_base covers the first import of a
+%%% While storage_import_initial_test_base covers the first import of a
 %%% storage, this module covers what subsequent (continuous) scans detect and
 %%% how the scanning engine behaves: modifications to already-imported files,
 %%% idempotency (unchanged entries are not reprocessed), retrying after a
@@ -25,10 +25,10 @@
 %%% their own scenario.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_update_oct_test_base).
+-module(storage_import_update_test_base).
 -author("Bartosz Walkowicz").
 
--include("storage_import_oct_test.hrl").
+-include("storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/data_access_control.hrl").
@@ -1098,7 +1098,7 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
 %% A file imported with sync_acl enabled has its on-storage NFS4 ACL changed;
 %% the scan must re-APPLY the new ACL - changing its enforcement, not just
 %% re-reading an xattr. Uses the same ACL/LUMA mocking approach as
-%% storage_import_initial_oct_test_base:import_nfs_acl_test (see there).
+%% storage_import_initial_test_base:import_nfs_acl_test (see there).
 %% The proof of re-enforcement is an order-dependent NFS4 ACL evaluation flip:
 %% the initial ACL grants EVERYONE@ read_acl and denies the named principal
 %% (mapped to user1, also the file owner) write_attributes; the updated ACL

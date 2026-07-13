@@ -28,10 +28,10 @@
 %%% their own scenario.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_race_oct_test_base).
+-module(storage_import_race_test_base).
 -author("Bartosz Walkowicz").
 
--include("storage_import_oct_test.hrl").
+-include("storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
