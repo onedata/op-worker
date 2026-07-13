@@ -195,9 +195,9 @@ routes() -> [
         method = 'HEAD',
         produces = [<<"application/octet-stream">>],
         b_gri = #b_gri{
-            type = op_file, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = file_at_path, 
+            type = op_file,
+            id = ?OBJECTID_BINDING(id),
+            aspect = file_at_path,
             scope = private
         }
     }},

@@ -53,7 +53,8 @@
     read_registered_file_after_source_removed_from_storage_test/1,
     read_registered_file_after_source_modified_on_storage_test/1,
     read_registered_file_when_storage_returns_error_test/1,
-    large_registered_file_should_be_correctly_replicated_to_other_provider_test/1
+    large_registered_file_should_be_correctly_replicated_to_other_provider_test/1,
+    register_shared_file_via_public_url_test/1
 ]).
 
 -define(SUPPORT_SIZE, 1000000000).
@@ -1076,6 +1077,68 @@ large_registered_file_should_be_correctly_replicated_to_other_provider_test(
     end, ?ATTEMPTS).
 
 
+register_shared_file_via_public_url_test(SuiteCtx = #file_registration_test_suite_ctx{
+    test_user_selector = User
+}) ->
+    % A single space (named after the test case, so it is picked up by
+    % clean_up_after_previous_run just like every other case here) is supported by the
+    % registering provider's imported read-only HTTP storage and by the other provider's
+    % writable POSIX storage. The HTTP storage endpoint is set to the registering
+    % provider's REST API root - individual files are registered by their full public
+    % share URL though (see below), so the endpoint host is largely irrelevant.
+    #test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        imported_storage_id = HttpStorageId,
+        registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId},
+        other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
+    } = init_testcase(?FUNCTION_NAME, SuiteCtx#file_registration_test_suite_ctx{
+        registering_storage_type = http
+    }),
+
+    % Create a file with content on the writable (other provider's POSIX) storage and
+    % share it, so its content becomes publicly downloadable.
+    SourceFilePath = filepath_utils:join([SpacePath, ?FILE_NAME]),
+    {ok, {SourceGuid, Handle}} = lfm_proxy:create_and_open(OtherNode, OtherSessId, SourceFilePath),
+    {ok, _} = lfm_proxy:write(OtherNode, Handle, 0, ?TEST_DATA),
+    ok = lfm_proxy:close(OtherNode, Handle),
+    {ok, ShareId} = ?assertMatch({ok, _},
+        opt_shares:create(OtherNode, OtherSessId, ?FILE_REF(SourceGuid), <<"share">>)),
+    {ok, ShareObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(SourceGuid, ShareId)),
+
+    % The shared file's public content URL, accessed directly on one of the supporting
+    % providers (chosen at random). Putting the full URL in the storage file id makes the
+    % HTTP helper target it directly, ignoring the storage endpoint.
+    %
+    % The Onezone public-share redirector root is intentionally NOT exercised yet:
+    % registration relies on the helper's getattr (HTTP HEAD) which - unlike its read -
+    % did not re-point the request path to the redirect target, so following the Onezone
+    % 302 queried the wrong path. This is fixed in the helpers repo (HTTPHelper::getattr);
+    % once that fix is pulled in as a dependency, switch to the commented line below to
+    % also cover the Onezone redirector root.
+    RestApiRoot = onenv_api_test_runner:get_rest_api_root(
+        lists_utils:random_element([RegNode, OtherNode])),
+%%    RestApiRoot = onenv_api_test_runner:random_share_rest_api_root([RegNode, OtherNode]),
+    PublicUrl = <<RestApiRoot/binary, "data/", ShareObjectId/binary, "/content">>,
+
+    % Register the shared file (size intentionally omitted, so it must be detected via
+    % HTTP HEAD) and verify it is readable through the public URL. Retries cover the
+    % short delay before the freshly created share becomes publicly resolvable.
+    RegFileName = ?FILE_NAME,
+    RegFilePath = filepath_utils:join([SpacePath, RegFileName]),
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => SpaceId,
+        <<"destinationPath">> => RegFileName,
+        <<"storageFileId">> => PublicUrl,
+        <<"storageId">> => HttpStorageId
+    }), ?ATTEMPTS),
+
+    ExpectedSize = byte_size(?TEST_DATA),
+    ?assertMatch({ok, #file_attr{size = ExpectedSize}},
+        lfm_proxy:stat(RegNode, RegSessId, {path, RegFilePath}), ?ATTEMPTS),
+    ?assertRead(RegNode, RegSessId, RegFilePath, 0, ?TEST_DATA, ?ATTEMPTS).
+
+
 %%%===================================================================
 %%% SetUp and TearDown helpers (called by thin SUITE modules)
 %%%===================================================================
@@ -1095,7 +1158,7 @@ end_per_testcase(_Case, SuiteCtx = #file_registration_test_suite_ctx{
     Nodes = oct_background:get_provider_nodes(RegProvider),
     test_utils:mock_unload(Nodes, storage_driver),
     test_utils:mock_unload(Nodes, file_meta),
-%%    maybe_stop_http_servers(SuiteCtx),
+    maybe_stop_http_servers(SuiteCtx),
     lfm_proxy:teardown(Config).
 
 
