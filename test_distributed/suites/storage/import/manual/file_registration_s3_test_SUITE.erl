@@ -114,7 +114,7 @@ read_registered_file_after_source_modified_on_storage_test(_Config) -> ?run_test
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, file_registration_test_base, storage_file_setup_utils],
+    ModulesToLoad = [?MODULE, file_registration_test_base, storage_file_setup_utils, storage_import_test_utils],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op_s3",
         envs = [{op_worker, op_worker, [

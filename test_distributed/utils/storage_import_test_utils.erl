@@ -1215,13 +1215,26 @@ filter_spaces_from_previous_run(AllTestCases) ->
 ) ->
     ok.
 delete_space_with_supporting_storages(SpaceId, ProviderSelector1, ProviderSelector2) ->
-    [Storage1] = opw_test_rpc:get_space_local_storages(ProviderSelector1, SpaceId),
-    [Storage2] = opw_test_rpc:get_space_local_storages(ProviderSelector2, SpaceId),
+    % a space is normally supported by exactly one storage on each of the two providers, but
+    % some cases set up spaces supported by just one of them (e.g. a source-share space on
+    % the non-importing provider only) - tolerate any number of storages per provider rather
+    % than assuming both are present
+    Storages1 = get_local_storages(ProviderSelector1, SpaceId),
+    Storages2 = get_local_storages(ProviderSelector2, SpaceId),
 
     ok = ozw_test_rpc:delete_space(SpaceId),
 
-    ok = delete_storage(ProviderSelector1, Storage1),
-    ok = delete_storage(ProviderSelector2, Storage2).
+    lists:foreach(fun(Storage) -> delete_storage(ProviderSelector1, Storage) end, Storages1),
+    lists:foreach(fun(Storage) -> delete_storage(ProviderSelector2, Storage) end, Storages2).
+
+
+%% @private
+-spec get_local_storages(oct_background:entity_selector(), od_space:id()) -> [od_storage:id()].
+get_local_storages(NodeSelector, SpaceId) ->
+    case ?rpc(NodeSelector, space_logic:get_local_storages(SpaceId)) of
+        {ok, Storages} -> Storages;
+        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) -> []
+    end.
 
 
 %% @private
