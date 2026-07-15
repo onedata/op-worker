@@ -60,7 +60,10 @@
     schedule_replication_of_100_regular_files_by_view_with_batch_10/1,
     file_removed_during_replication/1,
     rtransfer_works_between_providers_with_different_ports/1,
-    warp_time_during_replication/1
+    warp_time_during_replication/1,
+    regular_file_deleted_locally_during_replication/1,
+    regular_file_deleted_remotely_during_replication/1,
+    file_deleted_during_directory_replication/1
 ]).
 
 all() -> [
@@ -102,7 +105,10 @@ all() -> [
     schedule_replication_of_100_regular_files_by_view_with_batch_10,
     file_removed_during_replication,
     rtransfer_works_between_providers_with_different_ports,
-    warp_time_during_replication
+    warp_time_during_replication,
+    regular_file_deleted_locally_during_replication,
+    regular_file_deleted_remotely_during_replication,
+    file_deleted_during_directory_replication
 ].
 
 %%%===================================================================
@@ -228,6 +234,15 @@ rtransfer_works_between_providers_with_different_ports(Config) ->
 
 warp_time_during_replication(Config) ->
     replication_transfers_test_base:warp_time_during_replication(Config, rest).
+
+regular_file_deleted_locally_during_replication(Config) ->
+    replication_transfers_test_base:regular_file_deleted_locally_during_replication(Config, rest, guid).
+
+regular_file_deleted_remotely_during_replication(Config) ->
+    replication_transfers_test_base:regular_file_deleted_remotely_during_replication(Config, rest, guid).
+
+file_deleted_during_directory_replication(Config) ->
+    replication_transfers_test_base:file_deleted_during_directory_replication(Config, rest, guid).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
