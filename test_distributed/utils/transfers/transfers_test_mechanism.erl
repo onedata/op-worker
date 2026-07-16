@@ -37,8 +37,6 @@
     replicate_root_directory/2,
     replicate_despite_protection_flags/2,
     replicate_each_file_separately/2,
-    error_on_replicating_files/2,
-    change_storage_params/2,
     cancel_replication_on_target_nodes_by_scheduling_user/2,
     cancel_replication_on_target_nodes_by_other_user/2,
     rerun_replication/2,
@@ -190,53 +188,6 @@ replicate_each_file_separately(Config, #scenario{
             {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
             {TargetNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
-    end, ReplicatingNodes),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-error_on_replicating_files(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    lists:foreach(fun(TargetNode) ->
-        lists:foreach(fun({Guid, Path}) ->
-            TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-            FileKey = file_key(Guid, Path, FileKeyType),
-            ?assertMatch({error, _},
-                schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type))
-        end, FilesGuidsAndPaths)
-    end, ReplicatingNodes),
-    Config.
-
-%% modify storage during a running transfer
-%% to verify that transfer completes successfully despite
-%% helper reload (rtransfer restart).
-change_storage_params(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    SpaceId = ?config(?SPACE_ID_KEY, Config),
-
-    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
-    FileKey = file_key(Guid, Path, FileKeyType),
-    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId,
-            User, FileKey, Config, Type),
-        await_replication_starts(TargetNode, Tid),
-        {TargetNode, Tid, Guid, Path}
-    end, ReplicatingNodes),
-
-    lists:foreach(fun(Node) ->
-        StorageId = initializer:get_supporting_storage_id(Node, SpaceId),
-        modify_storage_timeout(Node, StorageId, <<"100000">>)
     end, ReplicatingNodes),
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
@@ -1525,21 +1476,6 @@ set_privileges(Config, SpaceId, UserId, SpacePrivs) ->
         false ->
             ozt_spaces:set_privileges(SpaceId, UserId, SpacePrivs)
     end.
-
-%% Modifies storage timeout twice in order to
-%% trigger helper reload and restore previous value.
--spec modify_storage_timeout(node(), storage:id(), NewValue :: binary()) -> ok.
-modify_storage_timeout(Node, StorageId, NewValue) ->
-    Helper = rpc:call(Node, storage, get_helper, [StorageId]),
-    OldValue = maps:get(<<"timeout">>, helper:get_args(Helper),
-        integer_to_binary(?DEFAULT_HELPER_TIMEOUT)),
-
-    ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
-        [StorageId, #{<<"timeout">> => NewValue}])),
-    ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
-        [StorageId, #{<<"timeout">> => OldValue}])),
-    ok.
-
 
 file_key(Guid, _Path, guid) ->
     ?FILE_REF(Guid);

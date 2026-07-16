@@ -97,9 +97,6 @@ end
 -define(WORKER_POOL, worker_pool).
 -define(WORKER_POOL_SIZE, 8).
 
--define(MISSING_PROVIDER_NODE, missing_provider).
--define(MISSING_PROVIDER_ID, <<"missing_provider_id">>).
-
 -define(HIST(Value, Length), begin
     __Hist = histogram:new(Length),
     histogram:increment(__Hist, Value)

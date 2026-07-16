@@ -24,8 +24,7 @@
     get_transfer/2, provider_id/1, ensure_transfers_removed/1,
     list_ended_transfers/2, list_waiting_transfers/2, list_ongoing_transfers/2,
     get_ongoing_transfers_for_file/2, get_ended_transfers_for_file/2,
-    remove_transfers/1, get_space_support/2,
-    mock_space_occupancy/3, unmock_space_occupancy/2, unmock_replication_worker/1,
+    remove_transfers/1, unmock_replication_worker/1,
     root_name/2, root_name/3,
     mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
     mock_prolonged_replica_eviction/3, unmock_prolonged_replica_eviction/1,
@@ -51,9 +50,6 @@ get_transfer(Node, TransferId) ->
             throw(transfer_not_found)
     end.
 
-provider_id(?MISSING_PROVIDER_NODE) ->
-    % overridden for test reason
-    ?MISSING_PROVIDER_ID;
 provider_id(Node) ->
     rpc:call(Node, oneprovider, get_id, []).
 
@@ -105,18 +101,6 @@ remove_transfers(Config) ->
             end, lists:umerge([Ongoing, Past, Scheduled]))
         end, SpaceIds)
     end, Workers).
-
-get_space_support(Node, SpaceId) ->
-    {ok, SupportSize} = rpc:call(Node, provider_logic, get_support_size, [SpaceId]),
-    SupportSize.
-
-mock_space_occupancy(Node, SpaceId, MockedSize) ->
-    CurrentSize = rpc:call(Node, space_quota, current_size, [SpaceId]),
-    rpc:call(Node, space_quota, apply_size_change, [SpaceId, MockedSize - CurrentSize]).
-
-unmock_space_occupancy(Node, SpaceId) ->
-    CurrentSize = rpc:call(Node, space_quota, current_size, [SpaceId]),
-    rpc:call(Node, space_quota, apply_size_change, [SpaceId, -CurrentSize]).
 
 unmock_replication_worker(Node) ->
     test_utils:mock_unload(Node, replication_worker).

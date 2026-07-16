@@ -22,15 +22,20 @@
 %%%    expected end state on both providers. The expected values of the
 %%%    #transfer{} record fields are derived from the declared file tree
 %%%    (file count, total byte size) and the transfer type; single fields
-%%%    can be overridden with an exact value, 'skip', {range, Min, Max}
-%%%    or a predicate fun. The special 'tree_bytes' override adjusts the
-%%%    derivation input rather than any single field: it replaces the total
-%%%    byte size counted from the declared tree (for content written outside
-%%%    of the tree spec, e.g. a big file filled after creation) and drives
-%%%    the per-type expected byte counters and histogram sums;
+%%%    can be overridden with an exact value, 'skip', {gte, Min},
+%%%    {range, Min, Max} or a predicate fun. The special 'tree_bytes'
+%%%    override adjusts the derivation input rather than any single field:
+%%%    it replaces the total byte size counted from the declared tree (for
+%%%    content written outside of the tree spec, e.g. a big file filled
+%%%    after creation) and drives the per-type expected byte counters and
+%%%    histogram sums. It may itself be an expectation (e.g. {gte, Min})
+%%%    when the exact transferred byte count is nondeterministic;
 %%% 5. assert_distribution/2,3 - asserts the expected post-transfer block
 %%%    distribution, again derived from the declared file tree and the
-%%%    transfer type, with optional per-file size overrides.
+%%%    transfer type, with optional per-file size overrides. For tests
+%%%    expecting a distribution that does not match this derivation (e.g.
+%%%    after a failed or no-op transfer), await_distribution/3 asserts an
+%%%    explicitly given one.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer_test_utils).
@@ -41,7 +46,9 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("ctool/include/onedata_file.hrl").
+-include_lib("ctool/include/posix/errno.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% API
@@ -51,9 +58,14 @@
     create_file_tree/3,
     ensure_initial_replicas/2,
     schedule_transfer/2,
-    await_replication_started/2,
+    mock_gated_file_replication/1,
+    grant_file_replication_permits/2,
+    await_gated_file_replication_job/0,
+    await_files_replicated/3,
+    unmock_gated_file_replication/1,
     await_transfer_ended/4, await_transfer_ended/5,
     assert_distribution/2, assert_distribution/3,
+    await_distribution/3,
     remove_all_transfers/1,
 
     get_space_support_size/2,
@@ -66,10 +78,11 @@
 -type field_expectation() ::
     term() |
     skip |
+    {gte, integer()} |
     {range, integer(), integer()} |
     % asserts a bytes-per-provider histogram field: the histogram of the given
-    % provider must span the given number of slots and sum up to the given bytes
-    {histogram_sum, od_provider:id(), non_neg_integer(), non_neg_integer()} |
+    % provider must sum up to bytes satisfying the given (nested) expectation
+    {histogram_sum, od_provider:id(), field_expectation()} |
     fun((term()) -> boolean()).
 -type expected_transfer() :: #{atom() => field_expectation()}.
 
@@ -78,6 +91,11 @@
 -type suite_ctx() :: #transfer_test_suite_ctx{}.
 
 -define(SPACE_ROOT_LS_LIMIT, 10000).
+
+-define(FILE_REPLICATION_PERMITS_KEY, file_replication_permits).
+-define(FILE_REPLICATION_JOB_GATED_MSG, file_replication_job_gated).
+-define(FILE_REPLICATION_PERMIT_POLL_INTERVAL_MS, 100).
+-define(INFINITE_PERMITS, 1 bsl 50).
 
 
 %%%===================================================================
@@ -106,7 +124,7 @@ remove_leftover_file_trees(#transfer_test_suite_ctx{
 
     lists:foreach(fun({ChildGuid, ChildName}) ->
         case str_utils:binary_starts_with(ChildName, CaseNamePrefix) of
-            true -> onenv_file_test_utils:rm_and_sync_file(UserSelector, ChildGuid);
+            true -> rm_leftover_file_tree(SpaceSelector, UserSelector, ChildGuid);
             false -> ok
         end
     end, Children).
@@ -204,18 +222,97 @@ schedule_transfer(#transfer_test_suite_ctx{
     TransferId.
 
 
--spec await_replication_started(oct_background:entity_selector(), transfer:id()) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks file replication on the given provider so that every replication
+%% job must acquire a permit before transferring its file. A job finding
+%% no free permit parks (notifying the calling process - see
+%% await_gated_file_replication_job/0) until one is granted with
+%% grant_file_replication_permits/2; no permits are available initially.
+%% This allows deterministically suspending an ongoing transfer and
+%% releasing it in stages, interleaved with other operations.
+%% Must be paired with unmock_gated_file_replication/1 in the test teardown.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_gated_file_replication(oct_background:entity_selector()) -> ok.
+mock_gated_file_replication(ProviderSelector) ->
+    TestProcess = self(),
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+
+    lists:foreach(fun(Node) ->
+        % the permit counter must be created on the provider node (atomics are
+        % node-local); the node-wide cache entry keeps the ref alive (an ets
+        % table would die with its owner - the transient rpc process)
+        ok = opw_test_rpc:call(Node, fun() ->
+            node_cache:put(?FILE_REPLICATION_PERMITS_KEY, atomics:new(1, []))
+        end)
+    end, Nodes),
+
+    ok = test_utils:mock_new(Nodes, replication_worker, [passthrough]),
+    ok = test_utils:mock_expect(Nodes, replication_worker, transfer_regular_file, fun(
+        FileCtx, TransferParams
+    ) ->
+        acquire_file_replication_permit(TestProcess),
+        meck:passthrough([FileCtx, TransferParams])
+    end).
+
+
+-spec grant_file_replication_permits(oct_background:entity_selector(), pos_integer() | all) ->
     ok.
-await_replication_started(ProviderSelector, TransferId) ->
-    ?assertEqual(true, case opw_test_rpc:call(ProviderSelector, transfer, get, [TransferId]) of
-        {ok, #document{value = #transfer{
-            bytes_replicated = BytesReplicated,
-            files_replicated = FilesReplicated
-        }}} ->
-            BytesReplicated > 0 orelse FilesReplicated > 0;
-        {error, _} ->
-            false
+grant_file_replication_permits(ProviderSelector, CountOrAll) ->
+    % permits are granted per provider node (irrelevant for the single-node
+    % providers the transfer suites run on)
+    lists:foreach(fun(Node) ->
+        ok = opw_test_rpc:call(Node, fun() ->
+            PermitsRef = node_cache:get(?FILE_REPLICATION_PERMITS_KEY),
+            case CountOrAll of
+                all -> atomics:put(PermitsRef, 1, ?INFINITE_PERMITS);
+                Count -> atomics:add(PermitsRef, 1, Count)
+            end
+        end)
+    end, oct_background:get_provider_nodes(ProviderSelector)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Awaits the notification a gated replication job sends when it parks
+%% awaiting a permit - proof that the transfer traverse is underway and
+%% suspended. Only jobs that actually park notify, so leftover mailbox
+%% messages cannot produce a false positive for an already-drained gate.
+%% @end
+%%--------------------------------------------------------------------
+-spec await_gated_file_replication_job() -> ok.
+await_gated_file_replication_job() ->
+    receive
+        ?FILE_REPLICATION_JOB_GATED_MSG -> ok
+    after timer:seconds(?ATTEMPTS) ->
+        ct:fail(no_file_replication_job_awaiting_permit)
+    end.
+
+
+-spec await_files_replicated(oct_background:entity_selector(), transfer:id(), non_neg_integer()) ->
+    ok.
+await_files_replicated(ProviderSelector, TransferId, ExpFilesReplicated) ->
+    ?assertEqual(ExpFilesReplicated, case opw_test_rpc:call(
+        ProviderSelector, transfer, get, [TransferId]
+    ) of
+        {ok, #document{value = #transfer{files_replicated = FilesReplicated}}} ->
+            FilesReplicated;
+        {error, _} = Error ->
+            Error
     end, ?ATTEMPTS).
+
+
+-spec unmock_gated_file_replication(oct_background:entity_selector()) -> ok.
+unmock_gated_file_replication(ProviderSelector) ->
+    % release any still-parked jobs first - a process parked inside the mock
+    % call would be killed by the code purge on unload
+    grant_file_replication_permits(ProviderSelector, all),
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    test_utils:mock_unload(Nodes, replication_worker),
+    lists:foreach(fun(Node) ->
+        ok = opw_test_rpc:call(Node, node_cache, clear, [?FILE_REPLICATION_PERMITS_KEY])
+    end, Nodes).
 
 
 -spec await_transfer_ended(suite_ctx(), transfer:id(), onenv_file_test_utils:object(), expected_transfer()) ->
@@ -303,6 +400,35 @@ assert_distribution(#transfer_test_suite_ctx{
     end, FilesWithExpDistribution).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Like file_test_utils:await_distribution/3 but takes provider selectors
+%% instead of nodes. Meant for tests expecting a bespoke distribution that
+%% differs from the one assert_distribution/2,3 derives from the transfer
+%% type (e.g. after a failed or no-op transfer).
+%% NOTE: every regular file created with create_file_tree/3 has an empty
+%% (zero blocks) distribution entry on each supporting provider - the
+%% creation sync awaits it - so the expectation must list such providers
+%% with size 0 rather than omit them.
+%% @end
+%%--------------------------------------------------------------------
+-spec await_distribution(
+    [oct_background:entity_selector()],
+    file_id:file_guid(),
+    [{oct_background:entity_selector(), file_meta:size()}]
+) ->
+    ok.
+await_distribution(ProviderSelectors, FileGuid, ExpSizePerProvider) ->
+    file_test_utils:await_distribution(
+        [oct_background:get_random_provider_node(PS) || PS <- ProviderSelectors],
+        FileGuid,
+        [
+            {oct_background:get_random_provider_node(PS), ExpSize}
+            || {PS, ExpSize} <- ExpSizePerProvider
+        ]
+    ).
+
+
 -spec remove_all_transfers(suite_ctx()) -> ok.
 remove_all_transfers(#transfer_test_suite_ctx{
     space_selector = SpaceSelector,
@@ -347,6 +473,88 @@ set_space_occupancy(ProviderSelector, SpaceId, TargetSize) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+%% Executed on the provider nodes within the gate-mocked replication job
+%% processes (see mock_gated_file_replication/1).
+-spec acquire_file_replication_permit(pid()) -> ok.
+acquire_file_replication_permit(TestProcess) ->
+    PermitsRef = node_cache:get(?FILE_REPLICATION_PERMITS_KEY),
+    case try_acquire_file_replication_permit(PermitsRef) of
+        true ->
+            ok;
+        false ->
+            TestProcess ! ?FILE_REPLICATION_JOB_GATED_MSG,
+            wait_for_file_replication_permit(PermitsRef)
+    end.
+
+
+%% @private
+-spec wait_for_file_replication_permit(atomics:atomics_ref()) -> ok.
+wait_for_file_replication_permit(PermitsRef) ->
+    case try_acquire_file_replication_permit(PermitsRef) of
+        true ->
+            ok;
+        false ->
+            timer:sleep(?FILE_REPLICATION_PERMIT_POLL_INTERVAL_MS),
+            wait_for_file_replication_permit(PermitsRef)
+    end.
+
+
+%% @private
+-spec try_acquire_file_replication_permit(atomics:atomics_ref()) -> boolean().
+try_acquire_file_replication_permit(PermitsRef) ->
+    case atomics:sub_get(PermitsRef, 1, 1) of
+        Permits when Permits >= 0 ->
+            true;
+        _ ->
+            % return the overdrawn permit (the counter may transiently go
+            % negative under concurrent acquisitions but never loses permits)
+            atomics:add(PermitsRef, 1, 1),
+            false
+    end.
+
+
+%% @private
+%% Removes a leftover file tree, awaiting its disappearance from the
+%% user-visible space on every provider. Unlike
+%% onenv_file_test_utils:rm_and_sync_file/2, a tree that has been moved to the
+%% trash already counts as removed - it does not wait for the (asynchronous,
+%% size-proportional) purge from the trash to finish, which for large trees
+%% may outlast the assertion attempts.
+-spec rm_leftover_file_tree(
+    oct_background:entity_selector(), oct_background:entity_selector(), file_id:file_guid()
+) ->
+    ok.
+rm_leftover_file_tree(SpaceSelector, UserSelector, FileGuid) ->
+    UserId = oct_background:get_user_id(UserSelector),
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    [RmProvider | RestProviders] = lists_utils:shuffle(
+        oct_background:get_space_supporting_providers(SpaceSelector)
+    ),
+
+    RmNode = oct_background:get_random_provider_node(RmProvider),
+    RmSessId = oct_background:get_user_session_id(UserId, RmProvider),
+    ?assertMatch(ok, lfm_proxy:rm_recursive(RmNode, RmSessId, ?FILE_REF(FileGuid))),
+
+    TrashGuid = opw_test_rpc:call(RmProvider, trash_dir, guid, [SpaceId]),
+    lists:foreach(fun(Provider) ->
+        Node = oct_background:get_random_provider_node(Provider),
+        SessId = oct_background:get_user_session_id(UserId, Provider),
+        ?assertEqual(true, is_removed_from_space(Node, SessId, FileGuid, TrashGuid), ?ATTEMPTS)
+    end, RestProviders).
+
+
+%% @private
+-spec is_removed_from_space(node(), session:id(), file_id:file_guid(), file_id:file_guid()) ->
+    boolean().
+is_removed_from_space(Node, SessId, FileGuid, TrashGuid) ->
+    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid)) of
+        {error, ?ENOENT} -> true;
+        {ok, #file_attr{parent_guid = TrashGuid}} -> true;
+        _ -> false
+    end.
 
 
 %% @private
@@ -396,7 +604,7 @@ build_expected_transfer(#transfer_test_suite_ctx{
     CreationProviderId = oct_background:get_provider_id(CreationProviderSelector),
     OtherProviderId = oct_background:get_provider_id(OtherProviderSelector),
     {FilesCount, DeclaredBytesCount} = count_files_and_bytes(TransferRootObject),
-    BytesCount = maps:get(tree_bytes, Overrides, DeclaredBytesCount),
+    BytesExpectation = maps:get(tree_bytes, Overrides, DeclaredBytesCount),
 
     CommonExpectation = #{
         user_id => oct_background:get_user_id(UserSelector),
@@ -413,9 +621,9 @@ build_expected_transfer(#transfer_test_suite_ctx{
                 files_to_process => FilesCount,
                 files_processed => FilesCount,
                 files_replicated => FilesCount,
-                bytes_replicated => BytesCount,
+                bytes_replicated => BytesExpectation,
                 files_evicted => 0
-            }, build_expected_histograms(CreationProviderId, BytesCount));
+            }, build_expected_histograms(CreationProviderId, BytesExpectation));
         eviction ->
             maps:merge(#{
                 replication_status => ?SKIPPED_STATUS,
@@ -439,36 +647,30 @@ build_expected_transfer(#transfer_test_suite_ctx{
                 files_to_process => 2 * FilesCount,
                 files_processed => 2 * FilesCount,
                 files_replicated => FilesCount,
-                bytes_replicated => BytesCount,
+                bytes_replicated => BytesExpectation,
                 files_evicted => FilesCount
-            }, build_expected_histograms(CreationProviderId, BytesCount))
+            }, build_expected_histograms(CreationProviderId, BytesExpectation))
     end,
     maps:merge(CommonExpectation, TypeSpecificExpectation).
 
 
 %% @private
--spec build_expected_histograms(od_provider:id(), non_neg_integer()) ->
+-spec build_expected_histograms(od_provider:id(), field_expectation()) ->
     expected_transfer().
-build_expected_histograms(SourceProviderId, BytesCount) ->
-    #{
-        min_hist => build_expected_histogram(SourceProviderId, BytesCount, ?MIN_HIST_LENGTH),
-        hr_hist => build_expected_histogram(SourceProviderId, BytesCount, ?HOUR_HIST_LENGTH),
-        dy_hist => build_expected_histogram(SourceProviderId, BytesCount, ?DAY_HIST_LENGTH),
-        mth_hist => build_expected_histogram(SourceProviderId, BytesCount, ?MONTH_HIST_LENGTH)
-    }.
-
-
-%% @private
--spec build_expected_histogram(od_provider:id(), non_neg_integer(), non_neg_integer()) ->
-    field_expectation().
-build_expected_histogram(_SourceProviderId, 0, _HistLength) ->
-    #{};
-build_expected_histogram(SourceProviderId, BytesCount, HistLength) ->
+build_expected_histograms(SourceProviderId, BytesExpectation) ->
     % transferred bytes are accounted per source provider; histogram window
     % sums (rather than exact slots) are asserted as slot boundaries shift
     % during the transfer
-    % TODO why do we need HistLen ????
-    {histogram_sum, SourceProviderId, BytesCount, HistLength}.
+    HistExpectation = case BytesExpectation of
+        0 -> #{};
+        _ -> {histogram_sum, SourceProviderId, BytesExpectation}
+    end,
+    #{
+        min_hist => HistExpectation,
+        hr_hist => HistExpectation,
+        dy_hist => HistExpectation,
+        mth_hist => HistExpectation
+    }.
 
 
 %% @private
@@ -575,11 +777,13 @@ collect_mismatched_fields(ExpectedTransfer, Transfer) ->
 -spec matches_expectation(field_expectation(), term()) -> boolean().
 matches_expectation(skip, _Value) ->
     true;
+matches_expectation({gte, Min}, Value) ->
+    is_integer(Value) andalso Value >= Min;
 matches_expectation({range, Min, Max}, Value) ->
     is_integer(Value) andalso Value >= Min andalso Value =< Max;
-matches_expectation({histogram_sum, ProviderId, BytesCount, HistLength}, HistPerProvider) ->
+matches_expectation({histogram_sum, ProviderId, SumExpectation}, HistPerProvider) ->
     is_map(HistPerProvider) andalso case maps:find(ProviderId, HistPerProvider) of
-        {ok, Hist} -> length(Hist) =:= HistLength andalso lists:sum(Hist) =:= BytesCount;
+        {ok, Hist} -> matches_expectation(SumExpectation, lists:sum(Hist));
         error -> false
     end;
 matches_expectation(Predicate, Value) when is_function(Predicate, 1) ->
