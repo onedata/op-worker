@@ -42,7 +42,6 @@
     rerun_replication/2,
     rerun_view_replication/2,
     replicate_files_from_view/2,
-    fail_to_replicate_files_from_view/2,
     remove_file_during_replication/2,
 
     % replica eviction scenarios
@@ -55,7 +54,6 @@
     rerun_evictions/2,
     rerun_view_evictions/2,
     evict_replicas_from_view/2,
-    fail_to_evict_replicas_from_view/2,
     remove_file_during_eviction/2,
 
     % migration scenarios
@@ -67,8 +65,7 @@
     cancel_migration_on_target_nodes_by_other_user/2,
     rerun_migrations/2,
     rerun_view_migrations/2,
-    migrate_replicas_from_view/2,
-    fail_to_migrate_replicas_from_view/2
+    migrate_replicas_from_view/2
 ]).
 
 -export([
@@ -269,23 +266,6 @@ replicate_files_from_view(Config, #scenario{
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
-fail_to_replicate_files_from_view(Config, #scenario{
-    user = User,
-    type = Type,
-    space_id = SpaceId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    lists:foreach(fun(TargetNode) ->
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        ?assertMatch({error, _}, schedule_replication_by_view(ScheduleNode,
-            TargetProviderId, User, SpaceId, ViewName, QueryViewParams, Config, Type))
-    end, ReplicatingNodes),
-    Config.
-
-
 remove_file_during_replication(Config, #scenario{
     user = User,
     type = Type,
@@ -470,22 +450,6 @@ evict_replicas_from_view(Config, #scenario{
     end, EvictingNodes),
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-fail_to_evict_replicas_from_view(Config, #scenario{
-    user = User,
-    type = Type,
-    space_id = SpaceId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams,
-    schedule_node = ScheduleNode,
-    evicting_nodes = EvictingNodes
-}) ->
-    lists:foreach(fun(EvictingNode) ->
-        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-        ?assertMatch({error, _}, schedule_replica_eviction_by_view(ScheduleNode,
-            EvictingProviderId, User, SpaceId, ViewName, QueryViewParams, Config, Type))
-    end, EvictingNodes),
-    Config.
 
 remove_file_during_eviction(Config, #scenario{
     user = User,
@@ -703,28 +667,6 @@ migrate_replicas_from_view(Config, #scenario{
     end, ReplicatingNodes),
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-fail_to_migrate_replicas_from_view(Config, #scenario{
-    user = User,
-    type = Type,
-    space_id = SpaceId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes,
-    evicting_nodes = EvictingNodes
-}) ->
-    lists:foreach(fun(ReplicatingNode) ->
-        lists:foreach(fun(EvictingNode) ->
-            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
-            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            ?assertMatch({error, _}, schedule_replica_migration_by_view(ScheduleNode,
-                EvictingProviderId, User, SpaceId, ViewName,
-                QueryViewParams, Config, Type, ReplicatingProviderId
-            ))
-        end, EvictingNodes)
-    end, ReplicatingNodes),
-    Config.
 
 %%%===================================================================
 %%% Internal functions

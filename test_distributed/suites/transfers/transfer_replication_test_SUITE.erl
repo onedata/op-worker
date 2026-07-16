@@ -42,6 +42,19 @@
     %% --- protection flags ---
     transfer_despite_protection_flags_test/1,
 
+    %% --- transfers by view ---
+    regular_file_by_view_test/1,
+    files_matched_by_view_with_reduce_test/1,
+    transfer_by_not_existing_view_test/1,
+    transfer_by_view_emitting_invalid_file_id_test/1,
+    transfer_by_view_emitting_not_existing_file_id_test/1,
+    transfer_by_empty_view_test/1,
+    transfer_by_view_with_not_matching_key_test/1,
+    hundred_files_by_view_test/1,
+    hundred_files_by_view_with_batch_100_test/1,
+    hundred_files_by_view_with_batch_10_test/1,
+    replication_by_view_emitting_multiple_keys_test/1,
+
     %% --- no-op replications ---
     replication_to_source_provider_test/1,
     replication_of_already_replicated_file_test/1,
@@ -74,6 +87,19 @@ all() -> [
 
     %% --- protection flags ---
     transfer_despite_protection_flags_test,
+
+    %% --- transfers by view ---
+    regular_file_by_view_test,
+    files_matched_by_view_with_reduce_test,
+    transfer_by_not_existing_view_test,
+    transfer_by_view_emitting_invalid_file_id_test,
+    transfer_by_view_emitting_not_existing_file_id_test,
+    transfer_by_empty_view_test,
+    transfer_by_view_with_not_matching_key_test,
+    hundred_files_by_view_test,
+    hundred_files_by_view_with_batch_100_test,
+    hundred_files_by_view_with_batch_10_test,
+    replication_by_view_emitting_multiple_keys_test,
 
     %% --- no-op replications ---
     replication_to_source_provider_test,
@@ -139,6 +165,70 @@ hundred_files_in_separate_transfers_test(_Config) -> ?run_test().
 
 
 transfer_despite_protection_flags_test(_Config) -> ?run_test().
+
+
+%% --- transfers by view ---
+
+
+regular_file_by_view_test(_Config) -> ?run_test().
+files_matched_by_view_with_reduce_test(_Config) -> ?run_test().
+transfer_by_not_existing_view_test(_Config) -> ?run_test().
+transfer_by_view_emitting_invalid_file_id_test(_Config) -> ?run_test().
+transfer_by_view_emitting_not_existing_file_id_test(_Config) -> ?run_test().
+transfer_by_empty_view_test(_Config) -> ?run_test().
+transfer_by_view_with_not_matching_key_test(_Config) -> ?run_test().
+hundred_files_by_view_test(_Config) -> ?run_test().
+hundred_files_by_view_with_batch_100_test(_Config) -> ?run_test().
+hundred_files_by_view_with_batch_10_test(_Config) -> ?run_test().
+
+
+replication_by_view_emitting_multiple_keys_test(_Config) ->
+    TestSuiteCtx = #transfer_test_suite_ctx{
+        other_provider_selector = OtherProviderSelector
+    } = ?SUITE_CTX,
+    #object{children = [FileObject = #object{guid = FileGuid}]} =
+        transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
+            children = [#file_spec{content = ?RAND_CONTENT()}]
+        }),
+
+    % the file carries two 'jobId.*' xattrs - the map function emits it
+    % under both job id keys
+    OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
+    file_test_utils:set_xattr(OtherNode, FileGuid, <<"jobId.1">>, undefined),
+    file_test_utils:set_xattr(OtherNode, FileGuid, <<"jobId.2">>, undefined),
+
+    MapFunction = <<
+        "function (id, type, meta, ctx) {
+            if (type == 'custom_metadata') {
+                const JOB_PREFIX = 'jobId.';
+                var results = [];
+                for (var key of Object.keys(meta)) {
+                    if (key.startsWith(JOB_PREFIX)) {
+                        var jobId = key.slice(JOB_PREFIX.length);
+                        results.push([jobId, id]);
+                    }
+                }
+                return {'list': results};
+            }
+        }"
+    >>,
+    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    transfer_test_utils:create_view(TestSuiteCtx, ViewName, MapFunction, undefined, []),
+
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    transfer_test_utils:await_view_query_result(
+        TestSuiteCtx, ViewName, [{key, <<"1">>}], [FileObjectId]
+    ),
+    transfer_test_utils:await_view_query_result(
+        TestSuiteCtx, ViewName, [{key, <<"2">>}], [FileObjectId]
+    ),
+
+    % replication scheduled by one of the keys transfers the file exactly once
+    TransferId = transfer_test_utils:schedule_view_transfer(
+        TestSuiteCtx, ViewName, [{key, <<"1">>}]
+    ),
+    transfer_test_utils:await_transfer_ended(TestSuiteCtx, TransferId, [FileObject], #{}),
+    transfer_test_utils:assert_distribution(TestSuiteCtx, [FileObject]).
 
 
 %% --- no-op replications ---

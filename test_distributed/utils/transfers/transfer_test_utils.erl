@@ -58,6 +58,16 @@
     create_file_tree/3,
     ensure_initial_replicas/2,
     schedule_transfer/2,
+    schedule_view_transfer/3,
+
+    rand_xattr_name/1,
+    rand_view_name/1,
+    gen_view_map_function/1, gen_view_map_function/2,
+    gen_view_reduce_function/1,
+    create_view/5,
+    await_view_query_result/4,
+    remove_all_views/1,
+
     mock_gated_file_replication/1,
     grant_file_replication_permits/2,
     await_gated_file_replication_job/0,
@@ -65,6 +75,7 @@
     unmock_gated_file_replication/1,
     await_transfer_ended/4, await_transfer_ended/5,
     assert_distribution/2, assert_distribution/3,
+    assert_initial_distribution/2,
     await_distribution/3,
     remove_all_transfers/1,
 
@@ -86,7 +97,12 @@
     fun((term()) -> boolean()).
 -type expected_transfer() :: #{atom() => field_expectation()}.
 
--export_type([transfer_type/0, field_expectation/0, expected_transfer/0]).
+% transferred files given either as a (nested) file tree or a flat list of
+% its objects (e.g. the subset of tree files matched by a view)
+-type file_tree_objects() ::
+    onenv_file_test_utils:object() | [onenv_file_test_utils:object()].
+
+-export_type([transfer_type/0, field_expectation/0, expected_transfer/0, file_tree_objects/0]).
 
 -type suite_ctx() :: #transfer_test_suite_ctx{}.
 
@@ -200,26 +216,186 @@ ensure_initial_replicas(_TestSuiteCtx, _TransferRootObject) ->
 
 -spec schedule_transfer(suite_ctx(), onenv_file_test_utils:object()) ->
     transfer:id().
-schedule_transfer(#transfer_test_suite_ctx{
-    transfer_type = TransferType,
+schedule_transfer(TestSuiteCtx = #transfer_test_suite_ctx{
     user_selector = UserSelector,
-    creation_provider_selector = CreationProviderSelector,
-    other_provider_selector = OtherProviderSelector
+    creation_provider_selector = CreationProviderSelector
 }, #object{guid = FileGuid}) ->
     SessionId = oct_background:get_user_session_id(UserSelector, CreationProviderSelector),
-    CreationProviderId = oct_background:get_provider_id(CreationProviderSelector),
-    OtherProviderId = oct_background:get_provider_id(OtherProviderSelector),
+    {ReplicatingProviderId, EvictingProviderId} = get_transfer_target_providers(TestSuiteCtx),
 
-    {ReplicatingProviderId, EvictingProviderId} = case TransferType of
-        replication -> {OtherProviderId, undefined};
-        eviction -> {undefined, OtherProviderId};
-        migration -> {OtherProviderId, CreationProviderId}
-    end,
     {ok, TransferId} = ?assertMatch({ok, _}, opt_transfers:schedule_file_transfer(
         CreationProviderSelector, SessionId, ?FILE_REF(FileGuid),
         ReplicatingProviderId, EvictingProviderId, undefined
     )),
     TransferId.
+
+
+-spec schedule_view_transfer(suite_ctx(), index:name(), transfer:query_view_params()) ->
+    transfer:id().
+schedule_view_transfer(TestSuiteCtx = #transfer_test_suite_ctx{
+    space_selector = SpaceSelector,
+    user_selector = UserSelector,
+    creation_provider_selector = CreationProviderSelector
+}, ViewName, QueryViewParams) ->
+    SessionId = oct_background:get_user_session_id(UserSelector, CreationProviderSelector),
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    {ReplicatingProviderId, EvictingProviderId} = get_transfer_target_providers(TestSuiteCtx),
+
+    {ok, TransferId} = ?assertMatch({ok, _}, opt_transfers:schedule_view_transfer(
+        CreationProviderSelector, SessionId, SpaceId, ViewName, QueryViewParams,
+        ReplicatingProviderId, EvictingProviderId, undefined
+    )),
+    TransferId.
+
+
+-spec rand_xattr_name(atom()) -> onedata_file:xattr_name().
+rand_xattr_name(CaseName) ->
+    str_utils:format_bin("xattr_~ts_~ts", [CaseName, str_utils:rand_hex(6)]).
+
+
+-spec rand_view_name(atom()) -> index:name().
+rand_view_name(CaseName) ->
+    str_utils:format_bin("view_~ts_~ts", [CaseName, str_utils:rand_hex(6)]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Builds a view map function emitting, for every file having the given
+%% xattr, its object id keyed by the xattr value.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_view_map_function(onedata_file:xattr_name()) -> index:view_function().
+gen_view_map_function(XattrName) ->
+    <<"function (id, type, meta, ctx) {
+        if (type == 'custom_metadata' && meta['", XattrName/binary, "']) {
+            return [meta['", XattrName/binary, "'], id];
+        }
+        return null;
+    }">>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Like gen_view_map_function/1 but emits [id, SecondXattrValue] pairs -
+%% input for a reduce function filtering by the second xattr value
+%% (see gen_view_reduce_function/1).
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_view_map_function(onedata_file:xattr_name(), onedata_file:xattr_name()) ->
+    index:view_function().
+gen_view_map_function(XattrName, SecondXattrName) ->
+    <<"function (id, type, meta, ctx) {
+        if (type == 'custom_metadata' && meta['", XattrName/binary, "']) {
+            return [meta['", XattrName/binary, "'], [id, meta['", SecondXattrName/binary, "']]];
+        }
+        return null;
+    }">>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Builds a view reduce function passing through only the file ids of the
+%% [id, XattrValue] pairs (emitted by gen_view_map_function/2) with the
+%% given xattr value.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_view_reduce_function(term()) -> index:view_function().
+gen_view_reduce_function(XattrValue) ->
+    XattrValueBin = str_utils:to_binary(XattrValue),
+    <<"function (key, values, rereduce) {
+        var filtered = [];
+        for (i = 0; i < values.length; i++)
+            if (values[i][1] == ", XattrValueBin/binary, ")
+                filtered.push(values[i][0]);
+        return filtered;
+    }">>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a view on the other provider (the one that evaluates it when
+%% processing transfers by view) and awaits the view doc dbsync on the
+%% creation (scheduling) provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_view(
+    suite_ctx(),
+    index:name(),
+    index:view_function(),
+    undefined | index:view_function(),
+    index:options()
+) ->
+    ok.
+create_view(#transfer_test_suite_ctx{
+    space_selector = SpaceSelector,
+    creation_provider_selector = CreationProviderSelector,
+    other_provider_selector = OtherProviderSelector
+}, ViewName, MapFunction, ReduceFunction, ViewOptions) ->
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    OtherProviderId = oct_background:get_provider_id(OtherProviderSelector),
+
+    ok = opw_test_rpc:call(OtherProviderSelector, index, save, [
+        SpaceId, ViewName, MapFunction, ReduceFunction, ViewOptions,
+        false, [OtherProviderId]
+    ]),
+    ?assertEqual(true, case opw_test_rpc:call(
+        CreationProviderSelector, index, get, [ViewName, SpaceId]
+    ) of
+        {ok, _} -> true;
+        {error, _} -> false
+    end, ?ATTEMPTS).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Awaits the view emitting exactly the expected values (in any order)
+%% for the given query. Queried on the other provider - the one the view
+%% is evaluated on.
+%% @end
+%%--------------------------------------------------------------------
+-spec await_view_query_result(suite_ctx(), index:name(), index:options(), [term()]) ->
+    ok.
+await_view_query_result(#transfer_test_suite_ctx{
+    space_selector = SpaceSelector,
+    other_provider_selector = OtherProviderSelector
+}, ViewName, QueryOptions, ExpectedValues) ->
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+
+    ?assertEqual(lists:sort(ExpectedValues), try
+        {ok, #{<<"rows">> := Rows}} = opw_test_rpc:call(OtherProviderSelector, index, query, [
+            SpaceId, ViewName, QueryOptions
+        ]),
+        lists:sort(lists:flatmap(fun(Row) ->
+            lists:flatten([maps:get(<<"value">>, Row)])
+        end, Rows))
+    catch _:_ ->
+        query_failed
+    end, ?ATTEMPTS).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes all views of the space, on every supporting provider. Called
+%% as part of the leftover cleanup - view test cases create views with
+%% per-run random names, which would otherwise accumulate.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_all_views(suite_ctx()) -> ok.
+remove_all_views(#transfer_test_suite_ctx{space_selector = SpaceSelector}) ->
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+
+    lists:foreach(fun(ProviderSelector) ->
+        {ok, ViewNames} = opw_test_rpc:call(ProviderSelector, index, list, [SpaceId]),
+        lists:foreach(fun(ViewName) ->
+            case opw_test_rpc:call(ProviderSelector, index, delete, [SpaceId, ViewName]) of
+                ok ->
+                    ok;
+                {error, not_found} ->
+                    % already deleted alongside the other provider (dbsync)
+                    ok
+            end
+        end, ViewNames)
+    end, oct_background:get_space_supporting_providers(SpaceSelector)).
 
 
 %%--------------------------------------------------------------------
@@ -315,16 +491,16 @@ unmock_gated_file_replication(ProviderSelector) ->
     end, Nodes).
 
 
--spec await_transfer_ended(suite_ctx(), transfer:id(), onenv_file_test_utils:object(), expected_transfer()) ->
+-spec await_transfer_ended(suite_ctx(), transfer:id(), file_tree_objects(), expected_transfer()) ->
     ok.
-await_transfer_ended(SuiteCtx, TransferId, TransferRootObject, Overrides) ->
-    await_transfer_ended(SuiteCtx, TransferId, TransferRootObject, Overrides, ?ATTEMPTS).
+await_transfer_ended(SuiteCtx, TransferId, TransferRootObjects, Overrides) ->
+    await_transfer_ended(SuiteCtx, TransferId, TransferRootObjects, Overrides, ?ATTEMPTS).
 
 
 -spec await_transfer_ended(
     suite_ctx(),
     transfer:id(),
-    onenv_file_test_utils:object(),
+    file_tree_objects(),
     expected_transfer(),
     non_neg_integer()
 ) ->
@@ -333,9 +509,9 @@ await_transfer_ended(#transfer_test_suite_ctx{
     transfer_type = TransferType,
     creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
-} = SuiteCtx, TransferId, TransferRootObject, Overrides, Attempts) ->
+} = SuiteCtx, TransferId, TransferRootObjects, Overrides, Attempts) ->
     ExpectedTransfer = maps:merge(
-        build_expected_transfer(SuiteCtx, TransferRootObject, Overrides),
+        build_expected_transfer(SuiteCtx, TransferRootObjects, Overrides),
         maps:remove(tree_bytes, Overrides)
     ),
 
@@ -349,10 +525,10 @@ await_transfer_ended(#transfer_test_suite_ctx{
     end, [CreationProviderSelector, OtherProviderSelector]).
 
 
--spec assert_distribution(suite_ctx(), onenv_file_test_utils:object()) ->
+-spec assert_distribution(suite_ctx(), file_tree_objects()) ->
     ok.
-assert_distribution(TestSuiteCtx, TransferRootObject) ->
-    assert_distribution(TestSuiteCtx, TransferRootObject, #{}).
+assert_distribution(TestSuiteCtx, TransferRootObjects) ->
+    assert_distribution(TestSuiteCtx, TransferRootObjects, #{}).
 
 
 %%--------------------------------------------------------------------
@@ -365,7 +541,7 @@ assert_distribution(TestSuiteCtx, TransferRootObject) ->
 %%--------------------------------------------------------------------
 -spec assert_distribution(
     suite_ctx(),
-    onenv_file_test_utils:object(),
+    file_tree_objects(),
     #{file_id:file_guid() => file_meta:size()}
 ) ->
     ok.
@@ -373,7 +549,7 @@ assert_distribution(#transfer_test_suite_ctx{
     transfer_type = TransferType,
     creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
-}, TransferRootObject, FileSizeOverrides) ->
+}, TransferRootObjects, FileSizeOverrides) ->
     CreationNode = oct_background:get_random_provider_node(CreationProviderSelector),
     OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
 
@@ -387,7 +563,7 @@ assert_distribution(#transfer_test_suite_ctx{
             migration -> [{CreationNode, 0}, {OtherNode, FileSize}]
         end,
         {FileName, FileGuid, ExpSizePerNode}
-    end, collect_regular_files(TransferRootObject)),
+    end, collect_regular_files(TransferRootObjects)),
 
     %% TODO VFS-13678 remove debug logging before merge to develop
     ct:pal("Asserting file distribution after ~tp, expected:~n~tp", [
@@ -398,6 +574,35 @@ assert_distribution(#transfer_test_suite_ctx{
     lists:foreach(fun({_FileName, FileGuid, ExpSizePerNode}) ->
         file_test_utils:await_distribution([CreationNode, OtherNode], FileGuid, ExpSizePerNode)
     end, FilesWithExpDistribution).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Asserts the pre-transfer block distribution of every regular file of
+%% the given tree (or file list): the creation provider holds the whole
+%% content while the other provider holds full replicas for eviction
+%% (set up by ensure_initial_replicas/2) and no blocks otherwise. Meant
+%% for tests expecting a transfer to change nothing.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_initial_distribution(suite_ctx(), file_tree_objects()) ->
+    ok.
+assert_initial_distribution(#transfer_test_suite_ctx{
+    transfer_type = TransferType,
+    creation_provider_selector = CreationProviderSelector,
+    other_provider_selector = OtherProviderSelector
+}, TransferRootObjects) ->
+    lists:foreach(fun(#object{guid = FileGuid, content = Content}) ->
+        FileSize = byte_size(Content),
+        OtherProviderSize = case TransferType of
+            eviction -> FileSize;
+            _ -> 0
+        end,
+        await_distribution(
+            [CreationProviderSelector, OtherProviderSelector], FileGuid,
+            [{CreationProviderSelector, FileSize}, {OtherProviderSelector, OtherProviderSize}]
+        )
+    end, collect_regular_files(TransferRootObjects)).
 
 
 %%--------------------------------------------------------------------
@@ -593,17 +798,35 @@ remove_all_datasets(SpaceSelector, UserSelector) ->
 
 
 %% @private
--spec build_expected_transfer(suite_ctx(), onenv_file_test_utils:object(), expected_transfer()) ->
+-spec get_transfer_target_providers(suite_ctx()) ->
+    {ReplicatingProviderId :: undefined | od_provider:id(), EvictingProviderId :: undefined | od_provider:id()}.
+get_transfer_target_providers(#transfer_test_suite_ctx{
+    transfer_type = TransferType,
+    creation_provider_selector = CreationProviderSelector,
+    other_provider_selector = OtherProviderSelector
+}) ->
+    CreationProviderId = oct_background:get_provider_id(CreationProviderSelector),
+    OtherProviderId = oct_background:get_provider_id(OtherProviderSelector),
+
+    case TransferType of
+        replication -> {OtherProviderId, undefined};
+        eviction -> {undefined, OtherProviderId};
+        migration -> {OtherProviderId, CreationProviderId}
+    end.
+
+
+%% @private
+-spec build_expected_transfer(suite_ctx(), file_tree_objects(), expected_transfer()) ->
     expected_transfer().
 build_expected_transfer(#transfer_test_suite_ctx{
     transfer_type = TransferType,
     user_selector = UserSelector,
     creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
-}, TransferRootObject, Overrides) ->
+}, TransferRootObjects, Overrides) ->
     CreationProviderId = oct_background:get_provider_id(CreationProviderSelector),
     OtherProviderId = oct_background:get_provider_id(OtherProviderSelector),
-    {FilesCount, DeclaredBytesCount} = count_files_and_bytes(TransferRootObject),
+    {FilesCount, DeclaredBytesCount} = count_files_and_bytes(TransferRootObjects),
     BytesExpectation = maps:get(tree_bytes, Overrides, DeclaredBytesCount),
 
     CommonExpectation = #{
@@ -674,24 +897,28 @@ build_expected_histograms(SourceProviderId, BytesExpectation) ->
 
 
 %% @private
--spec count_files_and_bytes(onenv_file_test_utils:object()) ->
+-spec count_files_and_bytes(file_tree_objects()) ->
     {non_neg_integer(), non_neg_integer()}.
+count_files_and_bytes(Objects) when is_list(Objects) ->
+    lists:foldl(fun(Object, {FilesCountAcc, BytesCountAcc}) ->
+        {FilesCount, BytesCount} = count_files_and_bytes(Object),
+        {FilesCountAcc + FilesCount, BytesCountAcc + BytesCount}
+    end, {0, 0}, Objects);
 count_files_and_bytes(#object{type = ?REGULAR_FILE_TYPE, content = Content}) ->
     {1, byte_size(Content)};
 count_files_and_bytes(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
-    lists:foldl(fun(Child, {FilesCountAcc, BytesCountAcc}) ->
-        {FilesCount, BytesCount} = count_files_and_bytes(Child),
-        {FilesCountAcc + FilesCount, BytesCountAcc + BytesCount}
-    end, {0, 0}, Children).
+    count_files_and_bytes(Children).
 
 
 %% @private
--spec collect_regular_files(onenv_file_test_utils:object()) ->
+-spec collect_regular_files(file_tree_objects()) ->
     [onenv_file_test_utils:object()].
+collect_regular_files(Objects) when is_list(Objects) ->
+    lists:flatmap(fun collect_regular_files/1, Objects);
 collect_regular_files(#object{type = ?REGULAR_FILE_TYPE} = Object) ->
     [Object];
 collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
-    lists:flatmap(fun collect_regular_files/1, Children).
+    collect_regular_files(Children).
 
 
 %% @private

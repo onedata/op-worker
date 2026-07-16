@@ -33,16 +33,6 @@
     eviction_should_succeed_when_remote_provider_modified_file_replica/1,
     eviction_should_fail_when_evicting_provider_modified_file_replica/1,
     quota_decreased_after_eviction/1,
-    schedule_replica_eviction_by_view/1,
-    schedule_eviction_of_regular_file_by_view_with_reduce/1,
-    scheduling_replica_eviction_by_not_existing_view_should_fail/1,
-    scheduling_replica_eviction_by_view_with_function_returning_wrong_value_should_fail/1,
-    scheduling_replica_eviction_by_view_returning_not_existing_file_should_not_fail/1,
-    scheduling_replica_eviction_by_empty_view_should_succeed/1,
-    scheduling_replica_eviction_by_not_existing_key_in_view_should_succeed/1,
-    schedule_replica_eviction_of_100_regular_files_by_view_with_batch_1000/1,
-    schedule_replica_eviction_of_100_regular_files_by_view_with_batch_100/1,
-    schedule_replica_eviction_of_100_regular_files_by_view_with_batch_10/1,
     remove_file_during_eviction/1
 ]).
 
@@ -58,16 +48,6 @@ all() -> [
     eviction_should_succeed_when_remote_provider_modified_file_replica,
     eviction_should_fail_when_evicting_provider_modified_file_replica,
     quota_decreased_after_eviction,
-    schedule_replica_eviction_by_view,
-    schedule_eviction_of_regular_file_by_view_with_reduce,
-    scheduling_replica_eviction_by_not_existing_view_should_fail,
-    scheduling_replica_eviction_by_view_with_function_returning_wrong_value_should_fail,
-    scheduling_replica_eviction_by_view_returning_not_existing_file_should_not_fail,
-    scheduling_replica_eviction_by_empty_view_should_succeed,
-    scheduling_replica_eviction_by_not_existing_key_in_view_should_succeed,
-    schedule_replica_eviction_of_100_regular_files_by_view_with_batch_1000,
-    schedule_replica_eviction_of_100_regular_files_by_view_with_batch_100,
-    schedule_replica_eviction_of_100_regular_files_by_view_with_batch_10,
     remove_file_during_eviction
 ].
 
@@ -107,38 +87,6 @@ eviction_should_fail_when_evicting_provider_modified_file_replica(Config) ->
 
 quota_decreased_after_eviction(Config) ->
     replica_eviction_transfers_test_base:quota_decreased_after_eviction(Config, rest, guid).
-
-schedule_replica_eviction_by_view(Config) ->
-    replica_eviction_transfers_test_base:schedule_replica_eviction_by_view(Config, rest).
-
-schedule_eviction_of_regular_file_by_view_with_reduce(Config) ->
-    replica_eviction_transfers_test_base:schedule_eviction_of_regular_file_by_view_with_reduce(Config, rest).
-
-scheduling_replica_eviction_by_not_existing_view_should_fail(Config) ->
-    replica_eviction_transfers_test_base:scheduling_replica_eviction_by_not_existing_view_should_fail(Config, rest).
-
-scheduling_replica_eviction_by_view_with_function_returning_wrong_value_should_fail(Config) ->
-    replica_eviction_transfers_test_base:scheduling_replica_eviction_by_view_with_function_returning_wrong_value_should_fail(Config, rest).
-
-scheduling_replica_eviction_by_view_returning_not_existing_file_should_not_fail(Config) ->
-    replica_eviction_transfers_test_base:scheduling_replica_eviction_by_view_returning_not_existing_file_should_not_fail(Config, rest).
-
-scheduling_replica_eviction_by_empty_view_should_succeed(Config) ->
-    replica_eviction_transfers_test_base:scheduling_replica_eviction_by_empty_view_should_succeed(Config, rest).
-
-scheduling_replica_eviction_by_not_existing_key_in_view_should_succeed(Config) ->
-    replica_eviction_transfers_test_base:scheduling_replica_eviction_by_not_existing_key_in_view_should_succeed(Config, rest).
-
-schedule_replica_eviction_of_100_regular_files_by_view_with_batch_1000(Config) ->
-    replica_eviction_transfers_test_base:schedule_replica_eviction_of_100_regular_files_by_view(Config, rest).
-
-schedule_replica_eviction_of_100_regular_files_by_view_with_batch_100(Config) ->
-    %replica_eviction_transfers_test_base:init_per_testcase sets replica_eviction_by_view_batch variable to 100
-    replica_eviction_transfers_test_base:schedule_replica_eviction_of_100_regular_files_by_view(Config, rest).
-
-schedule_replica_eviction_of_100_regular_files_by_view_with_batch_10(Config) ->
-    %replica_eviction_transfers_test_base:init_per_testcase sets replica_eviction_by_view_batch variable to 10
-    replica_eviction_transfers_test_base:schedule_replica_eviction_of_100_regular_files_by_view(Config, rest).
 
 remove_file_during_eviction(Config) ->
     replica_eviction_transfers_test_base:remove_file_during_eviction(Config, rest, guid).

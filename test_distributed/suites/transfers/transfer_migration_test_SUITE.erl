@@ -36,7 +36,19 @@
     hundred_files_in_separate_transfers_test/1,
 
     %% --- protection flags ---
-    transfer_despite_protection_flags_test/1
+    transfer_despite_protection_flags_test/1,
+
+    %% --- transfers by view ---
+    regular_file_by_view_test/1,
+    files_matched_by_view_with_reduce_test/1,
+    transfer_by_not_existing_view_test/1,
+    transfer_by_view_emitting_invalid_file_id_test/1,
+    transfer_by_view_emitting_not_existing_file_id_test/1,
+    transfer_by_empty_view_test/1,
+    transfer_by_view_with_not_matching_key_test/1,
+    hundred_files_by_view_test/1,
+    hundred_files_by_view_with_batch_100_test/1,
+    hundred_files_by_view_with_batch_10_test/1
 ]).
 
 all() -> [
@@ -52,7 +64,19 @@ all() -> [
     hundred_files_in_separate_transfers_test,
 
     %% --- protection flags ---
-    transfer_despite_protection_flags_test
+    transfer_despite_protection_flags_test,
+
+    %% --- transfers by view ---
+    regular_file_by_view_test,
+    files_matched_by_view_with_reduce_test,
+    transfer_by_not_existing_view_test,
+    transfer_by_view_emitting_invalid_file_id_test,
+    transfer_by_view_emitting_not_existing_file_id_test,
+    transfer_by_empty_view_test,
+    transfer_by_view_with_not_matching_key_test,
+    hundred_files_by_view_test,
+    hundred_files_by_view_with_batch_100_test,
+    hundred_files_by_view_with_batch_10_test
 ].
 
 -define(SUITE_CTX, #transfer_test_suite_ctx{
@@ -91,6 +115,21 @@ hundred_files_in_separate_transfers_test(_Config) -> ?run_test().
 
 
 transfer_despite_protection_flags_test(_Config) -> ?run_test().
+
+
+%% --- transfers by view ---
+
+
+regular_file_by_view_test(_Config) -> ?run_test().
+files_matched_by_view_with_reduce_test(_Config) -> ?run_test().
+transfer_by_not_existing_view_test(_Config) -> ?run_test().
+transfer_by_view_emitting_invalid_file_id_test(_Config) -> ?run_test().
+transfer_by_view_emitting_not_existing_file_id_test(_Config) -> ?run_test().
+transfer_by_empty_view_test(_Config) -> ?run_test().
+transfer_by_view_with_not_matching_key_test(_Config) -> ?run_test().
+hundred_files_by_view_test(_Config) -> ?run_test().
+hundred_files_by_view_with_batch_100_test(_Config) -> ?run_test().
+hundred_files_by_view_with_batch_10_test(_Config) -> ?run_test().
 
 
 %===================================================================
