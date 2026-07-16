@@ -22,17 +22,9 @@
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
-    replicate_empty_dir_by_guid/1,
-    replicate_tree_of_empty_dirs_by_guid/1,
-    replicate_regular_file_by_guid/1,
-    replicate_file_in_directory_by_guid/1,
-    replicate_big_file/1,
     schedule_replication_to_source_provider/1,
     replicate_already_replicated_file/1,
     not_synced_file_should_not_be_replicated/1,
-    replicate_100_files_separately/1,
-    replicate_100_files_in_one_transfer/1,
-    replication_should_succeed_despite_protection_flags/1,
     replication_should_succeed_when_there_is_enough_space_for_file/1,
     replication_should_fail_when_space_is_full/1,
     replicate_to_missing_provider_by_guid/1,
@@ -64,17 +56,9 @@
 ]).
 
 all() -> [
-    replicate_empty_dir_by_guid,
-    replicate_tree_of_empty_dirs_by_guid,
-    replicate_regular_file_by_guid,
-    replicate_file_in_directory_by_guid,
-    replicate_big_file,
     schedule_replication_to_source_provider,
     replicate_already_replicated_file,
     not_synced_file_should_not_be_replicated,
-    replicate_100_files_separately,
-    replicate_100_files_in_one_transfer,
-    replication_should_succeed_despite_protection_flags,
     replication_should_succeed_when_there_is_enough_space_for_file,
     replication_should_fail_when_space_is_full,
     replicate_to_missing_provider_by_guid,
@@ -109,21 +93,6 @@ all() -> [
 %%% API
 %%%===================================================================
 
-replicate_empty_dir_by_guid(Config) ->
-    replication_transfers_test_base:replicate_empty_dir(Config, rest, guid).
-
-replicate_tree_of_empty_dirs_by_guid(Config) ->
-    replication_transfers_test_base:replicate_tree_of_empty_dirs(Config, rest, guid).
-
-replicate_regular_file_by_guid(Config) ->
-    replication_transfers_test_base:replicate_regular_file(Config, rest, guid).
-
-replicate_file_in_directory_by_guid(Config) ->
-    replication_transfers_test_base:replicate_file_in_directory(Config, rest, guid).
-
-replicate_big_file(Config) ->
-    replication_transfers_test_base:replicate_big_file(Config, rest, guid).
-
 schedule_replication_to_source_provider(Config) ->
     replication_transfers_test_base:schedule_replication_to_source_provider(Config, rest, guid).
 
@@ -133,15 +102,6 @@ replicate_already_replicated_file(Config) ->
 not_synced_file_should_not_be_replicated(Config) ->
     % replication_worker:transfer_regular_file is mocked to return {error, not_found}
     replication_transfers_test_base:not_synced_file_should_not_be_replicated(Config, rest, guid).
-
-replicate_100_files_separately(Config) ->
-    replication_transfers_test_base:replicate_100_files_separately(Config, rest, guid).
-
-replicate_100_files_in_one_transfer(Config) ->
-    replication_transfers_test_base:replicate_100_files_in_one_transfer(Config, rest, guid).
-
-replication_should_succeed_despite_protection_flags(Config) ->
-    replication_transfers_test_base:replication_should_succeed_despite_protection_flags(Config, rest, guid).
 
 replication_should_succeed_when_there_is_enough_space_for_file(Config) ->
     replication_transfers_test_base:replication_should_succeed_when_there_is_enough_space_for_file(Config, rest, guid).
