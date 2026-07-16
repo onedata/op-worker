@@ -239,7 +239,10 @@ stages:
         - swift_helper
         - tmp_db_error
         - transfer_create_api
+        - transfer_eviction
         - transfer_get_api
+        - transfer_migration
+        - transfer_replication
         - transfers_restart
         - trash
         - tree_deletion_traverse
@@ -1832,12 +1835,33 @@ transfer_create_api:
     - <<: *ct_logs
       name: ct_logs_transfer_create_api.tar.gz
 
+transfer_eviction:
+  <<: *ct-onenv-job
+  key: TRANSEVIC
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_transfer_eviction.tar.gz
+
 transfer_get_api:
   <<: *ct-job
   key: TRANGETAPI
   artifacts:
     - <<: *ct_logs
       name: ct_logs_transfer_get_api.tar.gz
+
+transfer_migration:
+  <<: *ct-onenv-job
+  key: TRANSMIGR
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_transfer_migration.tar.gz
+
+transfer_replication:
+  <<: *ct-onenv-job
+  key: TRANSREPL
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_transfer_replication.tar.gz
 
 transfers_restart:
   <<: *ct-onenv-job
@@ -2145,7 +2169,10 @@ Coverage report:
     - artifact: ct_logs_swift_helper.tar.gz
     - artifact: ct_logs_tmp_db_error.tar.gz
     - artifact: ct_logs_transfer_create_api.tar.gz
+    - artifact: ct_logs_transfer_eviction.tar.gz
     - artifact: ct_logs_transfer_get_api.tar.gz
+    - artifact: ct_logs_transfer_migration.tar.gz
+    - artifact: ct_logs_transfer_replication.tar.gz
     - artifact: ct_logs_transfers_restart.tar.gz
     - artifact: ct_logs_trash.tar.gz
     - artifact: ct_logs_tree_deletion_traverse.tar.gz
