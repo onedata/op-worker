@@ -14,8 +14,8 @@
 %%%    directory named after the test case wrapping the declared content)
 %%%    on the creation provider and awaits its sync on the other one;
 %%% 2. ensure_initial_replicas/2 - sets up the replicas the suite's transfer
-%%%    type operates on (pre-replicates the tree for replica eviction;
-%%%    no-op otherwise);
+%%%    type operates on (for replica eviction every tree file is read on the
+%%%    other provider, which forces its replication; no-op otherwise);
 %%% 3. schedule_transfer/2 - schedules the suite-ctx-defined transfer type
 %%%    for the given file tree object;
 %%% 4. await_transfer_ended/4,5 - awaits the transfer doc reaching its
@@ -48,7 +48,6 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include_lib("ctool/include/onedata_file.hrl").
--include_lib("ctool/include/posix/errno.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% API
@@ -108,6 +107,8 @@
 
 -define(SPACE_ROOT_LS_LIMIT, 10000).
 
+-define(PREREPLICATION_READ_CHUNK_SIZE, 33554432).  % 32 MiB
+
 -define(FILE_REPLICATION_PERMITS_KEY, file_replication_permits).
 -define(FILE_REPLICATION_JOB_GATED_MSG, file_replication_job_gated).
 -define(FILE_REPLICATION_PERMIT_POLL_INTERVAL_MS, 100).
@@ -138,12 +139,11 @@ remove_leftover_file_trees(#transfer_test_suite_ctx{
     {ok, Children} = onenv_file_test_utils:ls(UserSelector, SpaceSelector, 0, ?SPACE_ROOT_LS_LIMIT),
     CaseNamePrefix = <<(atom_to_binary(CaseName, utf8))/binary, "_">>,
 
-    lists:foreach(fun({ChildGuid, ChildName}) ->
-        case str_utils:binary_starts_with(ChildName, CaseNamePrefix) of
-            true -> rm_leftover_file_tree(SpaceSelector, UserSelector, ChildGuid);
-            false -> ok
-        end
-    end, Children).
+    LeftoverTreeGuids = [ChildGuid || {ChildGuid, ChildName} <- Children,
+        str_utils:binary_starts_with(ChildName, CaseNamePrefix)],
+    lists_utils:pforeach(fun(ChildGuid) ->
+        rm_leftover_file_tree(SpaceSelector, UserSelector, ChildGuid)
+    end, LeftoverTreeGuids).
 
 
 %%--------------------------------------------------------------------
@@ -187,29 +187,23 @@ create_file_tree(#transfer_test_suite_ctx{
 %% @doc
 %% Ensures the initial replicas required by the suite's transfer type exist
 %% before the tested transfer is scheduled: replica eviction operates on
-%% a file tree already replicated to the other provider, so the tree is
-%% pre-replicated with an auxiliary replication transfer. For the other
-%% transfer types the creation provider replicas suffice.
+%% a file tree already replicated to the other provider, so every tree file
+%% is read (in parallel) on that provider, which forces its replication.
+%% For the other transfer types the creation provider replicas suffice.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_initial_replicas(suite_ctx(), onenv_file_test_utils:object()) -> ok.
 ensure_initial_replicas(#transfer_test_suite_ctx{
     transfer_type = eviction,
     user_selector = UserSelector,
-    creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
-}, #object{guid = RootFileGuid}) ->
-    SessionId = oct_background:get_user_session_id(UserSelector, CreationProviderSelector),
-    OtherProviderId = oct_background:get_provider_id(OtherProviderSelector),
+}, RootObject) ->
+    OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
+    SessionId = oct_background:get_user_session_id(UserSelector, OtherProviderSelector),
 
-    %% TODO consider reading every file on other provider - that will cause replication
-    {ok, TransferId} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(
-        CreationProviderSelector, SessionId, ?FILE_REF(RootFileGuid), OtherProviderId
-    )),
-    ExpectedTransfer = #{replication_status => ?COMPLETED_STATUS, failed_files => 0},
-    lists:foreach(fun(ProviderSelector) ->
-        await_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, ?LARGE_TRANSFER_ATTEMPTS)
-    end, [CreationProviderSelector, OtherProviderSelector]);
+    lists_utils:pforeach(fun(#object{guid = FileGuid}) ->
+        replicate_file_by_read(OtherNode, SessionId, FileGuid)
+    end, collect_regular_files(RootObject));
 ensure_initial_replicas(_TestSuiteCtx, _TransferRootObject) ->
     ok.
 
@@ -313,9 +307,9 @@ gen_view_reduce_function(XattrValue) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a view on the other provider (the one that evaluates it when
-%% processing transfers by view) and awaits the view doc dbsync on the
-%% creation (scheduling) provider.
+%% Creates a view on the providers that evaluate it when processing
+%% transfers by view (see get_view_evaluating_provider_selectors/1) and
+%% awaits the view doc dbsync on the creation (scheduling) provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_view(
@@ -326,17 +320,20 @@ gen_view_reduce_function(XattrValue) ->
     index:options()
 ) ->
     ok.
-create_view(#transfer_test_suite_ctx{
+create_view(TestSuiteCtx = #transfer_test_suite_ctx{
     space_selector = SpaceSelector,
     creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
 }, ViewName, MapFunction, ReduceFunction, ViewOptions) ->
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    OtherProviderId = oct_background:get_provider_id(OtherProviderSelector),
+    EvaluatingProviderIds = lists:map(
+        fun oct_background:get_provider_id/1,
+        get_view_evaluating_provider_selectors(TestSuiteCtx)
+    ),
 
     ok = opw_test_rpc:call(OtherProviderSelector, index, save, [
         SpaceId, ViewName, MapFunction, ReduceFunction, ViewOptions,
-        false, [OtherProviderId]
+        false, EvaluatingProviderIds
     ]),
     ?assertEqual(true, case opw_test_rpc:call(
         CreationProviderSelector, index, get, [ViewName, SpaceId]
@@ -349,28 +346,31 @@ create_view(#transfer_test_suite_ctx{
 %%--------------------------------------------------------------------
 %% @doc
 %% Awaits the view emitting exactly the expected values (in any order)
-%% for the given query. Queried on the other provider - the one the view
-%% is evaluated on.
+%% for the given query on every provider that evaluates the view when
+%% processing transfers by view (the xattrs driving the emissions are set
+%% on the other provider, so on the creation provider - queried only for
+%% migration - the emissions additionally await the metadata dbsync).
 %% @end
 %%--------------------------------------------------------------------
 -spec await_view_query_result(suite_ctx(), index:name(), index:options(), [term()]) ->
     ok.
-await_view_query_result(#transfer_test_suite_ctx{
-    space_selector = SpaceSelector,
-    other_provider_selector = OtherProviderSelector
+await_view_query_result(TestSuiteCtx = #transfer_test_suite_ctx{
+    space_selector = SpaceSelector
 }, ViewName, QueryOptions, ExpectedValues) ->
     SpaceId = oct_background:get_space_id(SpaceSelector),
 
-    ?assertEqual(lists:sort(ExpectedValues), try
-        {ok, #{<<"rows">> := Rows}} = opw_test_rpc:call(OtherProviderSelector, index, query, [
-            SpaceId, ViewName, QueryOptions
-        ]),
-        lists:sort(lists:flatmap(fun(Row) ->
-            lists:flatten([maps:get(<<"value">>, Row)])
-        end, Rows))
-    catch _:_ ->
-        query_failed
-    end, ?ATTEMPTS).
+    lists_utils:pforeach(fun(ProviderSelector) ->
+        ?assertEqual(lists:sort(ExpectedValues), try
+            {ok, #{<<"rows">> := Rows}} = opw_test_rpc:call(ProviderSelector, index, query, [
+                SpaceId, ViewName, QueryOptions
+            ]),
+            lists:sort(lists:flatmap(fun(Row) ->
+                lists:flatten([maps:get(<<"value">>, Row)])
+            end, Rows))
+        catch _:_ ->
+            query_failed
+        end, ?ATTEMPTS)
+    end, get_view_evaluating_provider_selectors(TestSuiteCtx)).
 
 
 %%--------------------------------------------------------------------
@@ -384,7 +384,7 @@ await_view_query_result(#transfer_test_suite_ctx{
 remove_all_views(#transfer_test_suite_ctx{space_selector = SpaceSelector}) ->
     SpaceId = oct_background:get_space_id(SpaceSelector),
 
-    lists:foreach(fun(ProviderSelector) ->
+    lists_utils:pforeach(fun(ProviderSelector) ->
         {ok, ViewNames} = opw_test_rpc:call(ProviderSelector, index, list, [SpaceId]),
         lists:foreach(fun(ViewName) ->
             case opw_test_rpc:call(ProviderSelector, index, delete, [SpaceId, ViewName]) of
@@ -571,7 +571,7 @@ assert_distribution(#transfer_test_suite_ctx{
         [{FileName, ExpSizePerNode} || {FileName, _, ExpSizePerNode} <- FilesWithExpDistribution]
     ]),
 
-    lists:foreach(fun({_FileName, FileGuid, ExpSizePerNode}) ->
+    lists_utils:pforeach(fun({_FileName, FileGuid, ExpSizePerNode}) ->
         file_test_utils:await_distribution([CreationNode, OtherNode], FileGuid, ExpSizePerNode)
     end, FilesWithExpDistribution).
 
@@ -592,7 +592,7 @@ assert_initial_distribution(#transfer_test_suite_ctx{
     creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
 }, TransferRootObjects) ->
-    lists:foreach(fun(#object{guid = FileGuid, content = Content}) ->
+    lists_utils:pforeach(fun(#object{guid = FileGuid, content = Content}) ->
         FileSize = byte_size(Content),
         OtherProviderSize = case TransferType of
             eviction -> FileSize;
@@ -642,10 +642,10 @@ remove_all_transfers(#transfer_test_suite_ctx{
 }) ->
     SpaceId = oct_background:get_space_id(SpaceSelector),
 
-    lists:foreach(fun(ProviderSelector) ->
+    lists_utils:pforeach(fun(ProviderSelector) ->
         lists:foreach(fun(ListingFun) ->
             {ok, TransferIds} = opw_test_rpc:call(ProviderSelector, transfer, ListingFun, [SpaceId]),
-            lists:foreach(fun(TransferId) ->
+            lists_utils:pforeach(fun(TransferId) ->
                 opw_test_rpc:call(ProviderSelector, transfer, delete, [TransferId])
             end, TransferIds)
         end, [list_waiting_transfers, list_ongoing_transfers, list_ended_transfers])
@@ -722,44 +722,26 @@ try_acquire_file_replication_permit(PermitsRef) ->
 
 
 %% @private
-%% Removes a leftover file tree, awaiting its disappearance from the
-%% user-visible space on every provider. Unlike
-%% onenv_file_test_utils:rm_and_sync_file/2, a tree that has been moved to the
-%% trash already counts as removed - it does not wait for the (asynchronous,
-%% size-proportional) purge from the trash to finish, which for large trees
-%% may outlast the assertion attempts.
+%% Removes a leftover file tree. Only the removing provider is awaited
+%% (lfm_proxy:rm_recursive synchronously moves the tree to the trash; the
+%% purge from the trash is asynchronous and size-proportional). The tree
+%% vanishing from the other providers' view of the space is NOT awaited -
+%% the tree created by the current case run carries a fresh random suffix
+%% in its name (see create_file_tree/3), so a lingering not-yet-synced-away
+%% leftover cannot collide with it, while the await would hostage the setup
+%% to the very dbsync backlog the trash purge generates.
 -spec rm_leftover_file_tree(
     oct_background:entity_selector(), oct_background:entity_selector(), file_id:file_guid()
 ) ->
     ok.
 rm_leftover_file_tree(SpaceSelector, UserSelector, FileGuid) ->
-    UserId = oct_background:get_user_id(UserSelector),
-    SpaceId = oct_background:get_space_id(SpaceSelector),
-    [RmProvider | RestProviders] = lists_utils:shuffle(
+    RmProvider = lists_utils:random_element(
         oct_background:get_space_supporting_providers(SpaceSelector)
     ),
-
     RmNode = oct_background:get_random_provider_node(RmProvider),
-    RmSessId = oct_background:get_user_session_id(UserId, RmProvider),
+    RmSessId = oct_background:get_user_session_id(UserSelector, RmProvider),
     ?assertMatch(ok, lfm_proxy:rm_recursive(RmNode, RmSessId, ?FILE_REF(FileGuid))),
-
-    TrashGuid = opw_test_rpc:call(RmProvider, trash_dir, guid, [SpaceId]),
-    lists:foreach(fun(Provider) ->
-        Node = oct_background:get_random_provider_node(Provider),
-        SessId = oct_background:get_user_session_id(UserId, Provider),
-        ?assertEqual(true, is_removed_from_space(Node, SessId, FileGuid, TrashGuid), ?ATTEMPTS)
-    end, RestProviders).
-
-
-%% @private
--spec is_removed_from_space(node(), session:id(), file_id:file_guid(), file_id:file_guid()) ->
-    boolean().
-is_removed_from_space(Node, SessId, FileGuid, TrashGuid) ->
-    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid)) of
-        {error, ?ENOENT} -> true;
-        {ok, #file_attr{parent_guid = TrashGuid}} -> true;
-        _ -> false
-    end.
+    ok.
 
 
 %% @private
@@ -795,6 +777,27 @@ remove_all_datasets(SpaceSelector, UserSelector) ->
             end
         end, Datasets)
     end, [attached, detached]).
+
+
+%% @private
+%% Providers that evaluate views when processing transfers by view. Both the
+%% replication and the eviction (sub)task query the view LOCALLY on the
+%% provider executing it (a view is instantiated only on the providers it was
+%% created with - on the others its processing completes as a no-op), so for
+%% migration - whose eviction phase runs on the creation provider - the view
+%% must be evaluated on both providers.
+-spec get_view_evaluating_provider_selectors(suite_ctx()) ->
+    [oct_background:entity_selector()].
+get_view_evaluating_provider_selectors(#transfer_test_suite_ctx{
+    transfer_type = migration,
+    creation_provider_selector = CreationProviderSelector,
+    other_provider_selector = OtherProviderSelector
+}) ->
+    [CreationProviderSelector, OtherProviderSelector];
+get_view_evaluating_provider_selectors(#transfer_test_suite_ctx{
+    other_provider_selector = OtherProviderSelector
+}) ->
+    [OtherProviderSelector].
 
 
 %% @private
@@ -919,6 +922,35 @@ collect_regular_files(#object{type = ?REGULAR_FILE_TYPE} = Object) ->
     [Object];
 collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
     collect_regular_files(Children).
+
+
+%% @private
+%% Reads the whole file on the given node, which forces replication of its
+%% content. The size is taken from stat rather than the declared tree content
+%% (which does not cover data written outside of the tree spec, e.g. by the
+%% big file test) and the reads are chunked so that even such files do not
+%% materialize as single huge binaries.
+-spec replicate_file_by_read(node(), session:id(), file_id:file_guid()) -> ok.
+replicate_file_by_read(Node, SessionId, FileGuid) ->
+    {ok, #file_attr{size = FileSize}} = ?assertMatch({ok, _}, lfm_proxy:stat(
+        Node, SessionId, ?FILE_REF(FileGuid)
+    )),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(
+        Node, SessionId, ?FILE_REF(FileGuid), read
+    )),
+    read_file_in_chunks(Node, Handle, 0, FileSize),
+    ok = lfm_proxy:close(Node, Handle).
+
+
+%% @private
+-spec read_file_in_chunks(node(), lfm:handle(), non_neg_integer(), non_neg_integer()) -> ok.
+read_file_in_chunks(_Node, _Handle, Offset, FileSize) when Offset >= FileSize ->
+    ok;
+read_file_in_chunks(Node, Handle, Offset, FileSize) ->
+    ChunkSize = min(?PREREPLICATION_READ_CHUNK_SIZE, FileSize - Offset),
+    {ok, Data} = ?assertMatch({ok, _}, lfm_proxy:read(Node, Handle, Offset, ChunkSize)),
+    ?assertEqual(ChunkSize, byte_size(Data)),
+    read_file_in_chunks(Node, Handle, Offset + ChunkSize, FileSize).
 
 
 %% @private

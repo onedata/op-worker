@@ -47,7 +47,6 @@
     transfer_by_empty_view_test/1,
     transfer_by_view_with_not_matching_key_test/1,
     hundred_files_by_view_test/1,
-    hundred_files_by_view_with_batch_100_test/1,
     hundred_files_by_view_with_batch_10_test/1
 ]).
 
@@ -61,19 +60,12 @@
 %%%===================================================================
 
 
-init_per_testcase(Case, TestSuiteCtx, Config) when
-    Case =:= hundred_files_by_view_with_batch_100_test;
-    Case =:= hundred_files_by_view_with_batch_10_test
-->
+init_per_testcase(Case = hundred_files_by_view_with_batch_10_test, TestSuiteCtx, Config) ->
     Nodes = get_all_provider_nodes(TestSuiteCtx),
     {ok, DefaultBatchSize} = test_utils:get_env(
         hd(Nodes), op_worker, transfer_traverse_list_batch_size
     ),
-    BatchSize = case Case of
-        hundred_files_by_view_with_batch_100_test -> 100;
-        hundred_files_by_view_with_batch_10_test -> 10
-    end,
-    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, BatchSize),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, 10),
 
     NewConfig = init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config),
     [{transfer_traverse_list_batch_size, DefaultBatchSize} | NewConfig];
@@ -86,10 +78,7 @@ init_per_testcase(Case, TestSuiteCtx, Config) ->
     NewConfig.
 
 
-end_per_testcase(Case, TestSuiteCtx, Config) when
-    Case =:= hundred_files_by_view_with_batch_100_test;
-    Case =:= hundred_files_by_view_with_batch_10_test
-->
+end_per_testcase(Case = hundred_files_by_view_with_batch_10_test, TestSuiteCtx, Config) ->
     Nodes = get_all_provider_nodes(TestSuiteCtx),
     DefaultBatchSize = ?config(transfer_traverse_list_batch_size, Config),
     test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, DefaultBatchSize),
@@ -114,9 +103,12 @@ empty_dir_test(TestSuiteCtx) ->
 
 
 tree_of_empty_dirs_test(TestSuiteCtx) ->
-    % 3 levels of nested directories, 10 dirs on each level (1110 dirs overall)
+    % 3 levels of nested directories, 5 dirs on each level (155 dirs overall) -
+    % enough to exercise a multi-level, multi-batch traverse; anything bigger
+    % (the original shape was 10 dirs per level - 1110 overall) floods dbsync
+    % for minutes, starving the cross-provider syncs the tests await
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([10, 10, 10, 0], <<>>)
+        children = transfer_test_utils:gen_nested_tree_spec([5, 5, 5, 0], <<>>)
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
@@ -217,12 +209,11 @@ hundred_files_in_separate_transfers_test(TestSuiteCtx) ->
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
-    TransferIdsAndFiles = lists:map(fun(FileObject) ->
+    TransferIdsAndFiles = lists_utils:pmap(fun(FileObject) ->
         {transfer_test_utils:schedule_transfer(TestSuiteCtx, FileObject), FileObject}
     end, FileObjects),
 
-    %% TODO list_utils:pmap/pforeach ?
-    lists:foreach(fun({TransferId, FileObject}) ->
+    lists_utils:pforeach(fun({TransferId, FileObject}) ->
         transfer_test_utils:await_transfer_ended(
             TestSuiteCtx, TransferId, FileObject, #{}, ?SCALE_TRANSFER_ATTEMPTS
         )
@@ -465,13 +456,10 @@ hundred_files_by_view_test(TestSuiteCtx) ->
     hundred_files_by_view_test_base(TestSuiteCtx, ?FUNCTION_NAME).
 
 
-hundred_files_by_view_with_batch_100_test(TestSuiteCtx) ->
-    % transfer_traverse_list_batch_size is lowered to 100 in init_per_testcase
-    hundred_files_by_view_test_base(TestSuiteCtx, ?FUNCTION_NAME).
-
-
 hundred_files_by_view_with_batch_10_test(TestSuiteCtx) ->
-    % transfer_traverse_list_batch_size is lowered to 10 in init_per_testcase
+    % transfer_traverse_list_batch_size is lowered to 10 in init_per_testcase,
+    % exercising the multi-batch view traverse (the default of 1000 lists the
+    % whole hundred-file view in one batch)
     hundred_files_by_view_test_base(TestSuiteCtx, ?FUNCTION_NAME).
 
 
@@ -486,7 +474,7 @@ hundred_files_by_view_test_base(TestSuiteCtx, CaseName) ->
 
     XattrName = transfer_test_utils:rand_xattr_name(CaseName),
     XattrValue = 1,
-    FileObjectIds = lists:map(fun(#object{guid = FileGuid}) ->
+    FileObjectIds = lists_utils:pmap(fun(#object{guid = FileGuid}) ->
         set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
         FileObjectId

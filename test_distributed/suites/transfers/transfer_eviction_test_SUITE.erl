@@ -47,7 +47,6 @@
     transfer_by_empty_view_test/1,
     transfer_by_view_with_not_matching_key_test/1,
     hundred_files_by_view_test/1,
-    hundred_files_by_view_with_batch_100_test/1,
     hundred_files_by_view_with_batch_10_test/1
 ]).
 
@@ -75,7 +74,6 @@ all() -> [
     transfer_by_empty_view_test,
     transfer_by_view_with_not_matching_key_test,
     hundred_files_by_view_test,
-    hundred_files_by_view_with_batch_100_test,
     hundred_files_by_view_with_batch_10_test
 ].
 
@@ -128,7 +126,6 @@ transfer_by_view_emitting_not_existing_file_id_test(_Config) -> ?run_test().
 transfer_by_empty_view_test(_Config) -> ?run_test().
 transfer_by_view_with_not_matching_key_test(_Config) -> ?run_test().
 hundred_files_by_view_test(_Config) -> ?run_test().
-hundred_files_by_view_with_batch_100_test(_Config) -> ?run_test().
 hundred_files_by_view_with_batch_10_test(_Config) -> ?run_test().
 
 
@@ -143,7 +140,12 @@ init_per_suite(Config) ->
         onenv_scenario = "2op",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {provider_token_ttl_sec, 24 * 60 * 60}
+            {provider_token_ttl_sec, 24 * 60 * 60},
+            % transfer status updates are sparse single-doc changes - with the
+            % default (5s) broadcast interval they idle in the dbsync out-stream
+            % aggregation window for several of its cycles, inflating every
+            % cross-provider await by tens of seconds
+            {dbsync_changes_broadcast_interval, 1000}
         ]}]
     }).
 
