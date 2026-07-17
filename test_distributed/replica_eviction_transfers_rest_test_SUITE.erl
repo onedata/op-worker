@@ -23,12 +23,6 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
     many_simultaneous_failed_replica_evictions/1,
-    rerun_replica_eviction/1,
-    rerun_replica_eviction_by_other_user/1,
-    rerun_dir_eviction/1,
-    rerun_view_eviction/1,
-    cancel_replica_eviction_on_target_nodes_by_scheduling_user/1,
-    cancel_replica_eviction_on_target_nodes_by_other_user/1,
     fail_to_evict_file_replica_without_permissions/1,
     eviction_should_succeed_when_remote_provider_modified_file_replica/1,
     eviction_should_fail_when_evicting_provider_modified_file_replica/1,
@@ -38,12 +32,6 @@
 
 all() -> [
     many_simultaneous_failed_replica_evictions,
-    rerun_replica_eviction,
-    rerun_replica_eviction_by_other_user,
-    rerun_dir_eviction,
-    rerun_view_eviction,
-    cancel_replica_eviction_on_target_nodes_by_scheduling_user,
-    cancel_replica_eviction_on_target_nodes_by_other_user,
 %%    fail_to_evict_file_replica_without_permissions %todo VFS-10259,
     eviction_should_succeed_when_remote_provider_modified_file_replica,
     eviction_should_fail_when_evicting_provider_modified_file_replica,
@@ -57,24 +45,6 @@ all() -> [
 
 many_simultaneous_failed_replica_evictions(Config) ->
     replica_eviction_transfers_test_base:many_simultaneous_failed_replica_evictions(Config, rest, guid).
-
-rerun_replica_eviction(Config) ->
-    replica_eviction_transfers_test_base:rerun_replica_eviction(Config, rest, guid).
-
-rerun_replica_eviction_by_other_user(Config) ->
-    replica_eviction_transfers_test_base:rerun_replica_eviction_by_other_user(Config, rest, guid).
-
-rerun_dir_eviction(Config) ->
-    replica_eviction_transfers_test_base:rerun_dir_eviction(Config, rest, guid).
-
-rerun_view_eviction(Config) ->
-    replica_eviction_transfers_test_base:rerun_view_eviction(Config, rest).
-
-cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config) ->
-    replica_eviction_transfers_test_base:cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, rest).
-
-cancel_replica_eviction_on_target_nodes_by_other_user(Config) ->
-    replica_eviction_transfers_test_base:cancel_replica_eviction_on_target_nodes_by_other_user(Config, rest).
 
 fail_to_evict_file_replica_without_permissions(Config) ->
     replica_eviction_transfers_test_base:fail_to_evict_file_replica_without_permissions(Config, rest, guid).

@@ -47,7 +47,13 @@
     transfer_by_empty_view_test/1,
     transfer_by_view_with_not_matching_key_test/1,
     hundred_files_by_view_test/1,
-    hundred_files_by_view_with_batch_10_test/1
+    hundred_files_by_view_with_batch_10_test/1,
+
+    cancel_ongoing_transfer_test/1,
+    rerun_failed_file_transfer_test/1,
+    rerun_failed_file_transfer_by_other_user_test/1,
+    rerun_failed_dir_transfer_test/1,
+    rerun_failed_view_transfer_test/1
 ]).
 
 -define(BIG_FILE_CHUNK_SIZE, 33554432).  % 32 MiB
@@ -70,6 +76,23 @@ init_per_testcase(Case = hundred_files_by_view_with_batch_10_test, TestSuiteCtx,
     NewConfig = init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config),
     [{transfer_traverse_list_batch_size, DefaultBatchSize} | NewConfig];
 
+init_per_testcase(Case = cancel_ongoing_transfer_test, TestSuiteCtx, Config) ->
+    % gate the transfer file jobs - the test cancels the transfer while its
+    % jobs are deterministically parked mid-flight
+    transfer_test_utils:mock_gated_file_processing(TestSuiteCtx),
+    init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+init_per_testcase(Case, TestSuiteCtx, Config) when
+    Case =:= rerun_failed_file_transfer_test;
+    Case =:= rerun_failed_file_transfer_by_other_user_test;
+    Case =:= rerun_failed_dir_transfer_test;
+    Case =:= rerun_failed_view_transfer_test
+->
+    % fail every transfer file job - the tests turn the failures off before
+    % rerunning the failed transfers
+    transfer_test_utils:mock_file_processing_failure(TestSuiteCtx),
+    init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
 init_per_testcase(Case, TestSuiteCtx, Config) ->
     NewConfig = lfm_proxy:init(Config),
     transfer_test_utils:remove_leftover_file_trees(TestSuiteCtx, strip_default_case_suffix(Case)),
@@ -82,6 +105,19 @@ end_per_testcase(Case = hundred_files_by_view_with_batch_10_test, TestSuiteCtx, 
     Nodes = get_all_provider_nodes(TestSuiteCtx),
     DefaultBatchSize = ?config(transfer_traverse_list_batch_size, Config),
     test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, DefaultBatchSize),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+end_per_testcase(Case = cancel_ongoing_transfer_test, TestSuiteCtx, Config) ->
+    transfer_test_utils:unmock_gated_file_processing(TestSuiteCtx),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+end_per_testcase(Case, TestSuiteCtx, Config) when
+    Case =:= rerun_failed_file_transfer_test;
+    Case =:= rerun_failed_file_transfer_by_other_user_test;
+    Case =:= rerun_failed_dir_transfer_test;
+    Case =:= rerun_failed_view_transfer_test
+->
+    transfer_test_utils:unmock_file_processing_failure(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(_Case, _TestSuiteCtx, Config) ->
@@ -498,9 +534,201 @@ hundred_files_by_view_test_base(TestSuiteCtx, CaseName) ->
     transfer_test_utils:assert_distribution(TestSuiteCtx, FileObjects).
 
 
+cancel_ongoing_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
+    transfer_type = TransferType
+}) ->
+    FilesCount = 10,
+    FileContent = ?RAND_CONTENT(),
+    RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
+        children = transfer_test_utils:gen_nested_tree_spec([FilesCount], FileContent)
+    }),
+    transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
+
+    % the transfer file jobs are gated (init_per_testcase) and no permits are
+    % granted - the scheduled transfer parks mid-flight
+    TransferId = transfer_test_utils:schedule_transfer(TestSuiteCtx, RootDir),
+    transfer_test_utils:await_gated_file_processing_job(),
+
+    transfer_test_utils:cancel_transfer(TestSuiteCtx, TransferId),
+    transfer_test_utils:grant_file_processing_permits(TestSuiteCtx, all),
+
+    % the jobs already started before the cancellation may still process
+    % their files after being released - only the final statuses are exact,
+    % the counters are merely bounded
+    TotalBytes = FilesCount * byte_size(FileContent),
+    Overrides = case TransferType of
+        replication -> #{
+            replication_status => ?CANCELLED_STATUS,
+            files_to_process => {range, 0, FilesCount},
+            files_processed => {range, 0, FilesCount},
+            files_replicated => {range, 0, FilesCount},
+            tree_bytes => {range, 0, TotalBytes}
+        };
+        eviction -> #{
+            eviction_status => ?CANCELLED_STATUS,
+            files_to_process => {range, 0, FilesCount},
+            files_processed => {range, 0, FilesCount},
+            files_evicted => {range, 0, FilesCount}
+        };
+        migration -> #{
+            replication_status => ?CANCELLED_STATUS,
+            eviction_status => ?CANCELLED_STATUS,
+            files_to_process => {range, 0, 2 * FilesCount},
+            files_processed => {range, 0, 2 * FilesCount},
+            files_replicated => {range, 0, FilesCount},
+            files_evicted => {range, 0, FilesCount},
+            tree_bytes => {range, 0, TotalBytes}
+        }
+    end,
+    transfer_test_utils:await_transfer_ended(TestSuiteCtx, TransferId, RootDir, Overrides).
+
+
+rerun_failed_file_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
+    user_selector = UserSelector
+}) ->
+    rerun_failed_file_transfer_test_base(TestSuiteCtx, ?FUNCTION_NAME, UserSelector).
+
+
+rerun_failed_file_transfer_by_other_user_test(TestSuiteCtx) ->
+    % rerun by another member of the space - the new transfer is attributed
+    % to the rerunning user rather than the one that scheduled the original
+    rerun_failed_file_transfer_test_base(TestSuiteCtx, ?FUNCTION_NAME, user2).
+
+
+rerun_failed_dir_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
+    transfer_type = TransferType,
+    user_selector = UserSelector
+}) ->
+    % 2 directories with 3 files each
+    FilesCount = 6,
+    RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
+        children = transfer_test_utils:gen_nested_tree_spec([2, 3], ?RAND_CONTENT())
+    }),
+    transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
+
+    % every transfer file job fails (mocked in init_per_testcase)
+    TransferId = transfer_test_utils:schedule_transfer(TestSuiteCtx, RootDir),
+    transfer_test_utils:await_transfer_ended(
+        TestSuiteCtx, TransferId, RootDir,
+        build_failed_transfer_overrides(TransferType, FilesCount)
+    ),
+    transfer_test_utils:assert_initial_distribution(TestSuiteCtx, RootDir),
+
+    rerun_transfer_and_await_completed(TestSuiteCtx, UserSelector, TransferId, RootDir).
+
+
+rerun_failed_view_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
+    transfer_type = TransferType,
+    user_selector = UserSelector
+}) ->
+    FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
+        TestSuiteCtx, ?FUNCTION_NAME
+    ),
+    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrValue = 1,
+    set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
+
+    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    transfer_test_utils:create_view(
+        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+    ),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    transfer_test_utils:await_view_query_result(
+        TestSuiteCtx, ViewName, [{key, XattrValue}], [FileObjectId]
+    ),
+
+    % every transfer file job fails (mocked in init_per_testcase)
+    TransferId = transfer_test_utils:schedule_view_transfer(
+        TestSuiteCtx, ViewName, [{key, XattrValue}]
+    ),
+    transfer_test_utils:await_transfer_ended(
+        TestSuiteCtx, TransferId, [FileObject],
+        build_failed_transfer_overrides(TransferType, 1)
+    ),
+    transfer_test_utils:assert_initial_distribution(TestSuiteCtx, [FileObject]),
+
+    % the rerun transfer processes the same view
+    rerun_transfer_and_await_completed(TestSuiteCtx, UserSelector, TransferId, [FileObject]).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+%% Schedules a transfer of a single file that fails whole (see the file
+%% processing failure mock in init_per_testcase), then reruns it as the
+%% given user and awaits the successful completion of the new transfer.
+rerun_failed_file_transfer_test_base(TestSuiteCtx = #transfer_test_suite_ctx{
+    transfer_type = TransferType
+}, CaseName, RerunningUserSelector) ->
+    RootDir = #object{children = [FileObject]} = transfer_test_utils:create_file_tree(
+        TestSuiteCtx, CaseName,
+        #dir_spec{children = [#file_spec{content = ?RAND_CONTENT()}]}
+    ),
+    transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
+
+    TransferId = transfer_test_utils:schedule_transfer(TestSuiteCtx, FileObject),
+    transfer_test_utils:await_transfer_ended(
+        TestSuiteCtx, TransferId, FileObject,
+        build_failed_transfer_overrides(TransferType, 1)
+    ),
+    transfer_test_utils:assert_initial_distribution(TestSuiteCtx, FileObject),
+
+    rerun_transfer_and_await_completed(
+        TestSuiteCtx, RerunningUserSelector, TransferId, FileObject
+    ).
+
+
+%% @private
+%% Expected transfer state after every file job of the transfer has failed
+%% (see transfer_test_utils:mock_file_processing_failure/1).
+build_failed_transfer_overrides(replication, FilesCount) -> #{
+    replication_status => ?FAILED_STATUS,
+    failed_files => FilesCount,
+    files_replicated => 0,
+    tree_bytes => 0
+};
+build_failed_transfer_overrides(eviction, FilesCount) -> #{
+    eviction_status => ?FAILED_STATUS,
+    failed_files => FilesCount,
+    files_evicted => 0
+};
+build_failed_transfer_overrides(migration, FilesCount) -> #{
+    % the failed replication subtask of each file precludes its eviction
+    % subtask - the files are counted (and fail) only once
+    replication_status => ?FAILED_STATUS,
+    eviction_status => ?FAILED_STATUS,
+    files_to_process => FilesCount,
+    files_processed => FilesCount,
+    failed_files => FilesCount,
+    files_replicated => 0,
+    files_evicted => 0,
+    tree_bytes => 0
+}.
+
+
+%% @private
+%% Turns off the mocked file job failures, reruns the given failed transfer
+%% and awaits the successful completion of the new transfer created this way.
+rerun_transfer_and_await_completed(TestSuiteCtx = #transfer_test_suite_ctx{
+    other_provider_selector = OtherProviderSelector
+}, RerunningUserSelector, TransferId, TransferRootObjects) ->
+    transfer_test_utils:disable_file_processing_failure(TestSuiteCtx),
+
+    NewTransferId = transfer_test_utils:rerun_transfer(
+        TestSuiteCtx, RerunningUserSelector, TransferId
+    ),
+    transfer_test_utils:await_transfer_rerun_id(TestSuiteCtx, TransferId, NewTransferId),
+
+    transfer_test_utils:await_transfer_ended(TestSuiteCtx, NewTransferId, TransferRootObjects, #{
+        % the new transfer is attributed to the rerunning user and to the
+        % provider the rerun was requested on
+        user_id => oct_background:get_user_id(RerunningUserSelector),
+        scheduling_provider => oct_background:get_provider_id(OtherProviderSelector)
+    }),
+    transfer_test_utils:assert_distribution(TestSuiteCtx, TransferRootObjects).
 
 
 %% @private

@@ -68,11 +68,19 @@
     await_view_query_result/4,
     remove_all_views/1,
 
-    mock_gated_file_replication/1,
-    grant_file_replication_permits/2,
-    await_gated_file_replication_job/0,
+    mock_gated_file_processing/1,
+    grant_file_processing_permits/2,
+    await_gated_file_processing_job/0,
     await_files_replicated/3,
-    unmock_gated_file_replication/1,
+    unmock_gated_file_processing/1,
+
+    mock_file_processing_failure/1,
+    disable_file_processing_failure/1,
+    unmock_file_processing_failure/1,
+
+    cancel_transfer/2,
+    rerun_transfer/3,
+    await_transfer_rerun_id/3,
     await_transfer_ended/4, await_transfer_ended/5,
     assert_distribution/2, assert_distribution/3,
     assert_initial_distribution/2,
@@ -109,16 +117,23 @@
 -define(SPACE_ROOT_LS_LIMIT, 10000).
 
 -define(PREREPLICATION_READ_CHUNK_SIZE, 33554432).  % 32 MiB
+% TODO VFS-XXX remove the replica registration verification (the two defines
+% below and the helpers marked with this ticket) once the lost file_location
+% update after an on-read replication is fixed
+-define(PREREPLICATION_MAX_READS_PER_FILE, 3).
+-define(REPLICA_REGISTRATION_AWAIT_ATTEMPTS, 15).
 
 % how much longer to poll a transfer that has already ended but does not match
 % the expectations - enough for the trailing dbsync revisions of the end state,
 % while orders of magnitude less than the full attempt budgets
 -define(ENDED_TRANSFER_GRACE_ATTEMPTS, 10).
 
--define(FILE_REPLICATION_PERMITS_KEY, file_replication_permits).
--define(FILE_REPLICATION_JOB_GATED_MSG, file_replication_job_gated).
--define(FILE_REPLICATION_PERMIT_POLL_INTERVAL_MS, 100).
+-define(FILE_PROCESSING_PERMITS_KEY, file_processing_permits).
+-define(FILE_PROCESSING_JOB_GATED_MSG, file_processing_job_gated).
+-define(FILE_PROCESSING_PERMIT_POLL_INTERVAL_MS, 100).
 -define(INFINITE_PERMITS, 1 bsl 50).
+
+-define(FILE_PROCESSING_FAILURE_ENABLED_KEY, file_processing_failure_enabled).
 
 
 %%%===================================================================
@@ -195,6 +210,9 @@ create_file_tree(#transfer_test_suite_ctx{
 %% before the tested transfer is scheduled: replica eviction operates on
 %% a file tree already replicated to the other provider, so every tree file
 %% is read (in parallel) on that provider, which forces its replication.
+%% Each replication is verified against the replica metadata and retried
+%% if its block registration got lost - see
+%% replicate_file_and_verify_replica_registration/5.
 %% For the other transfer types the creation provider replicas suffice.
 %% @end
 %%--------------------------------------------------------------------
@@ -205,10 +223,14 @@ ensure_initial_replicas(#transfer_test_suite_ctx{
     other_provider_selector = OtherProviderSelector
 }, RootObject) ->
     OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
+    OtherProviderId = oct_background:get_provider_id(OtherProviderSelector),
     SessionId = oct_background:get_user_session_id(UserSelector, OtherProviderSelector),
 
     lists_utils:pforeach(fun(#object{guid = FileGuid}) ->
-        replicate_file_by_read(OtherNode, SessionId, FileGuid)
+        replicate_file_and_verify_replica_registration(
+            OtherNode, OtherProviderId, SessionId, FileGuid,
+            ?PREREPLICATION_MAX_READS_PER_FILE
+        )
     end, collect_regular_files(RootObject));
 ensure_initial_replicas(_TestSuiteCtx, _TransferRootObject) ->
     ok.
@@ -406,69 +428,71 @@ remove_all_views(#transfer_test_suite_ctx{space_selector = SpaceSelector}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Mocks file replication on the given provider so that every replication
-%% job must acquire a permit before transferring its file. A job finding
-%% no free permit parks (notifying the calling process - see
-%% await_gated_file_replication_job/0) until one is granted with
-%% grant_file_replication_permits/2; no permits are available initially.
-%% This allows deterministically suspending an ongoing transfer and
-%% releasing it in stages, interleaved with other operations.
-%% Must be paired with unmock_gated_file_replication/1 in the test teardown.
+%% Mocks the file jobs of the suite ctx's transfer type (see
+%% get_file_processing_worker_module/1) so that every job must acquire a
+%% permit before processing its file. A job finding no free permit parks
+%% (notifying the calling process - see await_gated_file_processing_job/0)
+%% until one is granted with grant_file_processing_permits/2; no permits
+%% are available initially. This allows deterministically suspending an
+%% ongoing transfer and releasing it in stages, interleaved with other
+%% operations.
+%% Must be paired with unmock_gated_file_processing/1 in the test teardown.
 %% @end
 %%--------------------------------------------------------------------
--spec mock_gated_file_replication(oct_background:entity_selector()) -> ok.
-mock_gated_file_replication(ProviderSelector) ->
+-spec mock_gated_file_processing(suite_ctx()) -> ok.
+mock_gated_file_processing(SuiteCtx) ->
     TestProcess = self(),
-    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    Nodes = get_file_processing_nodes(SuiteCtx),
 
     lists:foreach(fun(Node) ->
         % the permit counter must be created on the provider node (atomics are
         % node-local); the node-wide cache entry keeps the ref alive (an ets
         % table would die with its owner - the transient rpc process)
         ok = opw_test_rpc:call(Node, fun() ->
-            node_cache:put(?FILE_REPLICATION_PERMITS_KEY, atomics:new(1, []))
+            node_cache:put(?FILE_PROCESSING_PERMITS_KEY, atomics:new(1, []))
         end)
     end, Nodes),
 
-    ok = test_utils:mock_new(Nodes, replication_worker, [passthrough]),
-    ok = test_utils:mock_expect(Nodes, replication_worker, transfer_regular_file, fun(
+    WorkerModule = get_file_processing_worker_module(SuiteCtx),
+    ok = test_utils:mock_new(Nodes, WorkerModule, [passthrough]),
+    ok = test_utils:mock_expect(Nodes, WorkerModule, transfer_regular_file, fun(
         FileCtx, TransferParams
     ) ->
-        acquire_file_replication_permit(TestProcess),
+        acquire_file_processing_permit(TestProcess),
         meck:passthrough([FileCtx, TransferParams])
     end).
 
 
--spec grant_file_replication_permits(oct_background:entity_selector(), pos_integer() | all) ->
+-spec grant_file_processing_permits(suite_ctx(), pos_integer() | all) ->
     ok.
-grant_file_replication_permits(ProviderSelector, CountOrAll) ->
+grant_file_processing_permits(SuiteCtx, CountOrAll) ->
     % permits are granted per provider node (irrelevant for the single-node
     % providers the transfer suites run on)
     lists:foreach(fun(Node) ->
         ok = opw_test_rpc:call(Node, fun() ->
-            PermitsRef = node_cache:get(?FILE_REPLICATION_PERMITS_KEY),
+            PermitsRef = node_cache:get(?FILE_PROCESSING_PERMITS_KEY),
             case CountOrAll of
                 all -> atomics:put(PermitsRef, 1, ?INFINITE_PERMITS);
                 Count -> atomics:add(PermitsRef, 1, Count)
             end
         end)
-    end, oct_background:get_provider_nodes(ProviderSelector)).
+    end, get_file_processing_nodes(SuiteCtx)).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Awaits the notification a gated replication job sends when it parks
+%% Awaits the notification a gated file processing job sends when it parks
 %% awaiting a permit - proof that the transfer traverse is underway and
 %% suspended. Only jobs that actually park notify, so leftover mailbox
 %% messages cannot produce a false positive for an already-drained gate.
 %% @end
 %%--------------------------------------------------------------------
--spec await_gated_file_replication_job() -> ok.
-await_gated_file_replication_job() ->
+-spec await_gated_file_processing_job() -> ok.
+await_gated_file_processing_job() ->
     receive
-        ?FILE_REPLICATION_JOB_GATED_MSG -> ok
+        ?FILE_PROCESSING_JOB_GATED_MSG -> ok
     after timer:seconds(?ATTEMPTS) ->
-        ct:fail(no_file_replication_job_awaiting_permit)
+        ct:fail(no_file_processing_job_awaiting_permit)
     end.
 
 
@@ -485,16 +509,144 @@ await_files_replicated(ProviderSelector, TransferId, ExpFilesReplicated) ->
     end, ?ATTEMPTS).
 
 
--spec unmock_gated_file_replication(oct_background:entity_selector()) -> ok.
-unmock_gated_file_replication(ProviderSelector) ->
+-spec unmock_gated_file_processing(suite_ctx()) -> ok.
+unmock_gated_file_processing(SuiteCtx) ->
     % release any still-parked jobs first - a process parked inside the mock
     % call would be killed by the code purge on unload
-    grant_file_replication_permits(ProviderSelector, all),
-    Nodes = oct_background:get_provider_nodes(ProviderSelector),
-    test_utils:mock_unload(Nodes, replication_worker),
+    grant_file_processing_permits(SuiteCtx, all),
+    Nodes = get_file_processing_nodes(SuiteCtx),
+    test_utils:mock_unload(Nodes, get_file_processing_worker_module(SuiteCtx)),
     lists:foreach(fun(Node) ->
-        ok = opw_test_rpc:call(Node, node_cache, clear, [?FILE_REPLICATION_PERMITS_KEY])
+        ok = opw_test_rpc:call(Node, node_cache, clear, [?FILE_PROCESSING_PERMITS_KEY])
     end, Nodes).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks the file jobs of the suite ctx's transfer type (see
+%% get_file_processing_worker_module/1) so that every job fails: a
+%% replication job fails its block synchronization request, an eviction
+%% job fails its local block deletion. The failures can be turned off
+%% without unloading the mock with disable_file_processing_failure/1
+%% (e.g. before asserting that a rerun of a failed transfer succeeds).
+%% Must be paired with unmock_file_processing_failure/1 in the test
+%% teardown.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_file_processing_failure(suite_ctx()) -> ok.
+mock_file_processing_failure(SuiteCtx = #transfer_test_suite_ctx{transfer_type = TransferType}) ->
+    Nodes = get_file_processing_nodes(SuiteCtx),
+    lists:foreach(fun(Node) ->
+        ok = opw_test_rpc:call(Node, node_cache, put, [?FILE_PROCESSING_FAILURE_ENABLED_KEY, true])
+    end, Nodes),
+
+    case TransferType of
+        eviction ->
+            ok = test_utils:mock_new(Nodes, replica_deletion_req, [passthrough]),
+            ok = test_utils:mock_expect(Nodes, replica_deletion_req, delete_blocks, fun(
+                FileCtx, Blocks, AllowedVV
+            ) ->
+                case node_cache:get(?FILE_PROCESSING_FAILURE_ENABLED_KEY, false) of
+                    true -> {error, test_error};
+                    false -> meck:passthrough([FileCtx, Blocks, AllowedVV])
+                end
+            end);
+        _ ->
+            ok = test_utils:mock_new(Nodes, replica_synchronizer, [passthrough]),
+            ok = test_utils:mock_expect(Nodes, replica_synchronizer, synchronize, fun(
+                UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, StatsCallbackModule
+            ) ->
+                case node_cache:get(?FILE_PROCESSING_FAILURE_ENABLED_KEY, false) of
+                    true ->
+                        throw(test_error);
+                    false ->
+                        meck:passthrough([
+                            UserCtx, FileCtx, Block, Prefetch, TransferId, Priority,
+                            StatsCallbackModule
+                        ])
+                end
+            end)
+    end.
+
+
+-spec disable_file_processing_failure(suite_ctx()) -> ok.
+disable_file_processing_failure(SuiteCtx) ->
+    lists:foreach(fun(Node) ->
+        ok = opw_test_rpc:call(Node, node_cache, put, [?FILE_PROCESSING_FAILURE_ENABLED_KEY, false])
+    end, get_file_processing_nodes(SuiteCtx)).
+
+
+-spec unmock_file_processing_failure(suite_ctx()) -> ok.
+unmock_file_processing_failure(SuiteCtx = #transfer_test_suite_ctx{transfer_type = TransferType}) ->
+    Nodes = get_file_processing_nodes(SuiteCtx),
+    MockedModule = case TransferType of
+        eviction -> replica_deletion_req;
+        _ -> replica_synchronizer
+    end,
+    test_utils:mock_unload(Nodes, MockedModule),
+    lists:foreach(fun(Node) ->
+        ok = opw_test_rpc:call(Node, node_cache, clear, [?FILE_PROCESSING_FAILURE_ENABLED_KEY])
+    end, Nodes).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Cancels the given ongoing transfer. The request is made on the other
+%% provider - the one executing the gated file jobs (see
+%% get_file_processing_worker_module/1) - so that the cancellation takes
+%% effect without waiting for dbsync; the operation itself is accepted
+%% on any provider supporting the space.
+%% @end
+%%--------------------------------------------------------------------
+-spec cancel_transfer(suite_ctx(), transfer:id()) -> ok.
+cancel_transfer(#transfer_test_suite_ctx{
+    other_provider_selector = OtherProviderSelector
+}, TransferId) ->
+    ?assertEqual(ok, opw_test_rpc:call(OtherProviderSelector, transfer, cancel, [TransferId])).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reruns the given ended transfer as the given user and returns the id
+%% of the new transfer created this way. The request is made on the other
+%% provider - any provider supporting the space may rerun a transfer, and
+%% picking the one that did not schedule the original also exercises the
+%% scheduling provider switch: the new transfer doc is attributed to the
+%% rerunning provider and user, so callers must expect them accordingly.
+%% @end
+%%--------------------------------------------------------------------
+-spec rerun_transfer(suite_ctx(), oct_background:entity_selector(), transfer:id()) ->
+    transfer:id().
+rerun_transfer(#transfer_test_suite_ctx{
+    other_provider_selector = OtherProviderSelector
+}, RerunningUserSelector, TransferId) ->
+    UserId = oct_background:get_user_id(RerunningUserSelector),
+    {ok, NewTransferId} = ?assertMatch({ok, _}, opw_test_rpc:call(
+        OtherProviderSelector, transfer, rerun_ended, [UserId, TransferId]
+    )),
+    NewTransferId.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Awaits the rerun linkage of a rerun transfer: its doc points to the
+%% new transfer with rerun_id (set by the rerunning provider, reaching
+%% the other one via dbsync).
+%% @end
+%%--------------------------------------------------------------------
+-spec await_transfer_rerun_id(suite_ctx(), transfer:id(), transfer:id()) -> ok.
+await_transfer_rerun_id(#transfer_test_suite_ctx{
+    creation_provider_selector = CreationProviderSelector,
+    other_provider_selector = OtherProviderSelector
+}, TransferId, ExpRerunId) ->
+    lists:foreach(fun(ProviderSelector) ->
+        ?assertEqual(ExpRerunId, case opw_test_rpc:call(
+            ProviderSelector, transfer, get, [TransferId]
+        ) of
+            {ok, #document{value = #transfer{rerun_id = RerunId}}} -> RerunId;
+            {error, _} = Error -> Error
+        end, ?ATTEMPTS)
+    end, [CreationProviderSelector, OtherProviderSelector]).
 
 
 -spec await_transfer_ended(suite_ctx(), transfer:id(), file_tree_objects(), expected_transfer()) ->
@@ -707,35 +859,58 @@ set_space_occupancy(ProviderSelector, SpaceId, TargetSize) ->
 
 
 %% @private
-%% Executed on the provider nodes within the gate-mocked replication job
-%% processes (see mock_gated_file_replication/1).
--spec acquire_file_replication_permit(pid()) -> ok.
-acquire_file_replication_permit(TestProcess) ->
-    PermitsRef = node_cache:get(?FILE_REPLICATION_PERMITS_KEY),
-    case try_acquire_file_replication_permit(PermitsRef) of
+%% The transfer_traverse_worker callback module whose file jobs the gate and
+%% failure mocks intercept: replication_worker for replication and migration
+%% (each file of a migration is replicated before being evicted, so gating or
+%% failing the replication jobs suspends or fails the whole transfer),
+%% replica_eviction_worker for eviction. For every transfer type the provider
+%% executing the intercepted jobs (the replicating or the evicting one
+%% respectively) is the other provider of the suite ctx layout.
+-spec get_file_processing_worker_module(suite_ctx()) -> module().
+get_file_processing_worker_module(#transfer_test_suite_ctx{transfer_type = eviction}) ->
+    replica_eviction_worker;
+get_file_processing_worker_module(#transfer_test_suite_ctx{}) ->
+    replication_worker.
+
+
+%% @private
+-spec get_file_processing_nodes(suite_ctx()) -> [node()].
+get_file_processing_nodes(#transfer_test_suite_ctx{
+    other_provider_selector = OtherProviderSelector
+}) ->
+    oct_background:get_provider_nodes(OtherProviderSelector).
+
+
+%% @private
+%% Executed on the provider nodes within the gate-mocked file processing job
+%% processes (see mock_gated_file_processing/1).
+-spec acquire_file_processing_permit(pid()) -> ok.
+acquire_file_processing_permit(TestProcess) ->
+    PermitsRef = node_cache:get(?FILE_PROCESSING_PERMITS_KEY),
+    case try_acquire_file_processing_permit(PermitsRef) of
         true ->
             ok;
         false ->
-            TestProcess ! ?FILE_REPLICATION_JOB_GATED_MSG,
-            wait_for_file_replication_permit(PermitsRef)
+            TestProcess ! ?FILE_PROCESSING_JOB_GATED_MSG,
+            wait_for_file_processing_permit(PermitsRef)
     end.
 
 
 %% @private
--spec wait_for_file_replication_permit(atomics:atomics_ref()) -> ok.
-wait_for_file_replication_permit(PermitsRef) ->
-    case try_acquire_file_replication_permit(PermitsRef) of
+-spec wait_for_file_processing_permit(atomics:atomics_ref()) -> ok.
+wait_for_file_processing_permit(PermitsRef) ->
+    case try_acquire_file_processing_permit(PermitsRef) of
         true ->
             ok;
         false ->
-            timer:sleep(?FILE_REPLICATION_PERMIT_POLL_INTERVAL_MS),
-            wait_for_file_replication_permit(PermitsRef)
+            timer:sleep(?FILE_PROCESSING_PERMIT_POLL_INTERVAL_MS),
+            wait_for_file_processing_permit(PermitsRef)
     end.
 
 
 %% @private
--spec try_acquire_file_replication_permit(atomics:atomics_ref()) -> boolean().
-try_acquire_file_replication_permit(PermitsRef) ->
+-spec try_acquire_file_processing_permit(atomics:atomics_ref()) -> boolean().
+try_acquire_file_processing_permit(PermitsRef) ->
     case atomics:sub_get(PermitsRef, 1, 1) of
         Permits when Permits >= 0 ->
             true;
@@ -951,12 +1126,77 @@ collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
 
 
 %% @private
+%% TODO VFS-XXX remove the verification (leaving plain replicate_file_by_read
+%% calls) once the lost file_location update is fixed
+%% Replicates the file to the given provider by reading it there and verifies
+%% that the fetched blocks actually got registered in the replica metadata:
+%% the fetch may write the whole content to the storage while the update of
+%% the local file_location doc (its blocks and last_replication_timestamp)
+%% silently never gets persisted. Such a replica is invisible (zero blocks in
+%% the distribution) - a subsequent eviction quietly skips the file, breaking
+%% the transfer counter expectations. A repeated read re-fetches the content
+%% and re-registers the blocks.
+-spec replicate_file_and_verify_replica_registration(
+    node(), od_provider:id(), session:id(), file_id:file_guid(), pos_integer()
+) ->
+    ok.
+replicate_file_and_verify_replica_registration(Node, ProviderId, SessionId, FileGuid, ReadsLeft) ->
+    FileSize = replicate_file_by_read(Node, SessionId, FileGuid),
+    case await_replica_registration(
+        Node, ProviderId, FileGuid, FileSize, ?REPLICA_REGISTRATION_AWAIT_ATTEMPTS
+    ) of
+        ok ->
+            ok;
+        {error, replica_not_registered} when ReadsLeft > 1 ->
+            ct:pal(
+                "WARNING: the replication (by read) of file ~ts on provider ~ts left "
+                "no blocks registered in its replica metadata - retrying the read "
+                "(reads left: ~tp)",
+                [FileGuid, ProviderId, ReadsLeft - 1]
+            ),
+            replicate_file_and_verify_replica_registration(
+                Node, ProviderId, SessionId, FileGuid, ReadsLeft - 1
+            );
+        {error, replica_not_registered} ->
+            ct:fail({replica_registration_lost, FileGuid, ProviderId})
+    end.
+
+
+%% @private
+%% TODO VFS-XXX remove along with the verification above
+-spec await_replica_registration(
+    node(), od_provider:id(), file_id:file_guid(), file_meta:size(), non_neg_integer()
+) ->
+    ok | {error, replica_not_registered}.
+await_replica_registration(_Node, _ProviderId, _FileGuid, _FileSize, 0) ->
+    {error, replica_not_registered};
+await_replica_registration(Node, ProviderId, FileGuid, FileSize, AttemptsLeft) ->
+    % freshly registered blocks may become visible in the distribution only
+    % after the (delayed) fslogic cache flush - poll before declaring them lost
+    {ok, Distribution} = ?assertMatch({ok, _}, opt_file_metadata:get_distribution_deprecated(
+        Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)
+    )),
+    IsRegistered = lists:any(fun(ProviderDistribution) ->
+        maps:get(<<"providerId">>, ProviderDistribution) =:= ProviderId
+            andalso maps:get(<<"totalBlocksSize">>, ProviderDistribution) =:= FileSize
+    end, Distribution),
+    case IsRegistered of
+        true ->
+            ok;
+        false ->
+            timer:sleep(timer:seconds(1)),
+            await_replica_registration(Node, ProviderId, FileGuid, FileSize, AttemptsLeft - 1)
+    end.
+
+
+%% @private
 %% Reads the whole file on the given node, which forces replication of its
-%% content. The size is taken from stat rather than the declared tree content
-%% (which does not cover data written outside of the tree spec, e.g. by the
-%% big file test) and the reads are chunked so that even such files do not
-%% materialize as single huge binaries.
--spec replicate_file_by_read(node(), session:id(), file_id:file_guid()) -> ok.
+%% content, and returns its size. The size is taken from stat rather than the
+%% declared tree content (which does not cover data written outside of the
+%% tree spec, e.g. by the big file test) and the reads are chunked so that
+%% even such files do not materialize as single huge binaries.
+-spec replicate_file_by_read(node(), session:id(), file_id:file_guid()) ->
+    file_meta:size().
 replicate_file_by_read(Node, SessionId, FileGuid) ->
     {ok, #file_attr{size = FileSize}} = ?assertMatch({ok, _}, lfm_proxy:stat(
         Node, SessionId, ?FILE_REF(FileGuid)
@@ -965,7 +1205,8 @@ replicate_file_by_read(Node, SessionId, FileGuid) ->
         Node, SessionId, ?FILE_REF(FileGuid), read
     )),
     read_file_in_chunks(Node, Handle, 0, FileSize),
-    ok = lfm_proxy:close(Node, Handle).
+    ok = lfm_proxy:close(Node, Handle),
+    FileSize.
 
 
 %% @private
@@ -1120,10 +1361,11 @@ matches_expectation({gte, Min}, Value) ->
 matches_expectation({range, Min, Max}, Value) ->
     is_integer(Value) andalso Value >= Min andalso Value =< Max;
 matches_expectation({histogram_sum, ProviderId, SumExpectation}, HistPerProvider) ->
-    is_map(HistPerProvider) andalso case maps:find(ProviderId, HistPerProvider) of
-        {ok, Hist} -> matches_expectation(SumExpectation, lists:sum(Hist));
-        error -> false
-    end;
+    % a provider absent from the histogram map has transferred no bytes
+    % (e.g. a transfer cancelled before any data was fetched)
+    is_map(HistPerProvider) andalso matches_expectation(
+        SumExpectation, lists:sum(maps:get(ProviderId, HistPerProvider, []))
+    );
 matches_expectation(Predicate, Value) when is_function(Predicate, 1) ->
     Predicate(Value);
 matches_expectation(ExpectedValue, Value) ->

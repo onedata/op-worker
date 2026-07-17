@@ -22,28 +22,16 @@
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
-    cancel_replication_on_target_nodes_by_scheduling_user/1,
-    cancel_replication_on_target_nodes_by_other_user/1,
     file_replication_failures_should_fail_whole_transfer/1,
     many_simultaneous_failed_transfers/1,
-    rerun_file_replication/1,
-    rerun_file_replication_by_other_user/1,
-    rerun_dir_replication/1,
-    rerun_view_replication/1,
     file_removed_during_replication/1,
     rtransfer_works_between_providers_with_different_ports/1,
     warp_time_during_replication/1
 ]).
 
 all() -> [
-    cancel_replication_on_target_nodes_by_scheduling_user,
-    cancel_replication_on_target_nodes_by_other_user,
     % file_replication_failures_should_fail_whole_transfer, TODO uncomment after resolving VFS-4742
     many_simultaneous_failed_transfers,
-    rerun_file_replication,
-    rerun_file_replication_by_other_user,
-    rerun_dir_replication,
-    rerun_view_replication,
     file_removed_during_replication,
     rtransfer_works_between_providers_with_different_ports,
     warp_time_during_replication
@@ -53,29 +41,11 @@ all() -> [
 %%% API
 %%%===================================================================
 
-cancel_replication_on_target_nodes_by_scheduling_user(Config) ->
-    replication_transfers_test_base:cancel_replication_on_target_nodes_by_scheduling_user(Config, rest).
-
-cancel_replication_on_target_nodes_by_other_user(Config) ->
-    replication_transfers_test_base:cancel_replication_on_target_nodes_by_other_user(Config, rest).
-
 file_replication_failures_should_fail_whole_transfer(Config) ->
     replication_transfers_test_base:file_replication_failures_should_fail_whole_transfer(Config, rest, guid).
 
 many_simultaneous_failed_transfers(Config) ->
     replication_transfers_test_base:many_simultaneous_failed_transfers(Config, rest, guid).
-
-rerun_file_replication(Config) ->
-    replication_transfers_test_base:rerun_file_replication(Config, rest, guid).
-
-rerun_file_replication_by_other_user(Config) ->
-    replication_transfers_test_base:rerun_file_replication_by_other_user(Config, rest, guid).
-
-rerun_dir_replication(Config) ->
-    replication_transfers_test_base:rerun_dir_replication(Config, rest, guid).
-
-rerun_view_replication(Config) ->
-    replication_transfers_test_base:rerun_view_replication(Config, rest).
 
 file_removed_during_replication(Config) ->
     replication_transfers_test_base:file_removed_during_replication(Config, rest, guid).

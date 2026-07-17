@@ -22,19 +22,11 @@
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
-    fail_to_migrate_file_replica_without_permissions/1,
-    cancel_migration_on_target_nodes_by_scheduling_user/1,
-    cancel_migration_on_target_nodes_by_other_user/1,
-    rerun_file_migration/1,
-    rerun_view_migration/1
+    fail_to_migrate_file_replica_without_permissions/1
 ]).
 
 all() -> [
 %%    fail_to_migrate_file_replica_without_permissions %todo VFS-10259
-    cancel_migration_on_target_nodes_by_scheduling_user,
-    cancel_migration_on_target_nodes_by_other_user,
-    rerun_file_migration,
-    rerun_view_migration
 ].
 
 %%%===================================================================
@@ -43,18 +35,6 @@ all() -> [
 
 fail_to_migrate_file_replica_without_permissions(Config) ->
     replica_migration_transfers_test_base:fail_to_migrate_file_replica_without_permissions(Config, rest, guid).
-
-cancel_migration_on_target_nodes_by_scheduling_user(Config) ->
-    replica_migration_transfers_test_base:cancel_migration_on_target_nodes_by_scheduling_user(Config, rest).
-
-cancel_migration_on_target_nodes_by_other_user(Config) ->
-    replica_migration_transfers_test_base:cancel_migration_on_target_nodes_by_other_user(Config, rest).
-
-rerun_file_migration(Config) ->
-    replica_migration_transfers_test_base:rerun_file_migration(Config, rest, guid).
-
-rerun_view_migration(Config) ->
-    replica_migration_transfers_test_base:rerun_view_migration(Config, rest).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

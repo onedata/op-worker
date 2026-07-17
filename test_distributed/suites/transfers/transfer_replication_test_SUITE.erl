@@ -54,6 +54,13 @@
     hundred_files_by_view_with_batch_10_test/1,
     replication_by_view_emitting_multiple_keys_test/1,
 
+    %% --- transfer lifecycle ---
+    cancel_ongoing_transfer_test/1,
+    rerun_failed_file_transfer_test/1,
+    rerun_failed_file_transfer_by_other_user_test/1,
+    rerun_failed_dir_transfer_test/1,
+    rerun_failed_view_transfer_test/1,
+
     %% --- no-op replications ---
     replication_to_source_provider_test/1,
     replication_of_already_replicated_file_test/1,
@@ -98,6 +105,13 @@ all() -> [
     hundred_files_by_view_test,
     hundred_files_by_view_with_batch_10_test,
     replication_by_view_emitting_multiple_keys_test,
+
+    %% --- transfer lifecycle ---
+    cancel_ongoing_transfer_test,
+    rerun_failed_file_transfer_test,
+    rerun_failed_file_transfer_by_other_user_test,
+    rerun_failed_dir_transfer_test,
+    rerun_failed_view_transfer_test,
 
     %% --- no-op replications ---
     replication_to_source_provider_test,
@@ -226,6 +240,16 @@ replication_by_view_emitting_multiple_keys_test(_Config) ->
     ),
     transfer_test_utils:await_transfer_ended(TestSuiteCtx, TransferId, [FileObject], #{}),
     transfer_test_utils:assert_distribution(TestSuiteCtx, [FileObject]).
+
+
+%% --- transfer lifecycle ---
+
+
+cancel_ongoing_transfer_test(_Config) -> ?run_test().
+rerun_failed_file_transfer_test(_Config) -> ?run_test().
+rerun_failed_file_transfer_by_other_user_test(_Config) -> ?run_test().
+rerun_failed_dir_transfer_test(_Config) -> ?run_test().
+rerun_failed_view_transfer_test(_Config) -> ?run_test().
 
 
 %% --- no-op replications ---
@@ -462,7 +486,7 @@ replication_continues_on_modified_storage_test(_Config) ->
     % file replication jobs are gated (init_per_testcase) and no permits are
     % granted yet - the scheduled transfer parks on the replicating provider
     TransferId = transfer_test_utils:schedule_transfer(TestSuiteCtx, RootDir),
-    transfer_test_utils:await_gated_file_replication_job(),
+    transfer_test_utils:await_gated_file_processing_job(),
 
     % modify storage params while the jobs are parked - the resulting helper
     % reload (and rtransfer restart) must not break the ongoing transfer
@@ -480,8 +504,8 @@ replication_continues_on_modified_storage_test(_Config) ->
     ])),
 
     % part of the tree must replicate with the modified params in force
-    transfer_test_utils:grant_file_replication_permits(
-        OtherProviderSelector, ?FILES_REPLICATED_ON_MODIFIED_STORAGE
+    transfer_test_utils:grant_file_processing_permits(
+        TestSuiteCtx, ?FILES_REPLICATED_ON_MODIFIED_STORAGE
     ),
     transfer_test_utils:await_files_replicated(
         OtherProviderSelector, TransferId, ?FILES_REPLICATED_ON_MODIFIED_STORAGE
@@ -492,7 +516,7 @@ replication_continues_on_modified_storage_test(_Config) ->
     ?assertEqual(ok, opw_test_rpc:call(OtherProviderSelector, storage, update_helper_args, [
         StorageId, #{<<"timeout">> => OldTimeout}
     ])),
-    transfer_test_utils:grant_file_replication_permits(OtherProviderSelector, all),
+    transfer_test_utils:grant_file_processing_permits(TestSuiteCtx, all),
 
     transfer_test_utils:await_transfer_ended(TestSuiteCtx, TransferId, RootDir, #{
         % a transfer of this many files may outlast the minute histogram window
@@ -567,8 +591,7 @@ init_per_testcase(Case, Config) when
 init_per_testcase(Case = replication_continues_on_modified_storage_test, Config) ->
     % gate the file replication jobs - the test releases them in stages,
     % interleaving storage modifications with replication progress
-    #transfer_test_suite_ctx{other_provider_selector = OtherProviderSelector} = ?SUITE_CTX,
-    transfer_test_utils:mock_gated_file_replication(OtherProviderSelector),
+    transfer_test_utils:mock_gated_file_processing(?SUITE_CTX),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
@@ -594,8 +617,7 @@ end_per_testcase(Case, Config) when
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case = replication_continues_on_modified_storage_test, Config) ->
-    #transfer_test_suite_ctx{other_provider_selector = OtherProviderSelector} = ?SUITE_CTX,
-    transfer_test_utils:unmock_gated_file_replication(OtherProviderSelector),
+    transfer_test_utils:unmock_gated_file_processing(?SUITE_CTX),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->

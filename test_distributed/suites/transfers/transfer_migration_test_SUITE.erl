@@ -47,7 +47,14 @@
     transfer_by_empty_view_test/1,
     transfer_by_view_with_not_matching_key_test/1,
     hundred_files_by_view_test/1,
-    hundred_files_by_view_with_batch_10_test/1
+    hundred_files_by_view_with_batch_10_test/1,
+
+    %% --- transfer lifecycle ---
+    cancel_ongoing_transfer_test/1,
+    rerun_failed_file_transfer_test/1,
+    rerun_failed_file_transfer_by_other_user_test/1,
+    rerun_failed_dir_transfer_test/1,
+    rerun_failed_view_transfer_test/1
 ]).
 
 all() -> [
@@ -74,7 +81,14 @@ all() -> [
     transfer_by_empty_view_test,
     transfer_by_view_with_not_matching_key_test,
     hundred_files_by_view_test,
-    hundred_files_by_view_with_batch_10_test
+    hundred_files_by_view_with_batch_10_test,
+
+    %% --- transfer lifecycle ---
+    cancel_ongoing_transfer_test,
+    rerun_failed_file_transfer_test,
+    rerun_failed_file_transfer_by_other_user_test,
+    rerun_failed_dir_transfer_test,
+    rerun_failed_view_transfer_test
 ].
 
 -define(SUITE_CTX, #transfer_test_suite_ctx{
@@ -127,6 +141,16 @@ transfer_by_empty_view_test(_Config) -> ?run_test().
 transfer_by_view_with_not_matching_key_test(_Config) -> ?run_test().
 hundred_files_by_view_test(_Config) -> ?run_test().
 hundred_files_by_view_with_batch_10_test(_Config) -> ?run_test().
+
+
+%% --- transfer lifecycle ---
+
+
+cancel_ongoing_transfer_test(_Config) -> ?run_test().
+rerun_failed_file_transfer_test(_Config) -> ?run_test().
+rerun_failed_file_transfer_by_other_user_test(_Config) -> ?run_test().
+rerun_failed_dir_transfer_test(_Config) -> ?run_test().
+rerun_failed_view_transfer_test(_Config) -> ?run_test().
 
 
 %===================================================================
