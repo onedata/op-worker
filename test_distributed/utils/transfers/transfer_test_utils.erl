@@ -47,6 +47,7 @@
 -include("modules/datastore/transfer.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/onedata_file.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
@@ -108,6 +109,11 @@
 -define(SPACE_ROOT_LS_LIMIT, 10000).
 
 -define(PREREPLICATION_READ_CHUNK_SIZE, 33554432).  % 32 MiB
+
+% how much longer to poll a transfer that has already ended but does not match
+% the expectations - enough for the trailing dbsync revisions of the end state,
+% while orders of magnitude less than the full attempt budgets
+-define(ENDED_TRANSFER_GRACE_ATTEMPTS, 10).
 
 -define(FILE_REPLICATION_PERMITS_KEY, file_replication_permits).
 -define(FILE_REPLICATION_JOB_GATED_MSG, file_replication_job_gated).
@@ -521,7 +527,27 @@ await_transfer_ended(#transfer_test_suite_ctx{
     ]),
 
     lists:foreach(fun(ProviderSelector) ->
-        await_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, Attempts)
+        case await_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, Attempts) of
+            ok ->
+                ok;
+            {failed, {error, _} = Error} ->
+                ct:pal("Transfer ~ts could not be fetched on provider ~tp due to: ~tp", [
+                    TransferId, ProviderSelector, Error
+                ]),
+                ct:fail(transfer_state_assertion_failed);
+            {failed, {mismatched_transfer_fields, Mismatches, Transfer}} ->
+                ct:pal(
+                    "Transfer ~ts on provider ~tp did not reach the expected state.~n"
+                    "Mismatched fields:~n~ts~n"
+                    "Transfer record:~n~ts",
+                    [
+                        TransferId, ProviderSelector,
+                        format_mismatched_fields(Mismatches), format_transfer(Transfer)
+                    ]
+                ),
+                pal_current_file_distributions(SuiteCtx, TransferRootObjects),
+                ct:fail(transfer_state_assertion_failed)
+        end
     end, [CreationProviderSelector, OtherProviderSelector]).
 
 
@@ -954,33 +980,86 @@ read_file_in_chunks(Node, Handle, Offset, FileSize) ->
 
 
 %% @private
+%% Polls the transfer doc on the given provider until it matches the
+%% expectations. A transfer that has already ended will never change again -
+%% only trailing dbsync revisions of the same end state (e.g. the other
+%% migration subtask's fields or a late histogram flush) may still arrive -
+%% so once an ended yet mismatched transfer is seen, the remaining attempts
+%% are capped to a short grace instead of idling through the full (potentially
+%% minutes-long) attempt budget.
 -spec await_transfer_state(
     oct_background:entity_selector(), transfer:id(), expected_transfer(), non_neg_integer()
 ) ->
-    ok | no_return().
+    ok | {failed, {error, term()} | {mismatched_transfer_fields, list(), transfer:transfer()}}.
 await_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, AttemptsLeft) ->
-    case check_transfer_state(ProviderSelector, TransferId, ExpectedTransfer) of
+    Result = check_transfer_state(ProviderSelector, TransferId, ExpectedTransfer),
+
+    EffectiveAttemptsLeft = case Result of
+        {mismatched_transfer_fields, _, Transfer} ->
+            case is_transfer_ended(Transfer) of
+                true -> min(AttemptsLeft, ?ENDED_TRANSFER_GRACE_ATTEMPTS);
+                false -> AttemptsLeft
+            end;
+        _ ->
+            AttemptsLeft
+    end,
+
+    case Result of
         ok ->
             ok;
-        _ when AttemptsLeft > 1 ->
+        _ when EffectiveAttemptsLeft > 1 ->
             timer:sleep(timer:seconds(1)),
-            await_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, AttemptsLeft - 1);
-        {error, _} = Error ->
-            ct:pal("Transfer ~ts could not be fetched on provider ~tp due to: ~tp", [
-                TransferId, ProviderSelector, Error
-            ]),
-            ct:fail(transfer_state_assertion_failed);
-        {mismatched_transfer_fields, Mismatches, Transfer} ->
-            ct:pal(
-                "Transfer ~ts on provider ~tp did not reach the expected state.~n"
-                "Mismatched fields:~n~ts~n"
-                "Transfer record:~n~ts",
-                [
-                    TransferId, ProviderSelector,
-                    format_mismatched_fields(Mismatches), format_transfer(Transfer)
-                ]
-            ),
-            ct:fail(transfer_state_assertion_failed)
+            await_transfer_state(
+                ProviderSelector, TransferId, ExpectedTransfer, EffectiveAttemptsLeft - 1
+            );
+        Failure ->
+            {failed, Failure}
+    end.
+
+
+%% @private
+-spec is_transfer_ended(transfer:transfer()) -> boolean().
+is_transfer_ended(Transfer) ->
+    EndedStatuses = [?COMPLETED_STATUS, ?FAILED_STATUS, ?CANCELLED_STATUS, ?SKIPPED_STATUS],
+    lists:member(get_transfer_field(replication_status, Transfer), EndedStatuses) andalso
+        lists:member(get_transfer_field(eviction_status, Transfer), EndedStatuses).
+
+
+%% @private
+%% One-shot dump of the current distribution of every regular file of the
+%% transferred tree, as seen by each provider - printed when a transfer state
+%% assertion fails, so that a file the transfer silently omitted (e.g. an
+%% eviction skipping an opened file counts it as processed but not evicted,
+%% with a debug-level log as the only product-side trace) can be identified
+%% immediately.
+-spec pal_current_file_distributions(suite_ctx(), file_tree_objects()) -> ok.
+pal_current_file_distributions(#transfer_test_suite_ctx{
+    creation_provider_selector = CreationProviderSelector,
+    other_provider_selector = OtherProviderSelector
+}, TransferRootObjects) ->
+    case collect_regular_files(TransferRootObjects) of
+        [] ->
+            ok;
+        FileObjects ->
+            Nodes = [
+                oct_background:get_random_provider_node(CreationProviderSelector),
+                oct_background:get_random_provider_node(OtherProviderSelector)
+            ],
+            FormattedFileEntries = lists:map(fun(#object{guid = FileGuid, name = FileName}) ->
+                FormattedNodeViews = lists:map(fun(Node) ->
+                    Distribution = try
+                        {ok, D} = opt_file_metadata:get_distribution_deprecated(
+                            Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)
+                        ),
+                        lists:sort(D)
+                    catch Class:Reason ->
+                        {failed_to_fetch_distribution, Class, Reason}
+                    end,
+                    io_lib:format("        as seen by ~tp: ~tp~n", [Node, Distribution])
+                end, Nodes),
+                io_lib:format("    ~ts:~n~ts", [FileName, FormattedNodeViews])
+            end, FileObjects),
+            ct:pal("Current file distributions:~n~ts", [FormattedFileEntries])
     end.
 
 

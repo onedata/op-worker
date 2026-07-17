@@ -49,6 +49,11 @@
     create_view_migration/1
 ]).
 
+%% TODO VFS-13703 add transfer cancellation (DELETE /transfers/:tid) and rerun
+%% (POST /transfers/:tid/rerun) API tests, including the space privilege checks
+%% for operating on a transfer scheduled by another user - this authz axis is
+%% covered nowhere else (the transfer machinery suites drive scheduling and
+%% cancellation through the internal API, which enforces no privileges)
 all() ->
     ?ALL([
         create_file_replication,
