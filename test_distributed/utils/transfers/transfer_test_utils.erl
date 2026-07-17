@@ -788,7 +788,9 @@ assert_initial_distribution(#transfer_test_suite_ctx{
 %% Like file_test_utils:await_distribution/3 but takes provider selectors
 %% instead of nodes. Meant for tests expecting a bespoke distribution that
 %% differs from the one assert_distribution/2,3 derives from the transfer
-%% type (e.g. after a failed or no-op transfer).
+%% type (e.g. after a failed or no-op transfer). A provider expectation
+%% given as a plain size stands for one contiguous block - an explicit
+%% block list must be given for a fragmented replica.
 %% NOTE: every regular file created with create_file_tree/3 has an empty
 %% (zero blocks) distribution entry on each supporting provider - the
 %% creation sync awaits it - so the expectation must list such providers
@@ -798,16 +800,16 @@ assert_initial_distribution(#transfer_test_suite_ctx{
 -spec await_distribution(
     [oct_background:entity_selector()],
     file_id:file_guid(),
-    [{oct_background:entity_selector(), file_meta:size()}]
+    [{oct_background:entity_selector(), file_meta:size() | [fslogic_blocks:block()]}]
 ) ->
     ok.
-await_distribution(ProviderSelectors, FileGuid, ExpSizePerProvider) ->
+await_distribution(ProviderSelectors, FileGuid, ExpSizeOrBlocksPerProvider) ->
     file_test_utils:await_distribution(
         [oct_background:get_random_provider_node(PS) || PS <- ProviderSelectors],
         FileGuid,
         [
-            {oct_background:get_random_provider_node(PS), ExpSize}
-            || {PS, ExpSize} <- ExpSizePerProvider
+            {oct_background:get_random_provider_node(PS), ExpSizeOrBlocks}
+            || {PS, ExpSizeOrBlocks} <- ExpSizeOrBlocksPerProvider
         ]
     ).
 

@@ -14,6 +14,7 @@
 
 -include("transfer_test.hrl").
 -include("onenv_test_utils.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/storage/helpers/helpers.hrl").
@@ -61,6 +62,10 @@
     rerun_failed_dir_transfer_test/1,
     rerun_failed_view_transfer_test/1,
 
+    %% --- failures and races ---
+    many_simultaneous_failed_transfers_test/1,
+    file_removed_during_transfer_test/1,
+
     %% --- no-op replications ---
     replication_to_source_provider_test/1,
     replication_of_already_replicated_file_test/1,
@@ -76,7 +81,8 @@
     replication_scheduled_on_not_supporting_provider_test/1,
 
     %% --- resilience ---
-    replication_continues_on_modified_storage_test/1
+    replication_continues_on_modified_storage_test/1,
+    warp_time_during_replication_test/1
 ]).
 
 all() -> [
@@ -113,6 +119,10 @@ all() -> [
     rerun_failed_dir_transfer_test,
     rerun_failed_view_transfer_test,
 
+    %% --- failures and races ---
+    many_simultaneous_failed_transfers_test,
+    file_removed_during_transfer_test,
+
     %% --- no-op replications ---
     replication_to_source_provider_test,
     replication_of_already_replicated_file_test,
@@ -128,7 +138,8 @@ all() -> [
     replication_scheduled_on_not_supporting_provider_test,
 
     %% --- resilience ---
-    replication_continues_on_modified_storage_test
+    replication_continues_on_modified_storage_test,
+    warp_time_during_replication_test
 ].
 
 -define(SUITE_CTX, #transfer_test_suite_ctx{
@@ -149,6 +160,17 @@ all() -> [
 % number of files (out of the 10x10 tree) let through the replication jobs
 % gate while the modified storage params are in force
 -define(FILES_REPLICATED_ON_MODIFIED_STORAGE, 30).
+
+-define(WARP_TEST_FILES_COUNT, 10).
+% numbers of files let through the replication jobs gate before the forward
+% and before the backward time warp
+-define(FILES_REPLICATED_BEFORE_FORWARD_WARP, 3).
+-define(FILES_REPLICATED_BEFORE_BACKWARD_WARP, 3).
+% the forward jump must stay well within the validity of the (time-caveated)
+% access tokens backing the test user sessions - a jump beyond it instantly
+% expires every session and fails all user operations
+-define(TIME_WARP_FORWARD_SECONDS, 600).
+-define(TIME_WARP_BACKWARD_SECONDS, 1000).
 
 
 %%%==================================================================
@@ -250,6 +272,13 @@ rerun_failed_file_transfer_test(_Config) -> ?run_test().
 rerun_failed_file_transfer_by_other_user_test(_Config) -> ?run_test().
 rerun_failed_dir_transfer_test(_Config) -> ?run_test().
 rerun_failed_view_transfer_test(_Config) -> ?run_test().
+
+
+%% --- failures and races ---
+
+
+many_simultaneous_failed_transfers_test(_Config) -> ?run_test().
+file_removed_during_transfer_test(_Config) -> ?run_test().
 
 
 %% --- no-op replications ---
@@ -525,6 +554,95 @@ replication_continues_on_modified_storage_test(_Config) ->
     transfer_test_utils:assert_distribution(TestSuiteCtx, RootDir).
 
 
+warp_time_during_replication_test(_Config) ->
+    TestSuiteCtx = #transfer_test_suite_ctx{
+        space_selector = SpaceSelector,
+        creation_provider_selector = CreationProviderSelector,
+        other_provider_selector = OtherProviderSelector
+    } = ?SUITE_CTX,
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    CreationProviderId = oct_background:get_provider_id(CreationProviderSelector),
+
+    % the time is frozen (init_per_testcase) - it changes only via the
+    % explicit warps below
+    ScheduleTime = time_test_utils:get_frozen_time_seconds(),
+    WarpedTime = ScheduleTime + ?TIME_WARP_FORWARD_SECONDS,
+
+    FileContent = ?RAND_CONTENT(),
+    FileSize = byte_size(FileContent),
+    RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
+        children = transfer_test_utils:gen_nested_tree_spec(
+            [?WARP_TEST_FILES_COUNT], FileContent
+        )
+    }),
+
+    % the file replication jobs are gated (init_per_testcase) - replicate the
+    % first files at the present time ...
+    TransferId = transfer_test_utils:schedule_transfer(TestSuiteCtx, RootDir),
+    transfer_test_utils:await_gated_file_processing_job(),
+    transfer_test_utils:grant_file_processing_permits(
+        TestSuiteCtx, ?FILES_REPLICATED_BEFORE_FORWARD_WARP
+    ),
+    transfer_test_utils:await_files_replicated(
+        OtherProviderSelector, TransferId, ?FILES_REPLICATED_BEFORE_FORWARD_WARP
+    ),
+
+    % ... the next batch after a forward warp ...
+    ok = time_test_utils:set_current_time_seconds(WarpedTime),
+    transfer_test_utils:grant_file_processing_permits(
+        TestSuiteCtx, ?FILES_REPLICATED_BEFORE_BACKWARD_WARP
+    ),
+    transfer_test_utils:await_files_replicated(
+        OtherProviderSelector, TransferId,
+        ?FILES_REPLICATED_BEFORE_FORWARD_WARP + ?FILES_REPLICATED_BEFORE_BACKWARD_WARP
+    ),
+
+    % ... and the rest after a warp far backwards - the transfer must complete
+    % unperturbed, with its timestamps and statistics clamped to the already
+    % reached (forward-warped) time rather than moving back
+    ok = time_test_utils:set_current_time_seconds(
+        ScheduleTime - ?TIME_WARP_BACKWARD_SECONDS
+    ),
+    transfer_test_utils:grant_file_processing_permits(TestSuiteCtx, all),
+
+    TotalBytes = ?WARP_TEST_FILES_COUNT * FileSize,
+    % the bytes replicated before the forward warp may (or may not, depending
+    % on the moment of their stats flush) rotate out of the minute histogram
+    % when the post-warp bytes are recorded ~10 warped minutes later
+    PostWarpBytes = TotalBytes - ?FILES_REPLICATED_BEFORE_FORWARD_WARP * FileSize,
+    transfer_test_utils:await_transfer_ended(TestSuiteCtx, TransferId, RootDir, #{
+        schedule_time => ScheduleTime,
+        start_time => ScheduleTime,
+        % the finish timestamp is clamped from below by the transfer's start
+        % time - without the backward warp protection it would precede it
+        finish_time => ScheduleTime,
+        min_hist => {histogram_sum, CreationProviderId, {range, PostWarpBytes, TotalBytes}}
+    }),
+    transfer_test_utils:assert_distribution(TestSuiteCtx, RootDir),
+
+    % the space-wide transfer stats must also survive the warps: the update
+    % time never moves back and the histograms record the transferred bytes
+    % (only lower bounds are asserted - the space stats accumulate across all
+    % test cases ever run on the shared space; the exact per-transfer byte
+    % accounting is asserted on the transfer doc histograms above)
+    ?assertEqual(
+        {true, true, true, true, true},
+        begin
+            {LastUpdate, [MinSum, HrSum, DySum, MthSum]} = get_space_transfer_stats(
+                OtherProviderSelector, SpaceId, CreationProviderId
+            ),
+            {
+                LastUpdate >= WarpedTime,
+                MinSum >= PostWarpBytes,
+                HrSum >= TotalBytes,
+                DySum >= TotalBytes,
+                MthSum >= TotalBytes
+            }
+        end,
+        ?ATTEMPTS
+    ).
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -594,6 +712,14 @@ init_per_testcase(Case = replication_continues_on_modified_storage_test, Config)
     transfer_test_utils:mock_gated_file_processing(?SUITE_CTX),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
+init_per_testcase(Case = warp_time_during_replication_test, Config) ->
+    % freeze the time on all nodes so that it changes only via the explicit
+    % warps the test makes; gate the file replication jobs so that the
+    % backward warp deterministically happens mid-transfer
+    ok = time_test_utils:freeze_time(Config),
+    transfer_test_utils:mock_gated_file_processing(?SUITE_CTX),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     transfer_common_test_base:init_per_testcase(_Case, ?SUITE_CTX, Config).
 
@@ -620,5 +746,42 @@ end_per_testcase(Case = replication_continues_on_modified_storage_test, Config) 
     transfer_test_utils:unmock_gated_file_processing(?SUITE_CTX),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
+end_per_testcase(Case = warp_time_during_replication_test, Config) ->
+    % release the parked jobs before unfreezing so that they complete under
+    % the mocked clock they started with
+    transfer_test_utils:unmock_gated_file_processing(?SUITE_CTX),
+    ok = time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
 end_per_testcase(_Case, Config) ->
     transfer_common_test_base:end_per_testcase(_Case, ?SUITE_CTX, Config).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+%% Fetches the space-wide transfer stats accumulated on the given provider:
+%% the last update time and the histogram sums of the bytes sourced from the
+%% given provider.
+get_space_transfer_stats(ProviderSelector, SpaceId, SourceProviderId) ->
+    case opw_test_rpc:call(ProviderSelector, space_transfer_stats, get, [
+        ?JOB_TRANSFERS_TYPE, SpaceId
+    ]) of
+        {ok, #document{value = #space_transfer_stats{
+            last_update = LastUpdate,
+            min_hist = MinHist,
+            hr_hist = HrHist,
+            dy_hist = DyHist,
+            mth_hist = MthHist
+        }}} ->
+            HistogramSums = [
+                lists:sum(maps:get(SourceProviderId, Hist, []))
+                || Hist <- [MinHist, HrHist, DyHist, MthHist]
+            ],
+            {maps:get(SourceProviderId, LastUpdate, 0), HistogramSums};
+        {error, not_found} ->
+            {0, [0, 0, 0, 0]}
+    end.

@@ -22,44 +22,19 @@
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
-    many_simultaneous_failed_replica_evictions/1,
-    fail_to_evict_file_replica_without_permissions/1,
-    eviction_should_succeed_when_remote_provider_modified_file_replica/1,
-    eviction_should_fail_when_evicting_provider_modified_file_replica/1,
-    quota_decreased_after_eviction/1,
-    remove_file_during_eviction/1
+    fail_to_evict_file_replica_without_permissions/1
 ]).
 
 all() -> [
-    many_simultaneous_failed_replica_evictions,
-%%    fail_to_evict_file_replica_without_permissions %todo VFS-10259,
-    eviction_should_succeed_when_remote_provider_modified_file_replica,
-    eviction_should_fail_when_evicting_provider_modified_file_replica,
-    quota_decreased_after_eviction,
-    remove_file_during_eviction
+%%    fail_to_evict_file_replica_without_permissions %todo VFS-10259
 ].
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-many_simultaneous_failed_replica_evictions(Config) ->
-    replica_eviction_transfers_test_base:many_simultaneous_failed_replica_evictions(Config, rest, guid).
-
 fail_to_evict_file_replica_without_permissions(Config) ->
     replica_eviction_transfers_test_base:fail_to_evict_file_replica_without_permissions(Config, rest, guid).
-
-eviction_should_succeed_when_remote_provider_modified_file_replica(Config) ->
-    replica_eviction_transfers_test_base:eviction_should_succeed_when_remote_provider_modified_file_replica(Config, rest, guid).
-
-eviction_should_fail_when_evicting_provider_modified_file_replica(Config) ->
-    replica_eviction_transfers_test_base:eviction_should_fail_when_evicting_provider_modified_file_replica(Config, rest, guid).
-
-quota_decreased_after_eviction(Config) ->
-    replica_eviction_transfers_test_base:quota_decreased_after_eviction(Config, rest, guid).
-
-remove_file_during_eviction(Config) ->
-    replica_eviction_transfers_test_base:remove_file_during_eviction(Config, rest, guid).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

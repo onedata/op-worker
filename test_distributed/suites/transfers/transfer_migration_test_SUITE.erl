@@ -54,7 +54,11 @@
     rerun_failed_file_transfer_test/1,
     rerun_failed_file_transfer_by_other_user_test/1,
     rerun_failed_dir_transfer_test/1,
-    rerun_failed_view_transfer_test/1
+    rerun_failed_view_transfer_test/1,
+
+    %% --- failures and races ---
+    many_simultaneous_failed_transfers_test/1,
+    file_removed_during_transfer_test/1
 ]).
 
 all() -> [
@@ -88,7 +92,11 @@ all() -> [
     rerun_failed_file_transfer_test,
     rerun_failed_file_transfer_by_other_user_test,
     rerun_failed_dir_transfer_test,
-    rerun_failed_view_transfer_test
+    rerun_failed_view_transfer_test,
+
+    %% --- failures and races ---
+    many_simultaneous_failed_transfers_test,
+    file_removed_during_transfer_test
 ].
 
 -define(SUITE_CTX, #transfer_test_suite_ctx{
@@ -151,6 +159,13 @@ rerun_failed_file_transfer_test(_Config) -> ?run_test().
 rerun_failed_file_transfer_by_other_user_test(_Config) -> ?run_test().
 rerun_failed_dir_transfer_test(_Config) -> ?run_test().
 rerun_failed_view_transfer_test(_Config) -> ?run_test().
+
+
+%% --- failures and races ---
+
+
+many_simultaneous_failed_transfers_test(_Config) -> ?run_test().
+file_removed_during_transfer_test(_Config) -> ?run_test().
 
 
 %===================================================================

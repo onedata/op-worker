@@ -37,14 +37,12 @@
     replicate_root_directory/2,
     replicate_despite_protection_flags/2,
     replicate_each_file_separately/2,
-    remove_file_during_replication/2,
 
     % replica eviction scenarios
     evict_root_directory/2,
     evict_despite_protection_flags/2,
     evict_each_file_replica_separately/2,
     schedule_replica_eviction_without_permissions/2,
-    remove_file_during_eviction/2,
 
     % migration scenarios
     migrate_root_directory/2,
@@ -55,8 +53,7 @@
 
 -export([
     move_transfer_ids_to_old_key/1,
-    get_transfer_ids/1,
-    await_replication_starts/2
+    get_transfer_ids/1
 ]).
 
 % functions exported to be called by rpc
@@ -174,31 +171,6 @@ replicate_each_file_separately(Config, #scenario{
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
-remove_file_during_replication(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    NodesTransferIdsAndFiles = lists:flatmap(fun(TargetNode) ->
-        lists:map(fun({Guid, Path}) ->
-            FileKey = file_key(Guid, Path, FileKeyType),
-            TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-            {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
-            {TargetNode, Tid, Guid, Path}
-        end, FilesGuidsAndPaths)
-    end, ReplicatingNodes),
-
-    lists_utils:pforeach(fun({TargetNode, Tid, Guid, Path}) ->
-        FileKey = file_key(Guid, Path, FileKeyType),
-        await_replication_starts(TargetNode, Tid),
-        ok = remove_file(TargetNode, User, FileKey, Config)
-    end, NodesTransferIdsAndFiles),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
 %%%===================================================================
 %%% Eviction scenarios
 %%%===================================================================
@@ -280,31 +252,6 @@ schedule_replica_eviction_without_permissions(Config, #scenario{
         {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, RootFileKey, Config, Type),
         {EvictingNode, Tid, RootGuid, RootPath}
     end, EvictingNodes),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-remove_file_during_eviction(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    evicting_nodes  = EvictingNodes
-}) ->
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    NodesTransferIdsAndFiles = lists:flatmap(fun(EvictingNode) ->
-        lists:map(fun({Guid, Path}) ->
-            FileKey = file_key(Guid, Path, FileKeyType),
-            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
-            {EvictingNode, Tid, Guid, Path}
-        end, FilesGuidsAndPaths)
-    end, EvictingNodes),
-
-    lists_utils:pforeach(fun({EvictingNode, Tid, Guid, Path}) ->
-        FileKey = file_key(Guid, Path, FileKeyType),
-        await_transfer_starts(EvictingNode, Tid, 1000, 10),
-        ok = remove_file(EvictingNode, User, FileKey, Config)
-    end, NodesTransferIdsAndFiles),
-
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 %%%===================================================================
@@ -812,10 +759,6 @@ subfile_path(ParentPath, FilePrefix, N) ->
 subdir_path(ParentPath, DirPrefix, N) ->
     filename:join([ParentPath, <<DirPrefix/binary, (integer_to_binary(N))/binary>>]).
 
-remove_file(Node, User, FileKey, Config) ->
-    SessionId = ?USER_SESSION(Node, User, Config),
-    lfm_proxy:unlink(Node, SessionId, FileKey).
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -1004,36 +947,6 @@ file_key(Guid, _Path, guid) ->
     ?FILE_REF(Guid);
 file_key(_Guid, Path, path) ->
     {path, Path}.
-
-await_replication_starts(Node, TransferId) ->
-    ?assertEqual(true, begin
-        try
-            #transfer{
-                bytes_replicated = BytesReplicated,
-                files_replicated = FilesReplicated
-            } = transfers_test_utils:get_transfer(Node, TransferId),
-            (BytesReplicated > 0) or (FilesReplicated > 0)
-        catch
-            throw:transfer_not_found ->
-                false
-        end
-    end, 60).
-
-await_transfer_starts(Node, TransferId, Attempts, Interval) ->
-    ?assertEqual(true, begin
-        try
-            #transfer{
-                start_time = StartTime,
-                files_to_process = FTP
-            } = transfers_test_utils:get_transfer(Node, TransferId),
-
-            StartTime > 0 andalso FTP > 0
-        catch
-            throw:transfer_not_found ->
-               false
-        end
-    end, Attempts, Interval).
-
 
 combinations([]) ->
     [[]];

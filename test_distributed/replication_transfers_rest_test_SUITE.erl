@@ -23,18 +23,12 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
     file_replication_failures_should_fail_whole_transfer/1,
-    many_simultaneous_failed_transfers/1,
-    file_removed_during_replication/1,
-    rtransfer_works_between_providers_with_different_ports/1,
-    warp_time_during_replication/1
+    rtransfer_works_between_providers_with_different_ports/1
 ]).
 
 all() -> [
     % file_replication_failures_should_fail_whole_transfer, TODO uncomment after resolving VFS-4742
-    many_simultaneous_failed_transfers,
-    file_removed_during_replication,
-    rtransfer_works_between_providers_with_different_ports,
-    warp_time_during_replication
+    rtransfer_works_between_providers_with_different_ports
 ].
 
 %%%===================================================================
@@ -44,17 +38,8 @@ all() -> [
 file_replication_failures_should_fail_whole_transfer(Config) ->
     replication_transfers_test_base:file_replication_failures_should_fail_whole_transfer(Config, rest, guid).
 
-many_simultaneous_failed_transfers(Config) ->
-    replication_transfers_test_base:many_simultaneous_failed_transfers(Config, rest, guid).
-
-file_removed_during_replication(Config) ->
-    replication_transfers_test_base:file_removed_during_replication(Config, rest, guid).
-
 rtransfer_works_between_providers_with_different_ports(Config) ->
     replication_transfers_test_base:rtransfer_works_between_providers_with_different_ports(Config, rest).
-
-warp_time_during_replication(Config) ->
-    replication_transfers_test_base:warp_time_during_replication(Config, rest).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
