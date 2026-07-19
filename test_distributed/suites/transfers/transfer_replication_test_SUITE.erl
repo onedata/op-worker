@@ -652,15 +652,21 @@ init_per_suite(Config) ->
     ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
-        envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {provider_token_ttl_sec, 24 * 60 * 60},
-            % transfer status updates are sparse single-doc changes - with the
-            % default (5s) broadcast interval they idle in the dbsync out-stream
-            % aggregation window for several of its cycles, inflating every
-            % cross-provider await by tens of seconds
-            {dbsync_changes_broadcast_interval, 1000}
-        ]}]
+        envs = [
+            {op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {provider_token_ttl_sec, 24 * 60 * 60},
+                % transfer status updates are sparse single-doc changes - with the
+                % default (5s) broadcast interval they idle in the dbsync out-stream
+                % aggregation window for several of its cycles, inflating every
+                % cross-provider await by tens of seconds
+                {dbsync_changes_broadcast_interval, 1000}
+            ]},
+            {op_worker, cluster_worker, [
+                {cache_to_disk_delay_ms, timer:seconds(1)},
+                {cache_to_disk_force_delay_ms, timer:seconds(2)}
+            ]}
+        ]
     }).
 
 
@@ -668,7 +674,12 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+% NOTE: every special init clause runs the default clause (the environment
+% cleanup) FIRST and only then applies its mocks or env tweaks - if the
+% cleanup crashes, ct skips the case WITHOUT running end_per_testcase, so
+% anything installed beforehand would leak into all subsequent cases
 init_per_testcase(Case = replication_of_not_synced_file_test, Config) ->
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     % simulate scheduling replication of a file the replicating provider has
     % not yet synced - its replication traverse fails to find the file
     #transfer_test_suite_ctx{other_provider_selector = OtherProviderSelector} = ?SUITE_CTX,
@@ -677,7 +688,7 @@ init_per_testcase(Case = replication_of_not_synced_file_test, Config) ->
     ok = test_utils:mock_expect(OtherProviderNodes, tree_traverse, run, fun(_, _, _) ->
         {error, not_found}
     end),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
+    NewConfig;
 
 init_per_testcase(Case, Config) when
     Case =:= replication_with_exactly_enough_space_test;
@@ -707,18 +718,20 @@ init_per_testcase(Case, Config) when
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case = replication_continues_on_modified_storage_test, Config) ->
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     % gate the file replication jobs - the test releases them in stages,
     % interleaving storage modifications with replication progress
     transfer_test_utils:mock_gated_file_processing(?SUITE_CTX),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
+    NewConfig;
 
 init_per_testcase(Case = warp_time_during_replication_test, Config) ->
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     % freeze the time on all nodes so that it changes only via the explicit
     % warps the test makes; gate the file replication jobs so that the
     % backward warp deterministically happens mid-transfer
     ok = time_test_utils:freeze_time(Config),
     transfer_test_utils:mock_gated_file_processing(?SUITE_CTX),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
+    NewConfig;
 
 init_per_testcase(_Case, Config) ->
     transfer_common_test_base:init_per_testcase(_Case, ?SUITE_CTX, Config).

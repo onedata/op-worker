@@ -48,6 +48,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/onedata_file.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
@@ -117,11 +118,19 @@
 -define(SPACE_ROOT_LS_LIMIT, 10000).
 
 -define(PREREPLICATION_READ_CHUNK_SIZE, 33554432).  % 32 MiB
-% TODO VFS-XXX remove the replica registration verification (the two defines
+% TODO VFS-XXX remove the replica registration verification (the three defines
 % below and the helpers marked with this ticket) once the lost file_location
 % update after an on-read replication is fixed
 -define(PREREPLICATION_MAX_READS_PER_FILE, 3).
--define(REPLICA_REGISTRATION_AWAIT_ATTEMPTS, 15).
+% covers the async fslogic cache flush delay and the synchronizer's 10 s idle
+% terminate (whose flush is the last chance for the update to become durable)
+-define(REPLICA_REGISTRATION_AWAIT_ATTEMPTS, 12).
+-define(REPLICA_REGISTRATION_AWAIT_AFTER_FORCED_FLUSH_ATTEMPTS, 5).
+
+% how long to wait, before unloading a mock of a module, for the processes
+% still executing its code to leave it (the unload purge would kill them)
+-define(MOCKED_MODULE_CALLS_DRAIN_ATTEMPTS, 150).
+-define(MOCKED_MODULE_CALLS_DRAIN_POLL_INTERVAL_MS, 100).
 
 % how much longer to poll a transfer that has already ended but does not match
 % the expectations - enough for the trailing dbsync revisions of the end state,
@@ -515,7 +524,15 @@ unmock_gated_file_processing(SuiteCtx) ->
     % call would be killed by the code purge on unload
     grant_file_processing_permits(SuiteCtx, all),
     Nodes = get_file_processing_nodes(SuiteCtx),
-    test_utils:mock_unload(Nodes, get_file_processing_worker_module(SuiteCtx)),
+    WorkerModule = get_file_processing_worker_module(SuiteCtx),
+    % released jobs need a moment to run their file processing to completion;
+    % purging them mid-call would lose their reports to the transfer traverse,
+    % leaving the transfer ongoing forever - each such transfer permanently
+    % occupies one of the (10) replication controller pool workers of the
+    % provider, and with all of them gone no replication or migration can even
+    % start on that provider until its restart (see replication_controller)
+    await_no_ongoing_calls_within_module(Nodes, WorkerModule),
+    test_utils:mock_unload(Nodes, WorkerModule),
     lists:foreach(fun(Node) ->
         ok = opw_test_rpc:call(Node, node_cache, clear, [?FILE_PROCESSING_PERMITS_KEY])
     end, Nodes).
@@ -583,6 +600,8 @@ unmock_file_processing_failure(SuiteCtx = #transfer_test_suite_ctx{transfer_type
         eviction -> replica_deletion_req;
         _ -> replica_synchronizer
     end,
+    % see the analogous await in unmock_gated_file_processing/1
+    await_no_ongoing_calls_within_module(Nodes, MockedModule),
     test_utils:mock_unload(Nodes, MockedModule),
     lists:foreach(fun(Node) ->
         ok = opw_test_rpc:call(Node, node_cache, clear, [?FILE_PROCESSING_FAILURE_ENABLED_KEY])
@@ -822,14 +841,35 @@ remove_all_transfers(#transfer_test_suite_ctx{
 }) ->
     SpaceId = oct_background:get_space_id(SpaceSelector),
 
-    lists_utils:pforeach(fun(ProviderSelector) ->
+    % the providers are cleaned SEQUENTIALLY and each deletion tolerates an
+    % already-missing doc: both providers list mostly the same transfers (the
+    % transfer links are dbsync-synced), so the second provider's listing may
+    % still contain transfers the first pass just deleted (its view catches
+    % up only after a dbsync propagation delay)
+    lists:foreach(fun(ProviderSelector) ->
         lists:foreach(fun(ListingFun) ->
             {ok, TransferIds} = opw_test_rpc:call(ProviderSelector, transfer, ListingFun, [SpaceId]),
             lists_utils:pforeach(fun(TransferId) ->
-                opw_test_rpc:call(ProviderSelector, transfer, delete, [TransferId])
+                delete_transfer_ignoring_missing_doc(ProviderSelector, TransferId)
             end, TransferIds)
         end, [list_waiting_transfers, list_ongoing_transfers, list_ended_transfers])
     end, [CreationProviderSelector, OtherProviderSelector]).
+
+
+%% @private
+%% transfer:delete/1 is not idempotent - it badmatches on getting the doc if
+%% it no longer exists (deleted concurrently or listed from a stale view)
+-spec delete_transfer_ignoring_missing_doc(oct_background:entity_selector(), transfer:id()) ->
+    ok.
+delete_transfer_ignoring_missing_doc(ProviderSelector, TransferId) ->
+    ok = opw_test_rpc:call(ProviderSelector, fun() ->
+        try
+            transfer:delete(TransferId)
+        catch
+            error:{badmatch, {error, not_found}} ->
+                ok
+        end
+    end).
 
 
 -spec get_space_support_size(oct_background:entity_selector(), od_space:id()) ->
@@ -921,6 +961,53 @@ try_acquire_file_processing_permit(PermitsRef) ->
             % negative under concurrent acquisitions but never loses permits)
             atomics:add(PermitsRef, 1, 1),
             false
+    end.
+
+
+%% @private
+%% Awaits until no process on the given nodes executes the code of the given
+%% (mocked) module - unloading a mock purges the module's code, killing any
+%% process executing it (the mock and the meck-renamed original alike). The
+%% await is bounded: on timeout a warning is logged and the caller proceeds
+%% with the unload (a test run must not hang on a wedged job forever).
+-spec await_no_ongoing_calls_within_module([node()], module()) -> ok.
+await_no_ongoing_calls_within_module(Nodes, Module) ->
+    MatchedModules = [Module, meck_util:original_name(Module)],
+    lists:foreach(fun(Node) ->
+        await_no_ongoing_calls_within_module(
+            Node, MatchedModules, ?MOCKED_MODULE_CALLS_DRAIN_ATTEMPTS
+        )
+    end, Nodes).
+
+
+%% @private
+-spec await_no_ongoing_calls_within_module(node(), [module()], non_neg_integer()) ->
+    ok.
+await_no_ongoing_calls_within_module(Node, MatchedModules, 0) ->
+    ct:pal(
+        "WARNING: unloading the mock of ~tp on node ~tp while some process is "
+        "still executing its code - the code purge will kill it",
+        [hd(MatchedModules), Node]
+    );
+await_no_ongoing_calls_within_module(Node, MatchedModules, AttemptsLeft) ->
+    AnyProcessExecutingModule = opw_test_rpc:call(Node, fun() ->
+        lists:any(fun(Pid) ->
+            case erlang:process_info(Pid, current_stacktrace) of
+                {current_stacktrace, Stacktrace} ->
+                    lists:any(fun(StackModule) ->
+                        lists:keymember(StackModule, 1, Stacktrace)
+                    end, MatchedModules);
+                undefined ->
+                    false
+            end
+        end, erlang:processes())
+    end),
+    case AnyProcessExecutingModule of
+        false ->
+            ok;
+        true ->
+            timer:sleep(?MOCKED_MODULE_CALLS_DRAIN_POLL_INTERVAL_MS),
+            await_no_ongoing_calls_within_module(Node, MatchedModules, AttemptsLeft - 1)
     end.
 
 
@@ -1131,64 +1218,97 @@ collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
 %% TODO VFS-XXX remove the verification (leaving plain replicate_file_by_read
 %% calls) once the lost file_location update is fixed
 %% Replicates the file to the given provider by reading it there and verifies
-%% that the fetched blocks actually got registered in the replica metadata:
-%% the fetch may write the whole content to the storage while the update of
-%% the local file_location doc (its blocks and last_replication_timestamp)
-%% silently never gets persisted. Such a replica is invisible (zero blocks in
-%% the distribution) - a subsequent eviction quietly skips the file, breaking
-%% the transfer counter expectations. A repeated read re-fetches the content
-%% and re-registers the blocks.
+%% that the fetched blocks actually got PERSISTED in the local file_location
+%% doc: the fetch may write the whole content to the storage and register the
+%% blocks only in the replica_synchronizer's in-process fslogic cache, whose
+%% flush then silently never makes them durable. Distribution reads served by
+%% the live process show such blocks, so only the persisted doc (what a later
+%% eviction acts upon once the process dies) is verified. On a stale doc the
+%% fslogic cache flush is first forced (catching the lost-flush case in the
+%% act); if that does not help, the read is repeated - a re-fetch re-registers
+%% the blocks anew.
 -spec replicate_file_and_verify_replica_registration(
     node(), od_provider:id(), session:id(), file_id:file_guid(), pos_integer()
 ) ->
     ok.
 replicate_file_and_verify_replica_registration(Node, ProviderId, SessionId, FileGuid, ReadsLeft) ->
     FileSize = replicate_file_by_read(Node, SessionId, FileGuid),
-    case await_replica_registration(
-        Node, ProviderId, FileGuid, FileSize, ?REPLICA_REGISTRATION_AWAIT_ATTEMPTS
+    case await_replica_registration_persisted(
+        Node, FileGuid, FileSize, ?REPLICA_REGISTRATION_AWAIT_ATTEMPTS
     ) of
         ok ->
             ok;
-        {error, replica_not_registered} when ReadsLeft > 1 ->
-            ct:pal(
-                "WARNING: the replication (by read) of file ~ts on provider ~ts left "
-                "no blocks registered in its replica metadata - retrying the read "
-                "(reads left: ~tp)",
-                [FileGuid, ProviderId, ReadsLeft - 1]
-            ),
-            replicate_file_and_verify_replica_registration(
-                Node, ProviderId, SessionId, FileGuid, ReadsLeft - 1
-            );
         {error, replica_not_registered} ->
-            ct:fail({replica_registration_lost, FileGuid, ProviderId})
+            ok = opw_test_rpc:call(Node, fun() ->
+                fslogic_location_cache:force_flush(file_id:guid_to_uuid(FileGuid)),
+                ok
+            end),
+            case await_replica_registration_persisted(
+                Node, FileGuid, FileSize,
+                ?REPLICA_REGISTRATION_AWAIT_AFTER_FORCED_FLUSH_ATTEMPTS
+            ) of
+                ok ->
+                    ct:pal(
+                        "WARNING: the blocks fetched by the replicating read of file ~ts "
+                        "on provider ~ts got persisted in its file_location only after "
+                        "an explicitly forced fslogic cache flush",
+                        [FileGuid, ProviderId]
+                    );
+                {error, replica_not_registered} when ReadsLeft > 1 ->
+                    ct:pal(
+                        "WARNING: the replication (by read) of file ~ts on provider ~ts "
+                        "left no blocks persisted in its file_location (even after a "
+                        "forced fslogic cache flush) - retrying the read (reads left: ~tp)",
+                        [FileGuid, ProviderId, ReadsLeft - 1]
+                    ),
+                    replicate_file_and_verify_replica_registration(
+                        Node, ProviderId, SessionId, FileGuid, ReadsLeft - 1
+                    );
+                {error, replica_not_registered} ->
+                    ct:fail({replica_registration_lost, FileGuid, ProviderId})
+            end
     end.
 
 
 %% @private
 %% TODO VFS-XXX remove along with the verification above
--spec await_replica_registration(
-    node(), od_provider:id(), file_id:file_guid(), file_meta:size(), non_neg_integer()
+-spec await_replica_registration_persisted(
+    node(), file_id:file_guid(), file_meta:size(), non_neg_integer()
 ) ->
     ok | {error, replica_not_registered}.
-await_replica_registration(_Node, _ProviderId, _FileGuid, _FileSize, 0) ->
+await_replica_registration_persisted(_Node, _FileGuid, _FileSize, 0) ->
     {error, replica_not_registered};
-await_replica_registration(Node, ProviderId, FileGuid, FileSize, AttemptsLeft) ->
-    % freshly registered blocks may become visible in the distribution only
-    % after the (delayed) fslogic cache flush - poll before declaring them lost
-    {ok, Distribution} = ?assertMatch({ok, _}, opt_file_metadata:get_distribution_deprecated(
-        Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)
-    )),
-    IsRegistered = lists:any(fun(ProviderDistribution) ->
-        maps:get(<<"providerId">>, ProviderDistribution) =:= ProviderId
-            andalso maps:get(<<"totalBlocksSize">>, ProviderDistribution) =:= FileSize
-    end, Distribution),
-    case IsRegistered of
-        true ->
+await_replica_registration_persisted(Node, FileGuid, FileSize, AttemptsLeft) ->
+    case get_persisted_local_blocks_size(Node, FileGuid) of
+        FileSize ->
             ok;
-        false ->
+        _ ->
             timer:sleep(timer:seconds(1)),
-            await_replica_registration(Node, ProviderId, FileGuid, FileSize, AttemptsLeft - 1)
+            await_replica_registration_persisted(Node, FileGuid, FileSize, AttemptsLeft - 1)
     end.
+
+
+%% @private
+%% TODO VFS-XXX remove along with the verification above
+%% Reads the summed size of the file's local replica blocks as PERSISTED in
+%% the datastore (the inline public blocks of the local file_location doc
+%% plus its file_local_blocks split-store) - deliberately bypassing the
+%% replica_synchronizer's in-process cache that serves distribution reads.
+-spec get_persisted_local_blocks_size(node(), file_id:file_guid()) ->
+    non_neg_integer().
+get_persisted_local_blocks_size(Node, FileGuid) ->
+    opw_test_rpc:call(Node, fun() ->
+        case file_location:get_local(file_id:guid_to_uuid(FileGuid)) of
+            {ok, #document{key = LocId, value = #file_location{blocks = InlineBlocks}}} ->
+                LocalBlocks = case file_local_blocks:get(LocId) of
+                    {ok, Blocks} -> Blocks;
+                    {error, not_found} -> []
+                end,
+                lists:sum([Size || #file_block{size = Size} <- InlineBlocks ++ LocalBlocks]);
+            {error, not_found} ->
+                0
+        end
+    end).
 
 
 %% @private

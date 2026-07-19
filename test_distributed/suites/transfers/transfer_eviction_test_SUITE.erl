@@ -325,15 +325,21 @@ init_per_suite(Config) ->
     ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
-        envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {provider_token_ttl_sec, 24 * 60 * 60},
-            % transfer status updates are sparse single-doc changes - with the
-            % default (5s) broadcast interval they idle in the dbsync out-stream
-            % aggregation window for several of its cycles, inflating every
-            % cross-provider await by tens of seconds
-            {dbsync_changes_broadcast_interval, 1000}
-        ]}]
+        envs = [
+            {op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {provider_token_ttl_sec, 24 * 60 * 60},
+                % transfer status updates are sparse single-doc changes - with the
+                % default (5s) broadcast interval they idle in the dbsync out-stream
+                % aggregation window for several of its cycles, inflating every
+                % cross-provider await by tens of seconds
+                {dbsync_changes_broadcast_interval, timer:seconds(1)}
+            ]},
+            {op_worker, cluster_worker, [
+                {cache_to_disk_delay_ms, timer:seconds(1)},
+                {cache_to_disk_force_delay_ms, timer:seconds(2)}
+            ]}
+        ]
     }).
 
 
@@ -342,12 +348,16 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(Case = eviction_of_locally_modified_replica_test, Config) ->
+    % the environment cleanup of the default clause runs FIRST - if it
+    % crashes, ct skips the case WITHOUT running end_per_testcase and an
+    % already-installed mock would leak into all subsequent cases
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     % only mock-load the module here - the mock expectation needs the file
     % guid, so it is set in the test body
     #transfer_test_suite_ctx{other_provider_selector = OtherProviderSelector} = ?SUITE_CTX,
     OtherProviderNodes = oct_background:get_provider_nodes(OtherProviderSelector),
     ok = test_utils:mock_new(OtherProviderNodes, replica_deletion_req, [passthrough]),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
+    NewConfig;
 
 init_per_testcase(Case, Config) ->
     transfer_common_test_base:init_per_testcase(Case, ?SUITE_CTX, Config).

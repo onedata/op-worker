@@ -69,25 +69,31 @@
 %%%===================================================================
 
 
+% NOTE: every special init clause runs the default clause (the environment
+% cleanup) FIRST and only then applies its mocks or env tweaks - if the
+% cleanup crashes, ct skips the case WITHOUT running end_per_testcase, so
+% anything installed beforehand would leak into all subsequent cases
 init_per_testcase(Case = hundred_files_by_view_with_batch_10_test, TestSuiteCtx, Config) ->
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config),
+
     Nodes = get_all_provider_nodes(TestSuiteCtx),
     {ok, DefaultBatchSize} = test_utils:get_env(
         hd(Nodes), op_worker, transfer_traverse_list_batch_size
     ),
     test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, 10),
 
-    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config),
     [{transfer_traverse_list_batch_size, DefaultBatchSize} | NewConfig];
 
 init_per_testcase(Case, TestSuiteCtx, Config) when
     Case =:= cancel_ongoing_transfer_test;
     Case =:= file_removed_during_transfer_test
 ->
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config),
     % gate the transfer file jobs - the tests interleave a disruptive operation
     % (transfer cancellation, file removal) with the jobs deterministically
     % parked mid-flight
     transfer_test_utils:mock_gated_file_processing(TestSuiteCtx),
-    init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+    NewConfig;
 
 init_per_testcase(Case, TestSuiteCtx, Config) when
     Case =:= rerun_failed_file_transfer_test;
@@ -96,10 +102,11 @@ init_per_testcase(Case, TestSuiteCtx, Config) when
     Case =:= rerun_failed_view_transfer_test;
     Case =:= many_simultaneous_failed_transfers_test
 ->
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config),
     % fail every transfer file job - the rerun tests turn the failures off
     % before rerunning the failed transfers
     transfer_test_utils:mock_file_processing_failure(TestSuiteCtx),
-    init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+    NewConfig;
 
 init_per_testcase(Case, TestSuiteCtx, Config) ->
     NewConfig = lfm_proxy:init(Config),
