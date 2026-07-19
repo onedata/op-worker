@@ -9,7 +9,7 @@
 %%% This file contains test of transfers in case of node restart without HA.
 %%% @end
 %%%-------------------------------------------------------------------
--module(transfers_restart_test_SUITE).
+-module(rtransfer_restarts_test_SUITE).
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").

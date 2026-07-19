@@ -204,6 +204,7 @@ stages:
         - replication_transfers_rest
         - rest_handler
         - reverse_luma
+        - rtransfer_restarts
         - s3_helper
         - sequencer
         - sequencer_in_stream
@@ -243,7 +244,6 @@ stages:
         - transfer_get_api
         - transfer_migration
         - transfer_replication
-        - transfers_restart
         - trash
         - tree_deletion_traverse
         - tree_traverse_listing
@@ -1588,6 +1588,13 @@ reverse_luma:
     - <<: *ct_logs
       name: ct_logs_reverse_luma.tar.gz
 
+rtransfer_restarts:
+  <<: *ct-onenv-job
+  key: TRRST
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_rtransfer_restarts.tar.gz
+
 s3_helper:
   <<: *ct-job
   key: S3HEL
@@ -1863,13 +1870,6 @@ transfer_replication:
     - <<: *ct_logs
       name: ct_logs_transfer_replication.tar.gz
 
-transfers_restart:
-  <<: *ct-onenv-job
-  key: TRRST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_transfers_restart.tar.gz
-
 trash:
   <<: *ct-onenv-job
   key: TRASH
@@ -2134,6 +2134,7 @@ Coverage report:
     - artifact: ct_logs_replication_transfers_rest.tar.gz
     - artifact: ct_logs_rest_handler.tar.gz
     - artifact: ct_logs_reverse_luma.tar.gz
+    - artifact: ct_logs_rtransfer_restarts.tar.gz
     - artifact: ct_logs_s3_helper.tar.gz
     - artifact: ct_logs_sequencer.tar.gz
     - artifact: ct_logs_sequencer_in_stream.tar.gz
@@ -2173,7 +2174,6 @@ Coverage report:
     - artifact: ct_logs_transfer_get_api.tar.gz
     - artifact: ct_logs_transfer_migration.tar.gz
     - artifact: ct_logs_transfer_replication.tar.gz
-    - artifact: ct_logs_transfers_restart.tar.gz
     - artifact: ct_logs_trash.tar.gz
     - artifact: ct_logs_tree_deletion_traverse.tar.gz
     - artifact: ct_logs_tree_traverse_listing.tar.gz
