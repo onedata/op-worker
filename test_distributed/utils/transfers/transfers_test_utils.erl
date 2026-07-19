@@ -26,11 +26,8 @@
     get_ongoing_transfers_for_file/2, get_ended_transfers_for_file/2,
     remove_transfers/1, unmock_replication_worker/1,
     root_name/2, root_name/3,
-    mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
-    mock_prolonged_replica_eviction/3, unmock_prolonged_replica_eviction/1,
-    unmock_replica_synchronizer_failure/1, remove_all_views/2, random_job_name/1,
-    test_map_function/1, test_reduce_function/1, test_map_function/2,
-    create_view/7, create_view/6, random_view_name/1, unmock_prolonged_replication/1
+    mock_replica_synchronizer_failure/1,
+    unmock_replica_synchronizer_failure/1, remove_all_views/2
 ]).
 -export([assert_transfer_state/4]).
 
@@ -118,54 +115,6 @@ root_name(FunctionName, Type, FileKeyType, RandomSuffix) ->
     SuffixBin = str_utils:to_binary(RandomSuffix),
     <<FunctionNameBin/binary, "_", TypeBin/binary, "_", FileKeyTypeBin/binary, "_", SuffixBin/binary>>.
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Prolongs call to replication_worker:transfer_regular_file/2 function for
-%% ProlongationTime seconds with probability ProlongationProbability.
-%% This function should be used to prolong duration time of transfers
-%% @end
-%%-------------------------------------------------------------------
--spec mock_prolonged_replication(node(), non_neg_integer(), non_neg_integer()) -> ok.
-mock_prolonged_replication(Worker, ProlongationProbability, ProlongationTime) ->
-    ok = test_utils:mock_new(Worker, replication_worker, [passthrough]),
-    ok = test_utils:mock_expect(Worker, replication_worker, transfer_regular_file,
-        fun(FileCtx, TransferParams) ->
-            Result = meck:passthrough([FileCtx, TransferParams]),
-            case rand:uniform() < ProlongationProbability of
-                true -> timer:sleep(timer:seconds(ProlongationTime));
-                false -> ok
-            end,
-            Result
-        end).
-
-unmock_prolonged_replication(Worker) ->
-    ok = test_utils:mock_unload(Worker, replication_worker).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Prolongs call to replica_eviction_worker:transfer_regular_file/2 function for
-%% ProlongationTime seconds with probability ProlongationProbability.
-%% This function should be used to prolong duration time of replica eviction transfers.
-%% @end
-%%-------------------------------------------------------------------
--spec mock_prolonged_replica_eviction(node(), non_neg_integer(), non_neg_integer()) -> ok.
-mock_prolonged_replica_eviction(Worker, ProlongationProbability, ProlongationTime) ->
-    ok = test_utils:mock_new(Worker, replica_eviction_worker, [passthrough]),
-    ok = test_utils:mock_expect(Worker, replica_eviction_worker, transfer_regular_file,
-        fun
-            (FileCtx, TransferParams) ->
-                Result = meck:passthrough([FileCtx, TransferParams]),
-                case rand:uniform() < ProlongationProbability of
-                    true -> timer:sleep(timer:seconds(ProlongationTime));
-                    false -> ok
-                end,
-                Result
-        end
-    ).
-
-unmock_prolonged_replica_eviction(Worker) ->
-    ok = test_utils:mock_unload(Worker, replica_eviction_worker).
-
 mock_replica_synchronizer_failure(Node) ->
     ok = test_utils:mock_new(Node, replica_synchronizer),
     ok = test_utils:mock_expect(Node, replica_synchronizer, synchronize,
@@ -183,49 +132,6 @@ remove_all_views(Nodes, SpaceId) ->
             ok = rpc:call(Node, index, delete, [SpaceId, ViewName])
         end, ViewNames)
     end, Nodes).
-
-random_job_name(FunctionName) ->
-    FunctionNameBin = str_utils:to_binary(FunctionName),
-    RandomIntBin = str_utils:to_binary(rand:uniform(?RANDOM_NAMESPACE_SIZE)),
-    <<"job_", FunctionNameBin/binary, "_", RandomIntBin/binary>>.
-
-random_view_name(FunctionName) ->
-    FunctionNameBin = str_utils:to_binary(FunctionName),
-    RandomIntBin = str_utils:to_binary(rand:uniform(?RANDOM_NAMESPACE_SIZE)),
-    <<"view_", FunctionNameBin/binary, "_", RandomIntBin/binary>>.
-
-test_map_function(XattrName) ->
-    <<"function (id, type, meta, ctx) {
-        if(type == 'custom_metadata' && meta['", XattrName/binary, "']) {
-            return [meta['", XattrName/binary, "'], id];
-        }
-        return null;
-    }">>.
-
-test_map_function(XattrName, XattrName2) ->
-    <<"function (id, type, meta, ctx) {
-        if(type == 'custom_metadata' && meta['", XattrName/binary, "']) {
-            return [meta['", XattrName/binary, "'], [id, meta['", XattrName2/binary, "']]];
-        }
-        return null;
-    }">>.
-
-test_reduce_function(XattrValue) ->
-    XattrValueBin = str_utils:to_binary(XattrValue),
-    <<"function (key, values, rereduce) {
-        var filtered = [];
-        for(i = 0; i < values.length; i++)
-            if(values[i][1] == ", XattrValueBin/binary, ")
-                filtered.push(values[i][0]);
-        return filtered;
-    }">>.
-
-create_view(Worker, SpaceId, ViewName, MapFunction, Options, Providers) ->
-    create_view(Worker, SpaceId, ViewName, MapFunction, undefined, Options, Providers).
-
-create_view(Worker, SpaceId, ViewName, MapFunction, ReduceFunction, Options, Providers) ->
-    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, MapFunction, ReduceFunction,
-        Options, false, Providers]).
 
 assert_transfer_state(Node, TransferId, ExpectedTransfer, Attempts) ->
     try
