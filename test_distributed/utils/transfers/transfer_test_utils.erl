@@ -48,7 +48,6 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/onedata_file.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
@@ -83,6 +82,7 @@
     rerun_transfer/3,
     await_transfer_rerun_id/3,
     await_transfer_ended/4, await_transfer_ended/5,
+    await_effective_replication_completed/3,
     assert_distribution/2, assert_distribution/3,
     assert_initial_distribution/2,
     await_distribution/3,
@@ -106,26 +106,27 @@
     fun((term()) -> boolean()).
 -type expected_transfer() :: #{atom() => field_expectation()}.
 
+% how the transfer doc is fetched: 'get' returns the doc of exactly the given
+% transfer, 'get_effective' follows `rerun_id` links to the doc of the transfer
+% that actually continues the job (a transfer rerun manually or restarted by
+% the provider after its own restart lives on under a new id)
+-type transfer_getter() :: get | get_effective.
+
 % transferred files given either as a (nested) file tree or a flat list of
 % its objects (e.g. the subset of tree files matched by a view)
 -type file_tree_objects() ::
     onenv_file_test_utils:object() | [onenv_file_test_utils:object()].
 
--export_type([transfer_type/0, field_expectation/0, expected_transfer/0, file_tree_objects/0]).
+-export_type([
+    transfer_type/0, field_expectation/0, expected_transfer/0, transfer_getter/0,
+    file_tree_objects/0
+]).
 
 -type suite_ctx() :: #transfer_test_suite_ctx{}.
 
 -define(SPACE_ROOT_LS_LIMIT, 10000).
 
 -define(PREREPLICATION_READ_CHUNK_SIZE, 33554432).  % 32 MiB
-% TODO VFS-XXX remove the replica registration verification (the three defines
-% below and the helpers marked with this ticket) once the lost file_location
-% update after an on-read replication is fixed
--define(PREREPLICATION_MAX_READS_PER_FILE, 3).
-% covers the async fslogic cache flush delay and the synchronizer's 10 s idle
-% terminate (whose flush is the last chance for the update to become durable)
--define(REPLICA_REGISTRATION_AWAIT_ATTEMPTS, 12).
--define(REPLICA_REGISTRATION_AWAIT_AFTER_FORCED_FLUSH_ATTEMPTS, 5).
 
 % how long to wait, before unloading a mock of a module, for the processes
 % still executing its code to leave it (the unload purge would kill them)
@@ -219,9 +220,6 @@ create_file_tree(#transfer_test_suite_ctx{
 %% before the tested transfer is scheduled: replica eviction operates on
 %% a file tree already replicated to the other provider, so every tree file
 %% is read (in parallel) on that provider, which forces its replication.
-%% Each replication is verified against the replica metadata and retried
-%% if its block registration got lost - see
-%% replicate_file_and_verify_replica_registration/5.
 %% For the other transfer types the creation provider replicas suffice.
 %% @end
 %%--------------------------------------------------------------------
@@ -229,17 +227,19 @@ create_file_tree(#transfer_test_suite_ctx{
 ensure_initial_replicas(#transfer_test_suite_ctx{
     transfer_type = eviction,
     user_selector = UserSelector,
+    creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
 }, RootObject) ->
+    CreationNode = oct_background:get_random_provider_node(CreationProviderSelector),
+    CreationSessionId = oct_background:get_user_session_id(UserSelector, CreationProviderSelector),
     OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
-    OtherProviderId = oct_background:get_provider_id(OtherProviderSelector),
-    SessionId = oct_background:get_user_session_id(UserSelector, OtherProviderSelector),
+    OtherSessionId = oct_background:get_user_session_id(UserSelector, OtherProviderSelector),
 
     lists_utils:pforeach(fun(#object{guid = FileGuid}) ->
-        replicate_file_and_verify_replica_registration(
-            OtherNode, OtherProviderId, SessionId, FileGuid,
-            ?PREREPLICATION_MAX_READS_PER_FILE
-        )
+        {ok, #file_attr{size = FileSize}} = ?assertMatch({ok, _}, lfm_proxy:stat(
+            CreationNode, CreationSessionId, ?FILE_REF(FileGuid)
+        )),
+        replicate_file_by_read(OtherNode, OtherSessionId, FileGuid, FileSize)
     end, collect_regular_files(RootObject));
 ensure_initial_replicas(_TestSuiteCtx, _TransferRootObject) ->
     ok.
@@ -683,7 +683,6 @@ await_transfer_ended(SuiteCtx, TransferId, TransferRootObjects, Overrides) ->
 ) ->
     ok.
 await_transfer_ended(#transfer_test_suite_ctx{
-    transfer_type = TransferType,
     creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
 } = SuiteCtx, TransferId, TransferRootObjects, Overrides, Attempts) ->
@@ -692,13 +691,8 @@ await_transfer_ended(#transfer_test_suite_ctx{
         maps:remove(tree_bytes, Overrides)
     ),
 
-    %% TODO VFS-13678 remove debug logging before merge to develop
-    ct:pal("Awaiting ~tp transfer ~ts end, expected state:~n~tp", [
-        TransferType, TransferId, ExpectedTransfer
-    ]),
-
     lists:foreach(fun(ProviderSelector) ->
-        case await_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, Attempts) of
+        case await_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, get, Attempts) of
             ok ->
                 ok;
             {failed, {error, _} = Error} ->
@@ -720,6 +714,44 @@ await_transfer_ended(#transfer_test_suite_ctx{
                 ct:fail(transfer_state_assertion_failed)
         end
     end, [CreationProviderSelector, OtherProviderSelector]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Awaits the replication part of the given transfer reaching the 'completed'
+%% status on the given provider, following `rerun_id` links - a transfer
+%% interrupted by a provider restart is resumed under a new id.
+%%
+%% Unlike await_transfer_ended/4,5 this asserts nothing but the status, so it
+%% does not need a suite ctx nor the transferred file tree - for tests that
+%% only need the transfer to be done before checking its effects.
+%% @end
+%%--------------------------------------------------------------------
+-spec await_effective_replication_completed(
+    oct_background:node_selector(), transfer:id(), non_neg_integer()
+) ->
+    ok.
+await_effective_replication_completed(ProviderSelector, TransferId, Attempts) ->
+    ExpectedTransfer = #{replication_status => ?COMPLETED_STATUS},
+
+    case await_transfer_state(
+        ProviderSelector, TransferId, ExpectedTransfer, get_effective, Attempts
+    ) of
+        ok ->
+            ok;
+        {failed, {error, _} = Error} ->
+            ct:pal("Transfer ~ts could not be fetched on provider ~tp due to: ~tp", [
+                TransferId, ProviderSelector, Error
+            ]),
+            ct:fail(replication_not_completed);
+        {failed, {mismatched_transfer_fields, _, Transfer}} ->
+            ct:pal(
+                "Replication of transfer ~ts did not complete on provider ~tp.~n"
+                "Transfer record:~n~ts",
+                [TransferId, ProviderSelector, format_transfer(Transfer)]
+            ),
+            ct:fail(replication_not_completed)
+    end.
 
 
 -spec assert_distribution(suite_ctx(), file_tree_objects()) ->
@@ -762,14 +794,18 @@ assert_distribution(#transfer_test_suite_ctx{
         {FileName, FileGuid, ExpSizePerNode}
     end, collect_regular_files(TransferRootObjects)),
 
-    %% TODO VFS-13678 remove debug logging before merge to develop
-    ct:pal("Asserting file distribution after ~tp, expected:~n~tp", [
-        TransferType,
-        [{FileName, ExpSizePerNode} || {FileName, _, ExpSizePerNode} <- FilesWithExpDistribution]
-    ]),
-
-    lists_utils:pforeach(fun({_FileName, FileGuid, ExpSizePerNode}) ->
-        file_test_utils:await_distribution([CreationNode, OtherNode], FileGuid, ExpSizePerNode)
+    lists_utils:pforeach(fun({FileName, FileGuid, ExpSizePerNode}) ->
+        try
+            file_test_utils:await_distribution([CreationNode, OtherNode], FileGuid, ExpSizePerNode)
+        catch Class:Reason:Stacktrace ->
+            % the shared assert reports only the mismatched distributions, naming
+            % neither the file they belong to (of the many asserted in parallel)
+            % nor the expectation in the terms it was declared in
+            ct:pal("Unexpected distribution of file ~ts (~ts) after ~tp, expected:~n~tp", [
+                FileName, FileGuid, TransferType, ExpSizePerNode
+            ]),
+            erlang:raise(Class, Reason, Stacktrace)
+        end
     end, FilesWithExpDistribution).
 
 
@@ -1215,120 +1251,31 @@ collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
 
 
 %% @private
-%% TODO VFS-XXX remove the verification (leaving plain replicate_file_by_read
-%% calls) once the lost file_location update is fixed
-%% Replicates the file to the given provider by reading it there and verifies
-%% that the fetched blocks actually got PERSISTED in the local file_location
-%% doc: the fetch may write the whole content to the storage and register the
-%% blocks only in the replica_synchronizer's in-process fslogic cache, whose
-%% flush then silently never makes them durable. Distribution reads served by
-%% the live process show such blocks, so only the persisted doc (what a later
-%% eviction acts upon once the process dies) is verified. On a stale doc the
-%% fslogic cache flush is first forced (catching the lost-flush case in the
-%% act); if that does not help, the read is repeated - a re-fetch re-registers
-%% the blocks anew.
--spec replicate_file_and_verify_replica_registration(
-    node(), od_provider:id(), session:id(), file_id:file_guid(), pos_integer()
-) ->
+%% Reads the whole file of the given size on the given node, which forces
+%% replication of its content. The size is not taken from the declared tree
+%% content (which does not cover data written outside of the tree spec, e.g.
+%% by the big file test) but from the provider holding the source replica,
+%% and is first awaited on the reading node: a file syncs there before its
+%% size does (create_and_sync_file_tree awaits the empty distribution entry,
+%% which is satisfied by a file_meta carrying size 0), and stating it too
+%% early would turn this function into a no-op - nothing to read, nothing
+%% fetched, no replica registered, and the eviction of such a file then
+%% honestly evicts nothing.
+%% The reads are chunked so that big files do not materialize as single huge
+%% binaries.
+-spec replicate_file_by_read(node(), session:id(), file_id:file_guid(), file_meta:size()) ->
     ok.
-replicate_file_and_verify_replica_registration(Node, ProviderId, SessionId, FileGuid, ReadsLeft) ->
-    FileSize = replicate_file_by_read(Node, SessionId, FileGuid),
-    case await_replica_registration_persisted(
-        Node, FileGuid, FileSize, ?REPLICA_REGISTRATION_AWAIT_ATTEMPTS
-    ) of
-        ok ->
-            ok;
-        {error, replica_not_registered} ->
-            ok = opw_test_rpc:call(Node, fun() ->
-                fslogic_location_cache:force_flush(file_id:guid_to_uuid(FileGuid)),
-                ok
-            end),
-            case await_replica_registration_persisted(
-                Node, FileGuid, FileSize,
-                ?REPLICA_REGISTRATION_AWAIT_AFTER_FORCED_FLUSH_ATTEMPTS
-            ) of
-                ok ->
-                    ct:pal(
-                        "WARNING: the blocks fetched by the replicating read of file ~ts "
-                        "on provider ~ts got persisted in its file_location only after "
-                        "an explicitly forced fslogic cache flush",
-                        [FileGuid, ProviderId]
-                    );
-                {error, replica_not_registered} when ReadsLeft > 1 ->
-                    ct:pal(
-                        "WARNING: the replication (by read) of file ~ts on provider ~ts "
-                        "left no blocks persisted in its file_location (even after a "
-                        "forced fslogic cache flush) - retrying the read (reads left: ~tp)",
-                        [FileGuid, ProviderId, ReadsLeft - 1]
-                    ),
-                    replicate_file_and_verify_replica_registration(
-                        Node, ProviderId, SessionId, FileGuid, ReadsLeft - 1
-                    );
-                {error, replica_not_registered} ->
-                    ct:fail({replica_registration_lost, FileGuid, ProviderId})
-            end
-    end.
-
-
-%% @private
-%% TODO VFS-XXX remove along with the verification above
--spec await_replica_registration_persisted(
-    node(), file_id:file_guid(), file_meta:size(), non_neg_integer()
-) ->
-    ok | {error, replica_not_registered}.
-await_replica_registration_persisted(_Node, _FileGuid, _FileSize, 0) ->
-    {error, replica_not_registered};
-await_replica_registration_persisted(Node, FileGuid, FileSize, AttemptsLeft) ->
-    case get_persisted_local_blocks_size(Node, FileGuid) of
-        FileSize ->
-            ok;
-        _ ->
-            timer:sleep(timer:seconds(1)),
-            await_replica_registration_persisted(Node, FileGuid, FileSize, AttemptsLeft - 1)
-    end.
-
-
-%% @private
-%% TODO VFS-XXX remove along with the verification above
-%% Reads the summed size of the file's local replica blocks as PERSISTED in
-%% the datastore (the inline public blocks of the local file_location doc
-%% plus its file_local_blocks split-store) - deliberately bypassing the
-%% replica_synchronizer's in-process cache that serves distribution reads.
--spec get_persisted_local_blocks_size(node(), file_id:file_guid()) ->
-    non_neg_integer().
-get_persisted_local_blocks_size(Node, FileGuid) ->
-    opw_test_rpc:call(Node, fun() ->
-        case file_location:get_local(file_id:guid_to_uuid(FileGuid)) of
-            {ok, #document{key = LocId, value = #file_location{blocks = InlineBlocks}}} ->
-                LocalBlocks = case file_local_blocks:get(LocId) of
-                    {ok, Blocks} -> Blocks;
-                    {error, not_found} -> []
-                end,
-                lists:sum([Size || #file_block{size = Size} <- InlineBlocks ++ LocalBlocks]);
-            {error, not_found} ->
-                0
-        end
-    end).
-
-
-%% @private
-%% Reads the whole file on the given node, which forces replication of its
-%% content, and returns its size. The size is taken from stat rather than the
-%% declared tree content (which does not cover data written outside of the
-%% tree spec, e.g. by the big file test) and the reads are chunked so that
-%% even such files do not materialize as single huge binaries.
--spec replicate_file_by_read(node(), session:id(), file_id:file_guid()) ->
-    file_meta:size().
-replicate_file_by_read(Node, SessionId, FileGuid) ->
-    {ok, #file_attr{size = FileSize}} = ?assertMatch({ok, _}, lfm_proxy:stat(
-        Node, SessionId, ?FILE_REF(FileGuid)
-    )),
+replicate_file_by_read(Node, SessionId, FileGuid, FileSize) ->
+    ?assertMatch(
+        {ok, #file_attr{size = FileSize}},
+        lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid)),
+        ?ATTEMPTS
+    ),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(
         Node, SessionId, ?FILE_REF(FileGuid), read
     )),
-    read_file_in_chunks(Node, Handle, 0, FileSize),
-    ok = lfm_proxy:close(Node, Handle),
-    FileSize.
+    ok = read_file_in_chunks(Node, Handle, 0, FileSize),
+    ok = lfm_proxy:close(Node, Handle).
 
 
 %% @private
@@ -1351,11 +1298,12 @@ read_file_in_chunks(Node, Handle, Offset, FileSize) ->
 %% are capped to a short grace instead of idling through the full (potentially
 %% minutes-long) attempt budget.
 -spec await_transfer_state(
-    oct_background:entity_selector(), transfer:id(), expected_transfer(), non_neg_integer()
+    oct_background:node_selector(), transfer:id(), expected_transfer(), transfer_getter(),
+    non_neg_integer()
 ) ->
     ok | {failed, {error, term()} | {mismatched_transfer_fields, list(), transfer:transfer()}}.
-await_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, AttemptsLeft) ->
-    Result = check_transfer_state(ProviderSelector, TransferId, ExpectedTransfer),
+await_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, GetFun, AttemptsLeft) ->
+    Result = check_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, GetFun),
 
     EffectiveAttemptsLeft = case Result of
         {mismatched_transfer_fields, _, Transfer} ->
@@ -1373,7 +1321,7 @@ await_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, AttemptsLef
         _ when EffectiveAttemptsLeft > 1 ->
             timer:sleep(timer:seconds(1)),
             await_transfer_state(
-                ProviderSelector, TransferId, ExpectedTransfer, EffectiveAttemptsLeft - 1
+                ProviderSelector, TransferId, ExpectedTransfer, GetFun, EffectiveAttemptsLeft - 1
             );
         Failure ->
             {failed, Failure}
@@ -1447,10 +1395,12 @@ format_transfer(Transfer) ->
 
 
 %% @private
--spec check_transfer_state(oct_background:entity_selector(), transfer:id(), expected_transfer()) ->
+-spec check_transfer_state(
+    oct_background:node_selector(), transfer:id(), expected_transfer(), transfer_getter()
+) ->
     ok | {error, term()} | {mismatched_transfer_fields, [{atom(), field_expectation(), term()}], transfer:transfer()}.
-check_transfer_state(ProviderSelector, TransferId, ExpectedTransfer) ->
-    case opw_test_rpc:call(ProviderSelector, transfer, get, [TransferId]) of
+check_transfer_state(ProviderSelector, TransferId, ExpectedTransfer, GetFun) ->
+    case opw_test_rpc:call(ProviderSelector, transfer, GetFun, [TransferId]) of
         {ok, #document{value = Transfer}} ->
             case collect_mismatched_fields(ExpectedTransfer, Transfer) of
                 [] -> ok;
