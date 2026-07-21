@@ -148,12 +148,10 @@
 }).
 
 
-% internal update is update sent when collector is flushing
-% stat_updates_acc_for_parent; external update is update sent
-% by other processes than collectors; initialization_error is an
-% additive error update reported during initialization that must be
-% preserved through the race-prevention re-reads (it cannot be
-% re-derived by re-listing children) - see update_stats_of_dir/3
+% * `internal` update is update sent when collector is flushing stat_updates_acc_for_parent; 
+% * `external` update is update sent by other processes than collectors; 
+% * `initialization_error` is an additive error update reported during initialization that must be preserved through 
+%   the race-prevention re-reads (it cannot be re-derived by re-listing children) - see update_stats_of_dir/3.
 -type update_type() :: internal | external | initialization_error.
 -type state() :: #state{}.
 

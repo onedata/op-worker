@@ -31,6 +31,8 @@
     disable_during_retry_test/1
 ]).
 
+-type paused_retry_traverse() :: {paused_retry_traverse, pid()}.
+
 -define(ATTEMPTS, 60).
 
 %%%===================================================================
@@ -78,23 +80,15 @@ retry_succeeds_test(_Config) ->
     Nodes = oct_background:get_all_providers_nodes(),
     {Fail1Guid, Fail2Guid, NormalDirGuid} = setup_failing_dirs_fixture(SpaceId, Nodes),
 
-    Master = self(),
-    test_utils:mock_new(Nodes, dir_stats_collections_initialization_traverse, [passthrough]),
-    test_utils:mock_expect(Nodes, dir_stats_collections_initialization_traverse, run, fun
-        (SId, Inc) when SId =:= SpaceId andalso Inc =:= 2 ->
-            Master ! {retry_starting, self()},
-            receive proceed -> meck:passthrough([SId, Inc]) end;
-        (SId, Inc) ->
-            meck:passthrough([SId, Inc])
-    end),
+    pause_retry_traverse(SpaceId, Nodes, 2),
 
     enable_dir_stats(SpaceId),
 
-    WorkerPid = receive {retry_starting, Pid} -> Pid end,
+    PausedRetry = await_retry_start(),
 
-    test_utils:mock_unload(Nodes, file_tree),
+    unmock_listing_failures(Nodes),
 
-    WorkerPid ! proceed,
+    resume_retry_traverse(PausedRetry),
 
     ?assertMatch(enabled,
         opw_test_rpc:call(krakow, dir_stats_service_state, get_extended_status, [SpaceId]),
@@ -131,7 +125,7 @@ reenable_after_retries_exhausted_test(_Config) ->
     ?assertMatch({ok, #dir_stats_service_state{initialization_retry_count = 1}},
         opw_test_rpc:call(krakow, dir_stats_service_state, get, [SpaceId])),
 
-    test_utils:mock_unload(Nodes, file_tree),
+    unmock_listing_failures(Nodes),
 
     disable_dir_stats(SpaceId),
 
@@ -161,15 +155,7 @@ disable_during_retry_test(_Config) ->
     Nodes = oct_background:get_all_providers_nodes(),
     {_Fail1Guid, _Fail2Guid, _NormalDirGuid} = setup_failing_dirs_fixture(SpaceId, Nodes),
 
-    Master = self(),
-    test_utils:mock_new(Nodes, dir_stats_collections_initialization_traverse, [passthrough]),
-    test_utils:mock_expect(Nodes, dir_stats_collections_initialization_traverse, run, fun
-        (SId, Inc) when SId =:= SpaceId andalso Inc =:= 2 ->
-            Master ! {retry_starting, self()},
-            receive proceed -> meck:passthrough([SId, Inc]) end;
-        (SId, Inc) ->
-            meck:passthrough([SId, Inc])
-    end),
+    pause_retry_traverse(SpaceId, Nodes, 2),
 
     enable_dir_stats(SpaceId),
 
@@ -177,7 +163,7 @@ disable_during_retry_test(_Config) ->
         opw_test_rpc:call(krakow, dir_stats_service_state, get_extended_status, [SpaceId]),
         ?ATTEMPTS),
 
-    WorkerPid = receive {retry_starting, Pid} -> Pid end,
+    PausedRetry = await_retry_start(),
 
     ?assertNotMatch(disabled,
         opw_test_rpc:call(krakow, dir_stats_service_state, get_extended_status, [SpaceId]),
@@ -185,7 +171,7 @@ disable_during_retry_test(_Config) ->
 
     set_dir_stats_status(SpaceId, disabled),
 
-    WorkerPid ! proceed,
+    resume_retry_traverse(PausedRetry),
 
     ?assertMatch(disabled,
         opw_test_rpc:call(krakow, dir_stats_service_state, get_extended_status, [SpaceId]),
@@ -281,6 +267,46 @@ setup_failing_dirs_fixture(SpaceId, Nodes) ->
         end
     end),
     {Fail1Guid, Fail2Guid, NormalDirGuid}.
+
+
+%% @private
+%% Installs a blocking mock on the retry run of the initialization traverse, so that
+%% the test controls when the retry actually proceeds. The mocked call reports itself to the test
+%% process and blocks; drive it with await_retry_start/0 followed by resume_retry_traverse/1.
+-spec pause_retry_traverse(od_space:id(), [node()], non_neg_integer()) -> ok.
+pause_retry_traverse(SpaceId, Nodes, IncarnationToPause) ->
+    Master = self(),
+    test_utils:mock_new(Nodes, dir_stats_collections_initialization_traverse, [passthrough]),
+    test_utils:mock_expect(Nodes, dir_stats_collections_initialization_traverse, run, fun
+        (SId, Inc) when SId =:= SpaceId andalso Inc =:= IncarnationToPause ->
+            Master ! {retry_starting, self()},
+            receive proceed -> meck:passthrough([SId, Inc]) end;
+        (SId, Inc) ->
+            meck:passthrough([SId, Inc])
+    end).
+
+
+%% @private
+%% Blocks until the retry traverse mocked by pause_retry_traverse/2 is reached.
+-spec await_retry_start() -> paused_retry_traverse().
+await_retry_start() ->
+    receive {retry_starting, Pid} -> {paused_retry_traverse, Pid} end.
+
+
+%% @private
+%% Lets the paused retry traverse proceed.
+-spec resume_retry_traverse(paused_retry_traverse()) -> ok.
+resume_retry_traverse({paused_retry_traverse, Pid}) ->
+    Pid ! proceed,
+    ok.
+
+
+%% @private
+%% Lifts the file_tree mock installed by setup_failing_dirs_fixture/2, so that listing the fail dirs
+%% succeeds from now on.
+-spec unmock_listing_failures([node()]) -> ok.
+unmock_listing_failures(Nodes) ->
+    test_utils:mock_unload(Nodes, file_tree).
 
 
 %% @private

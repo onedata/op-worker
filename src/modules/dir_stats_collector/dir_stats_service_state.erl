@@ -395,8 +395,7 @@ report_collections_initialization_finished(SpaceId, Incarnation) ->
 -spec report_initialization_error(tree_traverse:id()) ->
     retry_scheduled | retries_exhausted | no_action.
 report_initialization_error(TaskId) ->
-    [IncarnationBinary, SpaceId] = binary:split(TaskId, <<"#">>),
-    Incarnation = binary_to_integer(IncarnationBinary),
+    {SpaceId, Incarnation} = dir_stats_collections_initialization_traverse:decode_task_id(TaskId),
     MaxRetries = ?DIR_STATS_INITIALIZATION_MAX_RETRIES,
     Diff = fun
         (#dir_stats_service_state{

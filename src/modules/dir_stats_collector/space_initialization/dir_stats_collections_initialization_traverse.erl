@@ -31,6 +31,7 @@
 
 %% API
 -export([init_pool/0, stop_pool/0, run/2, cancel/2]).
+-export([decode_task_id/1]).
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, task_finished/2, task_canceled/2]).
 
@@ -138,8 +139,7 @@ get_job(DocOrId) ->
 
 -spec task_finished(tree_traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    [IncarnationBinary, SpaceId] = binary:split(TaskId, <<?TASK_ID_SEPARATOR>>),
-    Incarnation = binary_to_integer(IncarnationBinary),
+    {SpaceId, Incarnation} = decode_task_id(TaskId),
     dir_stats_service_state:report_collections_initialization_finished(SpaceId, Incarnation).
 
 
@@ -157,6 +157,12 @@ task_canceled(TaskId, PoolName) ->
 -spec gen_task_id(file_id:space_id(), non_neg_integer()) -> tree_traverse:id().
 gen_task_id(SpaceId, Incarnation) ->
     <<(integer_to_binary(Incarnation))/binary, ?TASK_ID_SEPARATOR, SpaceId/binary>>.
+
+
+-spec decode_task_id(tree_traverse:id()) -> {file_id:space_id(), non_neg_integer()}.
+decode_task_id(TaskId) ->
+    [IncarnationBinary, SpaceId] = binary:split(TaskId, <<?TASK_ID_SEPARATOR>>),
+    {SpaceId, binary_to_integer(IncarnationBinary)}.
 
 
 -spec do_tree_traverse_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
