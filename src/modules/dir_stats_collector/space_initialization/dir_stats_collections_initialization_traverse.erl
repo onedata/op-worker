@@ -99,12 +99,8 @@ do_master_job(#tree_traverse{
         initialization_finished -> ok
     end,
 
-    {ok, MasterJobMap} = Ans = try
-        do_tree_traverse_master_job(Job, MasterJobExtendedArgs)
-    catch
-        error:{badmatch, {error, not_found}} ->
-            {ok, #{}}
-    end,
+    {ok, MasterJobMap} = Ans = do_tree_traverse_master_job(Job, MasterJobExtendedArgs),
+    
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -172,11 +168,16 @@ do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobE
     case tree_traverse:do_master_job(Job, MasterJobExtendedArgs, NewJobsPreprocessor) of
         {ok, _} = Res ->
             Res;
+        {error, not_found, _} ->
+            % This directory has been deleted, do not count it and continue.
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            ?debug(?autoformat_with_msg("Directory deleted during stats initialization", FileUuid)),
+            {ok, #{}};
         {error, Reason, Stacktrace} ->
             #{task_id := TaskId} = MasterJobExtendedArgs,
             %% @TODO VFS-11151 - log to system audit log
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            ?error_exception(?autoformat_with_msg("Error when listing directory during stats initialization:",
+            ?error_exception(?autoformat_with_msg("Error when listing directory during stats initialization.",
                 FileUuid), error, Reason, Stacktrace),
             case dir_stats_service_state:report_initialization_error(TaskId) of
                 retries_exhausted ->
