@@ -246,7 +246,7 @@ clear_all(SpaceId, EventsMode, Token) ->
             {error, ?ERROR_NOT_FOUND} -> 
                 ok;
             {error, _} = Error -> 
-                ?error(?autoformat(Error));
+                ?error(?autoformat_with_msg("Unexpected error during trash cleanup", Error));
             {_, FileCtx1} ->
                 schedule_deletion_from_trash(FileCtx1, user_ctx:new(?ROOT_SESS_ID), EmitEventsFlag,
                     space_dir:uuid(SpaceId), extract_name(FileCtx1))

@@ -40,7 +40,7 @@
 
 -record(state, {
     id :: bulk_download:id(), % download code (stable across the whole download)
-    traverse_num = 0 :: non_neg_integer(),
+    traverse_incarnation = 0 :: non_neg_integer(),
     sent_bytes = 0 :: integer(),
     buffer = <<>> :: binary(),
     connection_pid :: pid(),
@@ -59,7 +59,7 @@
 % buffer cannot be smaller than tar stream internal buffer (32768 bytes)
 -define(MAX_BUFFER_SIZE, (op_worker:get_env(max_download_buffer_size, 104857600) + 32768)).
 -define(ABORT_TIMEOUT, timer:seconds(10)).
-% separator between the download code and the traverse number in the per-attempt traverse id;
+% separator between the download code and the traverse incarnation in the per-attempt traverse id;
 -define(TRAVERSE_ID_SEP, <<"#">>).
 
 
@@ -69,10 +69,10 @@
 
 -spec start(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean(),
     non_neg_integer()) -> {ok, pid()} | {error, term()}.
-start(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks, TraverseNum) ->
+start(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks, TraverseIncarnation) ->
     case tree_traverse_session:setup_for_task(user_ctx:new(SessionId), BulkDownloadId) of
         ok -> {ok, spawn(fun() ->
-            main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks, TraverseNum)
+            main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks, TraverseIncarnation)
         end)};
         {error, _} = Error -> Error
     end.
@@ -84,19 +84,19 @@ resume(MainPid, ResumeOffset) ->
     ok.
 
 
--spec abort(pid()) -> {ok, non_neg_integer() | undefined} | no_return().
+-spec abort(pid()) -> non_neg_integer().
 abort(MainPid) ->
     Ref = monitor(process, MainPid),
     MainPid ! ?MSG_ABORT(self()),
     receive
-        {aborted, MainPid, TraverseNum} ->
+        {aborted, MainPid, TraverseIncarnation} ->
             % the old process exits immediately after replying; consume the imminent 'DOWN'
             receive {'DOWN', Ref, process, MainPid, _} -> ok
             after ?ABORT_TIMEOUT -> demonitor(Ref, [flush]) end,
-            {ok, TraverseNum};
+            TraverseIncarnation;
         {'DOWN', Ref, process, MainPid, _Reason} ->
-            % died before handing off its retry number (rare race) — caller falls back to 0
-            {ok, undefined}
+            % died before handing off its retry number (rare race) — fall back to 0
+            0
     after ?ABORT_TIMEOUT ->
         demonitor(Ref, [flush]),
         error({bulk_download_abort_timeout, MainPid})
@@ -137,7 +137,7 @@ is_offset_allowed(MainPid, Offset) ->
 %% @private
 -spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean(),
     non_neg_integer()) -> no_return().
-main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks, TraverseNum) ->
+main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks, TraverseIncarnation) ->
     bulk_download_task:save(BulkDownloadId, self(), SessionId),
     TarStream = tar_utils:open_archive_stream(#{gzip => false}),
     %% @TODO VFS-8882 - use preserve/follow_external in API
@@ -147,7 +147,7 @@ main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks, Trav
     end,
     State = #state{
         id = BulkDownloadId,
-        traverse_num = TraverseNum,
+        traverse_incarnation = TraverseIncarnation,
         connection_pid = InitialConn,
         tar_stream = TarStream, 
         symlink_resolution_policy = SymlinkResolutionPolicy
@@ -187,9 +187,9 @@ handle_multiple_files(
         TraverseId, UserCtx, Guid, State#state.symlink_resolution_policy, Name),
     FinalState = wait_for_traverse(UpdatedState3, user_ctx:get_session_id(UserCtx)),
     tree_traverse_session:close_for_task(TraverseId),
-    % increment traverse_num so each subsequent directory traverse gets a fresh, unique, deterministic id
+    % increment traverse_incarnation so each subsequent directory traverse gets a fresh, unique, deterministic id
     handle_multiple_files(Tail, BulkDownloadId, UserCtx,
-        FinalState#state{traverse_num = FinalState#state.traverse_num + 1, root_dir_path = undefined});
+        FinalState#state{traverse_incarnation = FinalState#state.traverse_incarnation + 1, root_dir_path = undefined});
 handle_multiple_files(
     [#file_attr{type = ?REGULAR_FILE_TYPE, name = Name} = FileAttrs | Tail], 
     BulkDownloadId, UserCtx, State
@@ -348,7 +348,7 @@ new_tar_file_entry(#state{tar_stream = TarStream, root_dir_path = RootDirPath} =
 wait_for_conn(#state{id = Id} = State) ->
     receive
         ?MSG_ABORT(From) ->
-            From ! {aborted, self(), State#state.traverse_num},
+            From ! {aborted, self(), State#state.traverse_incarnation},
             finalize(State);
         ?MSG_DATA_SENT(NewDelay) ->
             State#state{send_retry_delay = NewDelay};
@@ -426,8 +426,8 @@ finalize(#state{tar_stream = TarStream} = State) ->
 
 %% @private
 -spec traverse_id(state()) -> bulk_download:id().
-traverse_id(#state{id = Id, traverse_num = TraverseNum}) ->
-    <<Id/binary, (?TRAVERSE_ID_SEP)/binary, (integer_to_binary(TraverseNum))/binary>>.
+traverse_id(#state{id = Id, traverse_incarnation = TraverseIncarnation}) ->
+    <<Id/binary, (?TRAVERSE_ID_SEP)/binary, (integer_to_binary(TraverseIncarnation))/binary>>.
 
 
 %% @private

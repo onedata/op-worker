@@ -73,19 +73,14 @@
     ok | {error, term()}.
 run(BulkDownloadId, FileAttrsList, SessionId, FollowSymlinks, CowboyReq) ->
     Conn = self(),
-    NextTraverseNum = case bulk_download_task:get_main_pid(BulkDownloadId) of
-        % abort synchronously; it returns the old run's current traverse number so the new run
+    NextTraverseIncarnation = case bulk_download_task:get_main_pid(BulkDownloadId) of
+        % abort synchronously; it returns the old run's current traverse incarnation so the new run
         % uses a strictly-greater (collision-free) traverse id.
-        {ok, Pid} ->
-            case bulk_download_main_process:abort(Pid) of
-                {ok, N} when is_integer(N) -> N + 1;
-                {ok, undefined} -> 0
-            end;
-        _ -> 
-            0
+        {ok, Pid} -> bulk_download_main_process:abort(Pid) + 1;
+        _ -> 0
     end,
     {ok, MainPid} = bulk_download_main_process:start(
-        BulkDownloadId, FileAttrsList, SessionId, Conn, FollowSymlinks, NextTraverseNum),
+        BulkDownloadId, FileAttrsList, SessionId, Conn, FollowSymlinks, NextTraverseIncarnation),
     data_streaming_loop(BulkDownloadId, MainPid, CowboyReq).
     
 
