@@ -372,12 +372,10 @@ create_view(TestSuiteCtx = #transfer_test_suite_ctx{
         SpaceId, ViewName, MapFunction, ReduceFunction, ViewOptions,
         false, EvaluatingProviderIds
     ]),
-    ?assertEqual(true, case opw_test_rpc:call(
+    ?assertMatch({ok, _}, opw_test_rpc:call(
         CreationProviderSelector, index, get, [ViewName, SpaceId]
-    ) of
-        {ok, _} -> true;
-        {error, _} -> false
-    end, ?ATTEMPTS).
+    ), ?VIEW_SYNC_ATTEMPTS),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -406,7 +404,7 @@ await_view_query_result(TestSuiteCtx = #transfer_test_suite_ctx{
             end, Rows))
         catch _:_ ->
             query_failed
-        end, ?ATTEMPTS)
+        end, ?VIEW_SYNC_ATTEMPTS)
     end, get_view_evaluating_provider_selectors(TestSuiteCtx)).
 
 
