@@ -24,7 +24,6 @@
 
 %% tests
 -export([
-    %% --- hardlinks (file x hardlink matrix) ---
     hardlink_file_kept_link_kept_test/1,
     hardlink_file_kept_link_deleted_while_open_test/1,
     hardlink_file_kept_link_deleted_test/1,
@@ -35,12 +34,10 @@
     hardlink_file_deleted_link_deleted_while_open_test/1,
     hardlink_file_deleted_link_deleted_test/1,
 
-    %% --- symlinks ---
     symlink_is_ignored_by_continuous_scan_test/1
 ]).
 
 all() -> [
-    %% --- hardlinks (file x hardlink matrix) ---
     hardlink_file_kept_link_kept_test,
     hardlink_file_kept_link_deleted_while_open_test,
     hardlink_file_kept_link_deleted_test,
@@ -51,7 +48,6 @@ all() -> [
     hardlink_file_deleted_link_deleted_while_open_test,
     hardlink_file_deleted_link_deleted_test,
 
-    %% --- symlinks ---
     symlink_is_ignored_by_continuous_scan_test
 ].
 

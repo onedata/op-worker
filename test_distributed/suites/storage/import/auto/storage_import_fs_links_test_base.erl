@@ -48,7 +48,6 @@
 
 %% tests
 -export([
-    %% --- hardlinks (file x hardlink matrix) ---
     hardlink_file_kept_link_kept_test/1,
     hardlink_file_kept_link_deleted_while_open_test/1,
     hardlink_file_kept_link_deleted_test/1,
@@ -59,14 +58,13 @@
     hardlink_file_deleted_link_deleted_while_open_test/1,
     hardlink_file_deleted_link_deleted_test/1,
 
-    %% --- symlinks ---
     symlink_is_ignored_by_continuous_scan_test/1
 ]).
 
 %% Whether (and how) a reference is removed via LFM before the scan under test runs:
-%%  * kept               - reference is left in place (must survive the scan);
+%%  * kept                - reference is left in place (must survive the scan);
 %%  * deleted_while_open  - reference is unlinked while an open handle is held;
-%%  * deleted            - reference is unlinked with no open handle.
+%%  * deleted             - reference is unlinked with no open handle.
 %% A reference survives the scenario exactly when its mode is 'kept'.
 -type deletion_mode() :: kept | deleted_while_open | deleted.
 

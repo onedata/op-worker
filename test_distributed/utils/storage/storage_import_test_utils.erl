@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Generic machinery shared by the storage import uites for writing
+%%% Generic machinery shared by the storage import suites for writing
 %%% declarative storage import tests.
 %%%
 %%% == Framework overview ==

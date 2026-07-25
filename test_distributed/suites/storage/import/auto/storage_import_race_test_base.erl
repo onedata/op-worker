@@ -47,7 +47,6 @@
 
 %% tests
 -export([
-    %% --- races against concurrent local/remote filesystem operations ---
     create_remote_file_import_conflict_test/1,
     create_remote_dir_import_race_test/1,
     create_remote_file_import_race_test/1,
@@ -60,7 +59,6 @@
     create_delete_race_test/1,
     create_list_race_test/1,
 
-    %% --- time warps ---
     time_warp_between_scans_test/1,
     time_warp_during_scan_test/1
 ]).

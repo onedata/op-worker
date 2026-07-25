@@ -325,7 +325,7 @@ update_registered_file_with_not_matching_destination_test(
     FilePath = filepath_utils:join([SpacePath, RegisteredFileName]),
 
     RegisterAndCheckFun = fun(Data) ->
-        ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        {ok, _, _, Body} = ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
             <<"spaceId">> => SpaceId,
             <<"destinationPath">> => RegisteredFileName,
             <<"storageFileId">> => StorageFileId,
@@ -342,12 +342,15 @@ update_registered_file_with_not_matching_destination_test(
         ?assertFile(RegNode, RegSessId, FilePath, Data, ?XATTRS, ?JSON1, ?RDF1),
 
         % check whether file is visible on the other provider
-        ?assertFile(OtherNode, OtherSessId, FilePath, Data, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
+        ?assertFile(OtherNode, OtherSessId, FilePath, Data, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS),
+
+        maps:get(<<"fileId">>, json_utils:decode(Body))
     end,
 
-    RegisterAndCheckFun(?TEST_DATA),
+    FileObjectId1 = RegisterAndCheckFun(?TEST_DATA),
     ok = update_source_file(SourceBackend, StorageFileId, ?TEST_DATA2),
-    RegisterAndCheckFun(?TEST_DATA2).
+    FileObjectId2 = RegisterAndCheckFun(?TEST_DATA2),
+    ?assertEqual(FileObjectId1, FileObjectId2).
 
 
 stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled(
