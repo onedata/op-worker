@@ -64,7 +64,7 @@
     read_registered_file_after_source_modified_on_storage_test/1,
     read_registered_file_when_storage_returns_error_test/1,
     large_registered_file_should_be_correctly_replicated_to_other_provider_test/1,
-    register_shared_file_via_public_url_test/1
+    register_shared_file_via_public_url_test/1  %% TODO VFS-13718
 ]).
 
 -define(SUPPORT_SIZE, 1000000000).
