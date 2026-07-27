@@ -217,20 +217,17 @@ stages:
         - space_file_events_rest
         - storage_cleanup
         - storage_files
-        - storage_import
-        - storage_import_delete_and_links
         - storage_import_deletion
-        - storage_import_initial_posix_oct
-        - storage_import_initial_s3_oct
-        - storage_import_update_posix_oct
-        - storage_import_update_s3_oct
-        - storage_import_links_posix_oct
-        - storage_import_links_s3_oct
-        - storage_import_delete_posix_oct
-        - storage_import_delete_s3_oct
-        - storage_import_s3
-        - storage_import_update
+        - storage_import_initial_posix
+        - storage_import_initial_s3
+        - storage_import_update_posix
         - storage_import_update_s3
+        - storage_import_fs_links_posix
+        - storage_import_fs_links_s3
+        - storage_import_delete_posix
+        - storage_import_delete_s3
+        - storage_import_race_posix
+        - storage_import_race_s3
         - storage_monitoring
         - storage_req
         - storage_sync_links
@@ -1678,20 +1675,6 @@ storage_files:
     - <<: *ct_logs
       name: ct_logs_storage_files.tar.gz
 
-storage_import:
-  <<: *ct-job
-  key: STORIMP
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import.tar.gz
-
-storage_import_delete_and_links:
-  <<: *ct-job
-  key: SIDL
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import_delete_and_links.tar.gz
-
 storage_import_deletion:
   <<: *ct-job
   key: STORIMPDEL
@@ -1699,82 +1682,75 @@ storage_import_deletion:
     - <<: *ct_logs
       name: ct_logs_storage_import_deletion.tar.gz
 
-storage_import_initial_posix_oct:
+storage_import_initial_posix:
   <<: *ct-onenv-job
-  key: STORIMPOCT
+  key: STORIMP
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_storage_import_initial_posix_oct.tar.gz
+      name: ct_logs_storage_import_initial_posix.tar.gz
 
-storage_import_initial_s3_oct:
+storage_import_initial_s3:
   <<: *ct-onenv-job
-  key: STORIMS3OCT
+  key: STORIMS3
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_storage_import_initial_s3_oct.tar.gz
+      name: ct_logs_storage_import_initial_s3.tar.gz
 
-storage_import_update_posix_oct:
+storage_import_update_posix:
   <<: *ct-onenv-job
-  key: STORIMUPOCT
+  key: STORIMUP
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_storage_import_update_posix_oct.tar.gz
-
-storage_import_update_s3_oct:
-  <<: *ct-onenv-job
-  key: STORIMUS3OCT
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import_update_s3_oct.tar.gz
-
-storage_import_links_posix_oct:
-  <<: *ct-onenv-job
-  key: STORIMLPOCT
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import_links_posix_oct.tar.gz
-
-storage_import_links_s3_oct:
-  <<: *ct-onenv-job
-  key: STORIMLS3OCT
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import_links_s3_oct.tar.gz
-
-storage_import_delete_posix_oct:
-  <<: *ct-onenv-job
-  key: STORIMDPOCT
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import_delete_posix_oct.tar.gz
-
-storage_import_delete_s3_oct:
-  <<: *ct-onenv-job
-  key: STORIMDS3OCT
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import_delete_s3_oct.tar.gz
-
-storage_import_s3:
-  <<: *ct-job
-  key: STORIMPS3
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import_s3.tar.gz
-
-storage_import_update:
-  <<: *ct-job
-  key: SIU
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import_update.tar.gz
+      name: ct_logs_storage_import_update_posix.tar.gz
 
 storage_import_update_s3:
-  <<: *ct-job
-  key: SIUS3
+  <<: *ct-onenv-job
+  key: STORIMUS3
   artifacts:
     - <<: *ct_logs
       name: ct_logs_storage_import_update_s3.tar.gz
+
+storage_import_fs_links_posix:
+  <<: *ct-onenv-job
+  key: STORIMLP
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_import_fs_links_posix.tar.gz
+
+storage_import_fs_links_s3:
+  <<: *ct-onenv-job
+  key: STORIMLS3
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_import_fs_links_s3.tar.gz
+
+storage_import_delete_posix:
+  <<: *ct-onenv-job
+  key: STORIMDP
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_import_delete_posix.tar.gz
+
+storage_import_delete_s3:
+  <<: *ct-onenv-job
+  key: STORIMDS3
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_import_delete_s3.tar.gz
+
+storage_import_race_posix:
+  <<: *ct-onenv-job
+  key: STORIMRP
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_import_race_posix.tar.gz
+
+storage_import_race_s3:
+  <<: *ct-onenv-job
+  key: STORIMRS3
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_import_race_s3.tar.gz
 
 storage_monitoring:
   <<: *ct-onenv-job
@@ -1791,7 +1767,7 @@ storage_req:
       name: ct_logs_storage_req.tar.gz
 
 storage_sync_links:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: SSL
   artifacts:
     - <<: *ct_logs
@@ -2123,20 +2099,17 @@ Coverage report:
     - artifact: ct_logs_space_file_events_rest.tar.gz
     - artifact: ct_logs_storage_cleanup.tar.gz
     - artifact: ct_logs_storage_files.tar.gz
-    - artifact: ct_logs_storage_import.tar.gz
-    - artifact: ct_logs_storage_import_delete_and_links.tar.gz
     - artifact: ct_logs_storage_import_deletion.tar.gz
-    - artifact: ct_logs_storage_import_initial_posix_oct.tar.gz
-    - artifact: ct_logs_storage_import_initial_s3_oct.tar.gz
-    - artifact: ct_logs_storage_import_update_posix_oct.tar.gz
-    - artifact: ct_logs_storage_import_update_s3_oct.tar.gz
-    - artifact: ct_logs_storage_import_links_posix_oct.tar.gz
-    - artifact: ct_logs_storage_import_links_s3_oct.tar.gz
-    - artifact: ct_logs_storage_import_delete_posix_oct.tar.gz
-    - artifact: ct_logs_storage_import_delete_s3_oct.tar.gz
-    - artifact: ct_logs_storage_import_s3.tar.gz
-    - artifact: ct_logs_storage_import_update.tar.gz
+    - artifact: ct_logs_storage_import_initial_posix.tar.gz
+    - artifact: ct_logs_storage_import_initial_s3.tar.gz
+    - artifact: ct_logs_storage_import_update_posix.tar.gz
     - artifact: ct_logs_storage_import_update_s3.tar.gz
+    - artifact: ct_logs_storage_import_fs_links_posix.tar.gz
+    - artifact: ct_logs_storage_import_fs_links_s3.tar.gz
+    - artifact: ct_logs_storage_import_delete_posix.tar.gz
+    - artifact: ct_logs_storage_import_delete_s3.tar.gz
+    - artifact: ct_logs_storage_import_race_posix.tar.gz
+    - artifact: ct_logs_storage_import_race_s3.tar.gz
     - artifact: ct_logs_storage_monitoring.tar.gz
     - artifact: ct_logs_storage_req.tar.gz
     - artifact: ct_logs_storage_sync_links.tar.gz

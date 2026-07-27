@@ -32,10 +32,10 @@
 %%% (root_verdict_overrides/2, initial_scan_monitoring_overrides/1).
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_links_oct_test_base).
+-module(storage_import_fs_links_test_base).
 -author("Bartosz Walkowicz").
 
--include("storage_import_oct_test.hrl").
+-include("storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/posix/errno.hrl").
@@ -48,7 +48,6 @@
 
 %% tests
 -export([
-    %% --- hardlinks (file x hardlink matrix) ---
     hardlink_file_kept_link_kept_test/1,
     hardlink_file_kept_link_deleted_while_open_test/1,
     hardlink_file_kept_link_deleted_test/1,
@@ -59,15 +58,13 @@
     hardlink_file_deleted_link_deleted_while_open_test/1,
     hardlink_file_deleted_link_deleted_test/1,
 
-    %% --- symlinks ---
-    symlink_is_ignored_by_initial_scan_test/1,
     symlink_is_ignored_by_continuous_scan_test/1
 ]).
 
 %% Whether (and how) a reference is removed via LFM before the scan under test runs:
-%%  * kept               - reference is left in place (must survive the scan);
+%%  * kept                - reference is left in place (must survive the scan);
 %%  * deleted_while_open  - reference is unlinked while an open handle is held;
-%%  * deleted            - reference is unlinked with no open handle.
+%%  * deleted             - reference is unlinked with no open handle.
 %% A reference survives the scenario exactly when its mode is 'kept'.
 -type deletion_mode() :: kept | deleted_while_open | deleted.
 
@@ -167,19 +164,6 @@ hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeleti
 %%%===================================================================
 %%% Symlink tests
 %%%===================================================================
-
-
-symlink_is_ignored_by_initial_scan_test(_SuiteCtx) ->
-    %% TODO VFS-13687 - blocked on a helper we do not have yet. The legacy test
-    %% creates the symlink and only THEN runs the very first scan, asserting that
-    %% the initial import does not delete a logical symlink that has no storage
-    %% counterpart. In the oct framework storage_import_test_utils:init_testcase/3
-    %% auto-triggers scan 1 as soon as the space support is set up, so the symlink
-    %% (which needs the space to exist first) cannot be created before scan 1.
-    %% Agreed approach: add a util that sets the space up with the initial scan
-    %% deferred, then create the symlink and force scan 1 - to be implemented as a
-    %% separate task; this body is pending that util.
-    error(not_yet_implemented).
 
 
 symlink_is_ignored_by_continuous_scan_test(SuiteCtx) ->

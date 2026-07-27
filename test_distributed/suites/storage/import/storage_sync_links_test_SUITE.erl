@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("storage_sync_links_test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -70,6 +71,7 @@
 all() -> ?ALL(?TEST_CASES).
 
 -define(POOL, ?MODULE).
+-define(PROVIDER_SELECTOR, krakow).
 
 -define(RAND_STR, <<(crypto:strong_rand_bytes(16))/binary>>).
 -define(SPACE_ID, <<"space_", ?RAND_STR/binary>>).
@@ -452,26 +454,22 @@ delete_many_children_links_recursive_test_base(Config, ImportedStorage) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        ssl:start(),
-        application:ensure_all_started(hackney),
-        initializer:disable_quota_limit(NewConfig),
-        initializer:mock_provider_ids(NewConfig),
-        multi_provider_file_ops_test_base:init_env(NewConfig)
-    end,
     {ok, _} = application:ensure_all_started(worker_pool),
     {ok, _} = worker_pool:start_sup_pool(?POOL, [{workers, 8}]),
-    [{?LOAD_MODULES, [initializer]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, storage_sync_links_test_utils]} | Config], #onenv_test_config{
+        onenv_scenario = "1op"
+    }).
 
-end_per_suite(Config) ->
+end_per_suite(_Config) ->
     ok = worker_pool:stop_sup_pool(?POOL),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:unload_quota_mocks(Config),
-    initializer:unmock_provider_ids(?config(op_worker_nodes, Config)),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 init_per_testcase(_Case, Config) ->
-    Config.
+    % The test bodies expect the worker node(s) under the op_worker_nodes key (as
+    % in the legacy environment); provide them from the onenv background. The tests
+    % operate on the storage_sync_links datastore structure directly, using random
+    % space/storage ids - no real space or storage support is needed.
+    [{op_worker_nodes, oct_background:get_provider_nodes(?PROVIDER_SELECTOR)} | Config].
 
 end_per_testcase(_Case, _Config) ->
     ok.

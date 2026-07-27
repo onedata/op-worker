@@ -1,18 +1,20 @@
 %%%--------------------------------------------------------------------
-%%% @author Katarzyna Such
+%%% @author Bartosz Walkowicz
 %%% @copyright (C) 2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module tests storage import on S3 storage.
+%%% This module tests how storage import detects and propagates deletions made
+%%% directly on S3 storage; see storage_import_delete_test_base for the shared
+%%% bodies.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_initial_s3_oct_test_SUITE).
--author("Katarzyna Such").
+-module(storage_import_delete_s3_test_SUITE).
+-author("Bartosz Walkowicz").
 
--include("storage_import_oct_test.hrl").
+-include("storage_import_test.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 -export([
@@ -23,23 +25,25 @@
 
 %% tests
 -export([
-    %% --- structure ---
-    import_empty_storage_test/1,
-    import_empty_file_test/1,
-    import_file_with_content_test/1,
-    import_file_in_directory_test/1,
-    import_many_subfiles_test/1,
-    import_nested_directory_tree_test/1
+    non_empty_directory_deletion_test/1,
+    import_continues_after_deletion_test/1,
+    recreate_file_deleted_by_sync_test/1,
+    imported_file_delete_recreate_lifecycle_test/1,
+    file_deletion_purges_metadata_test/1,
+    nested_file_deletion_test/1,
+    bulk_deletion_test/1,
+    create_subfiles_and_delete_before_import_is_finished_test/1
 ]).
 
 all() -> [
-    %% --- structure ---
-    import_empty_storage_test,
-    import_empty_file_test,
-    import_file_with_content_test,
-    import_file_in_directory_test,
-    import_many_subfiles_test,
-    import_nested_directory_tree_test
+    non_empty_directory_deletion_test,
+    file_deletion_purges_metadata_test,
+    nested_file_deletion_test,
+    bulk_deletion_test,
+    create_subfiles_and_delete_before_import_is_finished_test,
+    import_continues_after_deletion_test,
+    recreate_file_deleted_by_sync_test,
+    imported_file_delete_recreate_lifecycle_test
 ].
 
 -define(IMPORTING_PROVIDER_SELECTOR, krakow).
@@ -50,7 +54,7 @@ all() -> [
     non_importing_provider_selector = paris,
     space_owner_selector = space_owner
 }).
--define(run_test(), storage_import_initial_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
+-define(run_test(), storage_import_delete_test_base:?FUNCTION_NAME(?SUITE_CTX)).
 
 
 %%%==================================================================
@@ -58,25 +62,25 @@ all() -> [
 %%%===================================================================
 
 
-%% --- structure ---
+non_empty_directory_deletion_test(_Config) -> ?run_test().
+import_continues_after_deletion_test(_Config) -> ?run_test().
+recreate_file_deleted_by_sync_test(_Config) -> ?run_test().
+imported_file_delete_recreate_lifecycle_test(_Config) -> ?run_test().
+file_deletion_purges_metadata_test(_Config) -> ?run_test().
+nested_file_deletion_test(_Config) -> ?run_test().
+bulk_deletion_test(_Config) -> ?run_test().
+create_subfiles_and_delete_before_import_is_finished_test(_Config) -> ?run_test().
 
 
-import_empty_storage_test(_Config) -> ?run_test().
-import_empty_file_test(_Config) -> ?run_test().
-import_file_with_content_test(_Config) -> ?run_test().
-import_file_in_directory_test(_Config) -> ?run_test().
-import_many_subfiles_test(_Config) -> ?run_test().
-import_nested_directory_tree_test(_Config) -> ?run_test().
-
-
-%===================================================================
+%%===================================================================
 % SetUp and TearDown functions
 %===================================================================
+
 
 init_per_suite(Config) ->
     ModulesToLoad = [
         ?MODULE, sd_test_utils, storage_file_setup_utils,
-        storage_import_test_utils, storage_import_initial_oct_test_base
+        storage_import_test_utils, storage_import_delete_test_base
     ],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op_s3",
@@ -100,8 +104,8 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(Case, Config) ->
-    storage_import_initial_oct_test_base:init_per_testcase(Case, ?SUITE_CTX, Config).
+    storage_import_delete_test_base:init_per_testcase(Case, ?SUITE_CTX, Config).
 
 
 end_per_testcase(Case, Config) ->
-    storage_import_initial_oct_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).
+    storage_import_delete_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).

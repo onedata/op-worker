@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Katarzyna Such
-%%% @copyright (C) 2026 Onedata (onedata.org)
+%%% @copyright (C) 2024 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -9,8 +9,8 @@
 %%% Macros used in tests of storage import.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(STORAGE_IMPORT_OCT_TEST_HRL).
--define(STORAGE_IMPORT_OCT_TEST_HRL, 1).
+-ifndef(STORAGE_IMPORT_TEST_HRL).
+-define(STORAGE_IMPORT_TEST_HRL, 1).
 
 
 -include("onenv_test_utils.hrl").
@@ -30,8 +30,8 @@
 % default ?ATTEMPTS. Passed explicitly per-test so that small tests still fail fast.
 -define(LARGE_IMPORT_SCAN_ATTEMPTS, 300).
 
-% Attempts for asserting state on the non-importing provider when the file is NOT
-% awaited via verify_imported_tree first (which retries until the tree propagates).
+% Attempts for asserting state on the non-importing provider, which receives the
+% data via dbsync - possibly still digesting the backlog of preceding tests.
 -define(CROSS_PROVIDER_PROPAGATION_ATTEMPTS, 60).
 
 % Evaluates Expr only when StorageType is posix, no-op otherwise (see the "Flat (object)
