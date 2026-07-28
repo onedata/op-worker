@@ -13,6 +13,14 @@
 
 -include_lib("onenv_ct/include/chart_values.hrl").
 
+% LUMA DB populated with mappings fetched over HTTP from an external feed service
+% under the given url (see luma_test_server for a test implementation of such
+% a service).
+-record(external_feed_luma, {
+    url :: binary(),
+    api_key = undefined :: undefined | binary()
+}).
+
 -record(s3_storage_params, {
     storage_path_type :: binary(),
     imported_storage = false :: boolean(),
@@ -20,12 +28,14 @@
     bucket_name = ?S3_BUCKET_NAME :: binary(),
     access_key = ?S3_KEY_ID :: binary(),
     secret_key = ?S3_ACCESS_KEY :: binary(),
-    block_size = ?S3_DEFAULT_BLOCK_SIZE :: integer()
+    block_size = ?S3_DEFAULT_BLOCK_SIZE :: integer(),
+    luma_feed = auto :: space_setup_utils:luma_feed_spec()
 }).
 
 -record(posix_storage_params, {
     mount_point :: binary(),
-    imported_storage = false :: boolean()
+    imported_storage = false :: boolean(),
+    luma_feed = auto :: space_setup_utils:luma_feed_spec()
 }).
 
 -record(nulldevice_storage_params, {

@@ -26,12 +26,14 @@
     nulldevice_storage_params() |
     s3_storage_params().
 
+-type luma_feed_spec() :: auto | local | #external_feed_luma{}.
+
 -type support_spec() :: #support_spec{}.
 -type space_spec() :: #space_spec{}.
 
 -export_type([
     http_storage_params/0, posix_storage_params/0, nulldevice_storage_params/0,
-    s3_storage_params/0, storage_params/0, support_spec/0
+    s3_storage_params/0, storage_params/0, luma_feed_spec/0, support_spec/0
 ]).
 
 -define(CURRENT_DATETIME(), time:seconds_to_datetime(global_clock:timestamp_seconds())).
@@ -51,10 +53,11 @@
 -spec create_storage(oct_background:node_selector(), storage_params()) -> od_storage:id().
 create_storage(Provider, #s3_storage_params{storage_path_type = StoragePathType,
     imported_storage = Imported, hostname = Hostname, bucket_name = BucketName,
-    access_key = AccessKey, secret_key = SecretKey, block_size = BlockSize
+    access_key = AccessKey, secret_key = SecretKey, block_size = BlockSize,
+    luma_feed = LumaFeed
 } = S3StorageParam) ->
     create_bucket(Provider, S3StorageParam),
-    CreateStorageData = #{?RAND_STR() => #{
+    CreateStorageData = #{?RAND_STR() => maps:merge(#{
         <<"type">> => <<"s3">>,
         <<"storagePathType">> => StoragePathType,
         <<"importedStorage">> => Imported,
@@ -63,17 +66,19 @@ create_storage(Provider, #s3_storage_params{storage_path_type = StoragePathType,
         <<"accessKey">> => AccessKey,
         <<"secretKey">> => SecretKey,
         <<"blockSize">> => BlockSize
-    }},
+    }, luma_feed_args(LumaFeed))},
     panel_test_rpc:add_storage(Provider, CreateStorageData);
 
-create_storage(Provider, #posix_storage_params{mount_point = MountPoint, imported_storage = Imported}) ->
+create_storage(Provider, #posix_storage_params{
+    mount_point = MountPoint, imported_storage = Imported, luma_feed = LumaFeed
+}) ->
     ?assertMatch(ok, opw_test_rpc:call(Provider, filelib, ensure_path, [MountPoint])),
     panel_test_rpc:add_storage(Provider,
-        #{?RAND_STR() => #{
+        #{?RAND_STR() => maps:merge(#{
             <<"type">> => <<"posix">>,
             <<"mountPoint">> => MountPoint,
             <<"importedStorage">> => Imported
-        }}
+        }, luma_feed_args(LumaFeed))}
     );
 
 create_storage(Provider, #nulldevice_storage_params{
@@ -210,6 +215,20 @@ get_local_storages(ProviderSelector, SpaceId) ->
 -spec delete_storage(oct_background:node_selector(), storage:id()) -> ok.
 delete_storage(ProviderSelector, StorageId) ->
     ?assertEqual(ok, opw_test_rpc:call(ProviderSelector, storage, delete, [StorageId]), ?STORAGE_DELETE_ATTEMPTS).
+
+
+%% @private
+%% @doc Maps a luma_feed_spec() onto onepanel add-storage request parameters.
+%% For the auto feed no parameters are emitted - it is the onepanel default.
+-spec luma_feed_args(luma_feed_spec()) -> map().
+luma_feed_args(auto) ->
+    #{};
+luma_feed_args(local) ->
+    #{<<"lumaFeed">> => <<"local">>};
+luma_feed_args(#external_feed_luma{url = Url, api_key = undefined}) ->
+    #{<<"lumaFeed">> => <<"external">>, <<"lumaFeedUrl">> => Url};
+luma_feed_args(#external_feed_luma{url = Url, api_key = ApiKey}) ->
+    #{<<"lumaFeed">> => <<"external">>, <<"lumaFeedUrl">> => Url, <<"lumaFeedApiKey">> => ApiKey}.
 
 
 %% @private
