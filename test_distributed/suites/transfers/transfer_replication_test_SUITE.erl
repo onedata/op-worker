@@ -779,6 +779,8 @@ end_per_testcase(_Case, Config) ->
 %% Fetches the space-wide transfer stats accumulated on the given provider:
 %% the last update time and the histogram sums of the bytes sourced from the
 %% given provider.
+-spec get_space_transfer_stats(oct_background:entity_selector(), od_space:id(), od_provider:id()) ->
+    {LastUpdate :: time:seconds(), HistogramSums :: [non_neg_integer()]}.
 get_space_transfer_stats(ProviderSelector, SpaceId, SourceProviderId) ->
     case opw_test_rpc:call(ProviderSelector, space_transfer_stats, get, [
         ?JOB_TRANSFERS_TYPE, SpaceId

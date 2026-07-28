@@ -77,6 +77,12 @@ node_kill_test(Config) ->
 
     restart_test_base(Config, RestartFun, kill).
 
+%% @private
+-spec restart_test_base(
+    test_config:config(), RestartFun :: fun((test_config:config()) -> test_config:config()),
+    RestartType :: gentle | kill
+) ->
+    ok | no_return().
 restart_test_base(Config, RestartFun, RestartType) ->
     [P1, P2] = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
     [WorkerP1] = oct_background:get_provider_nodes(krakow),
@@ -213,10 +219,16 @@ end_per_suite(_Config) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
+-spec count_missing_transfer_links_in_db(node(), od_space:id(), [transfer:id()]) ->
+    non_neg_integer().
 count_missing_transfer_links_in_db(Worker, SpaceId, TransferIds) ->
     test_node_starter:load_modules([Worker], [?MODULE]),
     rpc:call(Worker, ?MODULE, count_missing_transfer_links_in_db, [SpaceId, TransferIds]).
 
+%% @private
+%% @doc Runs on the op_worker node.
+-spec count_missing_transfer_links_in_db(od_space:id(), [transfer:id()]) -> non_neg_integer().
 count_missing_transfer_links_in_db(SpaceId, TransferIds) ->
     {ok, Acc} = get_transfer_links_from_db(<<"SCHEDULED_TRANSFERS_KEY">>, SpaceId, sets:new()),
     {ok, Acc2} = get_transfer_links_from_db(<<"CURRENT_TRANSFERS_KEY">>, SpaceId, Acc),
@@ -224,16 +236,27 @@ count_missing_transfer_links_in_db(SpaceId, TransferIds) ->
 
     length(lists:filter(fun(TransferId) -> not sets:is_element(TransferId, TransferIdsInDb) end, TransferIds)).
 
+%% @private
+-spec get_transfer_links_from_db(Prefix :: binary(), od_space:id(), sets:set(transfer:id())) ->
+    {ok, sets:set(transfer:id())}.
 get_transfer_links_from_db(Prefix, SpaceId, Acc0) ->
     Ctx = #{model => transfer, memory_driver => undefined},
     get_transfer_links(Ctx, Prefix, SpaceId, Acc0).
 
+%% @private
+-spec get_transfer_links(
+    datastore:ctx(), Prefix :: binary(), od_space:id(), sets:set(transfer:id())
+) ->
+    {ok, sets:set(transfer:id())}.
 get_transfer_links(Ctx, Prefix, SpaceId, Acc0) ->
     datastore_model:fold_links(Ctx, <<Prefix/binary, "_", SpaceId/binary>>, all, fun
         (#link{target = TransferId}, Acc) ->
             {ok, sets:add_element(TransferId, Acc)}
     end, Acc0, #{}).
 
+%% @private
+-spec get_scheduled_and_current_transfer_links_set(node(), od_space:id()) ->
+    sets:set(transfer:id()).
 get_scheduled_and_current_transfer_links_set(Worker, SpaceId) ->
     test_node_starter:load_modules([Worker], [?MODULE]),
     Ctx = #{model => transfer},

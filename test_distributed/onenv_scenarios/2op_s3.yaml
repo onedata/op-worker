@@ -15,10 +15,29 @@ users:
   - &space_owner
     name: space_owner
     password: password
+  - &user1
+    name: user1
+    password: password
+  - &user2
+    name: user2
+    password: password
+  - &user3
+    name: user3
+    password: password
+  - &user4
+    name: user4
+    password: password
 
 spaces:
+  # NOTE: all users are members of this space so that each of them is an effective
+  # user of both providers - only then is a session created for them on each provider
   - name: space_krk_par_p
     user: *space_owner
+    users:
+      - user: *user1
+      - user: *user2
+      - user: *user3
+      - user: *user4
     supports:
       - provider: "oneprovider-1"
         storage_name: "s3"

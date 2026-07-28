@@ -117,12 +117,13 @@
 -type file_tree_objects() ::
     onenv_file_test_utils:object() | [onenv_file_test_utils:object()].
 
+-type suite_ctx() :: #transfer_test_suite_ctx{}.
+
 -export_type([
+    suite_ctx/0,
     transfer_type/0, field_expectation/0, expected_transfer/0, transfer_getter/0,
     file_tree_objects/0
 ]).
-
--type suite_ctx() :: #transfer_test_suite_ctx{}.
 
 -define(SPACE_ROOT_LS_LIMIT, 10000).
 

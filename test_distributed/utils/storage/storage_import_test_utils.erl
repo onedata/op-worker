@@ -1733,6 +1733,11 @@ assert_monitoring_state(NodeSelector, SpaceId, ExpectedSIM, Attempts) ->
 
 
 %% @private
+-spec assert_monitoring_fields(
+    #{binary() => integer() | skip | {range, integer(), integer()}},
+    #{binary() => term()}
+) ->
+    ok | no_return().
 assert_monitoring_fields(ExpectedSIM, SIM) ->
     maps:foreach(fun
         (_Key, skip) ->
@@ -1763,6 +1768,7 @@ assert_monitoring_fields(ExpectedSIM, SIM) ->
 %%  * the queueLength histograms are gauges, not counters - only the current
 %%    (head) window is meaningful, so it is taken as-is.
 %% @end
+-spec flatten_storage_import_histograms(#{binary() => term()}) -> #{binary() => term()}.
 flatten_storage_import_histograms(SIM) ->
     SIM#{
         <<"createdMinHist">> => lists:sum(maps:get(<<"createdMinHist">>, SIM)),
@@ -1783,6 +1789,8 @@ flatten_storage_import_histograms(SIM) ->
 
 
 %% @private
+-spec build_storage_import_monitoring_description(#{binary() => term()}) ->
+    {Format :: string(), Args :: [term()]}.
 build_storage_import_monitoring_description(SIM) ->
     maps:fold(fun(Key, Value, {AccFormat, AccArgs}) ->
         {AccFormat ++ "    ~tp = ~tp~n", AccArgs ++ [Key, Value]}

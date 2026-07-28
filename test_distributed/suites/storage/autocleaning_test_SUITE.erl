@@ -878,6 +878,11 @@ time_warp_test(Config) ->
 %%% Test bases
 %%%===================================================================
 
+%% @private
+-spec autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_test_base(
+    test_config:config(), Size :: non_neg_integer(), autocleaning:config()
+) ->
+    ok | no_return().
 autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_test_base(Config, Size, ACConfig) ->
     #{
         krk_node := KrkNode, paris_node := ParisNode,
@@ -1008,6 +1013,7 @@ describe_test_env(Config) ->
     }.
 
 %% @private
+-spec set_up_space(Case :: atom()) -> od_space:id().
 set_up_space(Case) ->
     space_setup_utils:set_up_space(#space_spec{
         name = Case,
@@ -1022,15 +1028,26 @@ set_up_space(Case) ->
 % none of the test cases inspects the files on storage - they only check the file
 % distribution and the auto-cleaning reports, so a null device storage is used to
 % keep the storage out of the equation (some cases operate on thousands of files)
+-spec create_nulldevice_storage(oct_background:entity_selector()) -> storage:id().
 create_nulldevice_storage(ProviderSelector) ->
     space_setup_utils:create_storage(ProviderSelector, #nulldevice_storage_params{}).
 
+%% @private
+-spec disable_periodic_spaces_autocleaning_check(node()) -> ok.
 disable_periodic_spaces_autocleaning_check(Worker) ->
     test_utils:set_env(Worker, ?APP_NAME, autocleaning_periodic_spaces_check_enabled, false).
 
+%% @private
+-spec enable_periodic_spaces_autocleaning_check(node()) -> ok.
 enable_periodic_spaces_autocleaning_check(Worker) ->
     test_utils:set_env(Worker, ?APP_NAME, autocleaning_periodic_spaces_check_enabled, true).
 
+%% @private
+-spec write_file(
+    node(), session:id(), ParentGuid :: file_id:file_guid(), file_meta:name(),
+    Size :: non_neg_integer()
+) ->
+    file_id:file_guid().
 write_file(Worker, SessId, ParentGuid, Name, Size) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ParentGuid, Name, ?DEFAULT_FILE_PERMS),
     {ok, H} = lfm_proxy:open(Worker, SessId, ?FILE_REF(Guid), write),
@@ -1038,11 +1055,22 @@ write_file(Worker, SessId, ParentGuid, Name, Size) ->
     ok = lfm_proxy:close(Worker, H),
     Guid.
 
+%% @private
+-spec write_files(
+    node(), session:id(), ParentGuid :: file_id:file_guid(), Prefix :: binary(),
+    Size :: non_neg_integer(), Num :: non_neg_integer()
+) ->
+    [file_id:file_guid()].
 write_files(Worker, SessId, ParentGuid, Prefix, Size, Num) ->
     lists_utils:pmap(fun(N) ->
         write_file(Worker, SessId, ParentGuid, <<Prefix/binary, (integer_to_binary(N))/binary>>, Size)
     end, lists:seq(1, Num), ?MAX_PARALLEL_FILE_CREATIONS).
 
+%% @private
+-spec read_opened_file(
+    node(), session:id(), file_id:file_guid(), lfm_proxy:handle(), Size :: non_neg_integer()
+) ->
+    ok | no_return().
 read_opened_file(Worker, SessId, Guid, Handle, Size) ->
     ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertEqual(Size, try
@@ -1053,6 +1081,11 @@ read_opened_file(Worker, SessId, Guid, Handle, Size) ->
             {Class, Reason}
     end).
 
+%% @private
+-spec schedule_file_replication(
+    node(), session:id(), file_id:file_guid(), od_provider:id(), ExpectedSize :: non_neg_integer()
+) ->
+    {ok, transfer:id()} | no_return().
 schedule_file_replication(Worker, SessId, Guid, ProviderId, ExpectedSize) ->
     ?assertMatch({ok, #file_attr{size = ExpectedSize}}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     {ok, _} = opt_transfers:schedule_file_replication(Worker, SessId, ?FILE_REF(Guid), ProviderId).
@@ -1068,6 +1101,7 @@ schedule_file_replication(Worker, SessId, Guid, ProviderId, ExpectedSize) ->
 %% NOTE: every test case runs in a space of its own, hence a cold view in every single
 %% one of them - which is what makes this necessary.
 %% @end
+-spec enable_file_popularity(node(), od_space:id()) -> ok | no_return().
 enable_file_popularity(Worker, SpaceId) ->
     ok = rpc:call(Worker, file_popularity_api, enable, [SpaceId]),
     ?assertMatch({ok, _}, rpc:call(Worker, index, query, [
@@ -1075,27 +1109,45 @@ enable_file_popularity(Worker, SpaceId) ->
     ]), ?ATTEMPTS),
     ok.
 
+%% @private
+-spec configure_autocleaning(node(), od_space:id(), autocleaning:config()) ->
+    {ok, od_space:id()} | {error, term()}.
 configure_autocleaning(Worker, SpaceId, Configuration) ->
     rpc:call(Worker, autocleaning_api, configure, [SpaceId, Configuration]).
 
+%% @private
+-spec force_start(node(), od_space:id()) -> {ok, autocleaning_run:id()} | {error, term()}.
 force_start(Worker, SpaceId) ->
     rpc:call(Worker, autocleaning_api, force_run, [SpaceId]).
 
+%% @private
+-spec cancel(node(), od_space:id(), autocleaning_run:id()) -> ok | {error, term()}.
 cancel(Worker, SpaceId, AutocleaningRunId) ->
     rpc:call(Worker, autocleaning_api, cancel_run, [SpaceId, AutocleaningRunId]).
 
+%% @private
+-spec restart_autocleaning_run(node(), od_space:id()) -> ok | {error, term()}.
 restart_autocleaning_run(Worker, SpaceId) ->
     rpc:call(Worker, autocleaning_api, restart_autocleaning_run, [SpaceId]).
 
+%% @private
+-spec list(node(), od_space:id()) -> {ok, [autocleaning_run:id()]} | {error, term()}.
 list(Worker, SpaceId) ->
     rpc:call(Worker, autocleaning_api, list_reports, [SpaceId]).
 
+%% @private
+-spec get_run_report(node(), autocleaning_run:id()) -> {ok, map()} | {error, term()}.
 get_run_report(Worker, ARId) ->
     rpc:call(Worker, autocleaning_api, get_run_report, [ARId]).
 
+%% @private
+-spec current_size(node(), od_space:id()) -> non_neg_integer().
 current_size(Worker, SpaceId) ->
     rpc:call(Worker, space_quota, current_size, [SpaceId]).
 
+%% @private
+-spec change_last_open(node(), file_id:file_guid(), NewLastOpen :: non_neg_integer()) ->
+    {ok, file_popularity:doc()} | {error, term()}.
 change_last_open(Worker, FileGuid, NewLastOpen) ->
     Uuid = file_id:guid_to_uuid(FileGuid),
     rpc:call(Worker, file_popularity, update, [Uuid, fun(FP) ->

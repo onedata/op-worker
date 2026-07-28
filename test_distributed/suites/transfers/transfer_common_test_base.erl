@@ -519,6 +519,8 @@ hundred_files_by_view_with_batch_10_test(TestSuiteCtx) ->
 
 
 %% @private
+%% @private
+-spec hundred_files_by_view_test_base(transfer_test_utils:suite_ctx(), CaseName :: atom()) -> ok.
 hundred_files_by_view_test_base(TestSuiteCtx, CaseName) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, CaseName, #dir_spec{
@@ -751,6 +753,11 @@ file_removed_during_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
 %% Schedules a transfer of a single file that fails whole (see the file
 %% processing failure mock in init_per_testcase), then reruns it as the
 %% given user and awaits the successful completion of the new transfer.
+-spec rerun_failed_file_transfer_test_base(
+    transfer_test_utils:suite_ctx(), CaseName :: atom(),
+    RerunningUserSelector :: oct_background:entity_selector()
+) ->
+    ok.
 rerun_failed_file_transfer_test_base(TestSuiteCtx = #transfer_test_suite_ctx{
     transfer_type = TransferType
 }, CaseName, RerunningUserSelector) ->
@@ -775,6 +782,11 @@ rerun_failed_file_transfer_test_base(TestSuiteCtx = #transfer_test_suite_ctx{
 %% @private
 %% Expected transfer state after every file job of the transfer has failed
 %% (see transfer_test_utils:mock_file_processing_failure/1).
+%% @private
+-spec build_failed_transfer_overrides(
+    transfer_test_utils:transfer_type(), FilesCount :: non_neg_integer()
+) ->
+    transfer_test_utils:expected_transfer().
 build_failed_transfer_overrides(replication, FilesCount) -> #{
     replication_status => ?FAILED_STATUS,
     failed_files => FilesCount,
@@ -803,6 +815,11 @@ build_failed_transfer_overrides(migration, FilesCount) -> #{
 %% @private
 %% Turns off the mocked file job failures, reruns the given failed transfer
 %% and awaits the successful completion of the new transfer created this way.
+-spec rerun_transfer_and_await_completed(
+    transfer_test_utils:suite_ctx(), RerunningUserSelector :: oct_background:entity_selector(),
+    transfer:id(), transfer_test_utils:file_tree_objects()
+) ->
+    ok.
 rerun_transfer_and_await_completed(TestSuiteCtx = #transfer_test_suite_ctx{
     other_provider_selector = OtherProviderSelector
 }, RerunningUserSelector, TransferId, TransferRootObjects) ->
@@ -825,6 +842,8 @@ rerun_transfer_and_await_completed(TestSuiteCtx = #transfer_test_suite_ctx{
 %% @private
 %% Creates the single-file tree most view test cases operate on, ensures
 %% the initial replicas and returns the file object.
+-spec setup_single_file_for_view_test(transfer_test_utils:suite_ctx(), CaseName :: atom()) ->
+    onenv_file_test_utils:object().
 setup_single_file_for_view_test(TestSuiteCtx, CaseName) ->
     RootDir = #object{children = [FileObject]} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, CaseName,
@@ -837,6 +856,11 @@ setup_single_file_for_view_test(TestSuiteCtx, CaseName) ->
 %% @private
 %% Sets the xattr on the other provider - the one the views are evaluated
 %% on - so that view emissions do not wait for metadata dbsync.
+-spec set_xattr(
+    transfer_test_utils:suite_ctx(), file_id:file_guid(),
+    XattrName :: binary(), XattrValue :: term()
+) ->
+    ok.
 set_xattr(#transfer_test_suite_ctx{other_provider_selector = OtherProviderSelector}, FileGuid, XattrName, XattrValue) ->
     OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
     file_test_utils:set_xattr(OtherNode, FileGuid, XattrName, XattrValue).
@@ -844,6 +868,7 @@ set_xattr(#transfer_test_suite_ctx{other_provider_selector = OtherProviderSelect
 
 %% @private
 %% All nodes of both providers of the suite.
+-spec get_all_provider_nodes(transfer_test_utils:suite_ctx()) -> [node()].
 get_all_provider_nodes(#transfer_test_suite_ctx{
     creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
@@ -856,6 +881,7 @@ get_all_provider_nodes(#transfer_test_suite_ctx{
 %% Special init/end_per_testcase clauses chain to the default ones with
 %% ?DEFAULT_CASE(Case), which suffixes the case name with "_default" -
 %% strip it to recover the name the case's file trees are prefixed with.
+-spec strip_default_case_suffix(atom()) -> atom().
 strip_default_case_suffix(Case) ->
     CaseStr = atom_to_list(Case),
     case lists:suffix("_default", CaseStr) of

@@ -41,10 +41,12 @@
 %%%===================================================================
 
 
+-spec assert_file_info(#{atom() => term()}, node(), binary(), pos_integer(), non_neg_integer()) ->
+    ok | no_return().
 assert_file_info(ExpectedValues, Worker, FilePath, Line, Attempts) when Attempts >= 0 ->
     try
         {ok, FI} = storage_test_utils:read_file_info(Worker, FilePath),
-        maps:map(fun(Field, ExpectedValue) ->
+        maps:foreach(fun(Field, ExpectedValue) ->
             assert_field(Field, ExpectedValue, FI)
         end, ExpectedValues)
     catch
@@ -74,6 +76,7 @@ assert_file_info(ExpectedValues, Worker, FilePath, Line, Attempts) when Attempts
     end.
 
 %% @private
+-spec assert_field(atom(), term(), #file_info{}) -> ok | no_return().
 assert_field(Field, ExpectedValue, Record) ->
     case get_record_field(Record, Field) of
         ExpectedValue ->
@@ -83,33 +86,43 @@ assert_field(Field, ExpectedValue, Record) ->
     end.
 
 %% @private
+-spec get_record_field(#file_info{}, atom()) -> term().
 get_record_field(Record, Field) ->
     FieldsList = record_info(fields, file_info),
     Index = lists_utils:index_of(Field, FieldsList),
     element(Index + 1, Record).
 
 
+-spec read_file(node(), binary()) -> {ok, binary()} | {error, term()}.
 read_file(Worker, FilePath) ->
     rpc:call(Worker, file, read_file, [FilePath]).
 
 
+-spec read_file_info(node(), binary()) -> {ok, #file_info{}} | {error, term()}.
 read_file_info(Worker, FilePath) ->
     rpc:call(Worker, file, read_file_info, [FilePath]).
 
 
+-spec list_dir(node(), binary()) -> {ok, [file:filename()]} | {error, term()}.
 list_dir(Worker, DirPath) ->
     rpc:call(Worker, file, list_dir, [DirPath]).
 
 
+%% @doc Path of the space dir on the storage supporting the space.
+-spec space_path(node(), od_space:id()) -> binary().
 space_path(Worker, SpaceId) ->
     file_path(Worker, SpaceId, <<"">>).
 
 
+%% @doc Path of a file on the storage supporting the space, given its path
+%% relative to the space dir.
+-spec file_path(node(), od_space:id(), file_meta:path()) -> binary().
 file_path(Worker, SpaceId, FilePath) ->
     SpaceMnt = get_space_mount_point(Worker, SpaceId),
     filename:join([SpaceMnt, FilePath]).
 
 
+-spec get_space_mount_point(node(), od_space:id()) -> binary().
 get_space_mount_point(Worker, SpaceId) ->
     {ok, StorageId} = get_supporting_storage_id(Worker, SpaceId),
     IsImportedStorage = rpc:call(Worker, storage, is_imported, [StorageId]),
@@ -120,25 +133,30 @@ get_space_mount_point(Worker, SpaceId) ->
     end.
 
 
+-spec get_supporting_storage_id(node(), od_space:id()) -> {ok, storage:id()} | {error, term()}.
 get_supporting_storage_id(Worker, SpaceId) ->
     rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId]).
 
 
+-spec get_helper(node(), storage:id()) -> helpers:helper().
 get_helper(Worker, StorageId) ->
     rpc:call(Worker, storage, get_helper, [StorageId]).
 
 
+-spec storage_mount_point(node(), storage:id()) -> binary().
 storage_mount_point(Worker, StorageId) ->
     Helper = get_helper(Worker, StorageId),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 
 
+-spec is_supporting_storage_posix_compatible(node(), od_space:id()) -> boolean().
 is_supporting_storage_posix_compatible(Worker, SpaceId) ->
     {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Worker, SpaceId),
     is_posix_compatible_storage(Worker, StorageId).
 
 
+-spec is_posix_compatible_storage(node(), storage:id()) -> boolean().
 is_posix_compatible_storage(Worker, StorageId) ->
     Helper = storage_test_utils:get_helper(Worker, StorageId),
     helper:is_posix_compatible(Helper).

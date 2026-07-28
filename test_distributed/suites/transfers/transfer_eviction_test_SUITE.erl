@@ -379,6 +379,10 @@ end_per_testcase(Case, Config) ->
 
 
 %% @private
+-spec await_space_occupancy(
+    oct_background:entity_selector(), od_space:id(), ExpOccupancy :: non_neg_integer()
+) ->
+    ok | no_return().
 await_space_occupancy(ProviderSelector, SpaceId, ExpOccupancy) ->
     ?assertEqual(
         ExpOccupancy,

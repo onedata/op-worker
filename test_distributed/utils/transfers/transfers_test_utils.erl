@@ -34,10 +34,15 @@
 
 -define(RANDOM_NAMESPACE_SIZE, 1073741824). % 1024 ^ 3
 
+%% Expected values (or predicates) of #transfer{} record fields, keyed by field name.
+-type transfer_expectation() :: #{atom() => term() | fun((term()) -> boolean())}.
+-export_type([transfer_expectation/0]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+-spec get_transfer(node(), transfer:id()) -> transfer:transfer() | no_return().
 get_transfer(Node, TransferId) ->
     case rpc:call(Node, transfer, get, [TransferId]) of
         {ok, #document{value = Transfer}} ->
@@ -46,9 +51,11 @@ get_transfer(Node, TransferId) ->
             throw(transfer_not_found)
     end.
 
+-spec provider_id(node()) -> od_provider:id().
 provider_id(Node) ->
     rpc:call(Node, oneprovider, get_id, []).
 
+-spec ensure_transfers_removed(test_config:config()) -> ok | no_return().
 ensure_transfers_removed(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
@@ -60,30 +67,36 @@ ensure_transfers_removed(Config) ->
         end, SpaceIds)
     end, Workers).
 
+-spec list_ended_transfers(node(), od_space:id()) -> [transfer:id()].
 list_ended_transfers(Worker, SpaceId) ->
     {ok, Transfers} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceId]),
     Transfers.
 
+-spec list_waiting_transfers(node(), od_space:id()) -> [transfer:id()].
 list_waiting_transfers(Worker, SpaceId) ->
     {ok, Transfers} = rpc:call(Worker, transfer, list_waiting_transfers, [SpaceId]),
     Transfers.
 
+-spec list_ongoing_transfers(node(), od_space:id()) -> [transfer:id()].
 list_ongoing_transfers(Worker, SpaceId) ->
     {ok, Transfers} = rpc:call(Worker, transfer, list_ongoing_transfers, [SpaceId]),
     Transfers.
 
+-spec get_ongoing_transfers_for_file(node(), undefined | file_id:file_guid()) -> [transfer:id()].
 get_ongoing_transfers_for_file(_Worker, undefined) ->
     [];
 get_ongoing_transfers_for_file(Worker, FileGuid) ->
     {ok, #{ongoing := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
     lists:sort(Transfers).
 
+-spec get_ended_transfers_for_file(node(), undefined | file_id:file_guid()) -> [transfer:id()].
 get_ended_transfers_for_file(_Worker, undefined) ->
     [];
 get_ended_transfers_for_file(Worker, FileGuid) ->
     {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
     lists:sort(Transfers).
 
+-spec remove_transfers(test_config:config()) -> ok.
 remove_transfers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
@@ -98,16 +111,28 @@ remove_transfers(Config) ->
         end, SpaceIds)
     end, Workers).
 
+-spec unmock_replication_worker(node() | [node()]) -> ok.
 unmock_replication_worker(Node) ->
     test_utils:mock_unload(Node, replication_worker).
 
+-spec root_name(FunctionName :: atom() | binary(), Type :: atom() | binary()) -> binary().
 root_name(FunctionName, Type) ->
     root_name(FunctionName, Type, <<"">>).
 
+-spec root_name(
+    FunctionName :: atom() | binary(), Type :: atom() | binary(), FileKeyType :: atom() | binary()
+) ->
+    binary().
 root_name(FunctionName, Type, FileKeyType) ->
     RandIntBin = str_utils:to_binary(rand:uniform(?RANDOM_NAMESPACE_SIZE)),
     root_name(FunctionName, Type, FileKeyType, RandIntBin).
 
+%% @private
+-spec root_name(
+    FunctionName :: atom() | binary(), Type :: atom() | binary(),
+    FileKeyType :: atom() | binary(), RandomSuffix :: binary()
+) ->
+    binary().
 root_name(FunctionName, Type, FileKeyType, RandomSuffix) ->
     TypeBin = str_utils:to_binary(Type),
     FileKeyTypeBin = str_utils:to_binary(FileKeyType),
@@ -115,6 +140,7 @@ root_name(FunctionName, Type, FileKeyType, RandomSuffix) ->
     SuffixBin = str_utils:to_binary(RandomSuffix),
     <<FunctionNameBin/binary, "_", TypeBin/binary, "_", FileKeyTypeBin/binary, "_", SuffixBin/binary>>.
 
+-spec mock_replica_synchronizer_failure(node() | [node()]) -> ok.
 mock_replica_synchronizer_failure(Node) ->
     ok = test_utils:mock_new(Node, replica_synchronizer),
     ok = test_utils:mock_expect(Node, replica_synchronizer, synchronize,
@@ -122,9 +148,11 @@ mock_replica_synchronizer_failure(Node) ->
             throw(test_error) end
     ).
 
+-spec unmock_replica_synchronizer_failure(node() | [node()]) -> ok.
 unmock_replica_synchronizer_failure(Node) ->
     ok = test_utils:mock_unload(Node, replica_synchronizer).
 
+-spec remove_all_views([node()], od_space:id()) -> ok.
 remove_all_views(Nodes, SpaceId) ->
     lists:foreach(fun(Node) ->
         {ok, ViewNames} = rpc:call(Node, index, list, [SpaceId]),
@@ -133,6 +161,10 @@ remove_all_views(Nodes, SpaceId) ->
         end, ViewNames)
     end, Nodes).
 
+-spec assert_transfer_state(
+    node(), transfer:id(), transfer_expectation(), Attempts :: non_neg_integer()
+) ->
+    ok | no_return().
 assert_transfer_state(Node, TransferId, ExpectedTransfer, Attempts) ->
     try
         Transfer = get_transfer(Node, TransferId),
@@ -166,11 +198,18 @@ assert_transfer_state(Node, TransferId, ExpectedTransfer, Attempts) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
+-spec assert_transfer_state(transfer_expectation(), transfer:transfer()) -> ok | no_return().
 assert_transfer_state(ExpectedTransfer, Transfer) ->
     maps:fold(fun(FieldName, ExpectedValueOrPredicate, _AccIn) ->
         assert_transfer_field(ExpectedValueOrPredicate, Transfer, FieldName)
     end, undefined, ExpectedTransfer).
 
+%% @private
+-spec assert_transfer_field(
+    term() | fun((term()) -> boolean()), transfer:transfer(), FieldName :: atom()
+) ->
+    ok | no_return().
 assert_transfer_field(ExpectedValueOrPredicate, Transfer, FieldName) ->
     Value = get_transfer_value(Transfer, FieldName),
     try
@@ -194,6 +233,8 @@ assert_transfer_field(ExpectedValueOrPredicate, Transfer, FieldName) ->
         throw({assertion_error, FieldName, ExpectedValueOrPredicate, Value})
     end.
 
+%% @private
+-spec get_transfer_value(transfer:transfer(), FieldName :: atom()) -> term() | no_return().
 get_transfer_value(Transfer, FieldName) ->
     FieldsList = record_info(fields, transfer),
 
@@ -204,6 +245,9 @@ get_transfer_value(Transfer, FieldName) ->
             element(Index + 1, Transfer)
     end.
 
+%% @private
+-spec transfer_fields_description(node(), transfer:id()) ->
+    {Format :: string(), Args :: [term()]}.
 transfer_fields_description(Node, TransferId) ->
     FieldsList = record_info(fields, transfer),
     Transfer = transfers_test_utils:get_transfer(Node, TransferId),

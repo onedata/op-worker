@@ -56,6 +56,8 @@
 -type node_counters() :: #{node() => counter_id() | [counter_id()]}.
 -type node_counters_data() :: #{node() => #{counter_id()  => data()}}.
 
+-export_type([data/0, counter_id/0, node_counters/0, node_counters_data/0]).
+
 -define(COUNTDOWN_SERVER(Node),
     binary_to_atom(<<"countdown_server_", (atom_to_binary(Node, latin1))/binary>>, latin1)
 ).

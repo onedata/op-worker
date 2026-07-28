@@ -321,6 +321,11 @@ time_warp_test(Config) ->
 %%% Test base functions
 %%%===================================================================
 
+%% @private
+-spec file_should_have_correct_popularity_value_base(
+    test_config:config(), LastOpenW :: number(), AvgOpenW :: number()
+) ->
+    ok | no_return().
 file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
     Node = oct_background:get_random_provider_node(krakow),
     SessId = oct_background:get_user_session_id(user1, krakow),
@@ -384,12 +389,14 @@ end_per_testcase(Case, Config) ->
 %%% view_traverse callbacks
 %%%===================================================================
 
+-spec process_row(json_utils:json_map(), view_traverse:info(), RowNum :: non_neg_integer()) -> ok.
 process_row(Row, _Info, RowNum) ->
     Popularity = maps:get(<<"key">>, Row),
     FileId = maps:get(<<"value">>, Row),
     ?COLLECTOR ! ?ROW(FileId, Popularity, RowNum),
     ok.
 
+-spec task_finished(view_traverse:task_id()) -> term().
 task_finished(_TaskId) ->
     whereis(?COLLECTOR) ! ?FINISHED.
 
@@ -397,12 +404,18 @@ task_finished(_TaskId) ->
 %%% view processing module API function
 %%%===================================================================
 
+%% @doc Runs on the op_worker node.
+-spec init() -> ok.
 init() ->
     view_traverse:init(?VIEW_PROCESSING_MODULE).
 
+%% @doc Runs on the op_worker node.
+-spec stop() -> ok.
 stop() ->
     view_traverse:stop(?VIEW_PROCESSING_MODULE).
 
+%% @doc Runs on the op_worker node.
+-spec run(od_space:id(), ViewTraverseOpts :: map()) -> {ok, view_traverse:task_id()} | {error, term()}.
 run(SpaceId, Opts) ->
     view_traverse:run(?VIEW_PROCESSING_MODULE, ?FILE_POPULARITY_VIEW(SpaceId), Opts).
 
@@ -410,9 +423,13 @@ run(SpaceId, Opts) ->
 %%% Functions exported for RPC
 %%%===================================================================
 
+%% @doc Runs on the op_worker node.
+-spec start_collector(TestMasterPid :: pid()) -> true.
 start_collector(TestMasterPid) ->
     register(?COLLECTOR, spawn(?MODULE, collector_loop, [TestMasterPid])).
 
+%% @doc Runs on the op_worker node.
+-spec collector_loop(TestMaster :: pid()) -> ok.
 collector_loop(TestMaster) ->
     collector_loop(TestMaster, #{}).
 
@@ -421,27 +438,43 @@ collector_loop(TestMaster) ->
 %%%===================================================================
 
 %% @private
+-spec create_posix_storage() -> storage:id().
 create_posix_storage() ->
     space_setup_utils:create_storage(krakow, #posix_storage_params{
         mount_point = <<"/mnt/st_", (generator:gen_name())/binary>>
     }).
 
 %% @private
+-spec create_file(node(), session:id(), od_space:id(), file_meta:name()) ->
+    {ok, file_id:file_guid()} | {error, term()}.
 create_file(Node, SessId, SpaceId, Name) ->
     lfm_proxy:create(Node, SessId, space_dir:guid(SpaceId), Name, ?DEFAULT_FILE_PERMS).
 
+%% @private
+-spec init_pool(node()) -> ok.
 init_pool(Worker) ->
     rpc:call(Worker, ?MODULE, init, []).
 
+%% @private
+-spec stop_pool(node()) -> ok.
 stop_pool(Worker) ->
     rpc:call(Worker, ?MODULE, stop, []).
 
+%% @private
+-spec run(node(), od_space:id(), ViewTraverseOpts :: map()) ->
+    {ok, view_traverse:task_id()} | {error, term()}.
 run(Worker, SpaceId, Opts) ->
     rpc:call(Worker, ?MODULE, run, [SpaceId, Opts]).
 
+%% @private
+-spec start_collector_remote(node()) -> true.
 start_collector_remote(Worker) ->
     true = rpc:call(Worker, ?MODULE, start_collector, [self()]).
 
+%% @private
+%% @doc Runs on the op_worker node.
+-spec collector_loop(TestMaster :: pid(), RowsMap :: #{non_neg_integer() => {binary(), number()}}) ->
+    ok.
 collector_loop(TestMaster, RowsMap) ->
     receive
         ?FINISHED ->
@@ -450,6 +483,9 @@ collector_loop(TestMaster, RowsMap) ->
             collector_loop(TestMaster, RowsMap#{RowNum => {FileId, Popularity}})
     end.
 
+%% @private
+-spec query(node(), od_space:id(), ViewTraverseOpts :: map()) ->
+    [{file_id:objectid(), Popularity :: number()}] | {error, term()}.
 query(Worker, SpaceId, Opts) ->
     start_collector_remote(Worker),
     case run(Worker, SpaceId, Opts) of
@@ -459,15 +495,25 @@ query(Worker, SpaceId, Opts) ->
             Error
     end.
 
+%% @private
+-spec ensure_collector_stopped(node()) -> ok | true.
 ensure_collector_stopped(Worker) ->
     case whereis(Worker, ?COLLECTOR) of
         undefined -> ok;
         CollectorPid -> exit(CollectorPid, kill)
     end.
 
+%% @private
+-spec enable_file_popularity(node(), od_space:id()) -> ok | {error, term()}.
 enable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, enable, [SpaceId]).
 
+%% @private
+-spec configure_file_popularity(
+    node(), od_space:id(), Enabled :: undefined | boolean(),
+    LastOpenWeight :: undefined | number(), AvgOpenCountPerDayWeight :: undefined | number()
+) ->
+    ok | {error, term()}.
 configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCountPerDayWeight) ->
     rpc:call(Worker, file_popularity_api, configure, [SpaceId, filter_undefined_values(#{
         enabled => Enabled,
@@ -475,6 +521,13 @@ configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCount
         avg_open_count_per_day_weight => AvgOpenCountPerDayWeight
     })]).
 
+%% @private
+-spec configure_file_popularity(
+    node(), od_space:id(), Enabled :: undefined | boolean(),
+    LastOpenWeight :: undefined | number(), AvgOpenCountPerDayWeight :: undefined | number(),
+    MaxAvgOpenCountPerDay :: undefined | number()
+) ->
+    ok | {error, term()}.
 configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay) ->
     rpc:call(Worker, file_popularity_api, configure, [SpaceId, filter_undefined_values(#{
         enabled => Enabled,
@@ -483,23 +536,36 @@ configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCount
         max_avg_open_count_per_day => MaxAvgOpenCountPerDay
     })]).
 
+%% @private
+-spec open_and_close_file(node(), session:id(), file_id:file_guid(), Times :: non_neg_integer()) -> ok.
 open_and_close_file(Worker, SessId, Guid, Times) ->
     lists:foreach(fun(_) ->
         open_and_close_file(Worker, SessId, Guid)
     end, lists:seq(1, Times)).
 
+%% @private
+-spec open_and_close_file(node(), session:id(), file_id:file_guid()) -> ok.
 open_and_close_file(Worker, SessId, Guid) ->
     {ok, H} = lfm_proxy:open(Worker, SessId, ?FILE_REF(Guid), read),
     ok = lfm_proxy:close(Worker, H).
 
+%% @private
+-spec popularity(
+    LastOpen :: number(), LastOpenW :: number(), AvgOpen :: number(), AvgOpenW :: number()
+) ->
+    number().
 popularity(LastOpen, LastOpenW, AvgOpen, AvgOpenW) ->
     LastOpen * LastOpenW + AvgOpen * AvgOpenW.
 
+%% @private
+-spec filter_undefined_values(map()) -> map().
 filter_undefined_values(Map) ->
     maps:filter(fun
         (_, undefined) -> false;
         (_, _) -> true
     end, Map).
 
+%% @private
+-spec whereis(node(), Name :: atom()) -> undefined | pid().
 whereis(Node, Name) ->
     rpc:call(Node, erlang, whereis, [Name]).

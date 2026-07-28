@@ -1669,7 +1669,7 @@ storage_cleanup:
       name: ct_logs_storage_cleanup.tar.gz
 
 storage_files:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: STFILES
   artifacts:
     - <<: *ct_logs

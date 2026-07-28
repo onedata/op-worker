@@ -164,9 +164,16 @@ delete_many_children_links_recursive_imported_storage_test(Config) ->
 % SetUp and TearDown functions
 %===================================================================
 
+%% @private
+-spec add_child_link_test_base(test_config:config(), ImportedStorage :: boolean()) -> ok | no_return().
 add_child_link_test_base(Config, ImportedStorage) ->
     add_child_link_test_base(Config, ImportedStorage, false).
 
+%% @private
+-spec add_child_link_test_base(
+    test_config:config(), ImportedStorage :: boolean(), MarkLeaves :: boolean()
+) ->
+    ok | no_return().
 add_child_link_test_base(Config, ImportedStorage, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -185,9 +192,17 @@ add_child_link_test_base(Config, ImportedStorage, MarkLeaves) ->
             ?assertNotEqual(undefined, ChildRootId)
     end.
 
+%% @private
+-spec add_existing_child_link_test_base(test_config:config(), ImportedStorage :: boolean()) ->
+    ok | no_return().
 add_existing_child_link_test_base(Config, ImportedStorage) ->
     add_existing_child_link_test_base(Config, ImportedStorage, false).
 
+%% @private
+-spec add_existing_child_link_test_base(
+    test_config:config(), ImportedStorage :: boolean(), MarkLeaves :: boolean()
+) ->
+    ok | no_return().
 add_existing_child_link_test_base(Config, ImportedStorage, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -206,9 +221,17 @@ add_existing_child_link_test_base(Config, ImportedStorage, MarkLeaves) ->
             ?assertNotEqual(undefined, ChildRootId)
     end.
 
+%% @private
+-spec add_children_links_test_base(test_config:config(), ImportedStorage :: boolean()) ->
+    ok | no_return().
 add_children_links_test_base(Config, ImportedStorage) ->
     add_children_links_test_base(Config, ImportedStorage, false).
 
+%% @private
+-spec add_children_links_test_base(
+    test_config:config(), ImportedStorage :: boolean(), MarkLeaves :: boolean()
+) ->
+    ok | no_return().
 add_children_links_test_base(Config, ImportedStorage, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -233,9 +256,17 @@ add_children_links_test_base(Config, ImportedStorage, MarkLeaves) ->
         end
     end, ChildrenNames).
 
+%% @private
+-spec add_children_links_recursive_test_base(test_config:config(), ImportedStorage :: boolean()) ->
+    ok | no_return().
 add_children_links_recursive_test_base(Config, ImportedStorage) ->
     add_children_links_recursive_test_base(Config, ImportedStorage, false).
 
+%% @private
+-spec add_children_links_recursive_test_base(
+    test_config:config(), ImportedStorage :: boolean(), MarkLeaves :: boolean()
+) ->
+    ok | no_return().
 add_children_links_recursive_test_base(Config, ImportedStorage, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -290,6 +321,9 @@ add_children_links_recursive_test_base(Config, ImportedStorage, MarkLeaves) ->
                 storage_sync_links_test_utils:get_link(W, RootId4, ChildName5))
     end.
 
+%% @private
+-spec list_children_links_test_base(test_config:config(), ImportedStorage :: boolean()) ->
+    ok | no_return().
 list_children_links_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -306,6 +340,9 @@ list_children_links_test_base(Config, ImportedStorage) ->
         storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, 10)),
     ?assertEqual(ChildrenNames, [C || {C, _} <- Children]).
 
+%% @private
+-spec list_children_links_token_test_base(test_config:config(), ImportedStorage :: boolean()) ->
+    ok | no_return().
 list_children_links_token_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -333,6 +370,8 @@ list_children_links_token_test_base(Config, ImportedStorage) ->
         storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, T4, 1)),
     ?assertEqual(true, T5#link_token.is_last).
 
+%% @private
+-spec delete_link_test_base(test_config:config(), ImportedStorage :: boolean()) -> ok | no_return().
 delete_link_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -349,6 +388,8 @@ delete_link_test_base(Config, ImportedStorage) ->
     ?assertMatch({{ok, []}, #link_token{}}, storage_sync_links_test_utils:list(
         W, RootStorageFileId, StorageId, 10)).
 
+%% @private
+-spec delete_links_test_base(test_config:config(), ImportedStorage :: boolean()) -> ok | no_return().
 delete_links_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -372,6 +413,9 @@ delete_links_test_base(Config, ImportedStorage) ->
             storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName))
     end, ChildrenNames).
 
+%% @private
+-spec delete_links_recursive_test_base(test_config:config(), ImportedStorage :: boolean()) ->
+    ok | no_return().
 delete_links_recursive_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -420,6 +464,9 @@ delete_links_recursive_test_base(Config, ImportedStorage) ->
             storage_sync_links_test_utils:list(W, ChildStorageFileId, StorageId, 10))
     end, ChildStorageFileIds).
 
+%% @private
+-spec add_many_children_links_recursive_test_base(test_config:config(), ImportedStorage :: boolean()) ->
+    ok | no_return().
 add_many_children_links_recursive_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -433,6 +480,9 @@ add_many_children_links_recursive_test_base(Config, ImportedStorage) ->
 
     ?assertList(StorageFileIds, W, RootStorageFileId, StorageId).
 
+%% @private
+-spec delete_many_children_links_recursive_test_base(test_config:config(), ImportedStorage :: boolean()) ->
+    ok | no_return().
 delete_many_children_links_recursive_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
@@ -478,12 +528,20 @@ end_per_testcase(_Case, _Config) ->
 % Internal functions
 %===================================================================
 
+%% @private
+%% @doc On an imported storage the space dir IS the storage mount dir.
+-spec space_storage_file_id(od_space:id(), ImportedStorage :: boolean()) -> helpers:file_id().
 space_storage_file_id(_SpaceId, true) ->
     <<"/">>;
 space_storage_file_id(SpaceId, false) ->
     <<"/", SpaceId/binary>>.
 
 
+%% @private
+%% @doc Storage file ids of a full file tree with the given number of children
+%% on each subsequent level, in no particular order.
+-spec generate_storage_file_ids(RootStorageFileId :: helpers:file_id(), Structure :: [pos_integer()]) ->
+    [helpers:file_id()].
 generate_storage_file_ids(RootStorageFileId, [Level]) ->
     [filename:join([RootStorageFileId, integer_to_binary(N)]) || N <- lists:seq(1, Level)];
 generate_storage_file_ids(RootStorageFileId, [Level | Rest]) ->
@@ -492,6 +550,11 @@ generate_storage_file_ids(RootStorageFileId, [Level | Rest]) ->
         [Child] ++ generate_storage_file_ids(Child, Rest) ++ AccIn
     end, [], lists:seq(1, Level)).
 
+%% @private
+-spec cast_add_link(
+    node(), RootStorageFileId :: helpers:file_id(), storage:id(), StorageFileId :: helpers:file_id()
+) ->
+    ok.
 cast_add_link(Worker, RootStorageFileId, StorageId, StorageFileId) ->
     ok = worker_pool:cast(?POOL,
         {storage_sync_links_test_utils, add_link, [Worker, RootStorageFileId, StorageId, StorageFileId]}).

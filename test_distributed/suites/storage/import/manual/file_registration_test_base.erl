@@ -1384,6 +1384,10 @@ read_full_content(Node, Handle, Offset, Size, Acc) ->
 
 
 %% @private
+%% @private
+%% @doc Freezes the save of the file_meta doc of the given file for 5 seconds,
+%% notifying the test master process the moment the save is entered.
+-spec mock_file_meta_save(oct_background:entity_selector(), file_meta:name()) -> ok.
 mock_file_meta_save(ProviderSelector, FileName) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     TestMasterPid = self(),
@@ -1401,12 +1405,14 @@ mock_file_meta_save(ProviderSelector, FileName) ->
 
 
 %% @private
+-spec unmock_file_meta_save(oct_background:entity_selector()) -> ok.
 unmock_file_meta_save(ProviderSelector) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     ok = test_utils:mock_unload(Nodes, file_meta).
 
 
 %% @private
+-spec wait_until_saving_file_meta_is_frozen() -> ok.
 wait_until_saving_file_meta_is_frozen() ->
     receive saving_file_meta_frozen -> ok end.
 

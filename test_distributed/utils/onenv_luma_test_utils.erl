@@ -36,12 +36,19 @@ populate_local_feed(ProviderSelector, StorageId, FeedData) ->
     end, maps:get(<<"storageUsers">>, FeedData, #{})),
 
     maps:foreach(fun(SpaceId, SpaceDefaults) ->
-        ok = opw_test_rpc:call(ProviderSelector, rpc_api, luma_spaces_posix_storage_defaults_store, [
-            StorageId, SpaceId, maps:get(<<"posix">>, SpaceDefaults, #{})
-        ]),
-        ok = opw_test_rpc:call(ProviderSelector, rpc_api, luma_spaces_display_defaults_store, [
-            StorageId, SpaceId, maps:get(<<"display">>, SpaceDefaults, #{})
-        ])
+        % only the explicitly specified kinds of defaults are stored - not every kind
+        % can be defined for every storage (e.g. posix storage defaults are rejected
+        % for non posix compatible storages and for imported ones)
+        maps:foreach(fun
+            (<<"posix">>, PosixDefaults) ->
+                ok = opw_test_rpc:call(ProviderSelector, rpc_api, luma_spaces_posix_storage_defaults_store, [
+                    StorageId, SpaceId, PosixDefaults
+                ]);
+            (<<"display">>, DisplayDefaults) ->
+                ok = opw_test_rpc:call(ProviderSelector, rpc_api, luma_spaces_display_defaults_store, [
+                    StorageId, SpaceId, DisplayDefaults
+                ])
+        end, SpaceDefaults)
     end, maps:get(<<"spacesDefaults">>, FeedData, #{})),
 
     OnedataUsers = maps:get(<<"onedataUsers">>, FeedData, #{}),
