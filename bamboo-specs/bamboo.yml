@@ -1098,7 +1098,7 @@ file_links_reconciliation_traverse:
   requirements: *os-agent
 
 file_popularity:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: FPOP
   artifacts:
     - <<: *ct_logs
