@@ -902,7 +902,7 @@ authz_misc:
       name: ct_logs_authz_misc.tar.gz
 
 autocleaning:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: AUT
   artifacts:
     - <<: *ct_logs
