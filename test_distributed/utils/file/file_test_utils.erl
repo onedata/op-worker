@@ -32,6 +32,7 @@
     await_xattr/4,
     await_attrs/4
 ]).
+-export([replicate_by_read/4]).
 
 -type offset() :: non_neg_integer().
 
@@ -41,6 +42,10 @@
 
 
 -define(DEFAULT_ATTEMPTS, 60).
+-define(READ_CHUNK_SIZE, 33554432).  % 32 MiB
+% cap on concurrently replicated files, so that a call for thousands of them
+% does not flood the provider with fetch requests
+-define(MAX_PARALLEL_REPLICATIONS, 100).
 
 
 %%%===================================================================
@@ -219,6 +224,43 @@ await_attrs(Node, FileGuid, ExpectedAttrsMap, Attempts) ->
     ?assertEqual(ExpectedAttrsMap, GetAttrFun(), Attempts).
     
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Forces replication of the given files to TargetNode by reading their whole
+%% content there (the "on the fly" replication), which is way cheaper than
+%% scheduling a transfer per file - those are dispatched through a small pool
+%% of controllers, each blocked for the entire lifetime of its transfer.
+%% The files are read in parallel and in chunks, so that big ones do not
+%% materialize as single huge binaries.
+%%
+%% The size of each file is taken from SourceNode - a provider that holds its
+%% replica - and only then awaited on TargetNode. A file syncs to a provider
+%% before its size does, so a size read on TargetNode too early would turn this
+%% function into a no-op: nothing to read, nothing fetched, no replica registered.
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_by_read(
+    SourceNode :: node(),
+    TargetNode :: node(),
+    TargetSessionId :: session:id(),
+    file_id:file_guid() | [file_id:file_guid()]
+) ->
+    ok | no_return().
+replicate_by_read(SourceNode, TargetNode, TargetSessionId, Files) ->
+    lists_utils:pforeach(fun(FileGuid) ->
+        {ok, #file_attr{size = FileSize}} = ?assertMatch(
+            {ok, _}, get_attrs(SourceNode, FileGuid), get_attempts()
+        ),
+        await_size(TargetNode, FileGuid, FileSize),
+
+        {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(
+            TargetNode, TargetSessionId, ?FILE_REF(FileGuid), read
+        )),
+        ok = read_in_chunks(TargetNode, Handle, 0, FileSize),
+        ok = lfm_proxy:close(TargetNode, Handle)
+    end, utils:ensure_list(Files), ?MAX_PARALLEL_REPLICATIONS).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -228,3 +270,14 @@ await_attrs(Node, FileGuid, ExpectedAttrsMap, Attempts) ->
 -spec get_attempts() -> non_neg_integer().
 get_attempts() ->
     node_cache:get(attempts, ?DEFAULT_ATTEMPTS).
+
+
+%% @private
+-spec read_in_chunks(node(), lfm:handle(), offset(), file_meta:size()) -> ok.
+read_in_chunks(_Node, _Handle, Offset, FileSize) when Offset >= FileSize ->
+    ok;
+read_in_chunks(Node, Handle, Offset, FileSize) ->
+    ChunkSize = min(?READ_CHUNK_SIZE, FileSize - Offset),
+    {ok, Data} = ?assertMatch({ok, _}, lfm_proxy:read(Node, Handle, Offset, ChunkSize)),
+    ?assertEqual(ChunkSize, byte_size(Data)),
+    read_in_chunks(Node, Handle, Offset + ChunkSize, FileSize).

@@ -126,8 +126,6 @@
 
 -define(SPACE_ROOT_LS_LIMIT, 10000).
 
--define(PREREPLICATION_READ_CHUNK_SIZE, 33554432).  % 32 MiB
-
 % how long to wait, before unloading a mock of a module, for the processes
 % still executing its code to leave it (the unload purge would kill them)
 -define(MOCKED_MODULE_CALLS_DRAIN_ATTEMPTS, 150).
@@ -219,8 +217,14 @@ create_file_tree(#transfer_test_suite_ctx{
 %% Ensures the initial replicas required by the suite's transfer type exist
 %% before the tested transfer is scheduled: replica eviction operates on
 %% a file tree already replicated to the other provider, so every tree file
-%% is read (in parallel) on that provider, which forces its replication.
+%% is read there, which forces its replication.
 %% For the other transfer types the creation provider replicas suffice.
+%%
+%% Note that the file sizes are resolved by the helper from the creation
+%% provider rather than taken from the declared tree content - the latter does
+%% not cover data written outside of the tree spec (e.g. by the big file test),
+%% and a file read with size 0 would end up with no replica registered, so its
+%% eviction would then honestly evict nothing.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_initial_replicas(suite_ctx(), onenv_file_test_utils:object()) -> ok.
@@ -231,16 +235,12 @@ ensure_initial_replicas(#transfer_test_suite_ctx{
     other_provider_selector = OtherProviderSelector
 }, RootObject) ->
     CreationNode = oct_background:get_random_provider_node(CreationProviderSelector),
-    CreationSessionId = oct_background:get_user_session_id(UserSelector, CreationProviderSelector),
     OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
     OtherSessionId = oct_background:get_user_session_id(UserSelector, OtherProviderSelector),
 
-    lists_utils:pforeach(fun(#object{guid = FileGuid}) ->
-        {ok, #file_attr{size = FileSize}} = ?assertMatch({ok, _}, lfm_proxy:stat(
-            CreationNode, CreationSessionId, ?FILE_REF(FileGuid)
-        )),
-        replicate_file_by_read(OtherNode, OtherSessionId, FileGuid, FileSize)
-    end, collect_regular_files(RootObject));
+    file_test_utils:replicate_by_read(CreationNode, OtherNode, OtherSessionId, [
+        FileGuid || #object{guid = FileGuid} <- collect_regular_files(RootObject)
+    ]);
 ensure_initial_replicas(_TestSuiteCtx, _TransferRootObject) ->
     ok.
 
@@ -1246,45 +1246,6 @@ collect_regular_files(#object{type = ?REGULAR_FILE_TYPE} = Object) ->
     [Object];
 collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
     collect_regular_files(Children).
-
-
-%% @private
-%% Reads the whole file of the given size on the given node, which forces
-%% replication of its content. The size is not taken from the declared tree
-%% content (which does not cover data written outside of the tree spec, e.g.
-%% by the big file test) but from the provider holding the source replica,
-%% and is first awaited on the reading node: a file syncs there before its
-%% size does (create_and_sync_file_tree awaits the empty distribution entry,
-%% which is satisfied by a file_meta carrying size 0), and stating it too
-%% early would turn this function into a no-op - nothing to read, nothing
-%% fetched, no replica registered, and the eviction of such a file then
-%% honestly evicts nothing.
-%% The reads are chunked so that big files do not materialize as single huge
-%% binaries.
--spec replicate_file_by_read(node(), session:id(), file_id:file_guid(), file_meta:size()) ->
-    ok.
-replicate_file_by_read(Node, SessionId, FileGuid, FileSize) ->
-    ?assertMatch(
-        {ok, #file_attr{size = FileSize}},
-        lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid)),
-        ?ATTEMPTS
-    ),
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(
-        Node, SessionId, ?FILE_REF(FileGuid), read
-    )),
-    ok = read_file_in_chunks(Node, Handle, 0, FileSize),
-    ok = lfm_proxy:close(Node, Handle).
-
-
-%% @private
--spec read_file_in_chunks(node(), lfm:handle(), non_neg_integer(), non_neg_integer()) -> ok.
-read_file_in_chunks(_Node, _Handle, Offset, FileSize) when Offset >= FileSize ->
-    ok;
-read_file_in_chunks(Node, Handle, Offset, FileSize) ->
-    ChunkSize = min(?PREREPLICATION_READ_CHUNK_SIZE, FileSize - Offset),
-    {ok, Data} = ?assertMatch({ok, _}, lfm_proxy:read(Node, Handle, Offset, ChunkSize)),
-    ?assertEqual(ChunkSize, byte_size(Data)),
-    read_file_in_chunks(Node, Handle, Offset + ChunkSize, FileSize).
 
 
 %% @private
