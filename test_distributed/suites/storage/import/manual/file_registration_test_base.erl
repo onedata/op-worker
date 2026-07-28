@@ -1428,8 +1428,8 @@ clean_up_after_previous_run(AllTestCases, #file_registration_test_suite_ctx{
     SourceSpaceNames = [
         binary_to_atom(source_space_name(atom_to_binary(Case))) || Case <- AllTestCases
     ],
-    storage_import_test_utils:clean_up_after_previous_run(
-        AllTestCases ++ SourceSpaceNames, RegProvider, OtherProvider
+    space_setup_utils:clean_up_after_previous_run(
+        AllTestCases ++ SourceSpaceNames, [RegProvider, OtherProvider]
     ).
 
 

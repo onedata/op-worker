@@ -28,6 +28,17 @@
     imported_storage = false :: boolean()
 }).
 
+-record(nulldevice_storage_params, {
+    imported_storage = false :: boolean(),
+    % simulation of latency and timeouts is disabled by default, so that the storage
+    % adds virtually no overhead to file operations
+    latency_min = 0 :: non_neg_integer(),
+    latency_max = 0 :: non_neg_integer(),
+    timeout_probability = 0.0 :: float(),
+    % file operations affected by the simulated latency and timeouts ("*" - all of them)
+    filter = <<"*">> :: binary()
+}).
+
 -record(http_storage_params, {
     endpoint :: binary(),
     readonly = true :: boolean(),
@@ -44,6 +55,7 @@
     provider :: oct_background:entity_selector(),
     storage_spec = any ::
         space_setup_utils:posix_storage_params() |
+        space_setup_utils:nulldevice_storage_params() |
         space_setup_utils:s3_storage_params() |
         storage:id() |
         any, % uses randomly selected storage of given provider

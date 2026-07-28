@@ -4,7 +4,8 @@
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @doc
-%%% Utility functions for testing storage import.
+%%% Utility functions for setting up spaces and storages in onenv tests, and for
+%%% cleaning up the ones left behind by a previous run.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_setup_utils).
@@ -13,27 +14,32 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("space_setup_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -type s3_storage_params() :: #s3_storage_params{}.
 -type posix_storage_params() :: #posix_storage_params{}.
+-type nulldevice_storage_params() :: #nulldevice_storage_params{}.
 -type http_storage_params() :: #http_storage_params{}.
 -type storage_params() ::
     http_storage_params() |
     posix_storage_params() |
+    nulldevice_storage_params() |
     s3_storage_params().
 
 -type support_spec() :: #support_spec{}.
 -type space_spec() :: #space_spec{}.
 
 -export_type([
-    http_storage_params/0, posix_storage_params/0, s3_storage_params/0,
-    storage_params/0, support_spec/0
+    http_storage_params/0, posix_storage_params/0, nulldevice_storage_params/0,
+    s3_storage_params/0, storage_params/0, support_spec/0
 ]).
 
 -define(CURRENT_DATETIME(), time:seconds_to_datetime(global_clock:timestamp_seconds())).
+-define(STORAGE_DELETE_ATTEMPTS, 60).
 
 %% API
 -export([create_storage/2, set_up_space/1]).
+-export([clean_up_after_previous_run/2]).
 -export([mock_existence_of_unhealthy_storage/1]).
 
 
@@ -67,6 +73,24 @@ create_storage(Provider, #posix_storage_params{mount_point = MountPoint, importe
             <<"type">> => <<"posix">>,
             <<"mountPoint">> => MountPoint,
             <<"importedStorage">> => Imported
+        }}
+    );
+
+create_storage(Provider, #nulldevice_storage_params{
+    imported_storage = Imported,
+    latency_min = LatencyMin,
+    latency_max = LatencyMax,
+    timeout_probability = TimeoutProbability,
+    filter = Filter
+}) ->
+    panel_test_rpc:add_storage(Provider,
+        #{?RAND_STR() => #{
+            <<"type">> => <<"nulldevice">>,
+            <<"importedStorage">> => Imported,
+            <<"latencyMin">> => LatencyMin,
+            <<"latencyMax">> => LatencyMax,
+            <<"timeoutProbability">> => TimeoutProbability,
+            <<"filter">> => Filter
         }}
     );
 
@@ -124,9 +148,68 @@ mock_existence_of_unhealthy_storage(Nodes) ->
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes every space left over by a previous run of one of the given test cases
+%% (matched by the space name) together with its supporting storages on the given
+%% providers. Suites that name each per-case space after the test case and leave it
+%% behind for post-mortem inspection call this at suite init to clean the leftovers
+%% from the previous run.
+%% @end
+%%--------------------------------------------------------------------
+-spec clean_up_after_previous_run([atom()], [oct_background:entity_selector()]) -> ok.
+clean_up_after_previous_run(AllTestCases, ProviderSelectors) ->
+    lists_utils:pforeach(fun(SpaceId) ->
+        delete_space_with_supporting_storages(SpaceId, ProviderSelectors)
+    end, filter_spaces_from_previous_run(AllTestCases)).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec filter_spaces_from_previous_run([atom()]) -> [od_space:id()].
+filter_spaces_from_previous_run(AllTestCases) ->
+    lists:filter(fun(SpaceId) ->
+        SpaceDetails = ozw_test_rpc:get_space_protected_data(?ROOT, SpaceId),
+        SpaceName = maps:get(<<"name">>, SpaceDetails),
+        lists:member(binary_to_atom(SpaceName), AllTestCases)
+    end, ozw_test_rpc:list_spaces()).
+
+
+%% @private
+-spec delete_space_with_supporting_storages(od_space:id(), [oct_background:entity_selector()]) -> ok.
+delete_space_with_supporting_storages(SpaceId, ProviderSelectors) ->
+    % storages must be resolved before the space is deleted, as the space->storage link
+    % is gone afterwards; a space is normally supported by one storage per provider, but
+    % some cases support it on just a subset of the given providers - tolerate an empty
+    % list per provider rather than assuming each has one
+    StoragesPerProvider = lists:map(fun(ProviderSelector) ->
+        {ProviderSelector, get_local_storages(ProviderSelector, SpaceId)}
+    end, ProviderSelectors),
+
+    ok = ozw_test_rpc:delete_space(SpaceId),
+
+    lists:foreach(fun({ProviderSelector, Storages}) ->
+        lists:foreach(fun(StorageId) -> delete_storage(ProviderSelector, StorageId) end, Storages)
+    end, StoragesPerProvider).
+
+
+%% @private
+-spec get_local_storages(oct_background:entity_selector(), od_space:id()) -> [od_storage:id()].
+get_local_storages(ProviderSelector, SpaceId) ->
+    case opw_test_rpc:call(ProviderSelector, space_logic, get_local_storages, [SpaceId]) of
+        {ok, Storages} -> Storages;
+        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) -> []
+    end.
+
+
+%% @private
+-spec delete_storage(oct_background:node_selector(), storage:id()) -> ok.
+delete_storage(ProviderSelector, StorageId) ->
+    ?assertEqual(ok, opw_test_rpc:call(ProviderSelector, storage, delete, [StorageId]), ?STORAGE_DELETE_ATTEMPTS).
 
 
 %% @private

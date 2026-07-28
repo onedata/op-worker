@@ -173,7 +173,7 @@
 
 %% API - suite/testcase setup
 -export([
-    clean_up_after_previous_run/2, clean_up_after_previous_run/3,
+    clean_up_after_previous_run/2,
     mock_space_dir_statbuf_on_flat_storage/1, unmock_space_dir_statbuf_on_flat_storage/1,
     create_storage/3,
     advance_mocked_space_dir_mtime/3,
@@ -273,26 +273,9 @@ clean_up_after_previous_run(AllTestCases, #storage_import_test_suite_ctx{
     importing_provider_selector = ImportingProviderSelector,
     non_importing_provider_selector = NonImportingProviderSelector
 }) ->
-    clean_up_after_previous_run(AllTestCases, ImportingProviderSelector, NonImportingProviderSelector).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes every space left over by a previous run of one of the given test
-%% cases (matched by the space name) together with its supporting storages on
-%% the two given providers. This selector-based variant is shared with other
-%% storage test suites (e.g. file_registration_test_base) that carry a different
-%% suite ctx but have the same two-supporting-providers cleanup need.
-%% @end
-%%--------------------------------------------------------------------
--spec clean_up_after_previous_run(
-    [atom()], oct_background:entity_selector(), oct_background:entity_selector()
-) ->
-    ok.
-clean_up_after_previous_run(AllTestCases, ProviderSelector1, ProviderSelector2) ->
-    lists_utils:pforeach(fun(SpaceId) ->
-        delete_space_with_supporting_storages(SpaceId, ProviderSelector1, ProviderSelector2)
-    end, filter_spaces_from_previous_run(AllTestCases)).
+    space_setup_utils:clean_up_after_previous_run(
+        AllTestCases, [ImportingProviderSelector, NonImportingProviderSelector]
+    ).
 
 
 -spec init_testcase(atom(), file_tree_spec(), suite_ctx()) -> case_ctx().
@@ -1351,50 +1334,6 @@ build_auto_storage_import_config(AutoImportConfig) when map_size(AutoImportConfi
     #{};
 build_auto_storage_import_config(AutoImportConfig) ->
     #{mode => <<"auto">>, auto_storage_import_config => AutoImportConfig}.
-
-
-%% @private
--spec filter_spaces_from_previous_run([atom()]) -> [od_space:id()].
-filter_spaces_from_previous_run(AllTestCases) ->
-    lists:filter(fun(SpaceId) ->
-        SpaceDetails = ozw_test_rpc:get_space_protected_data(?ROOT, SpaceId),
-        SpaceName = maps:get(<<"name">>, SpaceDetails),
-        lists:member(binary_to_atom(SpaceName), AllTestCases)
-    end, ozw_test_rpc:list_spaces()).
-
-
-%% @private
--spec delete_space_with_supporting_storages(
-    od_space:id(), oct_background:entity_selector(), oct_background:entity_selector()
-) ->
-    ok.
-delete_space_with_supporting_storages(SpaceId, ProviderSelector1, ProviderSelector2) ->
-    % a space is normally supported by exactly one storage on each of the two providers, but
-    % some cases set up spaces supported by just one of them (e.g. a source-share space on
-    % the non-importing provider only) - tolerate any number of storages per provider rather
-    % than assuming both are present
-    Storages1 = get_local_storages(ProviderSelector1, SpaceId),
-    Storages2 = get_local_storages(ProviderSelector2, SpaceId),
-
-    ok = ozw_test_rpc:delete_space(SpaceId),
-
-    lists:foreach(fun(Storage) -> delete_storage(ProviderSelector1, Storage) end, Storages1),
-    lists:foreach(fun(Storage) -> delete_storage(ProviderSelector2, Storage) end, Storages2).
-
-
-%% @private
--spec get_local_storages(oct_background:entity_selector(), od_space:id()) -> [od_storage:id()].
-get_local_storages(NodeSelector, SpaceId) ->
-    case ?rpc(NodeSelector, space_logic:get_local_storages(SpaceId)) of
-        {ok, Storages} -> Storages;
-        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) -> []
-    end.
-
-
-%% @private
--spec delete_storage(oct_background:node_selector(), storage:id()) -> ok.
-delete_storage(NodeSelector, StorageId) ->
-    ?assertEqual(ok, opw_test_rpc:call(NodeSelector, storage, delete, [StorageId]), ?ATTEMPTS).
 
 
 %% @private
