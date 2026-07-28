@@ -13,8 +13,9 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("permissions_test.hrl").
--include("storage_files_test_SUITE.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
 
 -export([
     all_perms/2,

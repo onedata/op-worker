@@ -34,6 +34,11 @@
 % first attempt and prove nothing.
 -define(DEFAULT_STORAGE_ASSERT_ATTEMPTS, 60).
 
+% Full #file_info.mode of a storage file/directory with the given permissions
+% (permission bits extended with the file type bits)
+-define(FILE_MODE(Perms), Perms bor 8#100000).
+-define(DIR_MODE(Perms), Perms bor 8#40000).
+
 
 -define(assertStorageFileContent(Node, SpaceId, RelPath, ExpContent),
     ?assertStorageFileContent(Node, SpaceId, RelPath, ExpContent, ?DEFAULT_STORAGE_ASSERT_ATTEMPTS)

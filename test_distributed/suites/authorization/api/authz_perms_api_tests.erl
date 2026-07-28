@@ -15,8 +15,9 @@
 -include("authz_api_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
--include("storage_files_test_SUITE.hrl").
+-include("storage_test.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
     test_set_perms/1,

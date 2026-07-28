@@ -14,7 +14,9 @@
 -author("Jakub Kudzia").
 
 -include("modules/logical_file_manager/lfm.hrl").
--include("storage_files_test_SUITE.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("kernel/include/file.hrl").
 
 %% API
 -export([
@@ -185,7 +187,7 @@ assert_file_attrs_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessi
             },
 
             StorageFilePath = get_storage_file_path(Node, SpaceId, LogicalFilePath),
-            ?ASSERT_FILE_INFO(ExpOwnerPosixAttrs, Node, StorageFilePath);
+            assert_file_info(ExpOwnerPosixAttrs, Node, StorageFilePath, ?LINE, 0);
         false ->
             ok
     end.
