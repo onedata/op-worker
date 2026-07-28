@@ -1662,7 +1662,7 @@ space_file_events_rest:
       name: ct_logs_space_file_events_rest.tar.gz
 
 storage_cleanup:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: STCL
   artifacts:
     - <<: *ct_logs
