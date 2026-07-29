@@ -60,10 +60,6 @@
     schedule_transfer/2,
     schedule_view_transfer/3,
 
-    rand_xattr_name/1,
-    rand_view_name/1,
-    gen_view_map_function/1, gen_view_map_function/2,
-    gen_view_reduce_function/1,
     create_view/5,
     await_view_query_result/4,
     remove_all_views/1,
@@ -280,69 +276,6 @@ schedule_view_transfer(TestSuiteCtx = #transfer_test_suite_ctx{
     TransferId.
 
 
--spec rand_xattr_name(atom()) -> onedata_file:xattr_name().
-rand_xattr_name(CaseName) ->
-    str_utils:format_bin("xattr_~ts_~ts", [CaseName, str_utils:rand_hex(6)]).
-
-
--spec rand_view_name(atom()) -> index:name().
-rand_view_name(CaseName) ->
-    str_utils:format_bin("view_~ts_~ts", [CaseName, str_utils:rand_hex(6)]).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Builds a view map function emitting, for every file having the given
-%% xattr, its object id keyed by the xattr value.
-%% @end
-%%--------------------------------------------------------------------
--spec gen_view_map_function(onedata_file:xattr_name()) -> index:view_function().
-gen_view_map_function(XattrName) ->
-    <<"function (id, type, meta, ctx) {
-        if (type == 'custom_metadata' && meta['", XattrName/binary, "']) {
-            return [meta['", XattrName/binary, "'], id];
-        }
-        return null;
-    }">>.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Like gen_view_map_function/1 but emits [id, SecondXattrValue] pairs -
-%% input for a reduce function filtering by the second xattr value
-%% (see gen_view_reduce_function/1).
-%% @end
-%%--------------------------------------------------------------------
--spec gen_view_map_function(onedata_file:xattr_name(), onedata_file:xattr_name()) ->
-    index:view_function().
-gen_view_map_function(XattrName, SecondXattrName) ->
-    <<"function (id, type, meta, ctx) {
-        if (type == 'custom_metadata' && meta['", XattrName/binary, "']) {
-            return [meta['", XattrName/binary, "'], [id, meta['", SecondXattrName/binary, "']]];
-        }
-        return null;
-    }">>.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Builds a view reduce function passing through only the file ids of the
-%% [id, XattrValue] pairs (emitted by gen_view_map_function/2) with the
-%% given xattr value.
-%% @end
-%%--------------------------------------------------------------------
--spec gen_view_reduce_function(term()) -> index:view_function().
-gen_view_reduce_function(XattrValue) ->
-    XattrValueBin = str_utils:to_binary(XattrValue),
-    <<"function (key, values, rereduce) {
-        var filtered = [];
-        for (i = 0; i < values.length; i++)
-            if (values[i][1] == ", XattrValueBin/binary, ")
-                filtered.push(values[i][0]);
-        return filtered;
-    }">>.
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a view on the providers that evaluate it when processing
@@ -364,19 +297,14 @@ create_view(TestSuiteCtx = #transfer_test_suite_ctx{
     other_provider_selector = OtherProviderSelector
 }, ViewName, MapFunction, ReduceFunction, ViewOptions) ->
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    EvaluatingProviderIds = lists:map(
-        fun oct_background:get_provider_id/1,
-        get_view_evaluating_provider_selectors(TestSuiteCtx)
-    ),
 
-    ok = opw_test_rpc:call(OtherProviderSelector, index, save, [
-        SpaceId, ViewName, MapFunction, ReduceFunction, ViewOptions,
-        false, EvaluatingProviderIds
-    ]),
-    ?assertMatch({ok, _}, opw_test_rpc:call(
-        CreationProviderSelector, index, get, [ViewName, SpaceId]
-    ), ?VIEW_SYNC_ATTEMPTS),
-    ok.
+    ok = view_test_utils:create_view(OtherProviderSelector, SpaceId, ViewName, #{
+        map_function => MapFunction,
+        reduce_function => ReduceFunction,
+        options => ViewOptions,
+        providers => get_view_evaluating_provider_selectors(TestSuiteCtx)
+    }),
+    view_test_utils:await_view_synced(CreationProviderSelector, SpaceId, ViewName).
 
 
 %%--------------------------------------------------------------------
@@ -393,20 +321,11 @@ create_view(TestSuiteCtx = #transfer_test_suite_ctx{
 await_view_query_result(TestSuiteCtx = #transfer_test_suite_ctx{
     space_selector = SpaceSelector
 }, ViewName, QueryOptions, ExpectedValues) ->
-    SpaceId = oct_background:get_space_id(SpaceSelector),
-
-    lists_utils:pforeach(fun(ProviderSelector) ->
-        ?assertEqual(lists:sort(ExpectedValues), try
-            {ok, #{<<"rows">> := Rows}} = opw_test_rpc:call(ProviderSelector, index, query, [
-                SpaceId, ViewName, QueryOptions
-            ]),
-            lists:sort(lists:flatmap(fun(Row) ->
-                lists:flatten([maps:get(<<"value">>, Row)])
-            end, Rows))
-        catch _:_ ->
-            query_failed
-        end, ?VIEW_SYNC_ATTEMPTS)
-    end, get_view_evaluating_provider_selectors(TestSuiteCtx)).
+    view_test_utils:await_query_result(
+        get_view_evaluating_provider_selectors(TestSuiteCtx),
+        oct_background:get_space_id(SpaceSelector),
+        ViewName, QueryOptions, ExpectedValues
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -418,20 +337,10 @@ await_view_query_result(TestSuiteCtx = #transfer_test_suite_ctx{
 %%--------------------------------------------------------------------
 -spec remove_all_views(suite_ctx()) -> ok.
 remove_all_views(#transfer_test_suite_ctx{space_selector = SpaceSelector}) ->
-    SpaceId = oct_background:get_space_id(SpaceSelector),
-
-    lists_utils:pforeach(fun(ProviderSelector) ->
-        {ok, ViewNames} = opw_test_rpc:call(ProviderSelector, index, list, [SpaceId]),
-        lists:foreach(fun(ViewName) ->
-            case opw_test_rpc:call(ProviderSelector, index, delete, [SpaceId, ViewName]) of
-                ok ->
-                    ok;
-                {error, not_found} ->
-                    % already deleted alongside the other provider (dbsync)
-                    ok
-            end
-        end, ViewNames)
-    end, oct_background:get_space_supporting_providers(SpaceSelector)).
+    view_test_utils:remove_all_views(
+        oct_background:get_space_supporting_providers(SpaceSelector),
+        oct_background:get_space_id(SpaceSelector)
+    ).
 
 
 %%--------------------------------------------------------------------

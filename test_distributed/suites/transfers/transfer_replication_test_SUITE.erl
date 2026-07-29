@@ -245,7 +245,7 @@ replication_by_view_emitting_multiple_keys_test(_Config) ->
             }
         }"
     >>,
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(TestSuiteCtx, ViewName, MapFunction, undefined, []),
 
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),

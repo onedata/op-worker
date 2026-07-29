@@ -302,13 +302,13 @@ regular_file_by_view_test(TestSuiteCtx) ->
     FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
         TestSuiteCtx, ?FUNCTION_NAME
     ),
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
     XattrValue = 1,
     set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
 
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(
-        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        TestSuiteCtx, ViewName, view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     transfer_test_utils:await_view_query_result(
@@ -333,8 +333,8 @@ files_matched_by_view_with_reduce_test(TestSuiteCtx) ->
 
     % the map function emits the files having Xattr1 (keyed by its value) and
     % the reduce function filters the emissions down to the ones with Xattr2 = 1
-    XattrName1 = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
-    XattrName2 = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName1 = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName2 = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
 
     % File1: xattr1 = 1, xattr2 = 1 - transferred
     set_xattr(TestSuiteCtx, File1#object.guid, XattrName1, 1),
@@ -351,11 +351,11 @@ files_matched_by_view_with_reduce_test(TestSuiteCtx) ->
     set_xattr(TestSuiteCtx, File6#object.guid, XattrName1, 1),
     set_xattr(TestSuiteCtx, File6#object.guid, XattrName2, 1),
 
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(
         TestSuiteCtx, ViewName,
-        transfer_test_utils:gen_view_map_function(XattrName1, XattrName2),
-        transfer_test_utils:gen_view_reduce_function(1),
+        view_test_utils:gen_map_function(XattrName1, XattrName2),
+        view_test_utils:gen_reduce_function(1),
         [{group, 1}, {key, 1}]
     ),
     {ok, FileObjectId1} = file_id:guid_to_objectid(File1#object.guid),
@@ -373,7 +373,7 @@ files_matched_by_view_with_reduce_test(TestSuiteCtx) ->
 
 transfer_by_not_existing_view_test(TestSuiteCtx) ->
     FileObject = setup_single_file_for_view_test(TestSuiteCtx, ?FUNCTION_NAME),
-    NotExistingViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    NotExistingViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
 
     % the view existence is validated only by the REST/GS middleware layer
     % (covered by transfer_create_api tests) - a transfer of an unknown view
@@ -392,7 +392,7 @@ transfer_by_view_emitting_invalid_file_id_test(TestSuiteCtx = #transfer_test_sui
     FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
         TestSuiteCtx, ?FUNCTION_NAME
     ),
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
     XattrValue = 1,
     set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
 
@@ -407,7 +407,7 @@ transfer_by_view_emitting_invalid_file_id_test(TestSuiteCtx = #transfer_test_sui
             return null;
         }"
     >>,
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(TestSuiteCtx, ViewName, MapFunction, undefined, []),
     transfer_test_utils:await_view_query_result(
         TestSuiteCtx, ViewName, [{key, XattrValue}], [InvalidFileId]
@@ -446,7 +446,7 @@ transfer_by_view_emitting_not_existing_file_id_test(TestSuiteCtx = #transfer_tes
     FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
         TestSuiteCtx, ?FUNCTION_NAME
     ),
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
     XattrValue = 1,
     set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
 
@@ -462,7 +462,7 @@ transfer_by_view_emitting_not_existing_file_id_test(TestSuiteCtx = #transfer_tes
             return null;
         }"
     >>,
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(TestSuiteCtx, ViewName, MapFunction, undefined, []),
     transfer_test_utils:await_view_query_result(
         TestSuiteCtx, ViewName, [{key, XattrValue}], [NotExistingFileObjectId]
@@ -477,10 +477,10 @@ transfer_by_view_emitting_not_existing_file_id_test(TestSuiteCtx = #transfer_tes
 
 
 transfer_by_empty_view_test(TestSuiteCtx) ->
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(
-        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        TestSuiteCtx, ViewName, view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     transfer_test_utils:await_view_query_result(TestSuiteCtx, ViewName, [], []),
 
@@ -492,12 +492,12 @@ transfer_by_view_with_not_matching_key_test(TestSuiteCtx) ->
     FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
         TestSuiteCtx, ?FUNCTION_NAME
     ),
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
     set_xattr(TestSuiteCtx, FileGuid, XattrName, 1),
 
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(
-        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        TestSuiteCtx, ViewName, view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     transfer_test_utils:await_view_query_result(TestSuiteCtx, ViewName, [{key, 1}], [FileObjectId]),
@@ -529,7 +529,7 @@ hundred_files_by_view_test_base(TestSuiteCtx, CaseName) ->
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
-    XattrName = transfer_test_utils:rand_xattr_name(CaseName),
+    XattrName = file_test_utils:rand_xattr_name(CaseName),
     XattrValue = 1,
     FileObjectIds = lists_utils:pmap(fun(#object{guid = FileGuid}) ->
         set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
@@ -537,9 +537,9 @@ hundred_files_by_view_test_base(TestSuiteCtx, CaseName) ->
         FileObjectId
     end, FileObjects),
 
-    ViewName = transfer_test_utils:rand_view_name(CaseName),
+    ViewName = view_test_utils:rand_view_name(CaseName),
     transfer_test_utils:create_view(
-        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        TestSuiteCtx, ViewName, view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     transfer_test_utils:await_view_query_result(
         TestSuiteCtx, ViewName, [{key, XattrValue}], FileObjectIds
@@ -645,13 +645,13 @@ rerun_failed_view_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
     FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
         TestSuiteCtx, ?FUNCTION_NAME
     ),
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
     XattrValue = 1,
     set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
 
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(
-        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        TestSuiteCtx, ViewName, view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     transfer_test_utils:await_view_query_result(

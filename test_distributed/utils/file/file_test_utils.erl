@@ -20,6 +20,7 @@
 
 
 -export([
+    rand_xattr_name/1,
     get_content/2, get_content/3,
     get_attrs/2, get_attrs/3, get_attrs/4,
     set_xattr/4
@@ -97,6 +98,19 @@ get_attrs(Node, SessId, FileGuid, RequestedXattrs) ->
         Result ->
             Result
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Builds an xattr name unique to the calling test case, so that the
+%% files it sets the xattr on are not confused with the ones left in the
+%% same space by other cases (or by earlier runs against a long-lived
+%% deployment).
+%% @end
+%%--------------------------------------------------------------------
+-spec rand_xattr_name(atom()) -> onedata_file:xattr_name().
+rand_xattr_name(CaseName) ->
+    str_utils:format_bin("xattr_~ts_~ts", [CaseName, str_utils:rand_hex(6)]).
 
 
 -spec set_xattr(node(), file_id:file_guid(), onedata_file:xattr_name(), custom_metadata:value()) ->

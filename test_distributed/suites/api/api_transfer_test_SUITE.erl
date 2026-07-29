@@ -1878,15 +1878,15 @@ create_bystander_file(TestSuiteCtx, CaseName) ->
 ) ->
     index:name().
 create_view_matching_files(TestSuiteCtx, CaseName, FileObjects) ->
-    XattrName = transfer_test_utils:rand_xattr_name(CaseName),
+    XattrName = file_test_utils:rand_xattr_name(CaseName),
     lists:foreach(fun(#object{guid = FileGuid}) ->
         set_xattr(TestSuiteCtx, FileGuid, XattrName, ?VIEW_XATTR_VALUE)
     end, FileObjects),
 
-    ViewName = transfer_test_utils:rand_view_name(CaseName),
+    ViewName = view_test_utils:rand_view_name(CaseName),
     transfer_test_utils:create_view(
         TestSuiteCtx, ViewName,
-        transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     ExpObjectIds = lists:map(fun(#object{guid = FileGuid}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
