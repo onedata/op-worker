@@ -51,6 +51,10 @@
 
 -export_type([view_spec/0]).
 
+% for awaiting a view removal to be reflected in the listings of all the providers -
+% budgeted for a dbsync round trip rather than an index build (see remove_all_views/2)
+-define(VIEW_CLEANUP_ATTEMPTS, 30).
+
 
 %%%===================================================================
 %%% API
@@ -230,15 +234,47 @@ await_query_result(ProviderSelectors, SpaceId, ViewName, QueryOptions, ExpectedV
 %%--------------------------------------------------------------------
 -spec remove_all_views([oct_background:entity_selector()], od_space:id()) -> ok.
 remove_all_views(ProviderSelectors, SpaceId) ->
-    lists_utils:pforeach(fun(ProviderSelector) ->
-        {ok, ViewNames} = opw_test_rpc:call(ProviderSelector, index, list, [SpaceId]),
-        lists:foreach(fun(ViewName) ->
-            case opw_test_rpc:call(ProviderSelector, index, delete, [SpaceId, ViewName]) of
-                ok ->
-                    ok;
-                {error, not_found} ->
-                    % already deleted alongside the other provider (dbsync)
-                    ok
-            end
-        end, ViewNames)
-    end, ProviderSelectors).
+    % A single pass does not suffice: a view deleted on one provider vanishes from
+    % the others' listings only once dbsync delivers the deletion, and deleting a
+    % view that its owner is deleting at the same time can leave the entry behind
+    % altogether - with the view doc already gone, the deletion falls back to
+    % removing the link by the given name, while a foreign view is listed under a
+    % name disambiguated with the owner's id, which matches no link. Both cases
+    % resolve within a few passes - by a repeated delete, once the name is no longer
+    % ambiguous, or by dbsync catching up - so keep deleting until all the listings
+    % are empty.
+    ?assertEqual([], begin
+        lists_utils:pforeach(fun(ProviderSelector) ->
+            remove_listed_views(ProviderSelector, SpaceId)
+        end, ProviderSelectors),
+        lists:usort(lists:flatmap(fun(ProviderSelector) ->
+            list_views(ProviderSelector, SpaceId)
+        end, ProviderSelectors))
+    end, ?VIEW_CLEANUP_ATTEMPTS),
+    ok.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec remove_listed_views(oct_background:entity_selector(), od_space:id()) -> ok.
+remove_listed_views(ProviderSelector, SpaceId) ->
+    lists:foreach(fun(ViewName) ->
+        case opw_test_rpc:call(ProviderSelector, index, delete, [SpaceId, ViewName]) of
+            ok ->
+                ok;
+            {error, not_found} ->
+                % already deleted alongside the other provider (dbsync)
+                ok
+        end
+    end, list_views(ProviderSelector, SpaceId)).
+
+
+%% @private
+-spec list_views(oct_background:entity_selector(), od_space:id()) -> [index:name()].
+list_views(ProviderSelector, SpaceId) ->
+    {ok, ViewNames} = opw_test_rpc:call(ProviderSelector, index, list, [SpaceId]),
+    ViewNames.

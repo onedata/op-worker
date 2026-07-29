@@ -108,7 +108,7 @@ get_distribution_deprecated(NodeSelector, SessionId, FileRef) ->
     end.
 
 
-%% @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+%% @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
 %% Required to call before eviction to ensure that evicting provider has knowledge of remote provider 
 %% blocks (through dbsync), as otherwise it can skip eviction.
 -spec get_local_knowledge_of_remote_provider_blocks(oct_background:node_selector(), file_id:file_guid(), oneprovider:id()) ->

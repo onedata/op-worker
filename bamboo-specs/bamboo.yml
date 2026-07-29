@@ -179,7 +179,6 @@ stages:
         - multi_provider_hardlinks
         - multi_provider_proxy
         - multi_provider_rest
-        - multi_provider_view_rest
         - multipart_upload
         - multiple_workflow_scheduling
 #        - nfs_helper # uncomment after fixing helper
@@ -243,6 +242,7 @@ stages:
         - tree_traverse_listing
         - user_auth
         - view
+        - view_rest
         - webdav_helper
         - webdav_token
         - workflow_scheduling
@@ -1400,14 +1400,6 @@ multi_provider_rest:
     - <<: *ct_logs
       name: ct_logs_multi_provider_rest.tar.gz
 
-multi_provider_view_rest:
-  <<: *ct-job
-  key: MULIDX
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_multi_provider_view_rest.tar.gz
-  requirements: *os-agent
-
 multipart_upload:
   <<: *ct-onenv-job
   key: MULUPL
@@ -1857,6 +1849,13 @@ view:
     - <<: *ct_logs
       name: ct_logs_view.tar.gz
 
+view_rest:
+  <<: *ct-onenv-job
+  key: MULIDX
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_view_rest.tar.gz
+
 webdav_helper:
   <<: *ct-job
   key: WEB
@@ -2061,7 +2060,6 @@ Coverage report:
     - artifact: ct_logs_multi_provider_hardlinks.tar.gz
     - artifact: ct_logs_multi_provider_proxy.tar.gz
     - artifact: ct_logs_multi_provider_rest.tar.gz
-    - artifact: ct_logs_multi_provider_view_rest.tar.gz
     - artifact: ct_logs_multipart_upload.tar.gz
     - artifact: ct_logs_multiple_workflow_scheduling.tar.gz
 #    - artifact: ct_logs_nfs_helper.tar.gz # uncomment after fixing helper
@@ -2125,6 +2123,7 @@ Coverage report:
     - artifact: ct_logs_tree_traverse_listing.tar.gz
     - artifact: ct_logs_user_auth.tar.gz
     - artifact: ct_logs_view.tar.gz
+    - artifact: ct_logs_view_rest.tar.gz
     - artifact: ct_logs_webdav_helper.tar.gz
     - artifact: ct_logs_webdav_token.tar.gz
     - artifact: ct_logs_workflow_scheduling.tar.gz

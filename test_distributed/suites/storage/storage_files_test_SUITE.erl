@@ -684,10 +684,9 @@ remotely_updated_perms_should_be_updated_on_storage_test_base(TestName, Env, Row
     ok | no_return().
 run_matrix(TestName, Env, TestFun, GenericArgs, SetupsPerRow) ->
     SubRuns = lists:flatmap(fun({RowName, Setups}) ->
-        % TODO replace with lists:map(lists_utils:enumerate ??
-        lists:zipwith(fun(Setup, SetupNo) ->
+        lists:map(fun({SetupNo, Setup}) ->
             {RowName, SetupNo, maps:merge(Setup, GenericArgs)}
-        end, Setups, lists:seq(1, length(Setups)))
+        end, lists_utils:enumerate(Setups))
     end, lists:sort(maps:to_list(SetupsPerRow))),
 
     AllPassed = lists:foldl(fun({RowName, SetupNo, Args}, Acc) ->

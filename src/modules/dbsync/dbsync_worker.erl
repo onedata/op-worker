@@ -302,7 +302,7 @@ handle_changes_request(ProviderId, #changes_request2{
         case global:whereis_name(StreamID) of
             undefined ->
                 Node = datastore_key:any_responsible_node(SpaceId),
-                % TODO VFS-VFS-6651 - child deletion will not be needed after
+                % TODO VFS-6651 - child deletion will not be needed after
                 % refactoring of supervision tree to use one_for_one supervisor
                 rpc:call(Node, supervisor, terminate_child, [?DBSYNC_WORKER_SUP, StreamID]),
                 rpc:call(Node, supervisor, delete_child, [?DBSYNC_WORKER_SUP, StreamID]),

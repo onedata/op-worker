@@ -1010,7 +1010,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         % Guid is resolved using path so it is possible that resolve_guid fails even if file is seen in statistics
         FileGuid = resolve_guid(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum], ?ATTEMPTS),
         GetBlocks = fun() ->
-            % @TODO VFS-VFS-9498 use distribution after replication uses fetched file location instead of dbsynced
+            % @TODO VFS-9498 use distribution after replication uses fetched file location instead of dbsynced
             case opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(WorkerProvider2, FileGuid, opw_test_rpc:get_provider_id(Worker)) of
                 {ok, Blocks} -> Blocks;
                 {error, _} = Error -> Error

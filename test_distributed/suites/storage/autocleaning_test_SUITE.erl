@@ -318,7 +318,7 @@ forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated(
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [Size, Size]), Guid),
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync),
     % as otherwise it will skip eviction.
-    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     ?assertEqual({ok, [[0, Size]]},
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(KrkNode, Guid, ParisId), ?ATTEMPTS),
     ?assertFilesInView(KrkNode, SpaceId, [Guid]),
@@ -360,7 +360,7 @@ restart_autocleaning_run_test(Config) ->
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [Size, Size]), Guid),
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync),
     % as otherwise it will skip eviction.
-    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     ?assertEqual({ok, [[0, Size]]},
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(KrkNode, Guid, ParisId), ?ATTEMPTS),
     ?assertFilesInView(KrkNode, SpaceId, [Guid]),

@@ -635,7 +635,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
     QosSpec = create_basic_qos_test_spec(DirStructureType, Filename),
     {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
     
-    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
     % as otherwise it will skip eviction.
     assert_initial_local_blocks_knowledge(oct_background:get_random_provider_node(EvictingProvider), GuidsAndPaths),
@@ -734,7 +734,7 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
     QosSpec = create_basic_qos_test_spec(DirStructureType, Name),
     {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
     
-    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
     % as otherwise it will skip eviction.
     assert_initial_local_blocks_knowledge(RunNode, GuidsAndPaths),

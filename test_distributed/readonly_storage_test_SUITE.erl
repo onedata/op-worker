@@ -619,7 +619,7 @@ eviction_job_should_succeed(Config) ->
     ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [TestDataSize, TestDataSize]), Guid, ?ATTEMPTS),
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
     % as otherwise it will skip eviction.
-    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     ?assertEqual({ok, [[0, TestDataSize]]},
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(W1, Guid, ProviderId2), ?ATTEMPTS),
     ?assertMatch({ok, _}, opt_transfers:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId1, undefined)),
