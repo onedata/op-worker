@@ -33,6 +33,10 @@ all() -> [
     failure_test
 ].
 
+% The only space in the "2op" scenario that is supported by both providers
+% and has an imported storage (required by find_importing_provider/2).
+-define(SPACE_SELECTOR, space1).
+
 -define(ATTEMPTS, 30).
 -define(assertInEndedList(Node, SpaceId, ExpectedEndedTransferIds),
     ?assertEqual([], ExpectedEndedTransferIds -- list_ended_transfers(Node, SpaceId), ?ATTEMPTS)
@@ -107,7 +111,7 @@ create_initial_data_structure(Config) ->
     SessId = fun(P) ->
         oct_background:get_user_session_id(user1, P)
     end,
-    [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
+    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     SpaceDirGuid = space_dir:guid(SpaceId),
 
     ConflictingDirName = generator:gen_name(),

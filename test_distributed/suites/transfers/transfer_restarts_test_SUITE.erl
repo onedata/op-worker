@@ -38,6 +38,10 @@ all() -> [
     node_kill_test
 ].
 
+% The only space in the "2op" scenario that is supported by both providers
+% with a posix storage.
+-define(SPACE_SELECTOR, space_krk_par_p).
+
 -define(FILE_DATA, <<"1234567890abcd">>).
 
 %%%===================================================================
@@ -87,7 +91,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
     [P1, P2] = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
     [WorkerP1] = oct_background:get_provider_nodes(krakow),
     [WorkerP2] = oct_background:get_provider_nodes(paris),
-    [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
+    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     SpaceDirGuid = space_dir:guid(SpaceId),
     User1 = oct_background:to_entity_id(user1),
     SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
