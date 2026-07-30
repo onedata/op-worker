@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @copyright (C) 2017-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @doc
@@ -9,7 +9,6 @@
 %%% For simplicity, all entities are related to each other.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Lukasz Opiola").
 
 -ifndef(LOGIC_TESTS_COMMON_HRL).
 -define(LOGIC_TESTS_COMMON_HRL, 1).
@@ -72,25 +71,10 @@
 -define(USER_GS_TOKEN_AUTH(Token), {token, Token}).
 
 
--define(USER_PERMS_IN_GROUP_VALUE_BINARIES, #{?USER_1 => [atom_to_binary(?GROUP_VIEW, utf8)], ?USER_2 => [atom_to_binary(?GROUP_VIEW, utf8)]}).
--define(USER_PERMS_IN_GROUP_MATCHER_ATOMS, #{?USER_1 := [?GROUP_VIEW], ?USER_2 := [?GROUP_VIEW]}).
--define(GROUP_PERMS_IN_GROUP_VALUE_BINARIES, #{?GROUP_1 => [atom_to_binary(?GROUP_VIEW, utf8)], ?GROUP_2 => [atom_to_binary(?GROUP_VIEW, utf8)]}).
--define(GROUP_PERMS_IN_GROUP_MATCHER_ATOMS, #{?GROUP_1 := [?GROUP_VIEW], ?GROUP_2 := [?GROUP_VIEW]}).
-
 -define(USER_PERMS_IN_SPACE_VALUE_BINARIES, #{?USER_1 => [atom_to_binary(?SPACE_VIEW, utf8)], ?USER_2 => [atom_to_binary(?SPACE_VIEW, utf8)]}).
 -define(USER_PERMS_IN_SPACE_MATCHER_ATOMS, #{?USER_1 := [?SPACE_VIEW], ?USER_2 := [?SPACE_VIEW]}).
 -define(GROUP_PERMS_IN_SPACE_VALUE_BINARIES, #{?GROUP_1 => [atom_to_binary(?SPACE_VIEW, utf8)], ?GROUP_2 => [atom_to_binary(?SPACE_VIEW, utf8)]}).
 -define(GROUP_PERMS_IN_SPACE_MATCHER_ATOMS, #{?GROUP_1 := [?SPACE_VIEW], ?GROUP_2 := [?SPACE_VIEW]}).
-
--define(USER_PERMS_IN_HSERVICE_VALUE_BINARIES, #{?USER_1 => [atom_to_binary(?HANDLE_SERVICE_VIEW, utf8)], ?USER_2 => [atom_to_binary(?HANDLE_SERVICE_VIEW, utf8)]}).
--define(USER_PERMS_IN_HSERVICE_MATCHER_ATOMS, #{?USER_1 := [?HANDLE_SERVICE_VIEW], ?USER_2 := [?HANDLE_SERVICE_VIEW]}).
--define(GROUP_PERMS_IN_HSERVICE_VALUE_BINARIES, #{?GROUP_1 => [atom_to_binary(?HANDLE_SERVICE_VIEW, utf8)], ?GROUP_2 => [atom_to_binary(?HANDLE_SERVICE_VIEW, utf8)]}).
--define(GROUP_PERMS_IN_HSERVICE_MATCHER_ATOMS, #{?GROUP_1 := [?HANDLE_SERVICE_VIEW], ?GROUP_2 := [?HANDLE_SERVICE_VIEW]}).
-
--define(USER_PERMS_IN_HANDLE_VALUE_BINARIES, #{?USER_1 => [atom_to_binary(?HANDLE_VIEW, utf8)], ?USER_2 => [atom_to_binary(?HANDLE_VIEW, utf8)]}).
--define(USER_PERMS_IN_HANDLE_MATCHER_ATOMS, #{?USER_1 := [?HANDLE_VIEW], ?USER_2 := [?HANDLE_VIEW]}).
--define(GROUP_PERMS_IN_HANDLE_VALUE_BINARIES, #{?GROUP_1 => [atom_to_binary(?HANDLE_VIEW, utf8)], ?GROUP_2 => [atom_to_binary(?HANDLE_VIEW, utf8)]}).
--define(GROUP_PERMS_IN_HANDLE_MATCHER_ATOMS, #{?GROUP_1 := [?HANDLE_VIEW], ?GROUP_2 := [?HANDLE_VIEW]}).
 
 % Mocked user data
 -define(USER_FULL_NAME(__User), __User).
@@ -437,18 +421,9 @@ end).
 -define(ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchema), ?ATM_INVENTORY_1).
 
 
--define(MOCK_JOIN_GROUP_TOKEN, <<"mockJoinGroupToken">>).
--define(MOCK_JOINED_GROUP_ID, <<"mockJoinedGroupId">>).
--define(MOCK_CREATED_GROUP_ID, <<"mockCreatedGroupId">>).
--define(MOCK_JOIN_SPACE_TOKEN, <<"mockJoinSpaceToken">>).
--define(MOCK_JOINED_SPACE_ID, <<"mockJoinedSpaceId">>).
--define(MOCK_CREATED_SPACE_ID, <<"mockCreatedSpaceId">>).
 -define(MOCK_CREATED_SHARE_ID, <<"mockCreatedHandleId">>).
 -define(MOCK_CREATED_HANDLE_ID, <<"mockCreatedHandleId">>).
 
--define(MOCK_INVITE_USER_TOKEN, <<"mockInviteUserToken">>).
--define(MOCK_INVITE_GROUP_TOKEN, <<"mockInviteGroupToken">>).
--define(MOCK_INVITE_PROVIDER_TOKEN, <<"mockInviteProviderToken">>).
 -define(MOCK_IDP_ACCESS_TOKEN, <<"mockIdPAccessToken">>).
 -define(MOCK_IDP, <<"mockIdP">>).
 
