@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -28,13 +28,13 @@
 %%% Users and spaces macros
 %%%===================================================================
 
--define(SESS_ID, <<"sessionId">>).
--define(USER_ID, <<"user1">>).
+-define(LUMA_SESS_ID, <<"sessionId">>).
+-define(LUMA_USER_ID, <<"user1">>).
 -define(USER_ID2, <<"user2">>).
 -define(GROUP_ID, <<"group1">>).
 -define(GROUP_ID2, <<"group2">>).
--define(ADMIN_ID, <<"adminId">>).
--define(SPACE_ID, <<"space1">>).
+-define(LUMA_ADMIN_ID, <<"adminId">>).
+-define(LUMA_SPACE_ID, <<"space1">>).
 -define(ACL_USER(N), <<"user", (integer_to_binary(N))/binary, "@nfs.domain.org">>).
 -define(ACL_USER0, ?ACL_USER(0)).
 -define(ACL_USER1, ?ACL_USER(1)).
@@ -73,8 +73,8 @@ end).
 -define(ROOT_DISPLAY_CREDS, {?ROOT_UID, ?ROOT_GID}).
 
 -define(AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS, luma_test_utils:new_posix_user_ctx(
-    luma_auto_feed:generate_posix_identifier(?SPACE_OWNER_ID(?SPACE_ID), ?POSIX_ID_RANGE),
-    luma_auto_feed:generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE)
+    luma_auto_feed:generate_posix_identifier(?SPACE_OWNER_ID(?LUMA_SPACE_ID), ?POSIX_ID_RANGE),
+    luma_auto_feed:generate_posix_identifier(?LUMA_SPACE_ID, ?POSIX_ID_RANGE)
 )).
 -define(EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     luma_test_utils:new_posix_user_ctx(?SPACE_DISPLAY_UID1, ?SPACE_DISPLAY_GID1)).
@@ -82,11 +82,11 @@ end).
     luma_test_utils:new_posix_user_ctx(?SPACE_DISPLAY_UID2, ?SPACE_DISPLAY_GID2)).
 
 -define(AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX, {
-    luma_auto_feed:generate_posix_identifier(?USER_ID, ?POSIX_ID_RANGE),
-    luma_auto_feed:generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE)
+    luma_auto_feed:generate_posix_identifier(?LUMA_USER_ID, ?POSIX_ID_RANGE),
+    luma_auto_feed:generate_posix_identifier(?LUMA_SPACE_ID, ?POSIX_ID_RANGE)
 }).
 -define(AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_POSIX, {
-    luma_auto_feed:generate_posix_identifier(?USER_ID, ?POSIX_ID_RANGE),
+    luma_auto_feed:generate_posix_identifier(?LUMA_USER_ID, ?POSIX_ID_RANGE),
     ?SPACE_MOUNT_GID
 }).
 
@@ -112,15 +112,15 @@ end).
 -define(POSIX_ADMIN_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?ROOT_UID, ?ROOT_GID)).
 -define(POSIX_USER_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?UID0, ?SPACE_GID1)).
 -define(IMPORTED_POSIX_USER_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?UID0, ?SPACE_MOUNT_GID)).
--define(POSIX_GENERATED_USER_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?GEN_UID(?USER_ID), ?SPACE_MOUNT_GID)).
+-define(POSIX_GENERATED_USER_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?GEN_UID(?LUMA_USER_ID), ?SPACE_MOUNT_GID)).
 -define(POSIX_MOUNT_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
 -define(POSIX_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
 -define(POSIX_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
 
 % Macros used to define posix compatible ownerships (UID, GID)
--define(GEN_UID(UserId), luma_auto_feed:generate_posix_identifier(UserId, ?UID_RANGE)).
+-define(GEN_UID(UserId), luma_auto_feed:generate_posix_identifier(UserId, ?LUMA_UID_RANGE)).
 
--define(UID_RANGE, {100000, 2000000}).
+-define(LUMA_UID_RANGE, {100000, 2000000}).
 
 -define(POSIX_STORAGE_ID_AUTO_FEED_LUMA, <<"posixStorageIdAutoFeedLuma">>).
 -define(POSIX_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"posixStorageIdExternalFeedLuma">>).
@@ -286,7 +286,7 @@ end).
 -define(GLUSTERFS_ADMIN_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(0, 0)).
 -define(GLUSTERFS_USER_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?UID0, ?SPACE_GID1)).
 -define(IMPORTED_GLUSTERFS_USER_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?UID0, ?SPACE_MOUNT_GID)).
--define(GLUSTERFS_GENERATED_USER_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?GEN_UID(?USER_ID), ?SPACE_MOUNT_GID)).
+-define(GLUSTERFS_GENERATED_USER_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?GEN_UID(?LUMA_USER_ID), ?SPACE_MOUNT_GID)).
 -define(GLUSTERFS_MOUNT_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
 -define(GLUSTERFS_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
 -define(GLUSTERFS_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
@@ -333,7 +333,7 @@ end).
 -define(NULLDEVICE_ADMIN_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(0, 0)).
 -define(NULLDEVICE_USER_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?UID0, ?SPACE_GID1)).
 -define(IMPORTED_NULLDEVICE_USER_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?UID0, ?SPACE_MOUNT_GID)).
--define(NULLDEVICE_GENERATED_USER_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?GEN_UID(?USER_ID), ?SPACE_MOUNT_GID)).
+-define(NULLDEVICE_GENERATED_USER_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?GEN_UID(?LUMA_USER_ID), ?SPACE_MOUNT_GID)).
 -define(NULLDEVICE_MOUNT_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
 -define(NULLDEVICE_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
 -define(NULLDEVICE_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
@@ -404,7 +404,7 @@ end).
         <<"ADMIN_OAUTH2">>
     ))#{
         <<"onedataAccessToken">> => ?OD_ACCESS_TOKEN,
-        <<"adminId">> => ?ADMIN_ID
+        <<"adminId">> => ?LUMA_ADMIN_ID
     }
 ).
 -define(EXPECTED_WEBDAV_OAUTH2_ADMIN_CREDENTIALS,
@@ -414,7 +414,7 @@ end).
     ))#{
         <<"accessToken">> => ?IDP_ADMIN_TOKEN,
         <<"accessTokenTTL">> => integer_to_binary(?TTL),
-        <<"adminId">> => ?ADMIN_ID
+        <<"adminId">> => ?LUMA_ADMIN_ID
     }
 ).
 
@@ -547,10 +547,6 @@ end).
 -define(IMPORTED_STORAGE_CONFIGS, (
     ?USER_DEFINED_LUMA_IMPORTED_STORAGE_CONFIGS ++
     ?AUTO_FEED_LUMA_IMPORTED_STORAGE_CONFIGS
-)).
-
--define(NON_IMPORTED_STORAGE_CONFIGS, (
-    ?ALL_STORAGE_CONFIGS -- ?IMPORTED_STORAGE_CONFIGS
 )).
 
 -define(POSIX_COMPATIBLE_NON_IMPORTED_STORAGE_CONFIGS, (
