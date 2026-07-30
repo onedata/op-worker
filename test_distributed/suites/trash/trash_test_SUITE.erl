@@ -12,7 +12,7 @@
 -module(trash_test_SUITE).
 -author("Jakub Kudzia").
 
--include("permissions_test.hrl").
+-include("authz/authz_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("file/distribution_assert.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").

@@ -11,8 +11,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(PERMISSIONS_TEST_HRL).
--define(PERMISSIONS_TEST_HRL, 1).
+-ifndef(AUTHZ_TEST_HRL).
+-define(AUTHZ_TEST_HRL, 1).
 
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/data_access_control.hrl").

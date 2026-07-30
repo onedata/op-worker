@@ -13,7 +13,7 @@
 -author("Katarzyna Such").
 
 -include("api/api_file_test_utils.hrl").
--include("cdmi_test.hrl").
+-include("cdmi/cdmi_test.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("test_rpc.hrl").
 -include_lib("ctool/include/http/codes.hrl").

@@ -12,7 +12,7 @@
 -module(cdmi_multi_provider_test_SUITE).
 -author("Tomasz Lichon").
 
--include("cdmi_test.hrl").
+-include("cdmi/cdmi_test.hrl").
 -include("file/file_tree_test.hrl").
 
 -include_lib("ctool/include/http/headers.hrl").

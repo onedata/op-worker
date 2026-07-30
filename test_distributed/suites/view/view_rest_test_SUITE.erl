@@ -26,7 +26,7 @@
 -module(view_rest_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("view_test.hrl").
+-include("view/view_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").

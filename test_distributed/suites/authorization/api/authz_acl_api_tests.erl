@@ -12,7 +12,7 @@
 -module(authz_acl_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+-include("authz/authz_api_test.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 

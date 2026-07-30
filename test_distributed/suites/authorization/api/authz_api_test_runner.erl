@@ -16,7 +16,7 @@
 -module(authz_api_test_runner).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+-include("authz/authz_api_test.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").

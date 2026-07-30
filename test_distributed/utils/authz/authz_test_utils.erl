@@ -14,7 +14,7 @@
 
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("permissions_test.hrl").
+-include("authz/authz_test.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 -export([

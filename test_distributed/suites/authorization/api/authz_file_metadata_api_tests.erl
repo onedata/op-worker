@@ -12,7 +12,7 @@
 -module(authz_file_metadata_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+-include("authz/authz_api_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").

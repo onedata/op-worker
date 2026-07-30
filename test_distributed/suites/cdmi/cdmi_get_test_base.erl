@@ -12,7 +12,7 @@
 -module(cdmi_get_test_base).
 -author("Katarzyna Such").
 
--include("cdmi_test.hrl").
+-include("cdmi/cdmi_test.hrl").
 -include("http/cdmi.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("file/file_tree_test.hrl").

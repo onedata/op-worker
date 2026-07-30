@@ -13,7 +13,7 @@
 -ifndef(AUTHZ_API_TEST_HRL).
 -define(AUTHZ_API_TEST_HRL, 1).
 
--include("permissions_test.hrl").
+-include("authz/authz_test.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 

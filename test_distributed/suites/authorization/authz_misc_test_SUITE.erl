@@ -14,7 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/logical_file_manager/lfm.hrl").
--include("permissions_test.hrl").
+-include("authz/authz_test.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 

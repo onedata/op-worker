@@ -12,7 +12,7 @@
 -module(cdmi_single_provider_test_SUITE).
 -author("Tomasz Lichon").
 
--include("cdmi_test.hrl").
+-include("cdmi/cdmi_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("file/file_tree_test.hrl").
 

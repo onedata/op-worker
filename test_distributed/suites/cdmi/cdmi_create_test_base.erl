@@ -12,7 +12,7 @@
 -module(cdmi_create_test_base).
 -author("Katarzyna Such").
 
--include("cdmi_test.hrl").
+-include("cdmi/cdmi_test.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% Tests

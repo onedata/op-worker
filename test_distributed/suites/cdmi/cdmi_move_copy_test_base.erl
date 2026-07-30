@@ -12,7 +12,7 @@
 -module(cdmi_move_copy_test_base).
 -author("Katarzyna Such").
 
--include("cdmi_test.hrl").
+-include("cdmi/cdmi_test.hrl").
 -include("http/cdmi.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include("file/file_tree_test.hrl").

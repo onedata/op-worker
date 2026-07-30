@@ -12,7 +12,7 @@
 -module(cdmi_misc_test_base).
 -author("Tomasz Lichon").
 
--include("cdmi_test.hrl").
+-include("cdmi/cdmi_test.hrl").
 -include("file/file_tree_test.hrl").
 
 -include_lib("ctool/include/test/test_utils.hrl").

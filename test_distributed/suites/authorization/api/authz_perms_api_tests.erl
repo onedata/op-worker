@@ -12,7 +12,7 @@
 -module(authz_perms_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+-include("authz/authz_api_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("file/file_tree_test.hrl").
 -include("storage/storage_test.hrl").

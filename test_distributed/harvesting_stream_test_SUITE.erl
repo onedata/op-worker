@@ -12,7 +12,7 @@
 -module(harvesting_stream_test_SUITE).
 -author("Jakub Kudzia").
 
--include("logic_tests_common.hrl").
+-include("graph_sync/logic_tests_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
