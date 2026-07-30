@@ -12,7 +12,7 @@
 -module(api_handle_test_SUITE).
 -author("Katarzyna Such").
 
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include("file/file_tree_test.hrl").
 -include("test_rpc.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").

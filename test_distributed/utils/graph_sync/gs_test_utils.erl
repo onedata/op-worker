@@ -12,7 +12,7 @@
 -module(gs_test_utils).
 -author("Katarzyna Such").
 
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 

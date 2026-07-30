@@ -14,7 +14,7 @@
 -author("Michal Stanisz").
 
 -include("qos_tests_utils.hrl").
--include("rest_test_utils.hrl").
+-include("api/rest_test_utils.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/logical_file_manager/lfm.hrl").

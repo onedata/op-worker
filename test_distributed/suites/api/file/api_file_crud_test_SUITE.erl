@@ -12,7 +12,7 @@
 -module(api_file_crud_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
+-include("api/api_file_test_utils.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").

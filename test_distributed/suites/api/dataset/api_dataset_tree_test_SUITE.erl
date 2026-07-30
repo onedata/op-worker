@@ -12,7 +12,7 @@
 -module(api_dataset_tree_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
+-include("api/api_file_test_utils.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("file/file_tree_test.hrl").
 -include("proto/oneprovider/provider_messages.hrl").

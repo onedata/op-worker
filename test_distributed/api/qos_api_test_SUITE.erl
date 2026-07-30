@@ -12,7 +12,7 @@
 -module(qos_api_test_SUITE).
 -author("Michal Stanisz").
 
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/logical_file_manager/lfm.hrl").

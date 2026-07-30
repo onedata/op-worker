@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
--include("api_file_test_utils.hrl").
+-include("api/api_file_test_utils.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("file/file_tree_test.hrl").
 -include("proto/oneclient/common_messages.hrl").

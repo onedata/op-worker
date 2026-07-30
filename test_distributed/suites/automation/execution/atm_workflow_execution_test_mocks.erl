@@ -20,7 +20,7 @@
 -module(atm_workflow_execution_test_mocks).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_execution_test.hrl").
+-include("atm/atm_workflow_execution_test.hrl").
 -include("modules/automation/atm_execution.hrl").
 
 %% API

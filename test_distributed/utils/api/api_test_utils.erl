@@ -12,8 +12,8 @@
 -module(api_test_utils).
 -author("Bartosz Walkowicz").
 
--include("api_test_runner.hrl").
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
+-include("api/api_file_test_utils.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").

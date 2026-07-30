@@ -12,7 +12,7 @@
 -module(op_worker_circuit_breaker_test_SUITE).
 -author("Katarzyna Such").
 
--include("api_file_test_utils.hrl").
+-include("api/api_file_test_utils.hrl").
 -include("cdmi_test.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("test_rpc.hrl").

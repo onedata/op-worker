@@ -13,7 +13,7 @@
 -module(atm_workflow_execution_restart_tests).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_execution_test.hrl").
+-include("atm/atm_workflow_execution_test.hrl").
 -include("modules/automation/atm_execution.hrl").
 
 -export([

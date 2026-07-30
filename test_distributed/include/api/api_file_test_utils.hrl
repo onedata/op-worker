@@ -15,7 +15,7 @@
 -define(FILE_METADATA_API_TEST_UTILS_HRL, 1).
 
 
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include("proto/oneclient/fuse_messages.hrl").

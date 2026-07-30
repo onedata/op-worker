@@ -22,7 +22,7 @@
 -module(api_transfer_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("file/file_tree_test.hrl").

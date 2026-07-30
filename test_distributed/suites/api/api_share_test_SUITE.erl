@@ -12,8 +12,8 @@
 -module(api_share_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
--include("api_test_runner.hrl").
+-include("api/api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("file/file_tree_test.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").

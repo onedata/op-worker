@@ -45,8 +45,8 @@
 -module(atm_workflow_execution_test_runner).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_execution_test_runner.hrl").
--include("atm_workflow_execution_test.hrl").
+-include("atm/atm_workflow_execution_test_runner.hrl").
+-include("atm/atm_workflow_execution_test.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("test_rpc.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
