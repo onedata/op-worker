@@ -1033,7 +1033,7 @@ init_per_suite(Config) ->
                 {atm_workflow_executions_graceful_stop_timeout_sec, 3}
             ]}],
             posthook = fun(NewConfig) ->
-                atm_test_inventory:init_per_suite(?ATM_PROVIDER_SELECTOR, user1),
+                atm_test_inventory:set_up(?ATM_PROVIDER_SELECTOR, user1),
                 atm_test_inventory:add_member(?ATM_USER_SELECTOR),
                 ozt_spaces:set_privileges(?ATM_SPACE_SELECTOR, ?ATM_USER_SELECTOR, [
                     ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS,

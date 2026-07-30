@@ -30,9 +30,7 @@
 
     resume_workflow_execution/1,
     force_continue_workflow_execution/1,
-    repeat_workflow_execution/3,
-
-    discard_workflow_execution/1
+    repeat_workflow_execution/3
 ]).
 -export([
     scan_audit_log/3, scan_audit_log/4,
@@ -50,7 +48,7 @@
     build_task_step_hook/1,
     build_task_step_strategy/1
 ]).
--export([get_values_batch/1, item_batch_to_json/1, item_to_json/1]).
+-export([get_values_batch/1]).
 
 
 -define(INFINITE_LOG_BASED_STORES_LISTING_OPTS, #{
@@ -160,15 +158,6 @@ repeat_workflow_execution(RepeatType, AtmLaneRunSelector, #atm_mock_call_ctx{
     ?erpc(ProviderSelector, mi_atm:repeat_workflow_execution(
         SessionId, RepeatType, AtmWorkflowExecutionId, AtmLaneRunSelector
     )).
-
-
--spec discard_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
-    ok | errors:error().
-discard_workflow_execution(#atm_mock_call_ctx{
-    provider = ProviderSelector,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    ?erpc(ProviderSelector, atm_workflow_execution_api:discard(AtmWorkflowExecutionId)).
 
 
 -spec scan_audit_log(
@@ -398,16 +387,6 @@ get_values_batch(ItemBatch) ->
     lists:map(fun(Item) -> Item#atm_item_execution.value end, ItemBatch).
 
 
--spec item_batch_to_json([atm_workflow_execution_handler:item()]) -> [json_utils:json_map()].
-item_batch_to_json(ItemBatch) ->
-    lists:map(fun item_to_json/1, ItemBatch).
-
-
--spec item_to_json(atm_workflow_execution_handler:item()) -> json_utils:json_map().
-item_to_json(#atm_item_execution{trace_id = TraceId, value = Value}) ->
-    #{<<"traceId">> => TraceId, <<"value">> => Value}.
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -595,3 +574,13 @@ substitute_expectation_placeholders(Expectations, AtmTaskExecutionId) ->
         (Expectation) ->
             Expectation
     end, Expectations).
+
+
+%% @private
+-spec discard_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
+    ok | errors:error().
+discard_workflow_execution(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, atm_workflow_execution_api:discard(AtmWorkflowExecutionId)).
