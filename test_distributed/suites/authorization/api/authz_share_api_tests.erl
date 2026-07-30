@@ -34,7 +34,7 @@ test_create_share(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{name = <<"dir1">>}],
+        files = [#authz_dir_spec{name = <<"dir1">>}],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         blocked_by_data_access_caveats = {true, ?ERR_POSIX(?EAGAIN)},
@@ -59,7 +59,7 @@ test_remove_share(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             on_create = fun(Node, _FileOwnerSessionId, Guid) ->
                 {ok, ShareId} = opt_shares:create(Node, SpaceOwnerSessionId, ?FILE_REF(Guid), <<"share">>),

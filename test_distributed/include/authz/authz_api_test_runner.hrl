@@ -17,7 +17,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--record(ct_authz_file_spec, {
+-record(authz_file_spec, {
     % name of file
     name :: binary(),
     % permissions needed to perform #test_spec.operation
@@ -27,7 +27,7 @@
     on_create = undefined :: undefined | fun((node(), session:id(), file_id:file_guid()) -> term())
 }).
 
--record(ct_authz_dir_spec, {
+-record(authz_dir_spec, {
     % name of directory
     name :: binary(),
     % permissions needed to perform #test_spec.operation
@@ -36,7 +36,7 @@
     % and can be used during test (described in `operation` of #authz_test_suite_spec{}).
     on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term()),
     % children of directory if needed
-    children = [] :: [#ct_authz_dir_spec{} | #ct_authz_file_spec{}]
+    children = [] :: [#authz_dir_spec{} | #authz_file_spec{}]
 }).
 
 -record(authz_test_suite_spec, {
@@ -92,7 +92,7 @@
 
     % Description of environment (files and permissions on them) needed to
     % perform `operation`.
-    files :: [#ct_authz_dir_spec{} | #ct_authz_file_spec{}],
+    files :: [#authz_dir_spec{} | #authz_file_spec{}],
 
     % Tells whether operation is blocked if session token contains data caveats
     blocked_by_data_access_caveats = false :: false | {true, errors:error()},
@@ -117,7 +117,7 @@
     % - ExecutionerSessId - session id of user which should perform operation,
     % - TestCaseRootDirPath - absolute path to root dir of testcase,
     % - ExtraData - mapping of file path (for every file specified in `files`) to
-    %               term returned from `on_create` #ct_authz_dir_spec{} or #ct_authz_file_spec{} fun.
+    %               term returned from `on_create` #authz_dir_spec{} or #authz_file_spec{} fun.
     %               If mentioned fun is left undefined then by default ?FILE_REF(GUID) will
     %               be used.
     %               If `on_create` fun returns FileGuid it should be returned as

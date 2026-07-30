@@ -38,7 +38,7 @@ test_mkdir(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             required_perms = [?traverse_container, ?add_subcontainer]
         }],
@@ -68,7 +68,7 @@ test_get_children_attrs(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             required_perms = [?traverse_container, ?list_container]
         }],
@@ -94,10 +94,10 @@ test_get_child_attr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             required_perms = [?traverse_container],
-            children = [#ct_authz_file_spec{name = <<"file1">>}]
+            children = [#authz_file_spec{name = <<"file1">>}]
         }],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
@@ -120,17 +120,17 @@ test_mv_dir(SpaceId) ->
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
         files = [
-            #ct_authz_dir_spec{
+            #authz_dir_spec{
                 name = <<"dir1">>,
                 required_perms = [?traverse_container, ?delete_subcontainer],
                 children = [
-                    #ct_authz_dir_spec{
+                    #authz_dir_spec{
                         name = <<"dir11">>,
                         required_perms = [?delete]
                     }
                 ]
             },
-            #ct_authz_dir_spec{
+            #authz_dir_spec{
                 name = <<"dir2">>,
                 required_perms = [?traverse_container, ?add_subcontainer]
             }
@@ -158,11 +158,11 @@ test_rm_dir(SpaceId) ->
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
         files = [
-            #ct_authz_dir_spec{
+            #authz_dir_spec{
                 name = <<"dir1">>,
                 required_perms = [?traverse_container, ?delete_subcontainer],
                 children = [
-                    #ct_authz_dir_spec{
+                    #authz_dir_spec{
                         name = <<"dir2">>,
                         required_perms = [?delete, ?list_container]
                     }

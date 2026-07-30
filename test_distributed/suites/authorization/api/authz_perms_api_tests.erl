@@ -146,7 +146,7 @@ test_check_read_perms(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?read_object]
         }],
@@ -170,7 +170,7 @@ test_check_write_perms(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?write_object]
         }],
@@ -194,7 +194,7 @@ test_check_rdwr_perms(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?read_object, ?write_object]
         }],
