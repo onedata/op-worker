@@ -14,7 +14,7 @@
 -author("Michal Cwiertnia").
 
 -include("modules/logical_file_manager/lfm.hrl").
--include("qos_tests_utils.hrl").
+-include("qos/qos_tests_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").

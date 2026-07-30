@@ -12,7 +12,7 @@
 -module(qos_status_test_SUITE).
 -author("Michal Stanisz").
 
--include("qos_tests_utils.hrl").
+-include("qos/qos_tests_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 

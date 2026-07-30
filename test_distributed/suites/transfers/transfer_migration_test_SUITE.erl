@@ -12,7 +12,7 @@
 -module(transfer_migration_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("transfer_test.hrl").
+-include("transfers/transfer_test.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 

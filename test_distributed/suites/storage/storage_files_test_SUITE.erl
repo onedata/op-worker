@@ -22,7 +22,7 @@
 -author("Jakub Kudzia").
 
 -include("env/space_setup_utils.hrl").
--include("storage_test.hrl").
+-include("storage/storage_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").

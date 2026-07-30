@@ -12,7 +12,7 @@
 -module(transfer_replication_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("transfer_test.hrl").
+-include("transfers/transfer_test.hrl").
 -include("file/file_tree_test.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/transfer.hrl").

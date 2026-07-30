@@ -13,7 +13,7 @@
 -module(transfer_common_test_base).
 -author("Bartosz Walkowicz").
 
--include("transfer_test.hrl").
+-include("transfers/transfer_test.hrl").
 -include("file/file_tree_test.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/data_access_control.hrl").

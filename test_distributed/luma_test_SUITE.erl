@@ -11,7 +11,7 @@
 -module(luma_test_SUITE).
 -author("Jakub Kudzia").
 
--include("luma_test_utils.hrl").
+-include("luma/luma_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

@@ -11,8 +11,8 @@
 -module(qos_replica_protection_test_SUITE).
 -author("Michal Stanisz").
 
--include("transfers_test_mechanism.hrl").
--include("qos_tests_utils.hrl").
+-include("transfers/transfers_test_mechanism.hrl").
+-include("qos/qos_tests_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 

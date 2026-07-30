@@ -12,7 +12,7 @@
 -module(storage_import_initial_posix_test_SUITE).
 -author("Katarzyna Such").
 
--include("storage_import_test.hrl").
+-include("storage/storage_import_test.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 -export([

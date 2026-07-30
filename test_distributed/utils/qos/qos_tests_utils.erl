@@ -13,7 +13,7 @@
 -author("Michal Cwiertnia").
 -author("Michal Stanisz").
 
--include("qos_tests_utils.hrl").
+-include("qos/qos_tests_utils.hrl").
 -include("api/rest_test_utils.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").

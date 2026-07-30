@@ -28,7 +28,7 @@
 -module(storage_import_update_test_base).
 -author("Bartosz Walkowicz").
 
--include("storage_import_test.hrl").
+-include("storage/storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/data_access_control.hrl").

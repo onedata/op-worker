@@ -163,7 +163,7 @@
 -module(storage_import_test_utils).
 -author("Bartosz Walkowicz").
 
--include("storage_import_test.hrl").
+-include("storage/storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").

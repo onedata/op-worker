@@ -16,7 +16,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("file/file_tree_test.hrl").
 -include("test_rpc.hrl").
--include("storage_test.hrl").
+-include("storage/storage_test.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

@@ -18,7 +18,7 @@
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("transfers_test_mechanism.hrl").
+-include("transfers/transfers_test_mechanism.hrl").
 -include("api/rest_test_utils.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/errors.hrl").

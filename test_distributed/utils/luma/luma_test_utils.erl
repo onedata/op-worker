@@ -12,7 +12,7 @@
 -module(luma_test_utils).
 -author("Wojciech Geisler").
 
--include("luma_test_utils.hrl").
+-include("luma/luma_test_utils.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 
 -export([run_test_for_all_storage_configs/5, clear_luma_db_for_all_storages/1,

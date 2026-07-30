@@ -26,7 +26,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("file/file_tree_test.hrl").
--include("transfer_test.hrl").
+-include("transfers/transfer_test.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").

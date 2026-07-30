@@ -12,7 +12,7 @@
 -module(harvesting_stress_test_utils).
 -author("Jakub Kudzia").
 
--include("harvesting_stress_test_utils.hrl").
+-include("harvesting/harvesting_stress_test_utils.hrl").
 
 %% API
 -export([mock_harvesting/1, mock_harvesting_stopped/1, harvesting_receive_loop/1,

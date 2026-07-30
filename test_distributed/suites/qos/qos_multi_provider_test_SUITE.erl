@@ -16,7 +16,7 @@
 
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("qos_tests_utils.hrl").
+-include("qos/qos_tests_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 

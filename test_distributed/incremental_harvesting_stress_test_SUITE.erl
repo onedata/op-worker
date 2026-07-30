@@ -14,7 +14,7 @@
 -module(incremental_harvesting_stress_test_SUITE).
 -author("Jakub Kudzia").
 
--include("harvesting_stress_test_utils.hrl").
+-include("harvesting/harvesting_stress_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 

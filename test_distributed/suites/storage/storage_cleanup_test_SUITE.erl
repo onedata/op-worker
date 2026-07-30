@@ -15,7 +15,7 @@
 -author("Jakub Kudzia").
 
 -include("env/space_setup_utils.hrl").
--include("storage_test.hrl").
+-include("storage/storage_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").

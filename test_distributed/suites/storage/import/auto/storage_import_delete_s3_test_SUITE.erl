@@ -14,7 +14,7 @@
 -module(storage_import_delete_s3_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("storage_import_test.hrl").
+-include("storage/storage_import_test.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 -export([

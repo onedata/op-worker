@@ -15,7 +15,7 @@
 -author("Michal Cwiertnia").
 
 
--include("qos_tests_utils.hrl").
+-include("qos/qos_tests_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
