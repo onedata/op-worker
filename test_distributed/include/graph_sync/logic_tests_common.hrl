@@ -11,6 +11,9 @@
 %%%-------------------------------------------------------------------
 -author("Lukasz Opiola").
 
+-ifndef(LOGIC_TESTS_COMMON_HRL).
+-define(LOGIC_TESTS_COMMON_HRL, 1).
+
 -include("global_definitions.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -828,3 +831,5 @@ end).
     <<"revisionRegistry">> => jsonable_record:to_json(?ATM_WORKFLOW_SCHEMA_REVISION_REGISTRY_VALUE(__AtmWorkflowSchemaId), atm_workflow_schema_revision_registry),
     <<"atmInventoryId">> => ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchemaId)
 }).
+
+-endif.

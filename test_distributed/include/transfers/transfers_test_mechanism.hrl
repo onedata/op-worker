@@ -9,6 +9,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
+-ifndef(TRANSFERS_TEST_MECHANISM_HRL).
+-define(TRANSFERS_TEST_MECHANISM_HRL, 1).
+
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -131,3 +134,5 @@ end).
 -define(OLD_TRANSFERS_KEY, old_transfer_ids).
 -define(SPACE_ID_KEY, space_id).
 
+
+-endif.

@@ -10,6 +10,9 @@
 %%%-------------------------------------------------------------------
 -author("Michal Cwiertnia").
 
+-ifndef(QOS_TEST_UTILS_HRL).
+-define(QOS_TEST_UTILS_HRL, 1).
+
 -include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
 
@@ -147,3 +150,5 @@
         ]}
     ]}
 ).
+
+-endif.
