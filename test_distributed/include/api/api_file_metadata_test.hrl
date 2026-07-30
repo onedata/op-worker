@@ -6,44 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Definitions of macros and records used in file metadata API tests.
+%%% Fixture metadata (json, rdf, xattrs, acl, cdmi attrs) and rest paths used by
+%%% file metadata API test suites.
 %%% @end
 %%%-------------------------------------------------------------------
+-ifndef(API_FILE_METADATA_TEST_HRL).
+-define(API_FILE_METADATA_TEST_HRL, 1).
 
--ifndef(API_FILE_TEST_UTILS_HRL).
--define(API_FILE_TEST_UTILS_HRL, 1).
 
-
--include("api/api_test_runner.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/http/codes.hrl").
--include_lib("ctool/include/http/headers.hrl").
-
-
--define(CLIENT_SPEC_FOR_SPACE_KRK, #client_spec{
-    correct = [user1, user3, user4],
-    unauthorized = [nobody],
-    forbidden_not_in_space = [user2]
-}).
-
--define(CLIENT_SPEC_FOR_SPACE_KRK_PAR(__ERRNO), #client_spec{
-    correct = [
-        user2, % space owner - doesn't need any perms
-        user3  % files owner (see fun create_shared_file/1)
-    ],
-    unauthorized = [nobody],
-    forbidden_not_in_space = [user1],
-    forbidden_in_space = [{user4, ?ERR_POSIX(__ERRNO)}]
-}).
--define(CLIENT_SPEC_FOR_SPACE_KRK_PAR, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EACCES)).
-
--define(CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS, #client_spec{
-    correct = [nobody, user1, user2, user3, user4]
-}).
-
--define(CLIENT_SPEC_FOR_SHARES, ?CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS).
 
 
 -define(NEW_ID_METADATA_REST_PATH(__FILE_OBJECT_ID, __METADATA_TYPE),

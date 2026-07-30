@@ -19,7 +19,7 @@
 -module(connection_manager_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api/api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 

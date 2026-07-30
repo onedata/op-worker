@@ -12,7 +12,6 @@
 -module(api_storage_test_SUITE).
 -author("Lukasz Opiola").
 
--include("api/api_file_test_utils.hrl").
 -include("api/api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").

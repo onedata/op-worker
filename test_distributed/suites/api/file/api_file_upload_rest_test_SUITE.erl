@@ -13,11 +13,13 @@
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
--include("api/api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("file/file_tree_test.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([
     all/0,

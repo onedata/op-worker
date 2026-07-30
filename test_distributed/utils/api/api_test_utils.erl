@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api/api_test_runner.hrl").
--include("api/api_file_test_utils.hrl").
+-include("api/api_file_metadata_test.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").

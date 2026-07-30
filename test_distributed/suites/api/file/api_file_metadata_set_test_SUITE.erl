@@ -13,11 +13,13 @@
 -module(api_file_metadata_set_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api/api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
+-include("api/api_file_metadata_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([
     groups/0, all/0,

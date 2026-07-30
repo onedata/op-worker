@@ -157,6 +157,29 @@
     data_spec = undefined :: undefined | onenv_api_test_runner:data_spec()
 }).
 
+-define(CLIENT_SPEC_FOR_SPACE_KRK, #client_spec{
+    correct = [user1, user3, user4],
+    unauthorized = [nobody],
+    forbidden_not_in_space = [user2]
+}).
+
+-define(CLIENT_SPEC_FOR_SPACE_KRK_PAR(__ERRNO), #client_spec{
+    correct = [
+        user2, % space owner - doesn't need any perms
+        user3  % files owner (see fun create_shared_file/1)
+    ],
+    unauthorized = [nobody],
+    forbidden_not_in_space = [user1],
+    forbidden_in_space = [{user4, ?ERR_POSIX(__ERRNO)}]
+}).
+-define(CLIENT_SPEC_FOR_SPACE_KRK_PAR, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EACCES)).
+
+-define(CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS, #client_spec{
+    correct = [nobody, user1, user2, user3, user4]
+}).
+
+-define(CLIENT_SPEC_FOR_SHARES, ?CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS).
+
 -define(SPACE_KRK, <<"space_krk">>).
 -define(SPACE_KRK_PAR, <<"space_krk_par">>).
 
