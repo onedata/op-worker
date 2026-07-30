@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -9,10 +9,9 @@
 %%% Definitions of macros and records used in file metadata API tests.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Bartosz Walkowicz").
 
--ifndef(FILE_METADATA_API_TEST_UTILS_HRL).
--define(FILE_METADATA_API_TEST_UTILS_HRL, 1).
+-ifndef(API_FILE_TEST_UTILS_HRL).
+-define(API_FILE_TEST_UTILS_HRL, 1).
 
 
 -include("api/api_test_runner.hrl").

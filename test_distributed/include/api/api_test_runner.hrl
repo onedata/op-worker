@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -9,10 +9,9 @@
 %%% Definitions of macros and records used in API (REST + gs) tests.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Bartosz Walkowicz").
 
--ifndef(API_TEST_UTILS_HRL).
--define(API_TEST_UTILS_HRL, 1).
+-ifndef(API_TEST_RUNNER_HRL).
+-define(API_TEST_RUNNER_HRL, 1).
 
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -158,9 +157,6 @@
     data_spec = undefined :: undefined | onenv_api_test_runner:data_spec()
 }).
 
--define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
-
--define(SPACE_1, <<"space1">>).
 -define(SPACE_2, <<"space2">>).
 -define(SPACE_KRK, <<"space_krk">>).
 -define(SPACE_KRK_PAR, <<"space_krk_par">>).
