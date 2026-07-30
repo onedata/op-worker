@@ -41,17 +41,12 @@
     share_file_and_sync_file_attrs/4,
 
     set_and_sync_metadata/4,
-    set_metadata/4,
     get_metadata/3,
-    set_xattrs/3,
     get_xattrs/2,
 
     randomly_add_qos/4,
-    randomly_set_metadata/2,
-    randomly_set_acl/2,
     randomly_create_share/3,
 
-    guids_to_object_ids/1,
     file_attr_to_json/4,
     replace_attrs_with_deprecated/1
 ]).
@@ -278,6 +273,7 @@ set_and_sync_metadata(Nodes, FileGuid, MetadataType, Metadata) ->
     end, Nodes).
 
 
+%% @private
 -spec set_metadata(node(), file_id:file_guid(), metadata_type(), term()) -> ok.
 set_metadata(Node, FileGuid, <<"rdf">>, Metadata) ->
     opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, Metadata, []);
@@ -296,6 +292,7 @@ get_metadata(Node, FileGuid, <<"xattrs">>) ->
     get_xattrs(Node, FileGuid).
 
 
+%% @private
 -spec set_xattrs(node(), file_id:file_guid(), map()) -> ok.
 set_xattrs(Node, FileGuid, Xattrs) ->
     lists:foreach(fun({Key, Val}) ->
@@ -344,6 +341,7 @@ randomly_add_qos(Nodes, FileGuid, Expression, ReplicasNum) ->
     end.
 
 
+%% @private
 -spec randomly_set_metadata([node()], file_id:file_guid()) ->
     {HasCustomMetadata :: boolean(), JsonMetadata :: json_utils:json_term()}.
 randomly_set_metadata(Nodes, FileGuid) ->
@@ -382,6 +380,7 @@ randomly_set_metadata(Nodes, FileGuid) ->
     end.
 
 
+%% @private
 -spec randomly_set_acl([node()], file_id:file_guid()) -> Set ::boolean().
 randomly_set_acl(Nodes, FileGuid) ->
     case rand:uniform(2) of
@@ -412,14 +411,6 @@ randomly_create_share(Node, SessionId, FileGuid) ->
         2 ->
             undefined
     end.
-
-
--spec guids_to_object_ids([file_id:file_guid()]) -> [file_id:objectid()].
-guids_to_object_ids(Guids) ->
-    lists:map(fun(Guid) ->
-        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        ObjectId
-    end, Guids).
 
 
 %% @TODO VFS-11376 Use file_attr_translator after it is properly unit tested
