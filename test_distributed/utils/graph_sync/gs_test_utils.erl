@@ -76,7 +76,7 @@ connect_via_gs(Node, Client) ->
 %% @private
 -spec gs_endpoint(node()) -> URL :: binary().
 gs_endpoint(Node) ->
-    Port = api_test_utils:get_https_server_port_str(Node),
+    Port = rest_test_utils:get_https_server_port_str(Node),
     Domain = opw_test_rpc:get_provider_domain(Node),
 
     str_utils:join_as_binaries(

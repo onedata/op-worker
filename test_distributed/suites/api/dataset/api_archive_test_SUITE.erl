@@ -233,7 +233,7 @@ build_create_archive_validate_rest_call_result_fun(MemRef) ->
         ArchiveId = maps:get(<<"archiveId">>, Body),
         api_test_memory:set(MemRef, archive_id, ArchiveId),
 
-        ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"archives">>, ArchiveId]),
+        ExpLocation = rest_test_utils:build_rest_url(TestNode, [<<"archives">>, ArchiveId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers))
     end.
 

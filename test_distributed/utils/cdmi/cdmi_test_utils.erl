@@ -38,7 +38,7 @@
 
 %% @private
 cdmi_endpoint(Node, Domain) ->
-    Port = api_test_utils:get_https_server_port_str(Node),
+    Port = rest_test_utils:get_https_server_port_str(Node),
     str_utils:format("https://~ts~ts/cdmi/", [Domain, Port]).
 
 

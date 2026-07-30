@@ -377,7 +377,7 @@ build_create_transfer_validate_rest_call_result_fun(TestSuiteCtx, MemRef) ->
         ),
         TransferId = maps:get(<<"transferId">>, Body),
 
-        ExpLocation = api_test_utils:build_rest_url(Node, [<<"transfers">>, TransferId]),
+        ExpLocation = rest_test_utils:build_rest_url(Node, [<<"transfers">>, TransferId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers)),
 
         validate_created_transfer(TestSuiteCtx, MemRef, TransferId, TestCtx)
@@ -1154,7 +1154,7 @@ build_rerun_transfer_validate_rest_call_result_fun(TestSuiteCtx, MemRef) ->
         ),
         NewTransferId = maps:get(<<"transferId">>, Body),
 
-        ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"transfers">>, NewTransferId]),
+        ExpLocation = rest_test_utils:build_rest_url(TestNode, [<<"transfers">>, NewTransferId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers)),
 
         validate_rerun_transfer(TestSuiteCtx, MemRef, NewTransferId)

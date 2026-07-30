@@ -1089,9 +1089,7 @@ get_rest_endpoint(Node, ResourcePath) ->
 get_rest_api_root(?ONEZONE_TARGET_NODE) ->
     str_utils:format_bin("https://~ts/api/v3/onezone/shares/", [ozw_test_rpc:get_domain()]);
 get_rest_api_root(Node) ->
-    Port = api_test_utils:get_https_server_port_str(Node),
-    Domain = opw_test_rpc:get_provider_domain(Node),
-    str_utils:format_bin("https://~ts~ts/api/v3/oneprovider/", [Domain, Port]).
+    rest_test_utils:rest_api_root(Node).
 
 
 %% @private

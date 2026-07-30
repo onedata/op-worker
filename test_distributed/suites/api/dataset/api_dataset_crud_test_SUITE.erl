@@ -201,7 +201,7 @@ build_establish_dataset_validate_rest_call_result_fun(MemRef) ->
         DatasetId = maps:get(<<"datasetId">>, Body),
         api_test_memory:set(MemRef, dataset_id, DatasetId),
 
-        ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"datasets">>, DatasetId]),
+        ExpLocation = rest_test_utils:build_rest_url(TestNode, [<<"datasets">>, DatasetId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers))
     end.
 

@@ -169,7 +169,7 @@ build_create_share_validate_rest_call_result_fun(MemRef, Providers, FileType, Sp
 
         api_test_memory:set(MemRef, shares, [ShareId | api_test_memory:get(MemRef, shares, [])]),
 
-        ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"shares">>, ShareId]),
+        ExpLocation = rest_test_utils:build_rest_url(TestNode, [<<"shares">>, ShareId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers)),
 
         verify_share_doc(

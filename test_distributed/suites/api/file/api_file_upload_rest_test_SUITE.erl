@@ -219,7 +219,7 @@ build_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
 
                 #{<<"fileId">> := FileObjectId} = ?assertMatch(#{<<"fileId">> := <<_/binary>>}, RespBody),
 
-                ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"data">>, FileObjectId]),
+                ExpLocation = rest_test_utils:build_rest_url(TestNode, [<<"data">>, FileObjectId]),
                 ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, RespHeaders)),
 
                 {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),

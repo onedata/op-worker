@@ -24,7 +24,11 @@
     request/5, request/6,
     cacerts_opts/1,
     user_token_header/1,
-    get_rest_error/1
+    get_rest_error/1,
+
+    rest_api_root/1,
+    build_rest_url/2,
+    get_https_server_port_str/1
 ]).
 
 %%%===================================================================
@@ -40,7 +44,7 @@ request(Node, URL, Method, Headers, Body, Opts) ->
         false -> maps:from_list(Headers)
     end,
     Result = http_client:request(
-        Method, <<(rest_endpoint(Node))/binary, URL/binary>>,
+        Method, <<(rest_api_root(Node))/binary, URL/binary>>,
         Headers2, Body, cacerts_opts(Node) ++ Opts
     ),
     case Result of
@@ -66,11 +70,33 @@ get_rest_error(Error) ->
     #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(Error),
     {ExpCode, ExpBody}.
 
+
+%% @doc Root of the Oneprovider REST API served by given node.
+rest_api_root(Node) ->
+    Port = get_https_server_port_str(Node),
+    Domain = opw_test_rpc:get_provider_domain(Node),
+    str_utils:format_bin("https://~ts~ts/api/v3/oneprovider/", [Domain, Port]).
+
+
+%% @doc Absolute URL of a REST resource as built by the Oneprovider itself.
+build_rest_url(Node, PathTokens) ->
+    rpc:call(Node, oneprovider, build_rest_url, [PathTokens]).
+
+
+get_https_server_port_str(Node) ->
+    case get({https_server_port, Node}) of
+        undefined ->
+            PortStr = case opw_test_rpc:get_env(Node, https_server_port) of
+                443 -> "";
+                P -> ":" ++ integer_to_list(P)
+            end,
+            put({https_server_port, Node}, PortStr),
+            PortStr;
+        Port ->
+            Port
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-rest_endpoint(Node) ->
-    Port = api_test_utils:get_https_server_port_str(Node),
-    Domain = opw_test_rpc:get_provider_domain(Node),
-    str_utils:format_bin("https://~ts~ts/api/v3/oneprovider/", [Domain, Port]).
