@@ -347,7 +347,7 @@ init_testcase(TestCaseName, FileTreeSpec, SuiteCtx = #storage_import_test_suite_
 %%  * auto_import_config := map() - non-default auto import config for the
 %%    support (e.g. #{sync_acl => true}); default #{} (onepanel defaults);
 %%  * scan_attempts := non_neg_integer() - attempts awaiting the initial scan;
-%%    default ?ATTEMPTS, pass ?LARGE_IMPORT_SCAN_ATTEMPTS for large trees;
+%%    default ?STORAGE_IMPORT_ATTEMPTS, pass ?LARGE_IMPORT_SCAN_ATTEMPTS for large trees;
 %%  * verify_dir_stats := boolean() - additionally assert the space's dir_size
 %%    stats after import; default false;
 %%  * monitoring_overrides := map() - overrides for
@@ -364,7 +364,7 @@ setup_and_verify_initial_import(CaseName, FileTreeSpec, SuiteCtx, Opts) ->
     TestCaseCtx = init_testcase(
         CaseName, FileTreeSpec, SuiteCtx, maps:get(auto_import_config, Opts, #{})
     ),
-    await_initial_scan_finished(TestCaseCtx, maps:get(scan_attempts, Opts, ?ATTEMPTS)),
+    await_initial_scan_finished(TestCaseCtx, maps:get(scan_attempts, Opts, ?STORAGE_IMPORT_ATTEMPTS)),
     verify_imported_tree(TestCaseCtx),
     maps:get(verify_dir_stats, Opts, false) andalso verify_dir_stats(TestCaseCtx),
     assert_storage_import_monitoring_state(TestCaseCtx, maps:get(monitoring_overrides, Opts, #{})),
@@ -477,7 +477,7 @@ flatten_objects(Object = #object{name = Name, children = Children}) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Awaits the completion of the initial import scan, retrying for the default
-%% (?ATTEMPTS) number of seconds. For large imports (many files), where the scan
+%% (?STORAGE_IMPORT_ATTEMPTS) number of seconds. For large imports (many files), where the scan
 %% may take much longer, use await_initial_scan_finished/2 with a higher Attempts
 %% (e.g. ?LARGE_IMPORT_SCAN_ATTEMPTS) - kept per-test so that small tests still
 %% fail fast if something goes wrong.
@@ -485,7 +485,7 @@ flatten_objects(Object = #object{name = Name, children = Children}) ->
 %%--------------------------------------------------------------------
 -spec await_initial_scan_finished(case_ctx()) -> true.
 await_initial_scan_finished(CaseCtx) ->
-    await_initial_scan_finished(CaseCtx, ?ATTEMPTS).
+    await_initial_scan_finished(CaseCtx, ?STORAGE_IMPORT_ATTEMPTS).
 
 
 -spec await_initial_scan_finished(case_ctx(), non_neg_integer()) -> true.
@@ -508,7 +508,7 @@ await_initial_scan_finished(#storage_import_test_case_ctx{
 %%--------------------------------------------------------------------
 -spec await_scan_finished(case_ctx(), non_neg_integer()) -> true.
 await_scan_finished(CaseCtx, ScanNum) ->
-    await_scan_finished(CaseCtx, ScanNum, ?ATTEMPTS).
+    await_scan_finished(CaseCtx, ScanNum, ?STORAGE_IMPORT_ATTEMPTS).
 
 
 -spec await_scan_finished(case_ctx(), non_neg_integer(), non_neg_integer()) -> true.
@@ -548,7 +548,7 @@ run_continuous_scan(CaseCtx, ScanNum) ->
 %%--------------------------------------------------------------------
 -spec run_continuous_scan(case_ctx(), non_neg_integer(), map()) -> ok.
 run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides) ->
-    run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides, ?ATTEMPTS).
+    run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides, ?STORAGE_IMPORT_ATTEMPTS).
 
 
 %% Like run_continuous_scan/3, but with an explicit attempts budget for awaiting
@@ -802,7 +802,7 @@ verify_imported_tree(#storage_import_test_case_ctx{
             verify_node(ProviderCtx, Path, Spec, Attempts)
         end, AllNodes, ?VERIFY_PARALLELISM)
     end, [
-        {ImportingProviderCtx, ?ATTEMPTS},
+        {ImportingProviderCtx, ?STORAGE_IMPORT_ATTEMPTS},
         {NonImportingProviderCtx, ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS}
     ]).
 
@@ -877,7 +877,7 @@ verify_dir_stats(#storage_import_test_case_ctx{
 %%--------------------------------------------------------------------
 -spec assert_attrs(#provider_ctx{}, file_meta:path(), #{atom() => term()}) -> ok.
 assert_attrs(ProviderCtx, Path, ExpectedAttrs) ->
-    assert_attrs(ProviderCtx, Path, ExpectedAttrs, ?ATTEMPTS).
+    assert_attrs(ProviderCtx, Path, ExpectedAttrs, ?STORAGE_IMPORT_ATTEMPTS).
 
 
 -spec assert_attrs(#provider_ctx{}, file_meta:path(), #{atom() => term()}, non_neg_integer()) -> ok.
@@ -903,7 +903,7 @@ assert_attrs(ProviderCtx, Path, ExpectedAttrs, Attempts) ->
 %%--------------------------------------------------------------------
 -spec assert_file_content(#provider_ctx{}, file_meta:path(), binary()) -> ok.
 assert_file_content(ProviderCtx, Path, Content) ->
-    assert_file_content(ProviderCtx, Path, Content, ?ATTEMPTS).
+    assert_file_content(ProviderCtx, Path, Content, ?STORAGE_IMPORT_ATTEMPTS).
 
 
 %% @private
@@ -1279,7 +1279,7 @@ await_scan_started(#storage_import_test_case_ctx{
     ?assertEqual(
         true,
         catch(?rpc(ImportingProviderSelector, is_scan_started(SpaceId, ScanNum))),
-        10 * ?ATTEMPTS,
+        10 * ?STORAGE_IMPORT_ATTEMPTS,
         100
     ).
 
@@ -1585,12 +1585,12 @@ filter_out_unobservable_dirs(s3, Specs) ->
 -spec assert_dir_stats(#provider_ctx{}, file_meta:path(), #dir_spec{}) -> ok.
 assert_dir_stats(#provider_ctx{selector = Selector, node = Node, session_id = SessId}, Path, DirSpec) ->
     {ok, #file_attr{guid = Guid}} = ?assertMatch(
-        {ok, _}, lfm_proxy:stat(Node, SessId, {path, Path}), ?ATTEMPTS),
+        {ok, _}, lfm_proxy:stat(Node, SessId, {path, Path}), ?STORAGE_IMPORT_ATTEMPTS),
     ExpectedStats = expected_dir_stats(DirSpec),
     ?assertEqual(
         ExpectedStats,
         get_current_dir_stats(Selector, Guid, maps:keys(ExpectedStats)),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ).
 
 

@@ -188,7 +188,7 @@ symlink_is_ignored_by_continuous_scan_test(SuiteCtx) ->
 
     %% the logical symlink has no storage counterpart, yet the scan must not
     %% mistake it for a deleted entry and remove it
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Node, SessId, {path, SymlinkPath}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Node, SessId, {path, SymlinkPath}), ?STORAGE_IMPORT_ATTEMPTS),
     assert_symlink_scan_monitoring_state(TestCaseCtx, StorageType).
 
 
@@ -225,9 +225,9 @@ unlink_if_applicable(Node, SessId, FileKey, _) ->
 ) ->
     ok.
 assert_reference_survival(Node, SessId, Path, kept) ->
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Node, SessId, {path, Path}), ?ATTEMPTS);
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Node, SessId, {path, Path}), ?STORAGE_IMPORT_ATTEMPTS);
 assert_reference_survival(Node, SessId, Path, _Deleted) ->
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, {path, Path}), ?ATTEMPTS).
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, {path, Path}), ?STORAGE_IMPORT_ATTEMPTS).
 
 
 %% @private

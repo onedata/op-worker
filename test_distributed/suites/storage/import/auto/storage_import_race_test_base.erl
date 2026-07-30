@@ -197,7 +197,7 @@ create_remote_file_import_conflict_test(SuiteCtx) ->
         lfm_proxy:stat(
             ImportingProviderNode, ImportingProviderSessionId, {path, ImportedConflictingFilePath}
         ),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     storage_import_test_utils:assert_file_content(
         ImportingProviderCtx, ImportedConflictingFilePath, StorageContent
@@ -316,7 +316,7 @@ create_remote_entry_import_race_test_base(TestCaseName, SuiteCtx, EntryType) ->
     %% provider and await its dbsync to the importing one
     DanglingUuid = datastore_key:new(),
     add_space_root_child_link_via_remote_provider(TestCaseCtx, EntryName, DanglingUuid),
-    ?assertMatch({ok, _, _}, get_space_root_child_link(TestCaseCtx, EntryName), ?ATTEMPTS),
+    ?assertMatch({ok, _, _}, get_space_root_child_link(TestCaseCtx, EntryName), ?STORAGE_IMPORT_ATTEMPTS),
 
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
@@ -327,7 +327,7 @@ create_remote_entry_import_race_test_base(TestCaseName, SuiteCtx, EntryType) ->
         lfm_proxy:stat(
             ImportingProviderNode, ImportingProviderSessionId, {path, ImportedConflictingEntryPath}
         ),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     %% the imported entry is backed by its own, fresh file_meta document - not
     %% by the half-synchronized one
@@ -423,7 +423,7 @@ create_file_import_race_test(SuiteCtx) ->
         lfm_proxy:stat(
             ImportingProviderNode, ImportingProviderSessionId, {path, ImportedConflictingFilePath}
         ),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     storage_import_test_utils:assert_file_content(
         ImportingProviderCtx, ImportedConflictingFilePath, StorageContent
@@ -675,13 +675,13 @@ remote_delete_file_reimport_race_test_base(TestCaseName, SuiteCtx, CreatingProvi
     ?assertEqual(
         {ok, Content},
         lfm_proxy:check_size_and_read(ReplicatorNode, ReadHandle, 0, byte_size(Content)),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     ok = lfm_proxy:close(ReplicatorNode, ReadHandle),
     %% either way the file's data has reached the imported storage by now
     ?assertMatch({ok, _}, storage_file_setup_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
 
     %% pretend that only the deletion of the file's LINK has been synchronized:
     %% remove the link directly on the remote provider and await the removal's
@@ -690,10 +690,10 @@ remote_delete_file_reimport_race_test_base(TestCaseName, SuiteCtx, CreatingProvi
     remove_space_root_child_link_via_remote_provider(
         TestCaseCtx, FileName, file_id:guid_to_uuid(FileGuid)
     ),
-    ?assertEqual({error, not_found}, get_space_root_child_link(TestCaseCtx, FileName), ?ATTEMPTS),
+    ?assertEqual({error, not_found}, get_space_root_child_link(TestCaseCtx, FileName), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(
         ImportingProviderNode, ImportingProviderSessionId, {path, SpaceFilePath}
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
 
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
@@ -941,7 +941,7 @@ create_list_race_test(SuiteCtx) ->
 
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(
         ImportingProviderNode, ImportingProviderSessionId, {path, FileDeletedOnStoragePath}
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(
         NonImportingProviderNode, NonImportingProviderSessionId, {path, FileDeletedOnStoragePath}
     ), ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS),

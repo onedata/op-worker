@@ -252,7 +252,7 @@ recreate_file_deleted_by_sync_test(SuiteCtx) ->
     ?assertMatch(
         {ok, _},
         storage_file_setup_utils:stat(ImportingProviderSelector, ImportedStorageId, StorageFileId),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
 
     %% the file disappears from the storage - scan 2 must delete it from the space
@@ -342,7 +342,7 @@ imported_file_delete_recreate_lifecycle_test(SuiteCtx) ->
     ?assertMatch(
         {ok, _},
         storage_file_setup_utils:stat(ImportingProviderSelector, ImportedStorageId, StorageFileId),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
 
     %% the storage file disappears - scan 2 must delete the recreated file from
@@ -462,11 +462,11 @@ file_deletion_purges_metadata_test(SuiteCtx) ->
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:get_xattr(Node, SessId, {path, FilePath}, <<"xattr_name">>), ?ATTEMPTS),
+        lfm_proxy:get_xattr(Node, SessId, {path, FilePath}, <<"xattr_name">>), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:get_xattr(Node, SessId, ?FILE_REF(FileGuid), <<"xattr_name">>), ?ATTEMPTS),
+        lfm_proxy:get_xattr(Node, SessId, ?FILE_REF(FileGuid), <<"xattr_name">>), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({error, not_found},
-        ?rpc(ImportingProviderSelector, custom_metadata:get(FileUuid)), ?ATTEMPTS),
+        ?rpc(ImportingProviderSelector, custom_metadata:get(FileUuid)), ?STORAGE_IMPORT_ATTEMPTS),
 
     {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
@@ -618,7 +618,7 @@ create_subfiles_and_delete_before_import_is_finished_test(SuiteCtx) ->
     ?assertEqual(
         true,
         ?rpc(ImportingProviderSelector, storage_import_monitoring:is_scan_in_progress(SpaceId)),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),

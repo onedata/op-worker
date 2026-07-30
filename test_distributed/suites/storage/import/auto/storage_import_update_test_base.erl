@@ -705,7 +705,7 @@ replace_file_with_dir_test(SuiteCtx) ->
     ?assertMatch(
         {ok, _},
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(NewSubDirGuid)),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ).
 
 
@@ -837,7 +837,7 @@ replace_remotely_created_non_empty_dir_with_file_test(SuiteCtx) ->
     ?assertMatch(
         {ok, _},
         storage_file_setup_utils:stat(ImportingProviderSelector, ImportedStorageId, ChildStorageFileId),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
 
     %% replace the dir with a same-named regular file, directly on the storage
@@ -859,7 +859,7 @@ replace_remotely_created_non_empty_dir_with_file_test(SuiteCtx) ->
         ?assertMatch(
             {error, ?ENOENT},
             lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(Guid)),
-            ?ATTEMPTS
+            ?STORAGE_IMPORT_ATTEMPTS
         ),
         ?assertMatch(
             {error, ?ENOENT},
@@ -1173,9 +1173,9 @@ update_nfs_acl_test(SuiteCtx) ->
         InitialAcl, User1FullName, User1Id
     ),
     ?assertEqual({ok, InitialAclJson},
-        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertEqual({ok, InitialAclJson},
-        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?STORAGE_IMPORT_ATTEMPTS),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
     %% change the storage's (mocked) ACL and let the next continuous scan re-apply it
@@ -1190,9 +1190,9 @@ update_nfs_acl_test(SuiteCtx) ->
         UpdatedAcl, User1FullName, User1Id
     ),
     ?assertEqual({ok, UpdatedAclJson},
-        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({error, ?EACCES},
-        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?STORAGE_IMPORT_ATTEMPTS),
 
     %% with sync_acl enabled the ACL is folded into the per-file attrs hash (see
     %% storage_import_hash:count_file_attrs_hash/2), so the ACL change surfaces
@@ -1297,7 +1297,7 @@ update_syncs_files_after_import_failed_test(SuiteCtx) ->
     SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     storage_import_test_utils:assert_monitoring_state_after_failed_import(TestCaseCtx),
 
@@ -1343,7 +1343,7 @@ update_syncs_files_after_previous_update_failed_test(SuiteCtx) ->
     SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
@@ -1451,7 +1451,7 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
     %% the change made to the suffixed storage file is reflected in the
     %% recreated logical file, on both providers
     assert_file_content_by_guid(
-        ImportingProviderCtx, RecreatedFileGuid, ChangedContent, ?ATTEMPTS
+        ImportingProviderCtx, RecreatedFileGuid, ChangedContent, ?STORAGE_IMPORT_ATTEMPTS
     ),
     assert_file_content_by_guid(
         NonImportingProviderCtx, RecreatedFileGuid, ChangedContent,
@@ -1485,8 +1485,8 @@ should_not_import_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
     ?assertMatch({ok, [_, _]}, lfm_proxy:get_children(
         ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
     )),
-    assert_file_content_by_guid(ImportingProviderCtx, LocalFileGuid, LocalContent, ?ATTEMPTS),
-    assert_file_content_by_guid(ImportingProviderCtx, RemoteFileGuid, RemoteContent, ?ATTEMPTS),
+    assert_file_content_by_guid(ImportingProviderCtx, LocalFileGuid, LocalContent, ?STORAGE_IMPORT_ATTEMPTS),
+    assert_file_content_by_guid(ImportingProviderCtx, RemoteFileGuid, RemoteContent, ?STORAGE_IMPORT_ATTEMPTS),
     %% the local file is LFM-created, the remote one lands on storage as a replica
     assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 1).
 
@@ -1518,7 +1518,7 @@ should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
     %% created logical file - also back on its origin provider, whose replica
     %% is invalidated and re-fetched
     assert_file_content_by_guid(
-        ImportingProviderCtx, RemoteFileGuid, ChangedContent, ?ATTEMPTS
+        ImportingProviderCtx, RemoteFileGuid, ChangedContent, ?STORAGE_IMPORT_ATTEMPTS
     ),
     assert_file_content_by_guid(
         NonImportingProviderCtx, RemoteFileGuid, ChangedContent,
@@ -2601,7 +2601,7 @@ should_not_sync_file_during_replication_test(SuiteCtx) ->
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(
             ImportingProviderNode, FileGuid, NonImportingProviderId
         ),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
 
     %% slow rtransfer down so that the partially-replicated storage file is
@@ -2661,10 +2661,10 @@ should_not_invalidate_file_after_replication_test(SuiteCtx) ->
     %% by reading it there
     {ok, ReadHandle} = ?assertMatch({ok, _}, lfm_proxy:open(
         ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(FileGuid), read
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertEqual({ok, Content}, lfm_proxy:read(
         ImportingProviderNode, ReadHandle, 0, ContentSize
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
     ok = lfm_proxy:close(ImportingProviderNode, ReadHandle),
     file_test_utils:await_distribution(
         [ImportingProviderNode, NonImportingProviderNode], FileGuid, [
@@ -2765,10 +2765,10 @@ setup_recreated_file_with_suffix_on_storage(TestCaseCtx = #storage_import_test_c
     SuffixedStorageFileId = ?CONFLICTING_STORAGE_FILE_NAME(PlainStorageFileId, RecreatedFileUuid),
     ?assertMatch({ok, _}, storage_file_setup_utils:stat(
         ImportingProviderSelector, ImportedStorageId, PlainStorageFileId
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({ok, _}, storage_file_setup_utils:stat(
         ImportingProviderSelector, ImportedStorageId, SuffixedStorageFileId
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
 
     #{
         file_name => FileName,
@@ -2834,7 +2834,7 @@ setup_replicated_file_with_suffix_on_storage(TestCaseCtx = #storage_import_test_
     ), ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS),
     ?assertEqual({ok, RemoteContent}, lfm_proxy:read(
         ImportingProviderNode, ReadHandle, 0, byte_size(RemoteContent)
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
     ok = lfm_proxy:close(ImportingProviderNode, ReadHandle),
 
     PlainStorageFileId = filepath_utils:join([<<"/">>, FileName]),
@@ -2842,10 +2842,10 @@ setup_replicated_file_with_suffix_on_storage(TestCaseCtx = #storage_import_test_
     SuffixedStorageFileId = ?CONFLICTING_STORAGE_FILE_NAME(PlainStorageFileId, RemoteFileUuid),
     ?assertMatch({ok, _}, storage_file_setup_utils:stat(
         ImportingProviderSelector, ImportedStorageId, PlainStorageFileId
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({ok, _}, storage_file_setup_utils:stat(
         ImportingProviderSelector, ImportedStorageId, SuffixedStorageFileId
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
 
     #{
         file_name => FileName,

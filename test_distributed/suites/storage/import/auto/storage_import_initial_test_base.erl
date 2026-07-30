@@ -341,14 +341,14 @@ import_nfs_acl_test(SuiteCtx) ->
 
     %% the file was imported and is accessible to its owner
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(ImportingProviderNode, User1SessId, {path, SpaceTestFilePath}), ?ATTEMPTS),
+        lfm_proxy:stat(ImportingProviderNode, User1SessId, {path, SpaceTestFilePath}), ?STORAGE_IMPORT_ATTEMPTS),
 
     %% the owner may read the imported ACL (the named principal resolves to it) ...
     ExpectedAclJson = storage_import_test_utils:expected_imported_acl_json(
         ?TEST_NFS4_ACL, oct_background:get_user_fullname(User1Selector), User1Id
     ),
     ?assertEqual({ok, ExpectedAclJson},
-        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?STORAGE_IMPORT_ATTEMPTS),
 
     %% ... but may neither set the ACL nor modify the file's attributes (ACL denies it)
     ?assertMatch({error, ?EACCES},
@@ -358,7 +358,7 @@ import_nfs_acl_test(SuiteCtx) ->
 
     %% the second (non-owner) user may also read the ACL (read_acl granted to EVERYONE@)
     ?assertEqual({ok, ExpectedAclJson},
-        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?STORAGE_IMPORT_ATTEMPTS),
 
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}).
 
@@ -386,7 +386,7 @@ import_nfs_acl_with_disabled_luma_should_fail_test(SuiteCtx) ->
     SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     storage_import_test_utils:assert_monitoring_state_after_failed_import(TestCaseCtx).
 
@@ -411,9 +411,9 @@ import_ignores_fifo_test(SuiteCtx) ->
     FifoPath = filepath_utils:join([SpacePath, FifoName]),
     lists:foreach(fun(#provider_ctx{node = Node, session_id = SessId}) ->
         ?assertEqual({ok, []},
-            lfm_proxy:get_children(Node, SessId, {path, SpacePath}, 0, 1), ?ATTEMPTS),
+            lfm_proxy:get_children(Node, SessId, {path, SpacePath}, 0, 1), ?STORAGE_IMPORT_ATTEMPTS),
         ?assertMatch({error, ?ENOENT},
-            lfm_proxy:stat(Node, SessId, {path, FifoPath}), ?ATTEMPTS)
+            lfm_proxy:stat(Node, SessId, {path, FifoPath}), ?STORAGE_IMPORT_ATTEMPTS)
     end, [ImportingProviderCtx, NonImportingProviderCtx]),
 
     %% unmodified: the space root + the (processed but skipped) fifo
@@ -451,15 +451,15 @@ import_directory_error_test(SuiteCtx) ->
     %% the dir was not imported ...
     ?assertMatch({ok, []},
         lfm_proxy:get_children(ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 1),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestDirPath}),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     ?assertMatch({error, ?EACCES},
         lfm_proxy:stat(ImportingProviderNode, NonImportingProviderSessionId, {path, SpaceTestDirPath}),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
 
     %% ... but is still present on the storage
@@ -481,14 +481,14 @@ import_directory_error_test(SuiteCtx) ->
 %% Shared body for the structure tests: imports the declared tree and runs the
 %% full generic verification (imported tree + dir stats + monitoring counters).
 %% Opts:
-%%   await_attempts - for trees big enough that the scan may outlast ?ATTEMPTS;
+%%   await_attempts - for trees big enough that the scan may outlast ?STORAGE_IMPORT_ATTEMPTS;
 %%   monitoring_overrides - assert_storage_import_monitoring_state/2 overrides.
 -spec import_file_tree_test_base(storage_import_test_utils:suite_ctx(), atom(), term(), map()) ->
     ok.
 import_file_tree_test_base(SuiteCtx, CaseName, FileTreeSpec, Opts) ->
     TestCaseCtx = storage_import_test_utils:init_testcase(CaseName, FileTreeSpec, SuiteCtx),
     storage_import_test_utils:await_initial_scan_finished(
-        TestCaseCtx, maps:get(await_attempts, Opts, ?ATTEMPTS)
+        TestCaseCtx, maps:get(await_attempts, Opts, ?STORAGE_IMPORT_ATTEMPTS)
     ),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
@@ -570,7 +570,7 @@ import_check_user_id_error_test_base(SuiteCtx, CaseName, NodeName, NodeSpec) ->
     SpaceTestNodePath = filepath_utils:join([SpacePath, NodeName]),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestNodePath}),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     storage_import_test_utils:assert_monitoring_state_after_failed_import(TestCaseCtx).
 
