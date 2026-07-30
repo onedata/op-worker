@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2021-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -22,10 +22,14 @@
 
 
 -export([
-    set_up_and_sync_archive/3,
     set_up_archive/3,
     set_up_archive/4,
     await_archive_sync/5
+]).
+-export([
+    mock_gated_archive_verification/0,
+    await_gated_archive_verification/2,
+    resume_gated_archive_verification/2
 ]).
 
 -type archive_spec() :: #archive_spec{}.
@@ -40,19 +44,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
--spec set_up_and_sync_archive(
-    [oct_background:entity_selector()],
-    oct_background:entity_selector(),
-    dataset:id()
-) ->
-    undefined | archive_object().
-set_up_and_sync_archive(Providers, UserSelector, DatasetId) ->
-    [CreationProvider | SyncProviders] = lists_utils:shuffle(Providers),
-    ArchiveObj = set_up_archive(CreationProvider, UserSelector, DatasetId),
-    await_archive_sync(CreationProvider, SyncProviders, UserSelector, ArchiveObj, DatasetId),
-    ArchiveObj.
-
 
 -spec set_up_archive(
     oct_background:entity_selector(),
@@ -134,6 +125,48 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
         ?assertEqual(true, lists:member(ArchiveId, ListArchivesFun()), ?ATTEMPTS)
 
     end, SyncProviders).
+
+%%%===================================================================
+%%% Archive verification traverse gate
+%%%
+%%% Blocks the product's archive verification traverse right before it makes
+%%% the archive immutable, so that a test can modify the archived files and
+%%% only then let the traverse proceed.
+%%%===================================================================
+
+
+-spec mock_gated_archive_verification() -> ok.
+mock_gated_archive_verification() ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    test_utils:mock_new(Nodes, archive_verification_traverse, [passthrough]),
+    Pid = self(),
+    test_utils:mock_expect(Nodes, archive_verification_traverse, block_archive_modification,
+        fun(ArchiveDoc) ->
+            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+            Pid ! {archive_verification_mock, ArchiveId, self()},
+            receive {continue, ArchiveId} ->
+                meck:passthrough([ArchiveDoc])
+            end
+        end).
+
+
+%% @doc Awaits the gated traverse reaching the block. Requires prior mocking.
+-spec await_gated_archive_verification(archive:id(), TimeoutSeconds :: pos_integer()) ->
+    {ok, pid()} | {error, term()}.
+await_gated_archive_verification(ArchiveId, TimeoutSeconds) ->
+    receive {archive_verification_mock, ArchiveId, Pid} ->
+        {ok, Pid}
+    after timer:seconds(TimeoutSeconds) ->
+        {error, archive_creation_not_finished}
+    end.
+
+
+%% @doc Releases the block awaited by await_gated_archive_verification/2.
+-spec resume_gated_archive_verification(pid(), archive:id()) -> ok.
+resume_gated_archive_verification(Pid, ArchiveId) ->
+    Pid ! {continue, ArchiveId},
+    ok.
+
 
 %%%===================================================================
 %%% Internal functions

@@ -54,6 +54,8 @@
 -define(LARGE_ATTEMPTS, 1200).
 -define(SMALL_ATTEMPTS, 60).
 
+-define(ARCHIVE_VERIFICATION_GATE_TIMEOUT_SECONDS, 60).
+
 %===================================================================
 % Test bases
 %===================================================================
@@ -151,7 +153,7 @@ verification_recreate_file_base(Layout) ->
 simple_verification_test_base(Layout, ModificationFun) ->
     OriginalContent = ?RAND_CONTENT(),
     OriginalMetadata = ?RAND_JSON_METADATA(),
-    archive_verification_test_utils:mock_archive_verification(),
+    archive_test_utils:mock_gated_archive_verification(),
     #object{
         dataset = #dataset_object{
             archives = [#archive_object{id = ArchiveId}]
@@ -162,7 +164,7 @@ simple_verification_test_base(Layout, ModificationFun) ->
             children = [#file_spec{content = OriginalContent, metadata = #metadata_spec{json = OriginalMetadata}}],
             metadata = #metadata_spec{json = OriginalMetadata}
         }),
-    {ok, Pid} = archive_verification_test_utils:wait_for_archive_verification_traverse(ArchiveId, ?SMALL_ATTEMPTS),
+    {ok, Pid} = archive_test_utils:await_gated_archive_verification(ArchiveId, ?ARCHIVE_VERIFICATION_GATE_TIMEOUT_SECONDS),
     
     [Provider | _] = oct_background:get_space_supporting_providers(?SPACE),
     Node = oct_background:get_random_provider_node(Provider),
@@ -175,14 +177,14 @@ simple_verification_test_base(Layout, ModificationFun) ->
     
     ModificationFun(Node, ArchivedDirGuid, ArchivedFileGuid, ArchivedFileName, OriginalContent, OriginalMetadata),
     
-    archive_verification_test_utils:start_verification_traverse(Pid, ArchiveId),
+    archive_test_utils:resume_gated_archive_verification(Pid, ArchiveId),
     
     SessId = oct_background:get_user_session_id(?USER1, Provider),
     ?assertMatch({ok, ?ARCHIVE_VERIFICATION_FAILED}, opt_archives:lookup_state(Provider, SessId, ArchiveId), ?SMALL_ATTEMPTS).
 
 
 dip_verification_test_base(Layout) ->
-    archive_verification_test_utils:mock_archive_verification(),
+    archive_test_utils:mock_gated_archive_verification(),
     #object{
         dataset = #dataset_object{
             archives = [#archive_object{id = AipArchiveId}]
@@ -199,14 +201,14 @@ dip_verification_test_base(Layout) ->
     
     SessId = oct_background:get_user_session_id(?USER1, Provider),
     lists:foreach(fun(ArchiveId) ->
-        {ok, Pid} = archive_verification_test_utils:wait_for_archive_verification_traverse(ArchiveId, ?SMALL_ATTEMPTS),
-        archive_verification_test_utils:start_verification_traverse(Pid, ArchiveId),
+        {ok, Pid} = archive_test_utils:await_gated_archive_verification(ArchiveId, ?ARCHIVE_VERIFICATION_GATE_TIMEOUT_SECONDS),
+        archive_test_utils:resume_gated_archive_verification(Pid, ArchiveId),
         ?assertMatch({ok, ?ARCHIVE_PRESERVED}, opt_archives:lookup_state(Provider, SessId, ArchiveId), ?SMALL_ATTEMPTS)
     end, [AipArchiveId, DipArchiveId]).
 
 
 nested_verification_test_base(Layout) ->
-    archive_verification_test_utils:mock_archive_verification(),
+    archive_test_utils:mock_gated_archive_verification(),
     #object{
         dataset = #dataset_object{
             archives = [#archive_object{id = ArchiveId}]
@@ -231,7 +233,7 @@ nested_verification_test_base(Layout) ->
     
     SessId = oct_background:get_user_session_id(?USER1, Provider),
     lists:foreach(fun(Id) ->
-        {ok, Pid} = archive_verification_test_utils:wait_for_archive_verification_traverse(Id, ?SMALL_ATTEMPTS),
-        archive_verification_test_utils:start_verification_traverse(Pid, Id),
+        {ok, Pid} = archive_test_utils:await_gated_archive_verification(Id, ?ARCHIVE_VERIFICATION_GATE_TIMEOUT_SECONDS),
+        archive_test_utils:resume_gated_archive_verification(Pid, Id),
         ?assertMatch({ok, ?ARCHIVE_PRESERVED}, opt_archives:lookup_state(Provider, SessId, Id), ?SMALL_ATTEMPTS)
     end, [NestedArchiveId1, NestedArchiveId2, ArchiveId]).

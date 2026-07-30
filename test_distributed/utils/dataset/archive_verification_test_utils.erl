@@ -1,13 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2021-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Assertions about archives - their state, statistics, directory structure and
-%%% verification traverse. Creating archives is done by archive_test_utils.
+%%% Assertions about archives - their state, statistics and directory structure.
+%%% Creating archives and gating their verification traverse is done by
+%%% archive_test_utils.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_verification_test_utils).
@@ -26,10 +27,7 @@
 -export([
     assert_archive_dir_structure_is_correct/7, assert_archive_stats/7, assert_archive_state/3, assert_archive_state/4,
     assert_archive_is_preserved/8, assert_incremental_archive_links/3,
-    assert_copied/6, assert_structure/7
-]).
--export([
-    mock_archive_verification/0, wait_for_archive_verification_traverse/2, start_verification_traverse/2
+    assert_copied/6
 ]).
 
 
@@ -186,38 +184,6 @@ assert_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts)
 
 
 %===================================================================
-% Test mocks
-%===================================================================
-
-mock_archive_verification() ->
-    Nodes = oct_background:get_all_providers_nodes(),
-    test_utils:mock_new(Nodes, archive_verification_traverse, [passthrough]),
-    Pid = self(),
-    test_utils:mock_expect(Nodes, archive_verification_traverse, block_archive_modification,
-        fun(ArchiveDoc) ->
-            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-            Pid ! {archive_verification_mock, ArchiveId, self()},
-            receive {continue, ArchiveId} ->
-                meck:passthrough([ArchiveDoc])
-            end
-        end).
-
-
-% this function require calling mock_archive_verification/1 beforehand
-wait_for_archive_verification_traverse(ArchiveId, Attempts) ->
-    receive {archive_verification_mock, ArchiveId, Pid} ->
-        {ok, Pid}
-    after timer:seconds(Attempts) ->
-        {error, archive_creation_not_finished}
-    end.
-
-
-% this function require calling mock_archive_verification/1 beforehand
-start_verification_traverse(Pid, ArchiveId) ->
-    Pid ! {continue, ArchiveId}.
-
-
-%===================================================================
 % Internal functions
 %===================================================================
 
@@ -265,6 +231,7 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId
     }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(ArchiveDirGuid)), Attempts).
 
 
+%% @private
 assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT, FollowSymlinks, Attempts) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
