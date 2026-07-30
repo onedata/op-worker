@@ -12,7 +12,7 @@
 -module(qos_status_test_SUITE).
 -author("Michal Stanisz").
 
--include("qos/qos_tests_utils.hrl").
+-include("qos/qos_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -147,7 +147,7 @@ qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test(_Con
 %%%===================================================================
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils, dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_test_utils, dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op",
             envs = [{op_worker, op_worker, [
@@ -165,13 +165,13 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    qos_tests_utils:mock_transfers(Workers),
+    qos_test_utils:mock_transfers(Workers),
     lfm_proxy:init(Config),
     Config.
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    qos_tests_utils:finish_all_transfers(),
+    qos_test_utils:finish_all_transfers(),
     test_utils:mock_unload(Workers, replica_synchronizer),
     lfm_proxy:teardown(Config).
 

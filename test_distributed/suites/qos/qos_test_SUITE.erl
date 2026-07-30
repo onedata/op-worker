@@ -14,7 +14,7 @@
 
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("qos/qos_tests_utils.hrl").
+-include("qos/qos_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -213,7 +213,7 @@ qos_cleanup_test(_Config) ->
         ]
     },
 
-    {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    {GuidsAndPaths, QosNameIdMapping} = qos_test_utils:fulfill_qos_test_base(QosSpec),
 
     #{files := [{FileGuid, _FilePath} | _]} = GuidsAndPaths,
 
@@ -356,7 +356,7 @@ prepare_audit_log_test_env(effective, Node, SessId, RootFilePath) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils]} | Config], #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_test_utils]} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60},
@@ -388,9 +388,9 @@ init_per_testcase(_, Config) ->
 audit_log_tests_init_per_testcase(Config, ExpectedSynchronizer) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Nodes, replica_synchronizer, [passthrough]),
-    qos_tests_utils:mock_replica_synchronizer(Nodes, ExpectedSynchronizer),
+    qos_test_utils:mock_replica_synchronizer(Nodes, ExpectedSynchronizer),
     % mock retry failed files, so there is only one failed entry in audit log
-    qos_tests_utils:mock_replica_synchronizer(Nodes, ?ERR_POSIX(?ENOENT)),
+    qos_test_utils:mock_replica_synchronizer(Nodes, ?ERR_POSIX(?ENOENT)),
     test_utils:mock_expect(Nodes, qos_logic, retry_failed_files, fun(_SpaceId) -> ok end).
 
 
@@ -424,12 +424,12 @@ add_qos_and_check_qos_docs(#qos_spec{
     expected_file_qos = ExpectedFileQos
 }) ->
     % add QoS for file and wait for appropriate QoS status
-    QosNameIdMapping = qos_tests_utils:add_multiple_qos(QosToAddList),
-    qos_tests_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries),
+    QosNameIdMapping = qos_test_utils:add_multiple_qos(QosToAddList),
+    qos_test_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries),
 
     % check qos documents
-    qos_tests_utils:assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping),
-    qos_tests_utils:assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, false).
+    qos_test_utils:assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping),
+    qos_test_utils:assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, false).
 
 
 add_qos_for_dir_and_check_effective_qos(#effective_qos_test_spec{
@@ -439,22 +439,22 @@ add_qos_for_dir_and_check_effective_qos(#effective_qos_test_spec{
     expected_effective_qos = ExpectedEffectiveQos
 }) ->
     % create initial dir structure
-    qos_tests_utils:create_dir_structure(InitialDirStructure),
+    qos_test_utils:create_dir_structure(InitialDirStructure),
 
     % add QoS and wait for appropriate QoS status
-    QosNameIdMapping = qos_tests_utils:add_multiple_qos(QosToAddList),
-    qos_tests_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries),
+    QosNameIdMapping = qos_test_utils:add_multiple_qos(QosToAddList),
+    qos_test_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries),
 
     % check qos_entry documents and effective QoS
-    qos_tests_utils:assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping),
-    qos_tests_utils:assert_effective_qos(ExpectedEffectiveQos, QosNameIdMapping, false).
+    qos_test_utils:assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping),
+    qos_test_utils:assert_effective_qos(ExpectedEffectiveQos, QosNameIdMapping, false).
 
 
 create_test_file() ->
     [ProviderId] = oct_background:get_provider_ids(),
     Name = generator:gen_name(),
     Path = ?PATH(Name),
-    _Guid = qos_tests_utils:create_file(ProviderId, ?SESS_ID(ProviderId), Path, ?TEST_DATA),
+    _Guid = qos_test_utils:create_file(ProviderId, ?SESS_ID(ProviderId), Path, ?TEST_DATA),
     Path.
 
 
@@ -462,7 +462,7 @@ create_test_dir_with_file() ->
     [ProviderId] = oct_background:get_provider_ids(),
     Name = generator:gen_name(),
     DirPath = ?PATH(Name),
-    _DirGuid = qos_tests_utils:create_directory(ProviderId, ?SESS_ID(ProviderId), DirPath),
+    _DirGuid = qos_test_utils:create_directory(ProviderId, ?SESS_ID(ProviderId), DirPath),
     FilePath = filename:join(DirPath, <<"file1">>),
-    _FileGuid = qos_tests_utils:create_file(ProviderId, ?SESS_ID(ProviderId), FilePath, ?TEST_DATA),
+    _FileGuid = qos_test_utils:create_file(ProviderId, ?SESS_ID(ProviderId), FilePath, ?TEST_DATA),
     DirPath.

@@ -12,7 +12,7 @@
 -author("Michal Stanisz").
 
 -include("transfers/transfers_test_mechanism.hrl").
--include("qos/qos_tests_utils.hrl").
+-include("qos/qos_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -633,7 +633,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
     [Provider1, Provider2, _Provider3 | _] = oct_background:get_provider_ids(),
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Filename),
-    {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    {GuidsAndPaths, _} = qos_test_utils:fulfill_qos_test_base(QosSpec),
     
     % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
@@ -646,7 +646,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         _ ->
             maps:fold(fun(Provider, NewQosParams) ->
                 maps:fold(fun(StorageId, Params, _) ->
-                    qos_tests_utils:set_qos_parameters(Provider, StorageId, Params)
+                    qos_test_utils:set_qos_parameters(Provider, StorageId, Params)
                 end, ok, NewQosParams)
             end, ok, NewQosParamsPerProvider)
     end,
@@ -679,7 +679,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
                 user = UserId,
                 assertion_nodes = oct_background:get_all_providers_nodes(),
                 files_structure = {pre_created, GuidsAndPaths},
-                root_directory = {qos_tests_utils:get_guid(?FILE_PATH(Filename), GuidsAndPaths), ?FILE_PATH(Filename)}
+                root_directory = {qos_test_utils:get_guid(?FILE_PATH(Filename), GuidsAndPaths), ?FILE_PATH(Filename)}
             },
             scenario = #scenario{
                 user = UserId,
@@ -732,7 +732,7 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
 
     ok = opw_test_rpc:call(RunNode, file_popularity_api, enable, [SpaceId]),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Name),
-    {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    {GuidsAndPaths, _} = qos_test_utils:fulfill_qos_test_base(QosSpec),
     
     % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
@@ -778,7 +778,7 @@ init_per_suite(Config) ->
     }).
 
 init_per_testcase(_Case, Config) ->
-    qos_tests_utils:reset_qos_parameters(),
+    qos_test_utils:reset_qos_parameters(),
     lfm_proxy:init(Config),
     Config.
 

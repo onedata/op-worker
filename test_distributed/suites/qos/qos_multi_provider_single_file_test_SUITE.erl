@@ -14,7 +14,7 @@
 -author("Michal Cwiertnia").
 
 -include("modules/logical_file_manager/lfm.hrl").
--include("qos/qos_tests_utils.hrl").
+-include("qos/qos_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -413,7 +413,7 @@ basic_qos_reconciliation_test_base(DirStructureType) ->
 
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Filename),
-    {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    {GuidsAndPaths, _} = qos_test_utils:fulfill_qos_test_base(QosSpec),
     NewData = <<"new_test_data">>,
     StoragePaths = lists:map(fun({Guid, Path}) ->
         % remove leading slash and space id
@@ -493,7 +493,7 @@ qos_transfer_stats_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
 
     Name = generator:gen_name(),
-    Guid = qos_tests_utils:create_file(Provider1, ?SESS_ID(Provider1), ?PATH(Name), ?TEST_DATA),
+    Guid = qos_test_utils:create_file(Provider1, ?SESS_ID(Provider1), ?PATH(Name), ?TEST_DATA),
     {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Guid), <<"providerId=", Provider2/binary>>, 1),
     % wait for qos entries to be dbsynced to other provider
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
@@ -535,7 +535,7 @@ qos_transfer_stats_test(_Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils, dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_test_utils, dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "3op",
             envs = [{op_worker, op_worker, [
@@ -546,16 +546,16 @@ init_per_suite(Config) ->
                 dir_stats_test_utils:disable_stats_counting(NewConfig),
                 [Provider1, Provider2, Provider3 | _] = oct_background:get_provider_ids(),
                 SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
-                qos_tests_utils:set_qos_parameters(Provider1, opt_spaces:get_storage_id(Provider1, SpaceId), #{
+                qos_test_utils:set_qos_parameters(Provider1, opt_spaces:get_storage_id(Provider1, SpaceId), #{
                     <<"type">> => <<"disk">>,
                     <<"tier">> => <<"t3">>,
                     <<"param1">> => <<"val1">>
                 }),
-                qos_tests_utils:set_qos_parameters(Provider2, opt_spaces:get_storage_id(Provider2, SpaceId), #{
+                qos_test_utils:set_qos_parameters(Provider2, opt_spaces:get_storage_id(Provider2, SpaceId), #{
                     <<"type">> => <<"tape">>,
                     <<"tier">> => <<"t2">>
                 }),
-                qos_tests_utils:set_qos_parameters(Provider3, opt_spaces:get_storage_id(Provider3, SpaceId), #{
+                qos_test_utils:set_qos_parameters(Provider3, opt_spaces:get_storage_id(Provider3, SpaceId), #{
                     <<"type">> => <<"disk">>,
                     <<"tier">> => <<"t2">>,
                     <<"param1">> => <<"val1">>
@@ -582,7 +582,7 @@ end_per_testcase(qos_transfer_stats_test, Config) ->
     time_test_utils:unfreeze_time(Config),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
-    qos_tests_utils:finish_all_transfers(),
+    qos_test_utils:finish_all_transfers(),
     lfm_proxy:teardown(Config).
 
 
@@ -597,13 +597,13 @@ run_tests(FileTypes, SourceProvider, TargetProviders, TestSpecFun) ->
             Filename = generator:gen_name(),
             InitialDirStructure = get_initial_structure_with_single_file(SourceProvider, Filename),
             ExpectedDirStructure = get_expected_structure_for_single_file(TargetProviders, Filename),
-            qos_tests_utils:fulfill_qos_test_base(TestSpecFun(?PATH(Filename), InitialDirStructure, ExpectedDirStructure));
+            qos_test_utils:fulfill_qos_test_base(TestSpecFun(?PATH(Filename), InitialDirStructure, ExpectedDirStructure));
         (dir) ->
             ct:pal("Starting for dir"),
             Name = generator:gen_name(),
             InitialDirStructure = get_initial_structure_with_single_dir(SourceProvider, Name),
             ExpectedDirStructure = get_expected_structure_for_single_dir(TargetProviders, Name),
-            qos_tests_utils:fulfill_qos_test_base(TestSpecFun(?PATH(?DIRNAME(Name)), InitialDirStructure, ExpectedDirStructure))
+            qos_test_utils:fulfill_qos_test_base(TestSpecFun(?PATH(?DIRNAME(Name)), InitialDirStructure, ExpectedDirStructure))
     end, FileTypes).
 
 

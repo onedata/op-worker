@@ -9,11 +9,11 @@
 %%% This module contains utils functions for QoS tests.
 %%% @end
 %%%--------------------------------------------------------------------
--module(qos_tests_utils).
+-module(qos_test_utils).
 -author("Michal Cwiertnia").
 -author("Michal Stanisz").
 
--include("qos/qos_tests_utils.hrl").
+-include("qos/qos_test_utils.hrl").
 -include("api/rest_test_utils.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
@@ -59,7 +59,7 @@
 -define(SPACE, space1).
 -define(SESS_ID(ProviderPlaceholder), oct_background:get_user_session_id(?USER_PLACEHOLDER, ProviderPlaceholder)).
 -define(GET_FILE_UUID(Node, SessId, FilePath),
-    file_id:guid_to_uuid(qos_tests_utils:get_guid(Node, SessId, FilePath))
+    file_id:guid_to_uuid(qos_test_utils:get_guid(Node, SessId, FilePath))
 ).
 
 -define(ATTEMPTS, 60).
@@ -594,9 +594,9 @@ assert_effective_qos(ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntr
     }) ->
         % if not specified in tests spec, check document on all nodes
         Providers = ensure_providers(ProviderOrUndef),
-        ExpectedQosEntriesId = qos_tests_utils:map_qos_names_to_ids(ExpectedQosEntriesWithNames, QosNameIdMapping),
+        ExpectedQosEntriesId = qos_test_utils:map_qos_names_to_ids(ExpectedQosEntriesWithNames, QosNameIdMapping),
         ExpectedAssignedEntriesId = maps:map(fun(_, QosNamesList) ->
-            qos_tests_utils:map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
+            qos_test_utils:map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
         end, ExpectedAssignedEntries),
 
         lists:foreach(fun(Provider) ->
@@ -627,7 +627,7 @@ assert_effective_qos(Provider, FilePath, QosEntries, AssignedEntries, FilterAssi
     ExpectedEffectiveQosSorted = sort_effective_qos(ExpectedEffectiveQos),
 
     GetSortedEffectiveQos = fun() ->
-        FileGuid = qos_tests_utils:get_guid(Node, ?SESS_ID(Provider), FilePath),
+        FileGuid = qos_test_utils:get_guid(Node, ?SESS_ID(Provider), FilePath),
         {ok, EffQos} = get_effective_qos_by_lfm(Node, ?SESS_ID(Provider), FileGuid),
         EffQosSorted = sort_effective_qos(EffQos),
         ErrMsg = str_utils:format(

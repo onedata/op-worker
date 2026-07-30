@@ -16,7 +16,7 @@
 
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("qos/qos_tests_utils.hrl").
+-include("qos/qos_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -268,16 +268,16 @@ reconcile_qos_using_file_meta_posthooks_test(_Config) ->
         ]
     },
 
-    {_, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    {_, _} = qos_test_utils:fulfill_qos_test_base(QosSpec),
 
     mock_dbsync_changes(oct_background:get_provider_nodes(Provider2), ?FUNCTION_NAME),
     mock_file_meta_posthooks(),
 
-    Guid = qos_tests_utils:create_file(Provider1, SessId, FilePath, <<"test_data">>),
+    Guid = qos_test_utils:create_file(Provider1, SessId, FilePath, <<"test_data">>),
 
     DirStructureBefore = get_expected_structure_for_single_dir([Provider1]),
     DirStructureBefore2 = DirStructureBefore#test_dir_structure{assertion_providers = [Provider1]},
-    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(
+    ?assert(qos_test_utils:assert_distribution_in_dir_structure(
         DirStructureBefore2, #{files => [{Guid, FilePath}], dirs => []}
     )),
     
@@ -292,7 +292,7 @@ reconcile_qos_using_file_meta_posthooks_test(_Config) ->
     save_matching_docs(oct_background:get_random_provider_node(Provider2), ?FUNCTION_NAME, Filters),
 
     DirStructureAfter = get_expected_structure_for_single_dir([Provider1, Provider2]),
-    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(DirStructureAfter,  
+    ?assert(qos_test_utils:assert_distribution_in_dir_structure(DirStructureAfter,  
         #{files => [{Guid, FilePath}], dirs => []})).
 
 
@@ -408,7 +408,7 @@ reevaluate_impossible_qos_test(_Config) ->
     {QosNameIdMapping, DirPath} = setup_reevaluate_test(RandomQosParam, impossible),
     
     % Impossible qos reevaluation is called after successful set_qos_parameters
-    ok = qos_tests_utils:set_qos_parameters(Provider2, P2StorageId, #{<<"param">> => RandomQosParam}),
+    ok = qos_test_utils:set_qos_parameters(Provider2, P2StorageId, #{<<"param">> => RandomQosParam}),
     
     ExpectedQosEntriesAfter = [
         #expected_qos_entry{
@@ -420,7 +420,7 @@ reevaluate_impossible_qos_test(_Config) ->
             possibility_check = {possible, Provider2}
         }
     ],
-    qos_tests_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntriesAfter),
+    qos_test_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntriesAfter),
     qos_reevaluate_assert_file_qos(P2StorageId, DirPath, QosNameIdMapping).
 
 reevaluate_impossible_qos_race_test(_Config) ->
@@ -432,7 +432,7 @@ reevaluate_impossible_qos_race_test(_Config) ->
     P2StorageId = opt_spaces:get_storage_id(Provider2, SpaceId),
     
     RandomQosParam = gen_random_qos_param(),
-    ok = qos_tests_utils:set_qos_parameters(Provider2, P2StorageId, #{<<"param">> => RandomQosParam}),
+    ok = qos_test_utils:set_qos_parameters(Provider2, P2StorageId, #{<<"param">> => RandomQosParam}),
     
     {QosNameIdMapping, DirPath} = setup_reevaluate_test(RandomQosParam, possible),
     
@@ -451,7 +451,7 @@ reevaluate_impossible_qos_conflict_test(_Config) ->
     lists_utils:pforeach(fun(Provider) ->
         StorageId = opt_spaces:get_storage_id(Provider, SpaceId),
         % Impossible qos reevaluation is called after successful set_qos_parameters
-        ok = qos_tests_utils:set_qos_parameters(Provider, StorageId, #{<<"param">> => RandomQosParam})
+        ok = qos_test_utils:set_qos_parameters(Provider, StorageId, #{<<"param">> => RandomQosParam})
     end, Providers),
     
     % final result should be calculated by provider with lowest id lexicographically
@@ -467,7 +467,7 @@ reevaluate_impossible_qos_conflict_test(_Config) ->
             possibility_check = {possible, FinalProvider}
         }
     ],
-    qos_tests_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntriesAfter).
+    qos_test_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntriesAfter).
 
 
 setup_reevaluate_test(QosParam, Status) ->
@@ -505,7 +505,7 @@ setup_reevaluate_test(QosParam, Status) ->
         ],
         wait_for_qos_fulfillment = false
     },
-    {_GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    {_GuidsAndPaths, QosNameIdMapping} = qos_test_utils:fulfill_qos_test_base(QosSpec),
     {QosNameIdMapping, DirPath}.
 
 
@@ -521,7 +521,7 @@ qos_reevaluate_assert_file_qos(StorageId, DirPath, QosNameIdMapping) ->
             }
         }
     ],
-    qos_tests_utils:assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, true, 10).
+    qos_test_utils:assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, true, 10).
 
 
 gen_random_qos_param() ->
@@ -581,10 +581,10 @@ qos_entry_deletion_test_base(DeletionType) ->
         ]
     },
     
-    {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    {GuidsAndPaths, QosNameIdMapping} = qos_test_utils:fulfill_qos_test_base(QosSpec),
     [QosEntryId] = maps:values(QosNameIdMapping),
     
-    DirGuid = qos_tests_utils:get_guid(QosRootFilePath, GuidsAndPaths),
+    DirGuid = qos_test_utils:get_guid(QosRootFilePath, GuidsAndPaths),
     
     % create file and write to it on remote provider to trigger reconciliation transfer
     {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(P2Node, ?SESS_ID(Provider2), DirGuid, 
@@ -593,7 +593,7 @@ qos_entry_deletion_test_base(DeletionType) ->
     ok = lfm_proxy:close(P2Node, FileHandle),
     
     % wait for reconciliation transfer to start
-    qos_tests_utils:wait_for_file_transfer_start(FileGuid),
+    qos_test_utils:wait_for_file_transfer_start(FileGuid),
     
     % remove entry to trigger transfer cancellation
     case DeletionType of
@@ -610,7 +610,7 @@ qos_entry_deletion_test_base(DeletionType) ->
     end, oct_background:get_all_providers_nodes()),
     
     % finish transfers to unlock waiting slave job processes
-    ok = qos_tests_utils:finish_all_transfers(),
+    ok = qos_test_utils:finish_all_transfers(),
     
     % check that 1 traverse was cancelled
     % (only initial traverse is cancelled, reconciliation traverse is started for 1 regular file so it is properly finished at this point)
@@ -651,7 +651,7 @@ create_hardlink_in_dir_with_qos(_Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils, dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_test_utils, dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op-2nodes",
             envs = [{op_worker, op_worker, [
@@ -674,17 +674,17 @@ init_per_testcase(Case, Config) when
     
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Nodes, qos_traverse, [passthrough]),
-    qos_tests_utils:mock_transfers(Nodes),
+    qos_test_utils:mock_transfers(Nodes),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
-    qos_tests_utils:reset_qos_parameters(),
+    qos_test_utils:reset_qos_parameters(),
     lfm_proxy:init(Config),
     Config.
 
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    qos_tests_utils:finish_all_transfers(),
+    qos_test_utils:finish_all_transfers(),
     test_utils:mock_unload(Nodes, replica_synchronizer),
     test_utils:mock_unload(Nodes, qos_traverse),
     lfm_proxy:teardown(Config).
@@ -703,16 +703,16 @@ add_qos_for_dir_and_check_effective_qos(TestSpec) ->
     } = TestSpec,
 
     % create initial dir structure
-    GuidsAndPaths = qos_tests_utils:create_dir_structure(InitialDirStructure),
-    ?assertMatch(true, qos_tests_utils:assert_distribution_in_dir_structure(InitialDirStructure, GuidsAndPaths)),
+    GuidsAndPaths = qos_test_utils:create_dir_structure(InitialDirStructure),
+    ?assertMatch(true, qos_test_utils:assert_distribution_in_dir_structure(InitialDirStructure, GuidsAndPaths)),
 
     % add QoS and wait for fulfillment
-    QosNameIdMapping = qos_tests_utils:add_multiple_qos(QosToAddList),
-    qos_tests_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries),
+    QosNameIdMapping = qos_test_utils:add_multiple_qos(QosToAddList),
+    qos_test_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries),
 
     % check documents
-    qos_tests_utils:assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping, ?ATTEMPTS),
-    qos_tests_utils:assert_effective_qos(ExpectedEffectiveQos, QosNameIdMapping, true).
+    qos_test_utils:assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping, ?ATTEMPTS),
+    qos_test_utils:assert_effective_qos(ExpectedEffectiveQos, QosNameIdMapping, true).
 
 
 %%%===================================================================
