@@ -381,9 +381,9 @@ cancel_verification_dip_with_delete(_Config) ->
 cancel_preserved_archive_test(_Config) ->
     #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} = 
         setup_initial_environment(#test_config{}),
-    archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, krakow, ?ATTEMPTS),
+    archive_verification_test_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, krakow, ?ATTEMPTS),
     ?assertEqual(ok, cancel_archivisation(paris, ArchiveId, delete)),
-    archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, [paris, krakow], ?ATTEMPTS).
+    archive_verification_test_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, [paris, krakow], ?ATTEMPTS).
 
 %===================================================================
 % Test bases
@@ -405,18 +405,18 @@ cancel_test_base(#test_config{
         archivisation_traverse -> ?ARCHIVE_BUILDING;
         archive_verification_traverse -> ?ARCHIVE_VERIFYING
     end,
-    archive_tests_utils:assert_archive_state(ArchiveToCancelId, InitialExpectedState, ?ATTEMPTS),
+    archive_verification_test_utils:assert_archive_state(ArchiveToCancelId, InitialExpectedState, ?ATTEMPTS),
     
     ?assertEqual(ok, cancel_archivisation(CancellingProvider, ArchiveToCancelId, PreservationPolicy)),
     
-    archive_tests_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLING(PreservationPolicy), ?ATTEMPTS),
+    archive_verification_test_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLING(PreservationPolicy), ?ATTEMPTS),
     
     continue_mocked_jobs(),
     
     case PreservationPolicy of
         retain ->
-            archive_tests_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLED, ?ATTEMPTS),
-            archive_tests_utils:assert_archive_state(NotCancelledArchivesToCheck, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+            archive_verification_test_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLED, ?ATTEMPTS),
+            archive_verification_test_utils:assert_archive_state(NotCancelledArchivesToCheck, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
     
             case CancelledTraverse of
                 archivisation_traverse ->
@@ -620,7 +620,7 @@ continue_mocked_jobs() ->
 %===================================================================
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_verification_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op",
             envs = [{op_worker, op_worker, [

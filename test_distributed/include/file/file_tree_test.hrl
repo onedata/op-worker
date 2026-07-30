@@ -26,7 +26,7 @@
 -record(dataset_spec, {
     state = ?ATTACHED_DATASET :: dataset:state(),
     protection_flags = [] :: [binary()],
-    archives = 0 :: non_neg_integer() | [onenv_archive_test_utils:archive_spec()]
+    archives = 0 :: non_neg_integer() | [archive_test_utils:archive_spec()]
 }).
 
 -record(metadata_spec, {
@@ -104,7 +104,7 @@
     state :: dataset:state(),
     protection_flags :: [binary()],
     space_id :: od_space:id(),
-    archives = [] :: [onenv_archive_test_utils:archive_object()]
+    archives = [] :: [archive_test_utils:archive_object()]
 }).
 
 -record(metadata_object, {

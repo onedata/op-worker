@@ -113,7 +113,7 @@ set_up_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
     end,
 
     ArchiveObjs = lists:map(fun(ArchiveSpec) ->
-        onenv_archive_test_utils:set_up_archive(CreationProvider, UserId, DatasetId, ArchiveSpec)
+        archive_test_utils:set_up_archive(CreationProvider, UserId, DatasetId, ArchiveSpec)
     end, ArchiveSpecs),
 
     #dataset_object{
@@ -163,7 +163,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     end, SyncProviders),
 
     lists_utils:pforeach(fun(ArchiveObj) ->
-        onenv_archive_test_utils:await_archive_sync(CreationProvider, SyncProviders, UserId, ArchiveObj, DatasetId)
+        archive_test_utils:await_archive_sync(CreationProvider, SyncProviders, UserId, ArchiveObj, DatasetId)
     end, ArchiveObjs).
 
 

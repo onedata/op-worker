@@ -6,10 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for archive tests.
+%%% Assertions about archives - their state, statistics, directory structure and
+%%% verification traverse. Creating archives is done by archive_test_utils.
 %%% @end
 %%%-------------------------------------------------------------------
--module(archive_tests_utils).
+-module(archive_verification_test_utils).
 -author("Jakub Kudzia").
 
 

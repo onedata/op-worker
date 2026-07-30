@@ -1356,7 +1356,7 @@ build_archive_gs_instance(ArchiveId, DatasetId, Creator, State, Config, Descript
     maps:without([<<"creationTime">>, <<"index">>, <<"relatedDip">>], BasicInfo#{<<"revision">> => 1}).
 
 
--spec take_random_archive(api_test_memory:mem_ref()) -> onenv_archive_test_utils:archive_object().
+-spec take_random_archive(api_test_memory:mem_ref()) -> archive_test_utils:archive_object().
 take_random_archive(MemRef) ->
     case lists_utils:shuffle(api_test_memory:get(MemRef, archive_objects)) of
         [ArchiveObject | RestArchiveIds] ->

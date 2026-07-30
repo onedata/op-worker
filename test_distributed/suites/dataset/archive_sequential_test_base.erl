@@ -83,7 +83,7 @@ archive_dataset_tree_test_base(FileStructure, ArchiveLayout) ->
         opt_archives:archive_dataset(Node, SessId, DatasetId, #archive_config{layout = ArchiveLayout}, <<>>),
 
     % created files are empty therefore expected size is 0
-    archive_tests_utils:assert_archive_is_preserved(Node, SessId, ArchiveId, DatasetId, RootGuid, length(FileGuids), 0, ?LARGE_ATTEMPTS).
+    archive_verification_test_utils:assert_archive_is_preserved(Node, SessId, ArchiveId, DatasetId, RootGuid, length(FileGuids), 0, ?LARGE_ATTEMPTS).
 
 
 archive_simple_dataset_test(Guid, DatasetId, ArchiveId) ->
@@ -92,15 +92,15 @@ archive_simple_dataset_test(Guid, DatasetId, ArchiveId) ->
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
         UserId = oct_background:get_user_id(?USER1),
-        archive_tests_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?LARGE_ATTEMPTS),
-        archive_tests_utils:assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, false, ?SMALL_ATTEMPTS),
+        archive_verification_test_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?LARGE_ATTEMPTS),
+        archive_verification_test_utils:assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, false, ?SMALL_ATTEMPTS),
         {ok, #file_attr{type = Type, size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
         {FileCount, ExpSize} = case Type of
             ?DIRECTORY_TYPE -> {0, 0};
             ?SYMLINK_TYPE -> {1, 0};
             _ -> {1, Size}
         end,
-        archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize, ?LARGE_ATTEMPTS)
+        archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize, ?LARGE_ATTEMPTS)
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
 
@@ -151,7 +151,7 @@ verification_recreate_file_base(Layout) ->
 simple_verification_test_base(Layout, ModificationFun) ->
     OriginalContent = ?RAND_CONTENT(),
     OriginalMetadata = ?RAND_JSON_METADATA(),
-    archive_tests_utils:mock_archive_verification(),
+    archive_verification_test_utils:mock_archive_verification(),
     #object{
         dataset = #dataset_object{
             archives = [#archive_object{id = ArchiveId}]
@@ -162,7 +162,7 @@ simple_verification_test_base(Layout, ModificationFun) ->
             children = [#file_spec{content = OriginalContent, metadata = #metadata_spec{json = OriginalMetadata}}],
             metadata = #metadata_spec{json = OriginalMetadata}
         }),
-    {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(ArchiveId, ?SMALL_ATTEMPTS),
+    {ok, Pid} = archive_verification_test_utils:wait_for_archive_verification_traverse(ArchiveId, ?SMALL_ATTEMPTS),
     
     [Provider | _] = oct_background:get_space_supporting_providers(?SPACE),
     Node = oct_background:get_random_provider_node(Provider),
@@ -175,14 +175,14 @@ simple_verification_test_base(Layout, ModificationFun) ->
     
     ModificationFun(Node, ArchivedDirGuid, ArchivedFileGuid, ArchivedFileName, OriginalContent, OriginalMetadata),
     
-    archive_tests_utils:start_verification_traverse(Pid, ArchiveId),
+    archive_verification_test_utils:start_verification_traverse(Pid, ArchiveId),
     
     SessId = oct_background:get_user_session_id(?USER1, Provider),
     ?assertMatch({ok, ?ARCHIVE_VERIFICATION_FAILED}, opt_archives:lookup_state(Provider, SessId, ArchiveId), ?SMALL_ATTEMPTS).
 
 
 dip_verification_test_base(Layout) ->
-    archive_tests_utils:mock_archive_verification(),
+    archive_verification_test_utils:mock_archive_verification(),
     #object{
         dataset = #dataset_object{
             archives = [#archive_object{id = AipArchiveId}]
@@ -199,14 +199,14 @@ dip_verification_test_base(Layout) ->
     
     SessId = oct_background:get_user_session_id(?USER1, Provider),
     lists:foreach(fun(ArchiveId) ->
-        {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(ArchiveId, ?SMALL_ATTEMPTS),
-        archive_tests_utils:start_verification_traverse(Pid, ArchiveId),
+        {ok, Pid} = archive_verification_test_utils:wait_for_archive_verification_traverse(ArchiveId, ?SMALL_ATTEMPTS),
+        archive_verification_test_utils:start_verification_traverse(Pid, ArchiveId),
         ?assertMatch({ok, ?ARCHIVE_PRESERVED}, opt_archives:lookup_state(Provider, SessId, ArchiveId), ?SMALL_ATTEMPTS)
     end, [AipArchiveId, DipArchiveId]).
 
 
 nested_verification_test_base(Layout) ->
-    archive_tests_utils:mock_archive_verification(),
+    archive_verification_test_utils:mock_archive_verification(),
     #object{
         dataset = #dataset_object{
             archives = [#archive_object{id = ArchiveId}]
@@ -231,7 +231,7 @@ nested_verification_test_base(Layout) ->
     
     SessId = oct_background:get_user_session_id(?USER1, Provider),
     lists:foreach(fun(Id) ->
-        {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(Id, ?SMALL_ATTEMPTS),
-        archive_tests_utils:start_verification_traverse(Pid, Id),
+        {ok, Pid} = archive_verification_test_utils:wait_for_archive_verification_traverse(Id, ?SMALL_ATTEMPTS),
+        archive_verification_test_utils:start_verification_traverse(Pid, Id),
         ?assertMatch({ok, ?ARCHIVE_PRESERVED}, opt_archives:lookup_state(Provider, SessId, Id), ?SMALL_ATTEMPTS)
     end, [NestedArchiveId1, NestedArchiveId2, ArchiveId]).

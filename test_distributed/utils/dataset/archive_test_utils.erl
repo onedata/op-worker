@@ -6,10 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions operating on archives used in onenv ct tests.
+%%% Utility functions for creating archives and awaiting their synchronization
+%%% between providers. Assertions about archives live in
+%%% archive_verification_test_utils.
 %%% @end
 %%%-------------------------------------------------------------------
--module(onenv_archive_test_utils).
+-module(archive_test_utils).
 -author("Jakub Kudzia").
 
 -include("file/file_tree_test.hrl").

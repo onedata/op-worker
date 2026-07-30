@@ -213,7 +213,7 @@ create_archivisation_tree(_Config) ->
     lists_utils:pforeach(fun({Provider, Data}) ->
         Node = oct_background:get_random_provider_node(Provider),
         lists_utils:pforeach(fun({DatasetId, ArchiveId, UserId}) ->
-            archive_tests_utils:create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId)
+            archive_verification_test_utils:create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId)
         end, Data)
     end, [{P1, P1Data}, {P2, P2Data}]),
 
@@ -222,7 +222,7 @@ create_archivisation_tree(_Config) ->
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
         lists_utils:pforeach(fun({DatasetId, ArchiveId, UserId}) ->
-            archive_tests_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?ATTEMPTS)
+            archive_verification_test_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?ATTEMPTS)
         end, MockedData)
     end, Providers).
 
@@ -497,10 +497,10 @@ archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId, FileCount, ExpSize,
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
         UserId = oct_background:get_user_id(?USER1),
-        archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
-        archive_tests_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?ATTEMPTS),
-        archive_tests_utils:assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, FollowSymlinks, 2 * ?ATTEMPTS),
-        archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize, ?ATTEMPTS)
+        archive_verification_test_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+        archive_verification_test_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?ATTEMPTS),
+        archive_verification_test_utils:assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, FollowSymlinks, 2 * ?ATTEMPTS),
+        archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize, ?ATTEMPTS)
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
 archive_nested_datasets_test_base(ArchiveLayout, IncludeDip) ->
@@ -601,11 +601,11 @@ archive_nested_datasets_test_base(ArchiveLayout, IncludeDip) ->
     ArchiveDir11Bytes = File21Size + File41Size + File42Size,
     ArchiveDir31Bytes = File41Size + File42Size,
 
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir11Id, DatasetDir11Id, Dir11Guid, 3, ArchiveDir11Bytes, ?ATTEMPTS),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveFile21Id, DatasetFile21Id, File21Guid, 1, File21Size, ?ATTEMPTS),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir22Id,  DatasetDir22Id, Dir22Guid, 0, 0, ?ATTEMPTS),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir31Id, DatasetDir31Id, Dir31Guid, 2, ArchiveDir31Bytes, ?ATTEMPTS),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveFile41Id, DatasetFile41Id, File41Guid, 1, File41Size, ?ATTEMPTS).
+    archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir11Id, DatasetDir11Id, Dir11Guid, 3, ArchiveDir11Bytes, ?ATTEMPTS),
+    archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveFile21Id, DatasetFile21Id, File21Guid, 1, File21Size, ?ATTEMPTS),
+    archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir22Id,  DatasetDir22Id, Dir22Guid, 0, 0, ?ATTEMPTS),
+    archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir31Id, DatasetDir31Id, Dir31Guid, 2, ArchiveDir31Bytes, ?ATTEMPTS),
+    archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveFile41Id, DatasetFile41Id, File41Guid, 1, File41Size, ?ATTEMPTS).
 
 
 simple_incremental_archive_test_base(Layout, Modifications) ->
@@ -624,7 +624,7 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
                     metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
                 }]
             }, paris),
-    archive_tests_utils:assert_archive_state(BaseArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    archive_verification_test_utils:assert_archive_state(BaseArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
     Node = oct_background:get_random_provider_node(krakow),
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
     ModifiedFiles = lists:usort(lists:map(fun
@@ -648,14 +648,14 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
         incremental = #{<<"enabled">> => true, <<"basedOn">> => BaseArchiveId},
         layout = Layout
     }, <<>>),
-    archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
-    archive_tests_utils:assert_incremental_archive_links(BaseArchiveId, ArchiveId, ModifiedFiles),
+    archive_verification_test_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    archive_verification_test_utils:assert_incremental_archive_links(BaseArchiveId, ArchiveId, ModifiedFiles),
     {ok, Children} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(DirGuid), 0, 10),
     {FilesNum, TotalSize} = lists:foldl(fun({Guid, _}, {AccNum, AccSize}) ->
         {ok, #file_attr{size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
         {AccNum + 1, AccSize + Size}
     end, {0, 0}, Children),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DirGuid, FilesNum, TotalSize, ?ATTEMPTS).
+    archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DirGuid, FilesNum, TotalSize, ?ATTEMPTS).
 
 
 nested_incremental_archive_test_base(Layout) ->
@@ -691,7 +691,7 @@ nested_incremental_archive_test_base(Layout) ->
                 }
             ]
         }, paris),
-    archive_tests_utils:assert_archive_state(TopBaseArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    archive_verification_test_utils:assert_archive_state(TopBaseArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
     Node = oct_background:get_random_provider_node(krakow),
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
     
@@ -715,13 +715,13 @@ nested_incremental_archive_test_base(Layout) ->
     {ok, #file_attr{size = Size1}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid1)),
     {ok, #file_attr{size = Size2}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid2)),
     
-    archive_tests_utils:assert_archive_state(TopArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
-    archive_tests_utils:assert_incremental_archive_links(TopBaseArchiveId, TopArchiveId, []),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, TopArchiveId, TopDatasetId, TopDirGuid, 2, Size1 + Size2, ?ATTEMPTS),
+    archive_verification_test_utils:assert_archive_state(TopArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    archive_verification_test_utils:assert_incremental_archive_links(TopBaseArchiveId, TopArchiveId, []),
+    archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, TopArchiveId, TopDatasetId, TopDirGuid, 2, Size1 + Size2, ?ATTEMPTS),
     
-    archive_tests_utils:assert_archive_state(NestedArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
-    archive_tests_utils:assert_incremental_archive_links(NestedBaseArchiveId, NestedArchiveId, []),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, NestedArchiveId, NestedDatasetId, NestedDirGuid, 1, Size2, ?ATTEMPTS).
+    archive_verification_test_utils:assert_archive_state(NestedArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    archive_verification_test_utils:assert_incremental_archive_links(NestedBaseArchiveId, NestedArchiveId, []),
+    archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, NestedArchiveId, NestedDatasetId, NestedDirGuid, 1, Size2, ?ATTEMPTS).
 
 
 modify_preserved_archive_test_base(Layout) ->
@@ -774,7 +774,7 @@ share_archive_dir_test_base(Layout) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_verification_test_utils, dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op-archive",
             envs = [{op_worker, op_worker, [
