@@ -172,7 +172,7 @@ migration_of_replica_protected_by_qos_file(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 0,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2
@@ -185,7 +185,7 @@ migration_of_replica_not_protected_by_qos_file(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider2,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2
@@ -200,7 +200,7 @@ migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2,
@@ -238,7 +238,7 @@ migration_of_replica_protected_by_qos_dir(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 0,
         dir_structure_type = nested,
@@ -252,7 +252,7 @@ migration_of_replica_not_protected_by_qos_dir(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider2,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 4,
         dir_structure_type = nested,
@@ -268,7 +268,7 @@ migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 4,
         dir_structure_type = nested,
@@ -307,7 +307,7 @@ migration_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 0,
         dir_structure_type = nested,
@@ -321,7 +321,7 @@ migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider2,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         dir_structure_type = nested,
@@ -337,7 +337,7 @@ migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately(
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         dir_structure_type = nested,
@@ -377,7 +377,7 @@ remote_migration_of_replica_protected_by_qos_file(Config) ->
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 0,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2
@@ -391,7 +391,7 @@ remote_migration_of_replica_not_protected_by_qos_file(Config) ->
         evicting_provider = Provider2,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2
@@ -407,7 +407,7 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2,
@@ -448,7 +448,7 @@ remote_migration_of_replica_protected_by_qos_dir(Config) ->
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 0,
         dir_structure_type = nested,
@@ -463,7 +463,7 @@ remote_migration_of_replica_not_protected_by_qos_dir(Config) ->
         evicting_provider = Provider2,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 4,
         dir_structure_type = nested,
@@ -480,7 +480,7 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 4,
         dir_structure_type = nested,
@@ -522,7 +522,7 @@ remote_migration_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 0,
         dir_structure_type = nested,
@@ -537,7 +537,7 @@ remote_migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config
         evicting_provider = Provider2,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         dir_structure_type = nested,
@@ -554,7 +554,7 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_sepa
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         dir_structure_type = nested,
@@ -572,7 +572,7 @@ autocleaning_of_replica_protected_by_qos_file(Config) ->
         run_provider = Provider1,
         dir_structure_type = simple,
         released_bytes = 0,
-        bytes_to_release = byte_size(?TEST_DATA),
+        bytes_to_release = byte_size(?QOS_TEST_DATA),
         files_number = 0
     }).
 
@@ -583,8 +583,8 @@ autocleaning_of_replica_not_protected_by_qos_file(Config) ->
     qos_autocleaning_protection_test_base(Config, #test_spec_autocleaning{
         run_provider = Provider2,
         dir_structure_type = simple,
-        released_bytes = byte_size(?TEST_DATA),
-        bytes_to_release = byte_size(?TEST_DATA),
+        released_bytes = byte_size(?QOS_TEST_DATA),
+        bytes_to_release = byte_size(?QOS_TEST_DATA),
         files_number = 1
     }).
 
@@ -596,7 +596,7 @@ autocleaning_of_replica_protected_by_qos_dir(Config) ->
         run_provider = Provider1,
         dir_structure_type = nested,
         released_bytes = 0,
-        bytes_to_release = 4*byte_size(?TEST_DATA),
+        bytes_to_release = 4*byte_size(?QOS_TEST_DATA),
         files_number = 0
     }).
 
@@ -607,8 +607,8 @@ autocleaning_of_replica_not_protected_by_qos_dir(Config) ->
     qos_autocleaning_protection_test_base(Config, #test_spec_autocleaning{
         run_provider = Provider2,
         dir_structure_type = nested,
-        released_bytes = 4*byte_size(?TEST_DATA),
-        bytes_to_release = 4*byte_size(?TEST_DATA),
+        released_bytes = 4*byte_size(?QOS_TEST_DATA),
+        bytes_to_release = 4*byte_size(?QOS_TEST_DATA),
         files_number = 4
     }).
 
@@ -797,19 +797,19 @@ end_per_suite(Config) ->
 
 -define(simple_dir_structure(Name, Distribution),
     {?SPACE_NAME, [
-        {Name, ?TEST_DATA, Distribution}
+        {Name, ?QOS_TEST_DATA, Distribution}
     ]}
 ).
 -define(nested_dir_structure(Name, Distribution),
     {?SPACE_NAME, [
         {Name, [
             {?filename(Name, 1), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution},
-                {?filename(Name, 2), ?TEST_DATA, Distribution}
+                {?filename(Name, 1), ?QOS_TEST_DATA, Distribution},
+                {?filename(Name, 2), ?QOS_TEST_DATA, Distribution}
             ]},
             {?filename(Name, 2), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution},
-                {?filename(Name, 2), ?TEST_DATA, Distribution}
+                {?filename(Name, 1), ?QOS_TEST_DATA, Distribution},
+                {?filename(Name, 2), ?QOS_TEST_DATA, Distribution}
             ]}
         ]}
     ]}

@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Cwiertnia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
@@ -8,7 +8,6 @@
 %%% This module contains utility records and macros for QoS tests.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Michal Cwiertnia").
 
 -ifndef(QOS_TEST_UTILS_HRL).
 -define(QOS_TEST_UTILS_HRL, 1).
@@ -25,7 +24,7 @@
 
 -define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 
--define(TEST_DATA, <<"test_data">>).
+-define(QOS_TEST_DATA, <<"test_data">>).
 
 -type qos_name() :: binary().
 
@@ -74,10 +73,10 @@
     %%  {?SPACE1, [
     %%      {<<"dir1">>, [
     %%          {<<"dir2">>, [
-    %%              {<<"file21">>, ?TEST_DATA, [?PROVIDER_ID(WorkerP1)]}
+    %%              {<<"file21">>, ?QOS_TEST_DATA, [?PROVIDER_ID(WorkerP1)]}
     %%          ]},
     %%          {<<"dir3">>, [
-    %%              {<<"file31">>, ?TEST_DATA, [?PROVIDER_ID(WorkerP3)]}
+    %%              {<<"file31">>, ?QOS_TEST_DATA, [?PROVIDER_ID(WorkerP3)]}
     %%          ]}
     %%      ]}
     %%  ]}
@@ -129,23 +128,23 @@
 
 -define(simple_dir_structure(SpaceId, Name, Distribution),
     {SpaceId, [
-        {Name, ?TEST_DATA, Distribution}
+        {Name, ?QOS_TEST_DATA, Distribution}
     ]}
 ).
 -define(nested_dir_structure(SpaceId, Name, Distribution),
     {SpaceId, [
         {Name, [
             {?filename(Name, 1), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution},
-                {?filename(Name, 2), ?TEST_DATA, Distribution},
-                {?filename(Name, 3), ?TEST_DATA, Distribution},
-                {?filename(Name, 4), ?TEST_DATA, Distribution}
+                {?filename(Name, 1), ?QOS_TEST_DATA, Distribution},
+                {?filename(Name, 2), ?QOS_TEST_DATA, Distribution},
+                {?filename(Name, 3), ?QOS_TEST_DATA, Distribution},
+                {?filename(Name, 4), ?QOS_TEST_DATA, Distribution}
             ]},
             {?filename(Name, 2), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution},
-                {?filename(Name, 2), ?TEST_DATA, Distribution},
-                {?filename(Name, 3), ?TEST_DATA, Distribution},
-                {?filename(Name, 4), ?TEST_DATA, Distribution}
+                {?filename(Name, 1), ?QOS_TEST_DATA, Distribution},
+                {?filename(Name, 2), ?QOS_TEST_DATA, Distribution},
+                {?filename(Name, 3), ?QOS_TEST_DATA, Distribution},
+                {?filename(Name, 4), ?QOS_TEST_DATA, Distribution}
             ]}
         ]}
     ]}

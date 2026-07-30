@@ -420,7 +420,7 @@ basic_qos_reconciliation_test_base(DirStructureType) ->
         [_, _ | PathTokens] = binary:split(Path, <<"/">>, [global]),
         StoragePath = storage_file_path(oct_background:get_random_provider_node(Provider2),
             SpaceId, filename:join(PathTokens)),
-        ?assertEqual({ok, ?TEST_DATA}, read_file(oct_background:get_random_provider_node(Provider2), StoragePath)),
+        ?assertEqual({ok, ?QOS_TEST_DATA}, read_file(oct_background:get_random_provider_node(Provider2), StoragePath)),
         {ok, FileHandle} = lfm_proxy:open(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Guid), write),
         {ok, _} = lfm_proxy:write(P1Node, FileHandle, 0, NewData),
         ok = lfm_proxy:close(P1Node, FileHandle),
@@ -493,7 +493,7 @@ qos_transfer_stats_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
 
     Name = generator:gen_name(),
-    Guid = qos_test_utils:create_file(Provider1, ?SESS_ID(Provider1), ?PATH(Name), ?TEST_DATA),
+    Guid = qos_test_utils:create_file(Provider1, ?SESS_ID(Provider1), ?PATH(Name), ?QOS_TEST_DATA),
     {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Guid), <<"providerId=", Provider2/binary>>, 1),
     % wait for qos entries to be dbsynced to other provider
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
@@ -503,7 +503,7 @@ qos_transfer_stats_test(_Config) ->
     check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [
         <<"total">>,
         ?QOS_STORAGE_TIME_SERIES_NAME((opt_spaces:get_storage_id(Provider1, SpaceId)))
-    ], {1, byte_size(?TEST_DATA)}),
+    ], {1, byte_size(?QOS_TEST_DATA)}),
     check_transfer_stats(Provider1, QosEntryId, ?FILES_STATS, [<<"total">>], empty),
     check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [
         <<"total">>,
@@ -519,11 +519,11 @@ qos_transfer_stats_test(_Config) ->
     check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
     check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [
         ?QOS_STORAGE_TIME_SERIES_NAME((opt_spaces:get_storage_id(Provider1, SpaceId)))
-    ], {1, byte_size(?TEST_DATA)}),
+    ], {1, byte_size(?QOS_TEST_DATA)}),
     check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [
         ?QOS_STORAGE_TIME_SERIES_NAME((opt_spaces:get_storage_id(Provider3, SpaceId)))
     ], {1, byte_size(NewData)}),
-    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [<<"total">>], {2, byte_size(NewData) + byte_size(?QOS_TEST_DATA)}),
     check_transfer_stats(Provider1, QosEntryId, ?FILES_STATS, [<<"total">>], empty),
     check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [
         <<"total">>,

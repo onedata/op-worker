@@ -1100,14 +1100,14 @@ qos_status_during_traverse_test_base(NumberOfFilesInDir) ->
         {?SPACE_NAME, [
             {Name, [ % Dir1
                 {?filename(Name, 1), % Dir2
-                    lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [Provider1]} end, lists:seq(1, NumberOfFilesInDir)) % Guids2
+                    lists:map(fun(Num) -> {?filename(Name, Num), ?QOS_TEST_DATA, [Provider1]} end, lists:seq(1, NumberOfFilesInDir)) % Guids2
                 },
                 {?filename(Name, 2), [ % Dir3
                     {?filename(Name, 1), % Dir4
-                        lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [Provider1]} end, lists:seq(1, NumberOfFilesInDir)) % Guids3
+                        lists:map(fun(Num) -> {?filename(Name, Num), ?QOS_TEST_DATA, [Provider1]} end, lists:seq(1, NumberOfFilesInDir)) % Guids3
                     }
                 ]} ] ++ 
-                lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [Provider1]} end, lists:seq(3, 2 + NumberOfFilesInDir)) % Guids1
+                lists:map(fun(Num) -> {?filename(Name, Num), ?QOS_TEST_DATA, [Provider1]} end, lists:seq(3, 2 + NumberOfFilesInDir)) % Guids1
             }
         ]},
     
@@ -1183,7 +1183,7 @@ qos_status_during_traverse_with_file_deletion_test_base(NumberOfFilesInDir, File
             {Name, % Dir1
                 lists:map(fun(Num) ->
                     TypeSpec = prepare_type_spec(FileType, oct_background:get_all_providers_nodes(), {target, FileToLinkGuid}),
-                    {?filename(Name, Num), ?TEST_DATA, [Provider1], TypeSpec} 
+                    {?filename(Name, Num), ?QOS_TEST_DATA, [Provider1], TypeSpec} 
                 end, lists:seq(1, NumberOfFilesInDir))
             }
         ]},
@@ -1232,7 +1232,7 @@ qos_status_during_traverse_with_dir_deletion_test_base(NumberOfFilesInDir, FileT
                 {?filename(Name, 1), % Dir2
                     lists:map(fun(Num) ->
                         TypeSpec = prepare_type_spec(FileType, oct_background:get_all_providers_nodes(), {target, FileToLinkGuid}),
-                        {?filename(Name, Num), ?TEST_DATA, [Provider1], TypeSpec}
+                        {?filename(Name, Num), ?QOS_TEST_DATA, [Provider1], TypeSpec}
                     end, lists:seq(1, NumberOfFilesInDir))
                 }
             ]}
@@ -1260,7 +1260,7 @@ qos_status_during_traverse_file_without_qos_test_base() ->
         {?SPACE_NAME, [
             {Name, [ % Dir1
                 {?filename(Name, 1), 
-                    [{?filename(Name, 0), ?TEST_DATA, [Provider1]}]
+                    [{?filename(Name, 0), ?QOS_TEST_DATA, [Provider1]}]
                 }]
             }
         ]},
@@ -1329,7 +1329,7 @@ qos_status_during_reconciliation_with_file_deletion_test_base(NumOfFiles, FileTy
     DirStructure =
         {?SPACE_NAME, [
             {Name, % Dir1
-                [{?filename(Name, 0), ?TEST_DATA, [Provider1]}]
+                [{?filename(Name, 0), ?QOS_TEST_DATA, [Provider1]}]
             }
         ]},
     
@@ -1368,7 +1368,7 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(NumOfFiles, FileTyp
     DirStructure =
         {?SPACE_NAME, [
             {Name, % Dir1
-                [{?filename(Name, 0), ?TEST_DATA, [Provider1]}]
+                [{?filename(Name, 0), ?QOS_TEST_DATA, [Provider1]}]
             }
         ]},
     
@@ -1400,7 +1400,7 @@ qos_status_after_failed_transfer(TargetProvider) ->
     Name = generator:gen_name(),
     DirStructure = fun(Distribution) ->
         {?SPACE_NAME, [
-            {Name, ?TEST_DATA, Distribution}
+            {Name, ?QOS_TEST_DATA, Distribution}
         ]}
     end,
     % create new QoS entry and check, that it is not fulfilled
@@ -1433,7 +1433,7 @@ qos_status_after_failed_transfer_deleted_file(TargetProvider) ->
     DirStructure = fun(Distribution) ->
         {?SPACE_NAME, [
             {Name, [
-                {?filename(Name, 1), ?TEST_DATA, Distribution}
+                {?filename(Name, 1), ?QOS_TEST_DATA, Distribution}
             ]}
         ]}
     end,
@@ -1472,7 +1472,7 @@ qos_status_after_failed_transfer_deleted_entry(TargetProvider) ->
     Name = generator:gen_name(),
     DirStructure = fun(Distribution) ->
         {?SPACE_NAME, [
-            {Name, ?TEST_DATA, Distribution}
+            {Name, ?QOS_TEST_DATA, Distribution}
         ]}
     end,
     

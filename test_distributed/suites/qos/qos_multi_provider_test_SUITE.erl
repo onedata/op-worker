@@ -119,7 +119,7 @@ effective_qos_for_file_in_directory(_Config) ->
                     provider = Provider1,
                     dir_structure = {?SPACE_PATH1, [
                         {DirName, [
-                            {<<"file1">>, ?TEST_DATA, [Provider1]}
+                            {<<"file1">>, ?QOS_TEST_DATA, [Provider1]}
                         ]}
                     ]}
                 },
@@ -129,7 +129,7 @@ effective_qos_for_file_in_directory(_Config) ->
                 expected_dir_structure = #test_dir_structure{
                     dir_structure = {?SPACE_PATH1, [
                         {DirName, [
-                            {<<"file1">>, ?TEST_DATA, [Provider1, Provider2]}
+                            {<<"file1">>, ?QOS_TEST_DATA, [Provider1, Provider2]}
                         ]}
                     ]}
                 }
@@ -165,9 +165,9 @@ effective_qos_for_file_in_nested_directories(_Config) ->
                     dir_structure = {?SPACE_PATH1, [
                         {DirName, [
                             {<<"dir2">>, [
-                                {<<"file21">>, ?TEST_DATA, [Provider1]},
+                                {<<"file21">>, ?QOS_TEST_DATA, [Provider1]},
                                 {<<"dir3">>, [
-                                    {<<"file31">>, ?TEST_DATA, [Provider1]}
+                                    {<<"file31">>, ?QOS_TEST_DATA, [Provider1]}
                                 ]}
                             ]}
                         ]}
@@ -180,9 +180,9 @@ effective_qos_for_file_in_nested_directories(_Config) ->
                     dir_structure = {?SPACE_PATH1, [
                         {DirName, [
                             {<<"dir2">>, [
-                                {<<"file21">>, ?TEST_DATA, [Provider1]},
+                                {<<"file21">>, ?QOS_TEST_DATA, [Provider1]},
                                 {<<"dir3">>, [
-                                    {<<"file31">>, ?TEST_DATA, [Provider1, Provider2]}
+                                    {<<"file31">>, ?QOS_TEST_DATA, [Provider1, Provider2]}
                                 ]}
                             ]}
                         ]}
@@ -218,8 +218,8 @@ effective_qos_for_files_in_different_directories_of_tree_structure(_Config) ->
                 initial_dir_structure = #test_dir_structure{
                     dir_structure = {?SPACE_PATH1, [
                         {DirName, [
-                            {<<"dir2">>, [{<<"file21">>, ?TEST_DATA, [Provider1]}]},
-                            {<<"dir3">>, [{<<"file31">>, ?TEST_DATA, [Provider1]}]}
+                            {<<"dir2">>, [{<<"file21">>, ?QOS_TEST_DATA, [Provider1]}]},
+                            {<<"dir3">>, [{<<"file31">>, ?QOS_TEST_DATA, [Provider1]}]}
                         ]}
                     ]}
                 },
@@ -229,8 +229,8 @@ effective_qos_for_files_in_different_directories_of_tree_structure(_Config) ->
                 expected_dir_structure = #test_dir_structure{
                     dir_structure = {?SPACE_PATH1, [
                         {DirName, [
-                            {<<"dir2">>, [{<<"file21">>, ?TEST_DATA, [Provider1]}]},
-                            {<<"dir3">>, [{<<"file31">>, ?TEST_DATA, [Provider1, Provider2]}]}
+                            {<<"dir2">>, [{<<"file21">>, ?QOS_TEST_DATA, [Provider1]}]},
+                            {<<"dir3">>, [{<<"file31">>, ?QOS_TEST_DATA, [Provider1, Provider2]}]}
                         ]}
                     ]}
                 }
@@ -335,7 +335,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
         opt_qos:get_effective_file_qos(P1Node, ?SESS_ID(Provider1), ?FILE_REF(DirGuid)),
         ?ATTEMPTS),
     
-    Size = size(?TEST_DATA),
+    Size = size(?QOS_TEST_DATA),
     ExpectedDistributionFun = fun(List) -> 
         Distribution = lists:map(fun({P, TotalBlocksSize}) ->
             #{
@@ -481,7 +481,7 @@ setup_reevaluate_test(QosParam, Status) ->
         initial_dir_structure = #test_dir_structure{
             provider = Provider1,
             dir_structure = {?SPACE_PATH1, [
-                {DirName, [{FileName, ?TEST_DATA, [Provider1]}]}
+                {DirName, [{FileName, ?QOS_TEST_DATA, [Provider1]}]}
             ]}
         },
         qos_to_add = [
@@ -551,7 +551,7 @@ qos_entry_deletion_test_base(DeletionType) ->
     DirStructure =
         {?SPACE_NAME, [
             {Name, % Dir1
-                [{?filename(Name, Num), ?TEST_DATA, [Provider1]} || Num <- lists:seq(1, 4)]
+                [{?filename(Name, Num), ?QOS_TEST_DATA, [Provider1]} || Num <- lists:seq(1, 4)]
             }
         ]},
     
@@ -748,7 +748,7 @@ unmock_file_meta_posthooks() ->
 
 create_file_with_content(Node, SessId, ParentGuid, Name) ->
     {ok, {G, H1}} = lfm_proxy:create_and_open(Node, SessId, ParentGuid, Name, ?DEFAULT_FILE_PERMS),
-    {ok, _} = lfm_proxy:write(Node, H1, 0, ?TEST_DATA),
+    {ok, _} = lfm_proxy:write(Node, H1, 0, ?QOS_TEST_DATA),
     ok = lfm_proxy:close(Node, H1),
     G.
 

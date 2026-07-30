@@ -180,7 +180,7 @@ effective_qos_for_file_in_directory(_Config) ->
         initial_dir_structure = #test_dir_structure{
             dir_structure = {?SPACE_PATH1, [
                 {Dirname, [
-                    {<<"file1">>, ?TEST_DATA}
+                    {<<"file1">>, ?QOS_TEST_DATA}
                 ]}
             ]}
         },
@@ -199,7 +199,7 @@ qos_cleanup_test(_Config) ->
     QosSpec = #fulfill_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
             dir_structure = {?SPACE_PATH1, [
-                {Name, ?TEST_DATA, [ProviderId]}
+                {Name, ?QOS_TEST_DATA, [ProviderId]}
             ]}
 
         },
@@ -454,7 +454,7 @@ create_test_file() ->
     [ProviderId] = oct_background:get_provider_ids(),
     Name = generator:gen_name(),
     Path = ?PATH(Name),
-    _Guid = qos_test_utils:create_file(ProviderId, ?SESS_ID(ProviderId), Path, ?TEST_DATA),
+    _Guid = qos_test_utils:create_file(ProviderId, ?SESS_ID(ProviderId), Path, ?QOS_TEST_DATA),
     Path.
 
 
@@ -464,5 +464,5 @@ create_test_dir_with_file() ->
     DirPath = ?PATH(Name),
     _DirGuid = qos_test_utils:create_directory(ProviderId, ?SESS_ID(ProviderId), DirPath),
     FilePath = filename:join(DirPath, <<"file1">>),
-    _FileGuid = qos_test_utils:create_file(ProviderId, ?SESS_ID(ProviderId), FilePath, ?TEST_DATA),
+    _FileGuid = qos_test_utils:create_file(ProviderId, ?SESS_ID(ProviderId), FilePath, ?QOS_TEST_DATA),
     DirPath.

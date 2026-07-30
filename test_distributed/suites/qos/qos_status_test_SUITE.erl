@@ -122,8 +122,8 @@ qos_status_during_reconciliation_prefix_file_test(_Config) ->
     DirStructure =
         {?SPACE_NAME, [
             {Name, [
-                {?filename(Name, 1), ?TEST_DATA, [Provider1]},
-                {?filename(Name, 11), ?TEST_DATA, [Provider1]}
+                {?filename(Name, 1), ?QOS_TEST_DATA, [Provider1]},
+                {?filename(Name, 11), ?QOS_TEST_DATA, [Provider1]}
             ]}
         ]},
     
