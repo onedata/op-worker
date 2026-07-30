@@ -22,7 +22,6 @@
     complementary_perms/3,
 
     perms_to_bitmask/1,
-    perm_to_bitmask/1,
 
     perm_to_posix_perms/1,
     posix_perm_to_mode/2,
@@ -62,24 +61,6 @@ perms_to_bitmask(Permissions) ->
     lists:foldl(fun(Perm, BitMask) ->
         BitMask bor perm_to_bitmask(Perm)
     end, ?no_flags_mask, Permissions).
-
-
--spec perm_to_bitmask(binary()) -> data_access_control:bitmask().
-perm_to_bitmask(?read_object) -> ?read_object_mask;
-perm_to_bitmask(?list_container) -> ?list_container_mask;
-perm_to_bitmask(?write_object) -> ?write_object_mask;
-perm_to_bitmask(?add_object) -> ?add_object_mask;
-perm_to_bitmask(?add_subcontainer) -> ?add_subcontainer_mask;
-perm_to_bitmask(?read_metadata) -> ?read_metadata_mask;
-perm_to_bitmask(?write_metadata) -> ?write_metadata_mask;
-perm_to_bitmask(?traverse_container) -> ?traverse_container_mask;
-perm_to_bitmask(?delete_object) -> ?delete_child_mask;
-perm_to_bitmask(?delete_subcontainer) -> ?delete_child_mask;
-perm_to_bitmask(?read_attributes) -> ?read_attributes_mask;
-perm_to_bitmask(?write_attributes) -> ?write_attributes_mask;
-perm_to_bitmask(?delete) -> ?delete_mask;
-perm_to_bitmask(?read_acl) -> ?read_acl_mask;
-perm_to_bitmask(?write_acl) -> ?write_acl_mask.
 
 
 -spec perm_to_posix_perms(Perm :: binary()) -> PosixPerms :: [atom()].
@@ -167,3 +148,22 @@ is_dir(Node, Guid) ->
         rpc:call(Node, file_meta, get, [Uuid])
     ),
     FileType == ?DIRECTORY_TYPE.
+
+
+%% @private
+-spec perm_to_bitmask(binary()) -> data_access_control:bitmask().
+perm_to_bitmask(?read_object) -> ?read_object_mask;
+perm_to_bitmask(?list_container) -> ?list_container_mask;
+perm_to_bitmask(?write_object) -> ?write_object_mask;
+perm_to_bitmask(?add_object) -> ?add_object_mask;
+perm_to_bitmask(?add_subcontainer) -> ?add_subcontainer_mask;
+perm_to_bitmask(?read_metadata) -> ?read_metadata_mask;
+perm_to_bitmask(?write_metadata) -> ?write_metadata_mask;
+perm_to_bitmask(?traverse_container) -> ?traverse_container_mask;
+perm_to_bitmask(?delete_object) -> ?delete_child_mask;
+perm_to_bitmask(?delete_subcontainer) -> ?delete_child_mask;
+perm_to_bitmask(?read_attributes) -> ?read_attributes_mask;
+perm_to_bitmask(?write_attributes) -> ?write_attributes_mask;
+perm_to_bitmask(?delete) -> ?delete_mask;
+perm_to_bitmask(?read_acl) -> ?read_acl_mask;
+perm_to_bitmask(?write_acl) -> ?write_acl_mask.

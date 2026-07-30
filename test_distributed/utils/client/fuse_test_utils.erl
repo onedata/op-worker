@@ -42,29 +42,22 @@
 
     connect_as_user/4,
 
-    generate_msg_id/0,
     extend_message_with_msg_id/1
 ]).
--export([connect_and_upgrade_proto/2]).
 -export([receive_server_message/0, receive_server_message/1, receive_server_message/2]).
 
 %% Fuse request messages
 -export([generate_create_file_message/3, generate_create_file_message/4,
-    generate_make_link_message/4, generate_create_dir_message/3, generate_delete_file_message/2,
-    generate_open_file_message/2, generate_open_file_message/3, generate_release_message/3,
-    generate_get_children_attrs_message/2, generate_get_children_message/2, generate_fsync_message/2]).
+    generate_delete_file_message/2, generate_get_children_attrs_message/2, generate_fsync_message/2]).
 
 %% Subscription messages
 -export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4,
     generate_file_attr_changed_subscription_message/5, generate_replica_status_changed_subscription_message/5,
     generate_file_location_changed_subscription_message/5]).
--export([generate_subscription_cancellation_message/3, generate_quota_exceeded_subscription_message/3]).
+-export([generate_subscription_cancellation_message/3]).
 
 %% Misc messages
 -export([generate_ping_message/0, generate_ping_message/1]).
-
-%% ProxyIO messages
--export([generate_write_message/5, generate_read_message/5]).
 
 -export([
     create_file/3, create_file/5, create_777_mode_file/3,
@@ -79,7 +72,6 @@
     ls/2, ls/3,
     emit_file_read_event/5,
     emit_file_written_event/5,
-    get_configuration/1, get_configuration/2,
     get_subscriptions/1, get_subscriptions/2, get_subscriptions/3,
     flush_events/3, flush_events/4,
 
@@ -181,7 +173,7 @@ connect_as_provider(Node, ProviderId, Token) ->
         }}
     } = ?assertMatch(#'ServerMessage'{
         message_body = {handshake_response, _}
-    }, fuse_test_utils:receive_server_message()),
+    }, receive_server_message()),
 
     case Status of
         'OK' ->
@@ -219,7 +211,7 @@ connect_as_client(Node, Nonce, Token, Version) ->
         }}
     } = ?assertMatch(#'ServerMessage'{
         message_body = {handshake_response, _}
-    }, fuse_test_utils:receive_server_message()),
+    }, receive_server_message()),
 
     case Status of
         'OK' ->
@@ -340,7 +332,7 @@ connect_as_user(Config, Node, User, SocketOpts) ->
 
     ?assertMatch(
         {ok, {_, SessId}},
-        fuse_test_utils:connect_via_token(Node, SocketOpts, Nonce, AccessToken)
+        connect_via_token(Node, SocketOpts, Nonce, AccessToken)
     ).
 
 
@@ -431,9 +423,6 @@ generate_fsync_message(RootGuid, HandleId, DataOnly, MsgId) ->
     }},
     generate_fuse_request_message(MsgId, FuseRequest).
 
-generate_open_file_message(FileGuid, MsgId) ->
-    generate_open_file_message(FileGuid, 'READ_WRITE', MsgId).
-
 generate_open_file_message(FileGuid, Flag, MsgId) ->
     FuseRequest = {file_request, #'FileRequest'{
         context_guid = FileGuid,
@@ -489,10 +478,6 @@ generate_file_location_changed_subscription_message(StreamId, SequenceNumber, Su
     },
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
 
-generate_quota_exceeded_subscription_message(StreamId, SequenceNumber, SubId) ->
-    Type = {quota_exceeded, #'QuotaExceededSubscription'{}},
-    generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
-
 generate_subscription_message(StreamId, SequenceNumber, SubId, Type) ->
     Message = #'ClientMessage'{
         message_stream = #'MessageStream'{stream_id = StreamId, sequence_number = SequenceNumber},
@@ -543,7 +528,7 @@ create_file(Sock, RootGuid, Filename) ->
     create_file(Sock, RootGuid, Filename, ?DEFAULT_FILE_PERMS, ?MSG_ID).
 
 create_file(Sock, RootGuid, Filename, Mode, MsgId) ->
-    ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, MsgId, Filename, Mode)),
+    ok = ssl:send(Sock, generate_create_file_message(RootGuid, MsgId, Filename, Mode)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {file_created, #'FileCreated'{
             handle_id = HandleId,
@@ -552,39 +537,39 @@ create_file(Sock, RootGuid, Filename, Mode, MsgId) ->
     }} = ?assertMatch(#'ServerMessage'{
         message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
         message_id = MsgId
-    }, fuse_test_utils:receive_server_message()),
+    }, receive_server_message()),
     {FileGuid, HandleId}.
 
 create_777_mode_file(Sock, RootGuid, Filename) ->
     create_file(Sock, RootGuid, Filename, 8#777, ?MSG_ID).
 
 delete_file(Sock, FileGuid) ->
-    ssl:send(Sock, fuse_test_utils:generate_delete_file_message(FileGuid, ?MSG_ID)).
+    ssl:send(Sock, generate_delete_file_message(FileGuid, ?MSG_ID)).
 
 make_link(Sock, FileGuid, TargetParentGuid, Name) ->
     make_link(Sock, FileGuid, TargetParentGuid, Name, ?MSG_ID).
 
 make_link(Sock, FileGuid, TargetParentGuid, Name, MsgId) ->
-    ok = ssl:send(Sock, fuse_test_utils:generate_make_link_message(FileGuid, MsgId, TargetParentGuid, Name)),
+    ok = ssl:send(Sock, generate_make_link_message(FileGuid, MsgId, TargetParentGuid, Name)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {file_attr, #'FileAttr'{uuid = LinkGuid}}
     }}} = ?assertMatch(#'ServerMessage'{
         message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
         message_id = MsgId
-    }, fuse_test_utils:receive_server_message()),
+    }, receive_server_message()),
     LinkGuid.
 
 create_directory(Sock, RootGuid, Dirname) ->
     create_directory(Sock, RootGuid, Dirname, ?MSG_ID).
 
 create_directory(Sock, RootGuid, Dirname, MsgId) ->
-    ok = ssl:send(Sock, fuse_test_utils:generate_create_dir_message(RootGuid, MsgId, Dirname)),
+    ok = ssl:send(Sock, generate_create_dir_message(RootGuid, MsgId, Dirname)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {dir, #'Dir'{uuid = DirId}}
     }}} = ?assertMatch(#'ServerMessage'{
         message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
         message_id = MsgId
-    }, fuse_test_utils:receive_server_message()),
+    }, receive_server_message()),
     DirId.
 
 open(Conn, FileGuid) ->
@@ -671,7 +656,7 @@ ls(Conn, DirId) ->
     ls(Conn, DirId, ?MSG_ID).
 
 ls(Conn, DirId, MsgId) ->
-    ok = ssl:send(Conn, fuse_test_utils:generate_get_children_message(DirId, MsgId)),
+    ok = ssl:send(Conn, generate_get_children_message(DirId, MsgId)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {file_children, #'FileChildren'{
             child_links = ChildLinks
@@ -681,7 +666,7 @@ ls(Conn, DirId, MsgId) ->
             status = #'Status'{code = ok}}
         },
         message_id = MsgId
-    }, fuse_test_utils:receive_server_message()),
+    }, receive_server_message()),
     ChildLinks.
 
 
@@ -734,9 +719,6 @@ emit_file_written_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
     RawMsg = messages:encode_msg(Msg),
     ok = ssl:send(Conn, RawMsg).
 
-
-get_configuration(Conn) ->
-    get_configuration(Conn, ?MSG_ID).
 
 get_configuration(Conn, MsgId) ->
     Msg = #'ClientMessage'{
@@ -813,7 +795,7 @@ get_protocol_version(Conn, MsgId) ->
     }}} = ?assertMatch(#'ServerMessage'{
         message_id = MsgId,
         message_body = {protocol_version, #'ProtocolVersion'{}}
-    }, fuse_test_utils:receive_server_message()),
+    }, receive_server_message()),
 
     {Major, Minor}.
 
@@ -838,7 +820,7 @@ generate_rtransfer_conn_secret(Conn, MsgId) ->
     } = ?assertMatch(#'ServerMessage'{
         message_id = MsgId,
         message_body = {rtransfer_conn_secret, #'RTransferConnSecret'{}}
-    }, fuse_test_utils:receive_server_message()),
+    }, receive_server_message()),
 
     Secret.
 
@@ -861,7 +843,7 @@ get_rtransfer_nodes_ips(Conn, MsgId) ->
     } = ?assertMatch(#'ServerMessage'{
         message_id = MsgId,
         message_body = {rtransfer_nodes_ips, #'RTransferNodesIPs'{}}
-    }, fuse_test_utils:receive_server_message()),
+    }, receive_server_message()),
 
     RespNodes.
 
@@ -888,6 +870,6 @@ ping(Conn, MsgId) ->
     ?assertMatch(#'ServerMessage'{
         message_id = MsgId,
         message_body = {pong, #'Pong'{}}
-    }, fuse_test_utils:receive_server_message()),
+    }, receive_server_message()),
 
     ok.

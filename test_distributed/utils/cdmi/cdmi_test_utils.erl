@@ -21,12 +21,12 @@
 
 %% API
 -export([
-    cdmi_endpoint/2, user_2_token_header/0,
+    user_2_token_header/0,
     get_tests_root_path/1, build_test_root_path/2, get_cdmi_endpoint/1,
     do_request/4, do_request/5, object_exists/2, create_new_file/2,
     open_file/3, write_to_file/4, get_file_content/2,
     mock_opening_file_without_perms/1, unmock_opening_file_without_perms/1,
-    set_acl/3, get_acl/2, get_xattrs/2, get_json_metadata/2, get_random_string/0,
+    set_acl/3, get_acl/2, get_xattrs/2, get_json_metadata/2,
     do_request_base/5
 ]).
 
@@ -36,6 +36,7 @@
 %%%===================================================================
 
 
+%% @private
 cdmi_endpoint(Node, Domain) ->
     Port = api_test_utils:get_https_server_port_str(Node),
     str_utils:format("https://~ts~ts/cdmi/", [Domain, Port]).
@@ -190,17 +191,6 @@ get_json_metadata(Path, Config) ->
     SessionId = oct_background:get_user_session_id(user2, Config#cdmi_test_config.p2_selector),
     {ok, FileGuid} = lfm_proxy:resolve_guid(WorkerP2, SessionId, absolute_binary_path(Path)),
     opt_file_metadata:get_custom_metadata(WorkerP2, SessionId, ?FILE_REF(FileGuid), json, [], false).
-
-
-get_random_string() ->
-    get_random_string(10, "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ").
-
-get_random_string(Length, AllowedChars) ->
-    lists:foldl(fun(_, Acc) ->
-        [lists:nth(rand:uniform(length(AllowedChars)),
-            AllowedChars)]
-        ++ Acc
-    end, [], lists:seq(1, Length)).
 
 
 % Performs a single request using http_client

@@ -23,8 +23,7 @@
     mkdir_with_ctx/2,
     create/1,
     create_with_ctx/2,
-    unlink/1,
-    unlink_with_ctx/2
+    unlink/1
 ]).
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils
@@ -81,6 +80,7 @@ create_with_ctx(CtxName, Args) ->
 unlink(Guid) ->
     unlink_with_ctx(?DEFAULT_CTX, [?FILE_REF(Guid)]).
 
+%% @private
 -spec unlink_with_ctx(ctx_name(), [any()]) -> ok | no_return().
 unlink_with_ctx(CtxName, Args) ->
     ?assertEqual(ok, execute_in_context(CtxName, unlink, Args)).
