@@ -542,7 +542,7 @@ init_data_access_caveats_test_case(TestCaseName, ExecutionerSelector, TestSuiteC
     FullPermsPerFile = set_full_perms(TestSuiteCtx, FileGuids),
 
     ExecutionerUserId = oct_background:get_user_id(ExecutionerSelector),
-    ExecutionerMainToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
+    ExecutionerMainToken = provider_test_utils:create_oz_temp_access_token(ExecutionerUserId),
 
     #authz_cv_test_case_ctx{
         test_case_ctx = TestCaseCtx,
@@ -632,7 +632,7 @@ constrain_executioner_session(CvTestCaseCtx = #authz_cv_test_case_ctx{
     executioner_main_token = MainToken
 }, Caveat) ->
     TokenWithCaveat = tokens:confine(MainToken, Caveat),
-    ConstrainedSessionId = provider_onenv_test_utils:create_session(TestNode, UserId, TokenWithCaveat),
+    ConstrainedSessionId = provider_test_utils:create_session(TestNode, UserId, TokenWithCaveat),
     CvTestCaseCtx#authz_cv_test_case_ctx{test_case_ctx = TestCaseCtx#authz_test_case_ctx{
         executioner_session_id = ConstrainedSessionId
     }}.
@@ -826,9 +826,9 @@ init_public_data_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx)
     TestCaseCtx = init_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
 
     ExecutionerUserId = oct_background:get_user_id(ExecutionerSelector),
-    ExecutionerToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
+    ExecutionerToken = provider_test_utils:create_oz_temp_access_token(ExecutionerUserId),
     TestCaseCtx#authz_test_case_ctx{
-        executioner_session_id = provider_onenv_test_utils:create_session(
+        executioner_session_id = provider_test_utils:create_session(
             TestNode, ExecutionerUserId, ExecutionerToken, public_data
         )
     }.
@@ -1257,9 +1257,9 @@ run_special_dirs_test_group(TestSuiteCtx = #authz_test_suite_ctx{
             share_container ->
                 TestNode = TestSuiteCtx#authz_test_suite_ctx.test_node,
                 ExecutionerUserId = oct_background:get_user_id(SpaceOwnerSelector),
-                ExecutionerToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
+                ExecutionerToken = provider_test_utils:create_oz_temp_access_token(ExecutionerUserId),
                 TestCaseCtx#authz_test_case_ctx{
-                    executioner_session_id = provider_onenv_test_utils:create_session(
+                    executioner_session_id = provider_test_utils:create_session(
                         TestNode, ExecutionerUserId, ExecutionerToken, public_data
                     )
                 };

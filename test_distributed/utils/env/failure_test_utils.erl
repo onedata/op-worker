@@ -45,7 +45,7 @@ restart_nodes(Config, Nodes) when is_list(Nodes) ->
         ?assertEqual(true, rpc:call(Node, gs_channel_service, is_connected_and_initialized, []), 60)
     end, Nodes),
 
-    UpdatedConfig = provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
+    UpdatedConfig = provider_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
     lfm_proxy:init(UpdatedConfig, false, Nodes),
     oct_background:update_background_config(UpdatedConfig);
 restart_nodes(Config, Node) ->
@@ -57,7 +57,7 @@ restart_nodes(Config, Node) ->
 
 init_per_suite(Config, Scenario) ->
     Posthook = fun(NewConfig) ->
-        provider_onenv_test_utils:initialize(NewConfig)
+        provider_test_utils:initialize(NewConfig)
     end,
     test_config:set_many(Config, [
         {set_onenv_scenario, [Scenario]}, % name of yaml file in test_distributed/onenv_scenarios

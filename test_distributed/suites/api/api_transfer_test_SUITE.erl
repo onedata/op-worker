@@ -156,7 +156,7 @@ create_file_transfer(_Config) ->
     % (it will be added to '#data_spec.bad_values'). It is created by user2 -
     % the space owner - as creating shares requires privileges the test users
     % are stripped of above.
-    #object{guid = SharedFileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = SharedFileGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user2, ?SPACE_SELECTOR, #file_spec{
             name = str_utils:format_bin("~ts_shared_file_~ts", [CaseName, str_utils:rand_hex(6)]),
             shares = [#share_spec{}]
@@ -1677,7 +1677,7 @@ do(#mod{method = "POST", request_uri = ?ENDED_TRANSFERS_PATH, entity_body = Body
     #transfer_test_suite_ctx{},
     api_test_memory:mem_ref(),
     file | view,
-    [onenv_file_test_utils:object()],
+    [file_tree_test_utils:object()],
     map(),
     map()
 ) ->
@@ -1825,7 +1825,7 @@ get_file_path(#transfer_test_suite_ctx{
 
 
 %% @private
--spec collect_regular_files(onenv_file_test_utils:object()) -> [onenv_file_test_utils:object()].
+-spec collect_regular_files(file_tree_test_utils:object()) -> [file_tree_test_utils:object()].
 collect_regular_files(#object{type = ?REGULAR_FILE_TYPE} = FileObject) ->
     [FileObject];
 collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
@@ -1834,7 +1834,7 @@ collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
 
 %% @private
 -spec create_and_replicate_file_tree(#transfer_test_suite_ctx{}, atom(), pos_integer()) ->
-    onenv_file_test_utils:object().
+    file_tree_test_utils:object().
 create_and_replicate_file_tree(TestSuiteCtx, CaseName, FilesCount) ->
     RootDirObject = transfer_test_utils:create_file_tree(
         TestSuiteCtx, CaseName, #dir_spec{children = [
@@ -1849,7 +1849,7 @@ create_and_replicate_file_tree(TestSuiteCtx, CaseName, FilesCount) ->
 %% The transfer target is either the single regular file of a fresh tree or
 %% the whole 5-file tree root directory, depending on the given root file type.
 -spec create_transfer_target_object(#transfer_test_suite_ctx{}, atom(), binary()) ->
-    onenv_file_test_utils:object().
+    file_tree_test_utils:object().
 create_transfer_target_object(TestSuiteCtx, CaseName, <<"file">>) ->
     RootDirObject = create_and_replicate_file_tree(TestSuiteCtx, CaseName, 1),
     hd(RootDirObject#object.children);
@@ -1861,7 +1861,7 @@ create_transfer_target_object(TestSuiteCtx, CaseName, <<"dir">>) ->
 %% Creates a file not taking part in the transfer, used to verify that the
 %% transfer affects nothing beyond its target.
 -spec create_bystander_file(#transfer_test_suite_ctx{}, atom()) ->
-    onenv_file_test_utils:object().
+    file_tree_test_utils:object().
 create_bystander_file(TestSuiteCtx, CaseName) ->
     RootDirObject = create_and_replicate_file_tree(TestSuiteCtx, CaseName, 1),
     hd(RootDirObject#object.children).
@@ -1874,7 +1874,7 @@ create_bystander_file(TestSuiteCtx, CaseName) ->
 -spec create_view_matching_files(
     #transfer_test_suite_ctx{},
     atom(),
-    [onenv_file_test_utils:object()]
+    [file_tree_test_utils:object()]
 ) ->
     index:name().
 create_view_matching_files(TestSuiteCtx, CaseName, FileObjects) ->

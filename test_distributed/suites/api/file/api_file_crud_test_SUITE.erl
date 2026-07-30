@@ -90,7 +90,7 @@ create_file_test(_Config) ->
 create_file_at_path_test(_Config) ->
     MemRef = api_test_memory:init(),
     PathTokens = [N1, N2, N3] = lists_utils:generate(fun(_) -> ?RANDOM_FILE_NAME() end, 3),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par, #dir_spec{
+    file_tree_test_utils:create_and_sync_file_tree(user2, space_krk_par, #dir_spec{
         name = N1,
         children = [
             #dir_spec{
@@ -164,7 +164,7 @@ create_file_test_base(CreationType, MemRef) ->
         ScenarioSpecBase#scenario_spec{
             name = "Create hardlink using rest",
             setup_fun = fun() ->
-                #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(
+                #object{guid = Guid} = file_tree_test_utils:create_and_sync_file_tree(
                     user2, space_krk_par, #file_spec{}),
                 api_test_memory:set(MemRef, hardlink_target, file_id:check_guid_to_objectid(Guid))
             end,

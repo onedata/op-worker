@@ -147,7 +147,7 @@ create_handle_prepare_gs_args_fun(MemRef) ->
 -spec build_create_handle_teardown_fun(api_test_memory:mem_ref()) -> onenv_api_test_runner:setup_fun().
 build_create_handle_teardown_fun(MemRef) ->
     fun() ->
-        onenv_file_test_utils:rm_and_sync_file(?SPACE_OWNER_AND_HS_MEMBER, api_test_memory:get(MemRef, guid))
+        file_tree_test_utils:rm_and_sync_file(?SPACE_OWNER_AND_HS_MEMBER, api_test_memory:get(MemRef, guid))
     end.
 
 
@@ -348,7 +348,7 @@ delete_handle_prepare_gs_args_fun(MemRef) ->
 
 
 %% @private
--spec create_and_sync_shared_file_of_random_type() -> onenv_file_test_utils:object().
+-spec create_and_sync_shared_file_of_random_type() -> file_tree_test_utils:object().
 create_and_sync_shared_file_of_random_type() ->
     ShareSpecs = [#share_spec{}],
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
@@ -356,7 +356,7 @@ create_and_sync_shared_file_of_random_type() ->
         <<"file">> -> #file_spec{shares = ShareSpecs};
         <<"dir">> -> #dir_spec{shares = ShareSpecs}
     end,
-    onenv_file_test_utils:create_and_sync_file_tree(
+    file_tree_test_utils:create_and_sync_file_tree(
         ?SPACE_OWNER_AND_HS_MEMBER, ?SPACE_SELECTOR, FileSpec
     ).
 

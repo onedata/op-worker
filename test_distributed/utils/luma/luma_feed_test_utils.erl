@@ -15,7 +15,7 @@
 %%% expressed identically regardless of the feed type under test.
 %%% @end
 %%%-------------------------------------------------------------------
--module(onenv_luma_test_utils).
+-module(luma_feed_test_utils).
 -author("Bartosz Walkowicz").
 
 %% API

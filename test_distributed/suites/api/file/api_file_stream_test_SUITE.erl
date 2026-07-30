@@ -275,7 +275,7 @@ gui_download_files_between_spaces_test(_Config) ->
 
     SetupFun = fun() ->
         Object = lists:map(fun(SpaceId) ->
-            onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, Spec, krakow)
+            file_tree_test_utils:create_and_sync_file_tree(user3, SpaceId, Spec, krakow)
         end, [SpaceId1, SpaceId2]),
         api_test_memory:set(MemRef, file_tree_object, Object)
     end,
@@ -333,14 +333,14 @@ gui_download_incorrect_uuid_test(Config) ->
 gui_download_tarball_with_symlink_loop_test(Config) ->
     MemRef = api_test_memory:init(),
     SpaceId = oct_background:get_space_id(space_krk_par),
-    #object{guid = DirGuid} = DirObject = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, #dir_spec{}, krakow),
+    #object{guid = DirGuid} = DirObject = file_tree_test_utils:create_and_sync_file_tree(user3, SpaceId, #dir_spec{}, krakow),
     Spec = [
         #file_spec{content = ?RAND_CONTENT(), mode = 8#604},
         #dir_spec{mode = 8#705, children = [#symlink_spec{symlink_value = make_symlink_target(SpaceId, DirObject)}]},
         #symlink_spec{symlink_value = make_symlink_target(SpaceId, DirObject)}
     ],
     [FileObject, #object{guid = ChildDirGuid, children = [#object{name = SymlinkName}]} = ChildDirObject, _SymlinkObject] =
-        onenv_file_test_utils:create_and_sync_file_tree(user3, DirGuid, Spec, krakow),
+        file_tree_test_utils:create_and_sync_file_tree(user3, DirGuid, Spec, krakow),
 
     ExpectedObject = ChildDirObject#object{
         children = [
@@ -392,7 +392,7 @@ gui_download_tarball_with_hardlinks_test(Config) ->
 
     SetupFun = fun() ->
         #object{guid = DirGuid, children = [#object{guid = FileGuid, content = Content}] = Children} = DirObject =
-            onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, Spec, krakow),
+            file_tree_test_utils:create_and_sync_file_tree(user3, SpaceId, Spec, krakow),
         SpaceDirGuid = space_dir:guid(SpaceId),
         {ok, LinkObject1} = make_hardlink(Config, FileGuid, SpaceDirGuid),
         {ok, LinkObject2} = make_hardlink(Config, FileGuid, DirGuid),
@@ -431,7 +431,7 @@ gui_download_tarball_with_hardlinks_test(Config) ->
 %% @private
 -spec gui_download_test_base(
     test_config:config(),
-    onenv_file_test_utils:object_spec() | [onenv_file_test_utils:file_spec()],
+    file_tree_test_utils:object_spec() | [file_tree_test_utils:file_spec()],
     onenv_api_test_runner:client_spec(),
     binary()
 ) ->
@@ -442,7 +442,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix) ->
 %% @private
 -spec gui_download_test_base(
     test_config:config(),
-    onenv_file_test_utils:object_spec() | [onenv_file_test_utils:file_spec()],
+    file_tree_test_utils:object_spec() | [file_tree_test_utils:file_spec()],
     onenv_api_test_runner:client_spec(),
     binary(),
     #{
@@ -455,7 +455,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) -
 
     SpaceId = oct_background:get_space_id(space_krk_par),
     #object{guid = DirGuid, shares = [DirShareId]} =
-        onenv_file_test_utils:create_and_sync_file_tree(
+        file_tree_test_utils:create_and_sync_file_tree(
             user3, SpaceId, #dir_spec{shares = [#share_spec{}]}, krakow),
 
     MemRef = api_test_memory:init(),
@@ -763,7 +763,7 @@ check_single_file_download_distribution(MemRef, expected_success, #api_test_ctx{
 %% @private
 -spec check_tarball_download_distribution(
     api_test_memory:mem_ref(), expected_success | expected_failure, onenv_api_test_runner:api_test_ctx(),
-    onenv_file_test_utils:object_spec(), [oneprovider:id()], node(), node()
+    file_tree_test_utils:object_spec(), [oneprovider:id()], node(), node()
 ) -> ok.
 check_tarball_download_distribution(_, _, #api_test_ctx{node = ?ONEZONE_TARGET_NODE}, _, _, _, _) ->
     % The request was made via Onezone's shared data redirector,
@@ -806,7 +806,7 @@ rest_download_file_test(Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk_par),
     #object{guid = DirGuid, shares = [DirShareId]} =
-        onenv_file_test_utils:create_and_sync_file_tree(
+        file_tree_test_utils:create_and_sync_file_tree(
             user3, SpaceId, #dir_spec{shares = [#share_spec{}]}, krakow),
 
     MemRef = api_test_memory:init(),
@@ -873,7 +873,7 @@ rest_download_file_at_path_test(Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk_par),
 
-    #object{guid = BaseDirGuid} = BaseDirObject = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = BaseDirGuid} = BaseDirObject = file_tree_test_utils:create_and_sync_file_tree(
         user3, SpaceId, #dir_spec{
             shares = [#share_spec{}]
         }, krakow),
@@ -997,7 +997,7 @@ rest_download_dir_test(Config) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
 
     #object{guid = DirGuid, shares = [DirShareId]} =
-        onenv_file_test_utils:create_and_sync_file_tree(
+        file_tree_test_utils:create_and_sync_file_tree(
             user3, SpaceId, #dir_spec{shares = [#share_spec{}]}, krakow),
 
     MemRef = api_test_memory:init(),
@@ -1066,7 +1066,7 @@ rest_download_dir_at_path_test(_Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk_par),
     #object{guid = DirGuid} =
-        onenv_file_test_utils:create_and_sync_file_tree(
+        file_tree_test_utils:create_and_sync_file_tree(
             user3, SpaceId, #dir_spec{shares = [#share_spec{}]}, krakow),
 
     MemRef = api_test_memory:init(),
@@ -1328,7 +1328,7 @@ sync_first_file_block_test(_Config) ->
 
     FileBlocks = ?RAND_INT(2, 6),
     FileSize = FileBlocks * ?DEFAULT_READ_BLOCK_SIZE,
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user2, space_krk_par, #file_spec{content = ?RAND_CONTENT(FileSize)}, krakow
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -1360,14 +1360,14 @@ sync_first_file_block_test(_Config) ->
 %% @private
 -spec build_download_file_setup_fun(
     api_test_memory:mem_ref(),
-    onenv_file_test_utils:object_spec() | [onenv_file_test_utils:file_spec()]
+    file_tree_test_utils:object_spec() | [file_tree_test_utils:file_spec()]
 ) ->
     onenv_api_test_runner:setup_fun().
 build_download_file_setup_fun(MemRef, Spec) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
 
     fun() ->
-        Object = onenv_file_test_utils:create_and_sync_file_tree(
+        Object = file_tree_test_utils:create_and_sync_file_tree(
             user3, SpaceId, utils:ensure_list(Spec), krakow
         ),
         api_test_memory:set(MemRef, file_tree_object, Object)
@@ -1499,7 +1499,7 @@ check_tarball(MemRef, Bytes, FileTreeObject, FilesStrategy) ->
 
 %% @private
 -spec check_extracted_tarball_structure(
-    api_test_memory:mem_ref(), onenv_file_test_utils:object_spec(), files_strategy(), binary(), child | root_dir
+    api_test_memory:mem_ref(), file_tree_test_utils:object_spec(), files_strategy(), binary(), child | root_dir
 ) ->
     ok.
 check_extracted_tarball_structure(MemRef, #object{type = ?DIRECTORY_TYPE} = Object, FilesStrategy, CurrentPath, DirType) ->
@@ -1522,7 +1522,7 @@ check_extracted_tarball_structure(_MemRef, #object{name = Filename}, no_files, C
 
 
 %% @private
--spec check_symlink(api_test_memory:mem_ref(), file_meta:path(), onenv_file_test_utils:object_spec(), public | private) -> ok.
+-spec check_symlink(api_test_memory:mem_ref(), file_meta:path(), file_tree_test_utils:object_spec(), public | private) -> ok.
 check_symlink(MemRef, CurrentPath, Object, private) ->
     #object{name = Filename, symlink_value = SymlinkValue} = Object,
     % NOTE: custom_label in SymlinkValue is used only for internal symlinks
@@ -1581,7 +1581,7 @@ unpack_tarball(Bytes) ->
 
 %% @private
 -spec make_hardlink(test_config:config(), fslogic_worker:file_guid(), fslogic_worker:file_guid()) ->
-    {ok, onenv_file_test_utils:object_spec()}.
+    {ok, file_tree_test_utils:object_spec()}.
 make_hardlink(Config, TargetGuid, ParentGuid) ->
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Node | _] = oct_background:get_provider_nodes(krakow),
@@ -1594,7 +1594,7 @@ make_hardlink(Config, TargetGuid, ParentGuid) ->
         SessId = oct_background:get_user_session_id(user3, rpc:call(Worker, oneprovider, get_id, [])),
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(LinkGuid)), ?ATTEMPTS)
     end, Providers),
-    onenv_file_test_utils:get_object_attributes(Node, UserSessId, LinkGuid).
+    file_tree_test_utils:get_object_attributes(Node, UserSessId, LinkGuid).
 
 
 %% @private
@@ -1602,14 +1602,14 @@ make_hardlink(Config, TargetGuid, ParentGuid) ->
 make_symlink_target() ->
     SpaceId = oct_background:get_space_id(space_krk_par),
     Name = ?RANDOM_FILE_NAME(),
-    Object = onenv_file_test_utils:create_and_sync_file_tree(
+    Object = file_tree_test_utils:create_and_sync_file_tree(
         user3, SpaceId, #file_spec{name = Name, content = Name}, krakow
     ),
     make_symlink_target(SpaceId, Object).
 
 
 %% @private
--spec make_symlink_target(od_space:id(), onenv_file_test_utils:object_spec()) ->
+-spec make_symlink_target(od_space:id(), file_tree_test_utils:object_spec()) ->
     file_meta_symlinks:symlink().
 make_symlink_target(SpaceId, #object{name = Name}) ->
     make_symlink_target(SpaceId, <<"">>, Name).

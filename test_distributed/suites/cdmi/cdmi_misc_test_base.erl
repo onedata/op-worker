@@ -44,7 +44,7 @@
 
 unauthorized_access_error_test(Config) ->
     TestDirName = ?build_test_root_path(Config),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{name = atom_to_binary(?FUNCTION_NAME)},
     Config#cdmi_test_config.p1_selector),
     {ok, Code, _Headers, Response} =
@@ -57,7 +57,7 @@ open_binary_file_without_permission_test(Config) ->
     [WorkerP1, _WorkerP2] = ?WORKERS(Config),
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     FilePath = filename:join([RootPath, "file8"]),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = <<"file8">>,
             content = ?FILE_CONTENT
@@ -84,7 +84,7 @@ open_binary_file_without_permission_test(Config) ->
 open_cdmi_file_without_permission_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     FilePath = filename:join([RootPath, "file9"]),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = <<"file9">>,
             content = ?FILE_CONTENT
@@ -297,7 +297,7 @@ delete_file_test(Config) ->
         filename:join([RootPath, "groupFile"]),
 
     %%----- basic delete -----------
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{name = <<"toDelete.txt">>},
     Config#cdmi_test_config.p1_selector),
 
@@ -308,7 +308,7 @@ delete_file_test(Config) ->
     ?assertNot(cdmi_test_utils:object_exists(FilePath, Config), ?ATTEMPTS),
 
     %%----- delete group file ------
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{name = <<"groupFile">>},
     Config#cdmi_test_config.p1_selector),
 
@@ -327,7 +327,7 @@ delete_dir_test(Config) ->
     ChildDirPath = filename:join([RootPath, "toDelete", "child"]) ++ "/",
 
     %%----- basic delete -----------
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{name = <<"toDelete">>},
     Config#cdmi_test_config.p1_selector),
 
@@ -341,7 +341,7 @@ delete_dir_test(Config) ->
     ),
     ?assertNot(cdmi_test_utils:object_exists(DirPath, Config), ?ATTEMPTS),
 
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = <<"toDelete">>,
             children = [
@@ -381,7 +381,7 @@ update_file_cdmi_test(Config) ->
     [WorkerP1, _WorkerP2] = ?WORKERS(Config),
     FilePath = cdmi_test_utils:build_test_root_path(Config, filename:join(?FUNCTION_NAME, "1")),
 
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = atom_to_binary(?FUNCTION_NAME),
             children = [
@@ -426,7 +426,7 @@ update_file_http_test(Config) ->
     [WorkerP1, _WorkerP2] = ?WORKERS(Config),
     FilePath = cdmi_test_utils:build_test_root_path(Config, filename:join(?FUNCTION_NAME, "1")),
 
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = atom_to_binary(?FUNCTION_NAME),
             children = [
@@ -527,7 +527,7 @@ request_format_check_test(Config) ->
 mimetype_and_encoding_noncdmi_file_test(Config) ->
     FilePath = cdmi_test_utils:build_test_root_path(
         Config, filename:join(?FUNCTION_NAME, "1")),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = atom_to_binary(?FUNCTION_NAME),
             children = [
@@ -558,7 +558,7 @@ update_mimetype_and_encoding_test(Config) ->
     [WorkerP1, _WorkerP2] = ?WORKERS(Config),
     FilePath = cdmi_test_utils:build_test_root_path(
         Config, filename:join(?FUNCTION_NAME, "2")),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = atom_to_binary(?FUNCTION_NAME),
             children = [
@@ -595,14 +595,14 @@ update_mimetype_and_encoding_test(Config) ->
 out_of_range_test(Config) ->
     Workers = oct_background:get_provider_nodes(Config#cdmi_test_config.p1_selector),
     DirPath = ?build_test_root_path(Config),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{name = atom_to_binary(?FUNCTION_NAME)},
     Config#cdmi_test_config.p1_selector),
 
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
 
     FilePath = filename:join([RootPath, "random_range_file.txt"]),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = <<"random_range_file.txt">>
         }, Config#cdmi_test_config.p1_selector

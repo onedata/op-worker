@@ -549,7 +549,7 @@ bulk_deletion_test(SuiteCtx) ->
         file_tree_spec = FileTreeSpec
     } = storage_import_test_utils:setup_and_verify_initial_import(
         ?FUNCTION_NAME,
-        #dir_spec{children = onenv_file_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR())},
+        #dir_spec{children = file_tree_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR())},
         SuiteCtx,
         #{
             scan_attempts => ?LARGE_IMPORT_SCAN_ATTEMPTS,
@@ -612,7 +612,7 @@ create_subfiles_and_delete_before_import_is_finished_test(SuiteCtx) ->
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     FileTreeSpec = storage_import_test_utils:create_file_tree_on_storage(
         ImportingProviderSelector, ImportedStorageId,
-        #dir_spec{children = onenv_file_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR())}
+        #dir_spec{children = file_tree_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR())}
     ),
     storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
     ?assertEqual(

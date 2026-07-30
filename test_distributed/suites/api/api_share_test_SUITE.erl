@@ -65,7 +65,7 @@ create_share_test(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
 
     {FileType, FileSpec} = generate_random_file_spec(),
-    FileInfo = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec),
+    FileInfo = file_tree_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec),
     FileGuid = FileInfo#object.guid,
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -232,7 +232,7 @@ get_share_test(_Config) ->
     {FileType, FileSpec} = generate_random_file_spec([
         #share_spec{name = ShareName, description = Description}
     ]),
-    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, SpaceId, FileSpec
     ),
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
@@ -338,7 +338,7 @@ update_share_test(_Config) ->
     {FileType, FileSpec} = generate_random_file_spec([
         #share_spec{name = OriginalShareName, description = OriginalDescription}
     ]),
-    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, SpaceKrkParId, FileSpec
     ),
 
@@ -515,19 +515,19 @@ delete_share_test(_Config) ->
 
 %% @private
 -spec build_delete_share_setup_fun(
-    [oct_background:entity_placeholder()], oct_background:entity_id(), onenv_file_test_utils:file_spec(),
+    [oct_background:entity_placeholder()], oct_background:entity_id(), file_tree_test_utils:file_spec(),
     api_test_memory:mem_ref(), boolean()
 ) -> ok.
 build_delete_share_setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare) ->
     fun() ->
-        #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
+        #object{guid = FileGuid, shares = ShareIds} = file_tree_test_utils:create_and_sync_file_tree(
             ?HANDLE_CREATOR, SpaceId, FileSpec
         ),
         api_test_memory:set(MemRef, shares, ShareIds),
         api_test_memory:set(MemRef, file_guid, FileGuid),
 
         ZombieShare andalso begin
-            onenv_file_test_utils:rm_and_sync_file(?HANDLE_CREATOR, FileGuid),
+            file_tree_test_utils:rm_and_sync_file(?HANDLE_CREATOR, FileGuid),
             assert_zombie_shares_exist(ShareIds, ?HANDLE_CREATOR, Providers)
         end
     end.
@@ -646,7 +646,7 @@ assert_zombie_shares_exist(ShareIds, UserSelector, Providers) ->
 
 share_root_accessed_via_public_data_mode_should_have_parent_set(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
-    #object{shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, SpaceId, #file_spec{shares = [#share_spec{}]}
     ),
 
@@ -670,14 +670,14 @@ share_root_accessed_via_public_data_mode_should_have_parent_set(_Config) ->
 
 %% @private
 -spec generate_random_file_spec() ->
-    {api_test_utils:file_type(), onenv_file_test_utils:file_spec()}.
+    {api_test_utils:file_type(), file_tree_test_utils:file_spec()}.
 generate_random_file_spec() ->
     generate_random_file_spec([]).
 
 
 %% @private
--spec generate_random_file_spec([onenv_file_test_utils:shares_spec()]) ->
-    {binary(), onenv_file_test_utils:file_spec()}.
+-spec generate_random_file_spec([file_tree_test_utils:shares_spec()]) ->
+    {binary(), file_tree_test_utils:file_spec()}.
 generate_random_file_spec(ShareSpecs) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     case FileType of

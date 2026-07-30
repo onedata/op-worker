@@ -1678,7 +1678,7 @@ force_start_test(SuiteCtx) ->
 force_stop_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
     %% [5, 5, 10] => 5 dirs x 5 subdirs x 10 files = 280 nodes
-    FileTreeSpec = onenv_file_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR()),
+    FileTreeSpec = file_tree_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR()),
 
     %% set up before init_testcase, as the initial scan auto-runs on space setup
     mock_import_file_started_notification(SuiteCtx, self()),
@@ -2531,7 +2531,7 @@ should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test(Sui
 %% (files with their content intact) and must not materialize on the imported
 %% storage.
 -spec should_not_delete_remote_entries_test_base(
-    atom(), storage_import_test_utils:suite_ctx(), onenv_file_test_utils:object_spec()
+    atom(), storage_import_test_utils:suite_ctx(), file_tree_test_utils:object_spec()
 ) ->
     ok.
 should_not_delete_remote_entries_test_base(TestCaseName, SuiteCtx, RemoteFileTreeSpec) ->
@@ -3100,7 +3100,7 @@ assert_file_content_by_guid(#provider_ctx{
 %% content - read via the non-importing provider, where its data lives - is
 %% intact.
 -spec assert_remote_entries_not_affected_by_scan(
-    storage_import_test_utils:case_ctx(), onenv_file_test_utils:object()
+    storage_import_test_utils:case_ctx(), file_tree_test_utils:object()
 ) ->
     ok.
 assert_remote_entries_not_affected_by_scan(#storage_import_test_case_ctx{

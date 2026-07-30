@@ -48,7 +48,7 @@ test_set_perms(SpaceId) ->
         children = [
             #object{guid = FileGuid}
         ]
-    } = onenv_file_test_utils:create_file_tree(
+    } = file_tree_test_utils:create_file_tree(
         FileOwnerUserId, SpaceDirGuid, krakow, #dir_spec{
             name = <<"root_dir">>,
             mode = ?FILE_MODE(8#700),

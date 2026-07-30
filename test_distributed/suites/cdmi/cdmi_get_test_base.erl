@@ -122,7 +122,7 @@ get_file_cdmi_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     FilledFilePath = ?build_test_root_path(Config),
     FilePathBin = atom_to_binary(?FUNCTION_NAME),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
         #file_spec{name = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "empty")},
         #file_spec{
             name = FilePathBin,
@@ -154,7 +154,7 @@ get_file_cdmi_test(Config) ->
 get_file_cdmi_attributes_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     FilledFilePath = ?build_test_root_path(Config),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
         #file_spec{name = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "empty")},
         #file_spec{
             name = atom_to_binary(?FUNCTION_NAME),
@@ -214,7 +214,7 @@ get_file_cdmi_attributes_test(Config) ->
 get_file_noncdmi_test(Config) ->
     FilledFilePath = ?build_test_root_path(Config),
     EmptyFilePath = cdmi_test_utils:build_test_root_path(Config, atom_to_list(?FUNCTION_NAME) ++ "empty"),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
         #file_spec{name = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "empty")},
         #file_spec{
             name = atom_to_binary(?FUNCTION_NAME),
@@ -340,7 +340,7 @@ get_dir_with_objectid_endpoint_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     TestDirPath = ?build_test_root_path(Config),
     TestDirPathCheck = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "/"),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = atom_to_binary(?FUNCTION_NAME),
             children = [
@@ -392,7 +392,7 @@ get_file_with_objectid_endpoint_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     TestFilePath = ?build_test_root_path(Config),
     TestFilePathBin = atom_to_binary(?FUNCTION_NAME),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{name = TestFilePathBin},
     Config#cdmi_test_config.p1_selector),
     RequestHeaders = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
@@ -462,7 +462,7 @@ list_basic_dir_test(Config) ->
     TestDirPathCheck = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "/"),
     TestFileNameBin = <<"some_file.txt">>,
 
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = atom_to_binary(?FUNCTION_NAME),
             children = [
@@ -496,7 +496,7 @@ list_root_space_dir_test(Config) ->
     TestDirNameCheck = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "/"),
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
 
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{name = atom_to_binary(?FUNCTION_NAME)},
     Config#cdmi_test_config.p1_selector),
 
@@ -526,7 +526,7 @@ selective_params_list_test(Config) ->
     TestDirPathCheck = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "/"),
     TestFileNameBin = <<"some_file.txt">>,
 
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = atom_to_binary(?FUNCTION_NAME),
             children = [
@@ -552,7 +552,7 @@ childrenrange_list_test(Config) ->
     Children = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
         "12", "13", "14"],
     ChildrenNameBinaries = lists:map(fun(X) -> list_to_binary(X) end, Children),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), #dir_spec{
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), #dir_spec{
         name = atom_to_binary(?FUNCTION_NAME),
         children = lists:map(
             fun(ChildName) ->

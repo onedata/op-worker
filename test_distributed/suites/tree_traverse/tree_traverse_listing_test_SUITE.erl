@@ -170,7 +170,7 @@ dir_stats_collections_initialization_traverse_listing_interrupted_call_error(_Co
 %%%===================================================================
 
 qos_traverse_listing_error_base() ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
+    #object{guid = RootDirGuid} = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
     FileUuid = file_id:guid_to_uuid(RootDirGuid),
     KrakowNode = oct_background:get_random_provider_node(krakow),
@@ -189,7 +189,7 @@ qos_traverse_listing_error_base() ->
 
 
 archivisation_traverse_listing_error_base(ErrorType) ->
-    onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{dataset = #dataset_spec{archives = 1}}, krakow),
+    file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{dataset = #dataset_spec{archives = 1}}, krakow),
     KrakowNode = oct_background:get_random_provider_node(krakow),
     % archivisation traverse is scheduled with archive creation
     
@@ -204,7 +204,7 @@ archivisation_traverse_listing_error_base(ErrorType) ->
 
 
 archive_verification_traverse_listing_error_base() ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
+    #object{guid = RootDirGuid} = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     KrakowNode = oct_background:get_random_provider_node(krakow),
     
     ok = opw_test_rpc:call(krakow, archive_verification_traverse, start, [#document{key = datastore_key:new(), value = #archive{data_dir_guid = RootDirGuid}}]),
@@ -215,7 +215,7 @@ archive_verification_traverse_listing_error_base() ->
 
 archive_recall_traverse_listing_error_base() ->
     #object{guid = RootDirGuid, dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{dataset = #dataset_spec{archives = 1}}, krakow),
+        file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{dataset = #dataset_spec{archives = 1}}, krakow),
 
     {ok, ArchiveDoc} = opw_test_rpc:call(krakow, archive, get, [ArchiveId]),
     UserCtx = opw_test_rpc:call(krakow, user_ctx, new, [<<"0">>]),
@@ -232,7 +232,7 @@ archive_recall_traverse_listing_error_base() ->
 
 
 replica_eviction_traverse_listing_error_base(ErrorType) ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
+    #object{guid = RootDirGuid} = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
     FileUuid = file_id:guid_to_uuid(RootDirGuid),
     KrakowNode = oct_background:get_random_provider_node(krakow),
@@ -249,7 +249,7 @@ replica_eviction_traverse_listing_error_base(ErrorType) ->
 
 
 replication_traverse_listing_error_base(ErrorType) ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
+    #object{guid = RootDirGuid} = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
     FileUuid = file_id:guid_to_uuid(RootDirGuid),
     KrakowNode = oct_background:get_random_provider_node(krakow),
@@ -266,7 +266,7 @@ replication_traverse_listing_error_base(ErrorType) ->
 
 
 bulk_download_traverse_listing_error_base(ErrorType) ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
+    #object{guid = RootDirGuid} = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     UserCtx = opw_test_rpc:call(krakow, user_ctx, new, [<<"0">>]),
     KrakowNode = oct_background:get_random_provider_node(krakow),
     
@@ -282,7 +282,7 @@ bulk_download_traverse_listing_error_base(ErrorType) ->
 
 
 tree_deletion_traverse_listing_error_base(ErrorType) ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
+    #object{guid = RootDirGuid} = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
     UserCtx = opw_test_rpc:call(krakow, user_ctx, new, [<<"0">>]),
     KrakowNode = oct_background:get_random_provider_node(krakow),
@@ -301,7 +301,7 @@ tree_deletion_traverse_listing_error_base(ErrorType) ->
 
 
 dir_stats_collections_initialization_traverse_listing_error_base(ErrorType) ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
+    #object{guid = RootDirGuid} = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
     SpaceDirGuid = space_dir:guid(SpaceId),
     KrakowNode = oct_background:get_random_provider_node(krakow),

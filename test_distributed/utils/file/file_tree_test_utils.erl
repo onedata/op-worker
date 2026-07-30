@@ -12,7 +12,7 @@
 %%% * flag to ensure files are created on storage
 %%% @end
 %%%-------------------------------------------------------------------
--module(onenv_file_test_utils).
+-module(file_tree_test_utils).
 -author("Bartosz Walkowicz").
 
 -include("file/file_tree_test.hrl").
@@ -308,7 +308,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
     Content /= <<>> andalso write_file(CreationNode, UserSessId, FileGuid, Content),
     MetadataObj = create_metadata(CreationNode, UserSessId, FileGuid, MetadataSpec),
 
-    DatasetObj = onenv_dataset_test_utils:set_up_dataset(
+    DatasetObj = dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, FileGuid, DatasetSpec
     ),
 
@@ -344,7 +344,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
     end,
     {ok, #file_attr{guid = SymlinkGuid}} = create_symlink(CreationNode, UserSessId, ParentGuid, FileName, FinalSymlinkValue),
 
-    DatasetObj = onenv_dataset_test_utils:set_up_dataset(
+    DatasetObj = dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, SymlinkGuid, DatasetSpec
     ),
 
@@ -379,7 +379,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #hardlink_spec{
     end,
     {ok, #file_attr{guid = HardlinkGuid}} = create_hardlink(CreationNode, UserSessId, ParentGuid, FileName, FinalTarget),
 
-    DatasetObj = onenv_dataset_test_utils:set_up_dataset(
+    DatasetObj = dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, HardlinkGuid, DatasetSpec
     ),
 
@@ -426,7 +426,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     end,
     MetadataObj = create_metadata(CreationNode, UserSessId, DirGuid, MetadataSpec),
 
-    DatasetObj = onenv_dataset_test_utils:set_up_dataset(
+    DatasetObj = dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, DirGuid, DatasetSpec
     ),
     {Shares, Handles} = create_shares(UserId, CreationProvider, UserSessId, DirGuid, ShareSpecs),
@@ -492,7 +492,7 @@ await_sync(CreationProvider, SyncProviders, UserId, #object{
 } = Object) ->
     await_file_attr_sync(SyncProviders, UserId, Object),
     await_file_metadata_sync(SyncProviders, UserId, Object),
-    onenv_dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj),
+    dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj),
     await_file_distribution_sync(CreationProvider, SyncProviders, UserId, Object);
 
 await_sync(CreationProvider, SyncProviders, UserId, #object{
@@ -501,7 +501,7 @@ await_sync(CreationProvider, SyncProviders, UserId, #object{
 } = Object) ->
     % file_attr construction uses file_meta document, so this checks symlink value synchronization
     await_file_attr_sync(SyncProviders, UserId, Object),
-    onenv_dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj);
+    dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj);
 
 await_sync(CreationProvider, SyncProviders, UserId, #object{
     guid = DirGuid,
@@ -510,7 +510,7 @@ await_sync(CreationProvider, SyncProviders, UserId, #object{
     children = Children
 } = Object) ->
     await_file_attr_sync(SyncProviders, UserId, Object#object{children = undefined}),
-    onenv_dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj),
+    dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj),
 
     ExpChildrenList = lists:keysort(2, lists_utils:pmap(fun(#object{guid = ChildGuid, name = ChildName} = Child) ->
         await_sync(CreationProvider, SyncProviders, UserId, Child),

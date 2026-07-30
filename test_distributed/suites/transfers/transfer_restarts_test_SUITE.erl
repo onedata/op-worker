@@ -209,7 +209,7 @@ init_per_testcase(_Case, Config) ->
     Workers = test_config:get_all_op_worker_nodes(Config),
     test_utils:set_env(Workers, ?APP_NAME, minimal_sync_request, 1),
     test_utils:set_env(Workers, ?APP_NAME, synchronizer_block_suiting, false),
-    UpdatedConfig = provider_onenv_test_utils:setup_sessions(Config),
+    UpdatedConfig = provider_test_utils:setup_sessions(Config),
     lfm_proxy:init(UpdatedConfig, false).
 
 

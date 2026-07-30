@@ -911,7 +911,7 @@ iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, ListingType, Starti
 list_children_with_prefix_names_using_start_index(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    #object{dataset = #dataset_object{id = DatasetId}} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, #dir_spec{
+    #object{dataset = #dataset_object{id = DatasetId}} = file_tree_test_utils:create_and_sync_file_tree(user1, space1, #dir_spec{
         dataset = #dataset_spec{},
         children = [
             #file_spec{name = <<"a">>, dataset = #dataset_spec{}},

@@ -88,7 +88,7 @@ public_file_api_samples_test(_Config) ->
                 ]
             }
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par,
+    } = file_tree_test_utils:create_and_sync_file_tree(user2, space_krk_par,
         #dir_spec{
             metadata = ?EXAMPLE_METADATA_SPEC,
             shares = [#share_spec{}],
@@ -197,7 +197,7 @@ private_file_api_samples_test(_Config) ->
                 type = ?SYMLINK_TYPE
             }
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par,
+    } = file_tree_test_utils:create_and_sync_file_tree(user2, space_krk_par,
         #dir_spec{
             metadata = ?EXAMPLE_METADATA_SPEC,
             children = [

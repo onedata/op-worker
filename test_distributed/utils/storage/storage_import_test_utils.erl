@@ -226,7 +226,7 @@
 -type case_ctx() :: #storage_import_test_case_ctx{}.
 % A single node of a declared storage file tree: either a generic onenv file/dir
 % spec, or a storage-import-specific FIFO spec (created on storage but not imported).
--type file_tree_node_spec() :: onenv_file_test_utils:object_spec() | #storage_fifo_spec{}.
+-type file_tree_node_spec() :: file_tree_test_utils:object_spec() | #storage_fifo_spec{}.
 -type file_tree_spec() ::
     undefined
     | file_tree_node_spec()
@@ -401,8 +401,8 @@ create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
 %% returns the created tree with all names concretized.
 %% @end
 %%--------------------------------------------------------------------
--spec create_file_tree_via_remote_provider(case_ctx(), onenv_file_test_utils:object_spec()) ->
-    onenv_file_test_utils:object().
+-spec create_file_tree_via_remote_provider(case_ctx(), file_tree_test_utils:object_spec()) ->
+    file_tree_test_utils:object().
 create_file_tree_via_remote_provider(#storage_import_test_case_ctx{
     suite_ctx = #storage_import_test_suite_ctx{
         non_importing_provider_selector = NonImportingProviderSelector,
@@ -415,7 +415,7 @@ create_file_tree_via_remote_provider(#storage_import_test_case_ctx{
         session_id = ImportingProviderSessionId
     }
 }, FileTreeSpec) ->
-    Object = onenv_file_test_utils:create_file_tree(
+    Object = file_tree_test_utils:create_file_tree(
         oct_background:get_user_id(SpaceOwnerSelector),
         space_dir:guid(SpaceId),
         NonImportingProviderSelector,
@@ -464,8 +464,8 @@ delete_file_tree_from_storage(ProviderSelector, StorageId, Spec) ->
 %% segments relative to the tree's parent.
 %% @end
 %%--------------------------------------------------------------------
--spec flatten_objects(onenv_file_test_utils:object()) ->
-    [{[file_meta:name()], onenv_file_test_utils:object()}].
+-spec flatten_objects(file_tree_test_utils:object()) ->
+    [{[file_meta:name()], file_tree_test_utils:object()}].
 flatten_objects(Object = #object{name = Name, children = Children}) ->
     [{[Name], Object} | [
         {[Name | DescendantSegments], Descendant}
@@ -1455,8 +1455,8 @@ ensure_name(Spec) ->
 %% (directories and files alike). Pure, in-process - performs no RPC - so that the
 %% expensive per-node verification can then be run in parallel.
 %% @end
--spec flatten_nodes(file_meta:path(), [onenv_file_test_utils:object_spec()]) ->
-    [{file_meta:path(), onenv_file_test_utils:object_spec()}].
+-spec flatten_nodes(file_meta:path(), [file_tree_test_utils:object_spec()]) ->
+    [{file_meta:path(), file_tree_test_utils:object_spec()}].
 flatten_nodes(ParentPath, Specs) ->
     lists:flatmap(fun(Spec) ->
         Path = filepath_utils:join([ParentPath, spec_name(Spec)]),
@@ -1476,7 +1476,7 @@ flatten_nodes(ParentPath, Specs) ->
 %% entry, so each is verified independently (and possibly in parallel).
 %% @end
 -spec verify_node(
-    #provider_ctx{}, file_meta:path(), onenv_file_test_utils:object_spec(), non_neg_integer()
+    #provider_ctx{}, file_meta:path(), file_tree_test_utils:object_spec(), non_neg_integer()
 ) ->
     ok.
 verify_node(ProviderCtx, Path, #dir_spec{children = Children}, Attempts) ->
@@ -1525,7 +1525,7 @@ assert_node_type(#provider_ctx{node = Node, session_id = SessId}, Path, Expected
 
 %% @private
 -spec assert_children(
-    #provider_ctx{}, file_meta:path(), [onenv_file_test_utils:object_spec()], non_neg_integer()
+    #provider_ctx{}, file_meta:path(), [file_tree_test_utils:object_spec()], non_neg_integer()
 ) ->
     ok.
 assert_children(#provider_ctx{node = Node, session_id = SessId}, ParentPath, ChildrenSpecs, Attempts) ->
@@ -1545,13 +1545,13 @@ list_child_names(Node, SessId, ParentPath) ->
 
 
 %% @private
--spec spec_name(onenv_file_test_utils:object_spec()) -> file_meta:name().
+-spec spec_name(file_tree_test_utils:object_spec()) -> file_meta:name().
 spec_name(#dir_spec{name = Name}) -> Name;
 spec_name(#file_spec{name = Name}) -> Name.
 
 
 %% @private
--spec to_spec_list(file_tree_spec()) -> [onenv_file_test_utils:object_spec()].
+-spec to_spec_list(file_tree_spec()) -> [file_tree_test_utils:object_spec()].
 to_spec_list(undefined) -> [];
 to_spec_list(Specs) when is_list(Specs) -> Specs;
 to_spec_list(Spec) -> [Spec].
@@ -1565,8 +1565,8 @@ to_spec_list(Spec) -> [Spec].
 %% divergences" section of the module doc). No-op on POSIX, where real (possibly
 %% empty) directories are always observable.
 %% @end
--spec filter_out_unobservable_dirs(posix | s3, [onenv_file_test_utils:object_spec()]) ->
-    [onenv_file_test_utils:object_spec()].
+-spec filter_out_unobservable_dirs(posix | s3, [file_tree_test_utils:object_spec()]) ->
+    [file_tree_test_utils:object_spec()].
 filter_out_unobservable_dirs(posix, Specs) ->
     Specs;
 filter_out_unobservable_dirs(s3, Specs) ->

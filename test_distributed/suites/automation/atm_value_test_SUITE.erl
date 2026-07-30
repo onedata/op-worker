@@ -293,7 +293,7 @@ atm_dataset_value_validation_test(_Config) ->
 
     [
         #object{dataset = #dataset_object{id = FileInSpace1DatasetId}}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(
+    ] = file_tree_test_utils:create_and_sync_file_tree(
         user1, space1, [#file_spec{dataset = #dataset_spec{}}]
     ),
 
@@ -303,7 +303,7 @@ atm_dataset_value_validation_test(_Config) ->
         ]},
         #object{dataset = #dataset_object{id = FileDatasetId}},
         #object{dataset = #dataset_object{id = SymlinkDatasetId}}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #dir_spec{mode = 8#700, dataset = #dataset_spec{}, children = [
             #file_spec{dataset = #dataset_spec{}}
         ]},
@@ -352,7 +352,7 @@ atm_dataset_value_to_from_store_item_test(_Config) ->
         ]},
         #object{dataset = #dataset_object{id = FileDatasetId}},
         #object{dataset = #dataset_object{id = SymlinkDatasetId}}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #dir_spec{mode = 8#700, dataset = #dataset_spec{}, children = [
             #file_spec{dataset = #dataset_spec{}}
         ]},
@@ -395,7 +395,7 @@ atm_dataset_value_describe_test(_Config) ->
         ]},
         #object{dataset = #dataset_object{id = FileDatasetId}},
         #object{dataset = #dataset_object{id = SymlinkDatasetId}}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #dir_spec{mode = 8#700, dataset = #dataset_spec{}, children = [
             #file_spec{dataset = #dataset_spec{}}
         ]},
@@ -433,14 +433,14 @@ atm_file_value_validation_test(_Config) ->
     SpaceKrkId = oct_background:get_space_id(space_krk),
     SessionId = oct_background:get_user_session_id(user1, krakow),
 
-    [#object{guid = FileInSpace1Guid}] = onenv_file_test_utils:create_and_sync_file_tree(
+    [#object{guid = FileInSpace1Guid}] = file_tree_test_utils:create_and_sync_file_tree(
         user1, space1, [#file_spec{}]
     ),
     [
         #object{guid = DirGuid, children = [#object{guid = FileInDirGuid}]},
         #object{guid = FileGuid},
         #object{guid = SymlinkGuid}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #dir_spec{mode = 8#700, children = [#file_spec{}]},
         #file_spec{},
         #symlink_spec{symlink_value = <<"a/b">>}
@@ -515,7 +515,7 @@ atm_file_value_to_from_store_item_test(_Config) ->
         #object{guid = DirGuid, children = [#object{guid = FileInDirGuid}]},
         #object{guid = FileGuid},
         #object{guid = SymlinkGuid}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #dir_spec{mode = 8#700, children = [#file_spec{}]},
         #file_spec{},
         #symlink_spec{symlink_value = <<"a/b">>}
@@ -556,7 +556,7 @@ atm_file_value_describe_test(_Config) ->
         #object{guid = DirGuid, children = [#object{guid = FileInDirGuid}]},
         #object{guid = FileGuid},
         #object{guid = SymlinkGuid}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #dir_spec{mode = 8#700, children = [#file_spec{}]},
         #file_spec{},
         #symlink_spec{symlink_value = <<"a/b">>}

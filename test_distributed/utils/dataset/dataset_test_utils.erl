@@ -9,7 +9,7 @@
 %%% Utility functions operating on datasets used in onenv ct tests.
 %%% @end
 %%%-------------------------------------------------------------------
--module(onenv_dataset_test_utils).
+-module(dataset_test_utils).
 -author("Bartosz Walkowicz").
 
 -include("file/file_tree_test.hrl").
@@ -47,7 +47,7 @@
 
 -spec set_up_and_sync_dataset(
     oct_background:entity_selector(),
-    onenv_file_test_utils:object_selector()
+    file_tree_test_utils:object_selector()
 ) ->
     dataset_object().
 set_up_and_sync_dataset(UserSelector, RootFileSelector) ->
@@ -56,13 +56,13 @@ set_up_and_sync_dataset(UserSelector, RootFileSelector) ->
 
 -spec set_up_and_sync_dataset(
     oct_background:entity_selector(),
-    onenv_file_test_utils:object_selector(),
+    file_tree_test_utils:object_selector(),
     dataset_spec()
 ) ->
     dataset_object().
 set_up_and_sync_dataset(UserSelector, RootFileSelector, DatasetSpec) ->
     UserId = oct_background:get_user_id(UserSelector),
-    {RootFileGuid, SpaceId} = onenv_file_test_utils:resolve_file(RootFileSelector),
+    {RootFileGuid, SpaceId} = file_tree_test_utils:resolve_file(RootFileSelector),
 
     [CreationProvider | SyncProviders] = lists_utils:shuffle(oct_background:get_space_supporting_providers(
         SpaceId
@@ -173,7 +173,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     file_meta:path(),
     dataset:id(),
     [binary()],
-    onenv_file_test_utils:object()
+    file_tree_test_utils:object()
 ) ->
     [{file_meta:name(), dataset:id(), dataset_api:info()}].
 get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, ParentEffProtectionFlagsJson,
@@ -214,7 +214,7 @@ cleanup_all_datasets(ProviderSelectors, SpaceSelector) ->
     file_meta:path(),
     dataset:id(),
     [binary()],
-    onenv_file_test_utils:object()
+    file_tree_test_utils:object()
 ) ->
     [{file_meta:name(), dataset:id(), dataset_api:info()}].
 get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, ParentEffProtectionFlagsJson, #object{

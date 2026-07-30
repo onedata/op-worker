@@ -38,10 +38,10 @@
 -record(file_spec, {
     name = undefined :: undefined | binary(),
     mode = ?DEFAULT_FILE_MODE :: file_meta:mode(),
-    shares = [] :: [onenv_file_test_utils:share_spec()],
-    dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
+    shares = [] :: [file_tree_test_utils:share_spec()],
+    dataset = undefined :: undefined | dataset_test_utils:dataset_spec(),
     content = <<"">> :: binary(),
-    metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec(),
+    metadata = #metadata_spec{} :: file_tree_test_utils:object_spec(),
     % Custom label that can be provided in symlink/hardlink spec as target.
     % NOTE: link must be specified after this file (i.e. further on the list) in file spec.
     custom_label = undefined :: undefined | any(),
@@ -53,13 +53,13 @@
 -record(dir_spec, {
     name = undefined :: undefined | binary(),
     mode = ?DEFAULT_DIR_MODE :: file_meta:mode(),
-    shares = [] :: [onenv_file_test_utils:share_spec()],
-    dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
+    shares = [] :: [file_tree_test_utils:share_spec()],
+    dataset = undefined :: undefined | dataset_test_utils:dataset_spec(),
     children = [] :: [#dir_spec{} | #file_spec{}],
-    metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec(),
+    metadata = #metadata_spec{} :: file_tree_test_utils:object_spec(),
     % Custom label that can be provided in symlink/hardlink spec as target.
     % NOTE: link must be specified after this dir (i.e. further on the list) in file spec.
-    custom_label = undefined :: undefined | onenv_file_test_utils:custom_label(),
+    custom_label = undefined :: undefined | file_tree_test_utils:custom_label(),
     %% TODO VFS-12179 handle uid/gid in creating test files utils
     uid = undefined :: luma:uid(),
     gid = undefined :: luma:gid()
@@ -67,21 +67,21 @@
 
 -record(symlink_spec, {
     name = undefined :: undefined | binary(),
-    dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
-    symlink_value :: binary() | {custom_label, onenv_file_test_utils:custom_label()},
+    dataset = undefined :: undefined | dataset_test_utils:dataset_spec(),
+    symlink_value :: binary() | {custom_label, file_tree_test_utils:custom_label()},
     % Custom label that can be provided in symlink/hardlink spec as target.
     % NOTE: link must be specified after this symlink (i.e. further on the list) in file spec.
-    custom_label = undefined :: undefined | onenv_file_test_utils:custom_label()
+    custom_label = undefined :: undefined | file_tree_test_utils:custom_label()
 }).
 
 -record(hardlink_spec, {
     name = undefined :: undefined | binary(),
-    shares = [] :: [onenv_file_test_utils:share_spec()],
-    dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
-    target :: file_id:file_guid() | {custom_label, onenv_file_test_utils:custom_label()},
+    shares = [] :: [file_tree_test_utils:share_spec()],
+    dataset = undefined :: undefined | dataset_test_utils:dataset_spec(),
+    target :: file_id:file_guid() | {custom_label, file_tree_test_utils:custom_label()},
     % Custom label that can be provided in symlink/hardlink spec as target.
     % NOTE: link must be specified after this hardlink (i.e. further on the list) in file spec.
-    custom_label = undefined :: undefined | onenv_file_test_utils:custom_label()
+    custom_label = undefined :: undefined | file_tree_test_utils:custom_label()
 }).
 
 -record(share_spec, {
@@ -120,11 +120,11 @@
     mode :: file_meta:mode(),
     shares = [] :: [od_share:id()],
     handles = #{} :: #{od_share:id() => od_handle:id()},
-    dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_object(),
+    dataset = undefined :: undefined | dataset_test_utils:dataset_object(),
     content = undefined :: undefined | binary(),  % set only for files
-    children = undefined :: undefined | [onenv_file_test_utils:object()],  % set only for dirs
+    children = undefined :: undefined | [file_tree_test_utils:object()],  % set only for dirs
     symlink_value = undefined :: undefined | file_meta_symlinks:symlink(),  % set only for symlinks
-    metadata :: undefined | onenv_file_test_utils:metadata_object()
+    metadata :: undefined | file_tree_test_utils:metadata_object()
 }).
 
 

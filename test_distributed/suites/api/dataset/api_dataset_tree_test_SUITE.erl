@@ -150,7 +150,7 @@ get_top_datasets_test(Config) ->
 
     TopAttachedDatasets = case SpaceDirDataset of
         undefined ->
-            onenv_dataset_test_utils:get_exp_child_datasets(
+            dataset_test_utils:get_exp_child_datasets(
                 ?ATTACHED_DATASET, SpaceDirPath, undefined, [], FileTree
             );
         {_, _, _} ->
@@ -160,7 +160,7 @@ get_top_datasets_test(Config) ->
 
     ct:pal("Test listing top detached datasets"),
 
-    TopDetachedDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
+    TopDetachedDatasets = dataset_test_utils:get_exp_child_datasets(
         ?DETACHED_DATASET, SpaceDirPath, undefined, [], FileTree
     ),
     get_top_datasets_test_base(SpaceId, ?DETACHED_DATASET, TopDetachedDatasets).
@@ -306,7 +306,7 @@ get_child_datasets_test(Config) ->
 
     ct:pal("Listing child datasets of attached dataset"),
 
-    AttachedChildDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
+    AttachedChildDatasets = dataset_test_utils:get_exp_child_datasets(
         ?ATTACHED_DATASET, DirWithDetachedDatasetPath, AttachedDatasetId, DirWithAttachedDatasetEffProtectionFlags,
         DirWithAttachedDataset
     ),
@@ -314,7 +314,7 @@ get_child_datasets_test(Config) ->
 
     ct:pal("Listing child datasets of detached dataset"),
 
-    DetachedChildDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
+    DetachedChildDatasets = dataset_test_utils:get_exp_child_datasets(
         ?DETACHED_DATASET, TestDirPath, DetachedDatasetId, TestDirProtectionFlags, DirWithDetachedDataset
     ),
     get_child_datasets_test_base(DetachedDatasetId, DetachedChildDatasets).
@@ -682,7 +682,7 @@ init_per_group(_Group, Config) ->
         2 ->
             ct:pal("Establishing dataset for space root dir"),
 
-            #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user3, SpaceId),
+            #dataset_object{id = DatasetId} = dataset_test_utils:set_up_and_sync_dataset(user3, SpaceId),
 
             DatasetInfo = #dataset_info{
                 id = DatasetId,
@@ -697,14 +697,14 @@ init_per_group(_Group, Config) ->
             },
             {?SPACE_KRK_PAR, DatasetId, DatasetInfo}
     end,
-    FileTree = onenv_file_test_utils:create_and_sync_file_tree(
+    FileTree = file_tree_test_utils:create_and_sync_file_tree(
         user3, SpaceId, ?FILE_TREE_SPEC
     ),
     [{space_dir_dataset, SpaceDirDataset}, {file_tree, FileTree} | NewConfig].
 
 
 end_per_group(_Group, Config) ->
-    onenv_dataset_test_utils:cleanup_all_datasets(space_krk_par),
+    dataset_test_utils:cleanup_all_datasets(space_krk_par),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 

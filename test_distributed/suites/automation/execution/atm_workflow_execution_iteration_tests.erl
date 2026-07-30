@@ -37,11 +37,11 @@
 -record(iterate_over_file_store_test_spec, {
     testcase :: atom(),
     store_type :: automation:store_type(),
-    initial_files :: [onenv_file_test_utils:object()],
+    initial_files :: [file_tree_test_utils:object()],
     % atm_file_type values are references to file entity in op. When those files
     % are removed the references for them should be omitted during iteration
-    files_to_remove_before_iteration_starts :: [onenv_file_test_utils:object()],
-    exp_iterated_files :: [onenv_file_test_utils:object()]
+    files_to_remove_before_iteration_starts :: [file_tree_test_utils:object()],
+    exp_iterated_files :: [file_tree_test_utils:object()]
 }).
 -type iterate_over_file_store_test_spec() :: #iterate_over_file_store_test_spec{}.
 
@@ -329,7 +329,7 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec 
                 prepare_lane = #atm_step_mock_spec{
                     before_step_hook = fun(_MockCallCtx) ->
                         lists_utils:pforeach(fun(#object{guid = Guid}) ->
-                            onenv_file_test_utils:rm_and_sync_file(user1, Guid)
+                            file_tree_test_utils:rm_and_sync_file(user1, Guid)
                         end, FilesToRemove)
                     end
                 },
@@ -426,7 +426,7 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec 
                 prepare_lane = #atm_step_mock_spec{
                     before_step_hook = fun(_MockCallCtx) ->
                         lists_utils:pforeach(fun(#object{guid = Guid}) ->
-                            onenv_file_test_utils:rm_and_sync_file(user1, Guid)
+                            file_tree_test_utils:rm_and_sync_file(user1, Guid)
                         end, FilesToRemove)
                     end
                 },
@@ -458,9 +458,9 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec 
 
 
 %% @private
--spec create_initial_files() -> [onenv_file_test_utils:object()].
+-spec create_initial_files() -> [file_tree_test_utils:object()].
 create_initial_files() ->
-    onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_SELECTOR, lists:flatten([
+    file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_SELECTOR, lists:flatten([
         #dir_spec{children = [
             #file_spec{name = <<"file1">>},
             #file_spec{name = <<"file2">>},
@@ -512,7 +512,7 @@ build_handle_task_execution_stopped_mock_spec_for_skipped_tasks() ->
 
 
 %% @private
--spec file_object_to_atm_file_value(onenv_file_test_utils:object()) -> automation:item().
+-spec file_object_to_atm_file_value(file_tree_test_utils:object()) -> automation:item().
 file_object_to_atm_file_value(#object{guid = Guid}) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     #{<<"fileId">> => ObjectId}.

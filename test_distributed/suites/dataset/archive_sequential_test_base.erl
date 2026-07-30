@@ -75,7 +75,7 @@ archive_dataset_tree_test_base(FileStructure, ArchiveLayout) ->
     #object{
         guid = RootGuid,
         dataset = #dataset_object{id = DatasetId}
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{dataset = #dataset_spec{}}),
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{dataset = #dataset_spec{}}),
 
     {_, FileGuids} = lfm_test_utils:create_files_tree(Node, SessId, FileStructure, RootGuid),
 
@@ -156,7 +156,7 @@ simple_verification_test_base(Layout, ModificationFun) ->
         dataset = #dataset_object{
             archives = [#archive_object{id = ArchiveId}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]},
             children = [#file_spec{content = OriginalContent, metadata = #metadata_spec{json = OriginalMetadata}}],
@@ -187,7 +187,7 @@ dip_verification_test_base(Layout) ->
         dataset = #dataset_object{
             archives = [#archive_object{id = AipArchiveId}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = true}}]},
             children = [#file_spec{content = ?RAND_CONTENT(), metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}]
@@ -215,7 +215,7 @@ nested_verification_test_base(Layout) ->
             #object{dataset = #dataset_object{id = NestedDatasetId1}},
             #object{dataset = #dataset_object{id = NestedDatasetId2}}
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, create_nested_archives = true}}]},
             children = [

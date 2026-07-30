@@ -494,7 +494,7 @@ setup_initial_environment(#test_config{
     dip_strategy = DipStrategy,
     nested_strategy = NestedStrategy
 }) ->
-    onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+    file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{
             layout = case Layout of
                 random -> lists_utils:random_element(?ARCHIVE_LAYOUTS);

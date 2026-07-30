@@ -2762,7 +2762,7 @@ create_dir_and_symlink_to_it(Testcase, Node, SessionId) ->
 
     {ok, #file_attr{guid = SymlinkGuid}} = lfm_proxy:make_symlink(
         Node, SessionId, {path, TestCaseDirPath}, generator:gen_name(),
-        onenv_file_test_utils:prepare_symlink_value(Node, SessionId, DirGuid)
+        file_tree_test_utils:prepare_symlink_value(Node, SessionId, DirGuid)
     ),
 
     {DirGuid, SymlinkGuid}.

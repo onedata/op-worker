@@ -45,7 +45,7 @@ copy_file_test(Config) ->
     JsonMetadata = #{<<"a">> => <<"b">>, <<"c">> => 2, <<"d">> => []},
 
     % create file to copy
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user2,
         node_cache:get(root_dir_guid),
         #file_spec{
@@ -102,7 +102,7 @@ copy_dir_test(Config) ->
     UserId = oct_background:get_user_id(user2),
     UserName = oct_background:get_user_fullname(user2),
     [WorkerP1, _WorkerP2] = ?WORKERS(Config),
-    #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user2,
         node_cache:get(root_dir_guid),
         #dir_spec{
@@ -185,7 +185,7 @@ copy_dir_test(Config) ->
 
 % tests copy and move operations on dataobjects and containers
 move_file_test(Config) ->
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = atom_to_binary(?FUNCTION_NAME),
@@ -213,7 +213,7 @@ move_file_test(Config) ->
 
 
 move_dir_test(Config) ->
-    #object{guid = DirGuid}  = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid}  = file_tree_test_utils:create_and_sync_file_tree(
         user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = atom_to_binary(?FUNCTION_NAME)
@@ -245,7 +245,7 @@ moved_file_permanently_test(Config) ->
     FilePath = ?build_test_root_path(Config),
     FilePathWithSlash = FilePath ++ "/",
 
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{name = atom_to_binary(?FUNCTION_NAME)},
     Config#cdmi_test_config.p1_selector),
 
@@ -267,7 +267,7 @@ moved_dir_permanently_test(Config) ->
     CDMIEndpoint = cdmi_test_utils:get_cdmi_endpoint(Config),
     DirPathWithoutSlash = ?build_test_root_path(Config),
     DirPath = DirPathWithoutSlash ++ "/",
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = atom_to_binary(?FUNCTION_NAME),
             children = [
@@ -294,7 +294,7 @@ moved_dir_with_QS_permanently_test(Config) ->
     CDMIEndpoint = cdmi_test_utils:get_cdmi_endpoint(Config),
     DirPathWithoutSlash = ?build_test_root_path(Config),
     DirPath = DirPathWithoutSlash ++ "/",
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = atom_to_binary(?FUNCTION_NAME),
             children = [
@@ -322,7 +322,7 @@ move_copy_conflict_test(Config) ->
     FileUri = list_to_binary(filename:join("/", FilePath)),
     FileData = <<"data">>,
     NewMoveFilePath = cdmi_test_utils:build_test_root_path(Config, "new" ++ atom_to_list(?FUNCTION_NAME)),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = atom_to_binary(?FUNCTION_NAME),
             content = <<"data">>

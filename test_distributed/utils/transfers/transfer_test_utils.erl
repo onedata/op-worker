@@ -110,7 +110,7 @@
 % transferred files given either as a (nested) file tree or a flat list of
 % its objects (e.g. the subset of tree files matched by a view)
 -type file_tree_objects() ::
-    onenv_file_test_utils:object() | [onenv_file_test_utils:object()].
+    file_tree_test_utils:object() | [file_tree_test_utils:object()].
 
 -type suite_ctx() :: #transfer_test_suite_ctx{}.
 
@@ -161,7 +161,7 @@ remove_leftover_file_trees(#transfer_test_suite_ctx{
     % block the file tree removal below (rm_recursive moves the tree to the trash,
     % but its protected entries can never be purged from there)
     remove_all_datasets(SpaceSelector, UserSelector),
-    {ok, Children} = onenv_file_test_utils:ls(UserSelector, SpaceSelector, 0, ?SPACE_ROOT_LS_LIMIT),
+    {ok, Children} = file_tree_test_utils:ls(UserSelector, SpaceSelector, 0, ?SPACE_ROOT_LS_LIMIT),
     CaseNamePrefix = <<(atom_to_binary(CaseName, utf8))/binary, "_">>,
 
     LeftoverTreeGuids = [ChildGuid || {ChildGuid, ChildName} <- Children,
@@ -171,15 +171,15 @@ remove_leftover_file_trees(#transfer_test_suite_ctx{
     end, LeftoverTreeGuids).
 
 
--spec create_file_tree(suite_ctx(), atom(), onenv_file_test_utils:object_spec()) ->
-    onenv_file_test_utils:object().
+-spec create_file_tree(suite_ctx(), atom(), file_tree_test_utils:object_spec()) ->
+    file_tree_test_utils:object().
 create_file_tree(#transfer_test_suite_ctx{
     space_selector = SpaceSelector,
     user_selector = UserSelector,
     creation_provider_selector = CreationProviderSelector
 }, CaseName, #dir_spec{} = RootDirSpec) ->
     RootDirName = str_utils:format_bin("~ts_~ts", [CaseName, str_utils:rand_hex(6)]),
-    onenv_file_test_utils:create_and_sync_file_tree(
+    file_tree_test_utils:create_and_sync_file_tree(
         UserSelector, SpaceSelector,
         RootDirSpec#dir_spec{name = RootDirName},
         CreationProviderSelector
@@ -201,7 +201,7 @@ create_file_tree(#transfer_test_suite_ctx{
 %% eviction would then honestly evict nothing.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_initial_replicas(suite_ctx(), onenv_file_test_utils:object()) -> ok.
+-spec ensure_initial_replicas(suite_ctx(), file_tree_test_utils:object()) -> ok.
 ensure_initial_replicas(#transfer_test_suite_ctx{
     transfer_type = eviction,
     user_selector = UserSelector,
@@ -219,7 +219,7 @@ ensure_initial_replicas(_TestSuiteCtx, _TransferRootObject) ->
     ok.
 
 
--spec schedule_transfer(suite_ctx(), onenv_file_test_utils:object()) ->
+-spec schedule_transfer(suite_ctx(), file_tree_test_utils:object()) ->
     transfer:id().
 schedule_transfer(TestSuiteCtx = #transfer_test_suite_ctx{
     user_selector = UserSelector,
@@ -958,7 +958,7 @@ rm_leftover_file_tree(SpaceSelector, UserSelector, FileGuid) ->
 %% @private
 %% Removes all top-level datasets in the space so that any protection flags
 %% they carry no longer block the removal of leftover file trees. Unlike
-%% onenv_dataset_test_utils:cleanup_all_datasets/1, it does not walk dataset
+%% dataset_test_utils:cleanup_all_datasets/1, it does not walk dataset
 %% archives (transfer tests never create any, and listing them fails with
 %% not_found for a never-archived dataset).
 -spec remove_all_datasets(oct_background:entity_selector(), oct_background:entity_selector()) ->
@@ -1126,7 +1126,7 @@ count_files_and_bytes(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
 
 %% @private
 -spec collect_regular_files(file_tree_objects()) ->
-    [onenv_file_test_utils:object()].
+    [file_tree_test_utils:object()].
 collect_regular_files(Objects) when is_list(Objects) ->
     lists:flatmap(fun collect_regular_files/1, Objects);
 collect_regular_files(#object{type = ?REGULAR_FILE_TYPE} = Object) ->

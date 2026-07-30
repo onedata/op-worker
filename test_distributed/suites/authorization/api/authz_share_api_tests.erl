@@ -95,7 +95,7 @@ test_share_perms_are_checked_only_up_to_share_root(SpaceId) ->
         children = [#object{
             children = [#object{guid = FileGuid}]
         }]
-    }]} = onenv_file_test_utils:create_file_tree(SpaceOwnerUserId, SpaceDirGuid, krakow, #dir_spec{
+    }]} = file_tree_test_utils:create_file_tree(SpaceOwnerUserId, SpaceDirGuid, krakow, #dir_spec{
         name = <<"root_dir">>,
         mode = ?FILE_MODE(8#700),
         children = [#dir_spec{

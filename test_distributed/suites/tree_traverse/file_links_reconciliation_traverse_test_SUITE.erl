@@ -56,7 +56,7 @@ newly_supported_space_is_marked_as_not_needing_traverse_test(_Config) ->
 
 file_links_reconciliation_traverse_test(Config) ->
     ChildrenCount = 100,
-    #object{guid = DirGuid, children = ChildrenObjects} = onenv_file_test_utils:create_file_tree(
+    #object{guid = DirGuid, children = ChildrenObjects} = file_tree_test_utils:create_file_tree(
         oct_background:get_user_id(user1),
         space_dir:guid(oct_background:get_space_id(space1)),
         oct_background:get_provider_id(paris),

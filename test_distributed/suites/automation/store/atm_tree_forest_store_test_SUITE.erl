@@ -214,7 +214,7 @@ iteration_after_restart_with_new_dirs_root(_Config) ->
         end, [], FilesMap),
     
     Spec = [#dir_spec{children = [], mode = 8#705}, #dir_spec{children = [#file_spec{}], mode = 8#705}, #file_spec{}],
-    AddedObject = onenv_file_test_utils:create_and_sync_file_tree(user1, Root1, Spec, krakow),
+    AddedObject = file_tree_test_utils:create_and_sync_file_tree(user1, Root1, Spec, krakow),
     GetIds = fun
         F(#object{guid = Guid, children = Children}) ->
             [Guid | F(Children)];
@@ -404,7 +404,7 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
     end,
     ChildrenSpec = ChildrenSpecGen(Depth),
     Spec = [#dir_spec{children = ChildrenSpec, mode = 8#705}, #dir_spec{children = ChildrenSpec, mode = 8#705}, #file_spec{}],
-    Objects = onenv_file_test_utils:create_and_sync_file_tree(
+    Objects = file_tree_test_utils:create_and_sync_file_tree(
         user1, SpaceId, Spec, krakow
     ),
     ObjectToListFun = fun

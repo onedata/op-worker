@@ -805,7 +805,7 @@ set_up_matrix_row(?POSIX_EXTERNAL = RowName, LumaFeedUrl) ->
 set_up_matrix_row(?POSIX_LOCAL = RowName, _LumaFeedUrl) ->
     StorageId = create_posix_storage(krakow, local, false),
     SpaceId = create_space(RowName, [{krakow, StorageId}]),
-    onenv_luma_test_utils:populate_local_feed(krakow, StorageId, feed_data(SpaceId, #{
+    luma_feed_test_utils:populate_local_feed(krakow, StorageId, feed_data(SpaceId, #{
         user1 => #{<<"storageCredentials">> => #{<<"uid">> => 3001}, <<"displayUid">> => 3331},
         user2 => #{<<"storageCredentials">> => #{<<"uid">> => 3002}}
     }, #{
@@ -838,7 +838,7 @@ set_up_matrix_row(?IMPORTED_POSIX_LOCAL = RowName, _LumaFeedUrl) ->
     SpaceId = create_space(RowName, [{krakow, StorageId}]),
     % posix storage defaults can not be defined for an imported storage - the space
     % dir owner is always taken from the storage itself
-    onenv_luma_test_utils:populate_local_feed(krakow, StorageId, feed_data(SpaceId, #{
+    luma_feed_test_utils:populate_local_feed(krakow, StorageId, feed_data(SpaceId, #{
         user1 => #{<<"storageCredentials">> => #{<<"uid">> => 6001}, <<"displayUid">> => 6661},
         user2 => #{<<"storageCredentials">> => #{<<"uid">> => 6002}}
     }, #{
@@ -872,7 +872,7 @@ set_up_matrix_row(?S3_EXTERNAL = RowName, LumaFeedUrl) ->
 set_up_matrix_row(?S3_LOCAL = RowName, _LumaFeedUrl) ->
     StorageId = create_s3_storage(local),
     SpaceId = create_space(RowName, [{krakow, StorageId}]),
-    onenv_luma_test_utils:populate_local_feed(krakow, StorageId, feed_data(SpaceId, #{
+    luma_feed_test_utils:populate_local_feed(krakow, StorageId, feed_data(SpaceId, #{
         user1 => #{
             <<"storageCredentials">> => #{<<"accessKey">> => <<"AccessKey">>, <<"secretKey">> => <<"SecretKey">>},
             <<"displayUid">> => 9991
@@ -963,7 +963,7 @@ create_space(RowName, ProvidersWithStorages) ->
 
 %% @private
 %% @doc Builds feed data in the schema shared by luma_test_server and
-%% onenv_luma_test_utils, resolving user placeholders to actual onedata user ids.
+%% luma_feed_test_utils, resolving user placeholders to actual onedata user ids.
 -spec feed_data(od_space:id(), #{user_selector() => json_utils:json_map()}, json_utils:json_map()) ->
     json_utils:json_map().
 feed_data(SpaceId, StorageUsers, SpaceDefaults) ->

@@ -948,7 +948,7 @@ get_dir_distribution_1_test(Config) ->
         guid = DirGuid,
         shares = [ShareId],
         children = [#object{guid = FileGuid}]
-    } = onenv_file_test_utils:create_and_sync_file_tree(
+    } = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{
             mode = 8#707,
             shares = [#share_spec{}],
@@ -1021,7 +1021,7 @@ get_dir_distribution_2_test(Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
-    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
@@ -1088,7 +1088,7 @@ get_dir_distribution_3_test(Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
-    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
@@ -1111,7 +1111,7 @@ get_dir_distribution_3_test(Config) ->
     wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist1),
     get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist1, Config),
 
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user3, DirGuid, #file_spec{}
     ),
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 5, {rand_content, 10}),
@@ -1151,7 +1151,7 @@ get_dir_distribution_4_test(Config) ->
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
 
-    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_s3, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
@@ -1196,7 +1196,7 @@ get_dir_distribution_backwards_compatibility_test(Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
-    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
@@ -1245,7 +1245,7 @@ get_dir_distribution_backwards_compatibility_test(Config) ->
 get_symlink_distribution_test(Config) ->
     FileType = <<"sym">>,
     
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>}
     ),
 
@@ -1485,7 +1485,7 @@ get_historical_dir_size_stats_layout_test(Config) ->
     P2StorageId = get_storage_id(SpaceId, P2Id),
 
     [#object{guid = DirGuid, shares = [ShareId]}, #object{guid = FileGuid}] =
-        onenv_file_test_utils:create_and_sync_file_tree(
+        file_tree_test_utils:create_and_sync_file_tree(
             user3, space_krk_par, [
                 #dir_spec{
                     mode = 8#707,
@@ -1555,7 +1555,7 @@ get_historical_dir_size_stats_slice_test(Config) ->
 
     time_test_utils:set_current_time_seconds(CurrentTimestamp),
     [#object{guid = DirGuid, shares = [ShareId]}, #object{guid = FileGuid}] =
-        onenv_file_test_utils:create_and_sync_file_tree(
+        file_tree_test_utils:create_and_sync_file_tree(
             user3, space_krk_par, [
                 #dir_spec{
                     mode = 8#707,
@@ -1572,13 +1572,13 @@ get_historical_dir_size_stats_slice_test(Config) ->
     await_dir_size_sync([krakow, paris], 8, DirGuid),
 
     time_test_utils:simulate_seconds_passing(100),
-    onenv_file_test_utils:create_and_sync_file_tree(
+    file_tree_test_utils:create_and_sync_file_tree(
         user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(16)}, krakow
     ),
     await_dir_size_sync([krakow, paris], 24, DirGuid),
 
     time_test_utils:simulate_seconds_passing(180),
-    onenv_file_test_utils:create_and_sync_file_tree(
+    file_tree_test_utils:create_and_sync_file_tree(
         user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(8)}, krakow
     ),
     await_dir_size_sync([krakow, paris], 32, DirGuid),
@@ -1692,7 +1692,7 @@ get_historical_dir_size_stats_disabled_test(Config) ->
     disable_dir_stats_collecting_for_space(paris, space_krk_par),
 
     [#object{guid = DirGuid, shares = [ShareId]}] =
-        onenv_file_test_utils:create_and_sync_file_tree(
+        file_tree_test_utils:create_and_sync_file_tree(
             user3, space_krk_par, [
                 #dir_spec{
                     mode = 8#707,
@@ -1992,7 +1992,7 @@ assert_file_location_created(_Node, dir, _DirUuid, _LocationProviderId) ->
 -spec create_storage_locations_test_file(reg | dir, od_space:id()) ->
     {file_id:file_guid(), file_id:file_guid(), od_share:id()}.
 create_storage_locations_test_file(reg, SpaceId) ->
-    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_dir:guid(SpaceId), #file_spec{
             shares = [#share_spec{}],
             mode = 8#707,
@@ -2005,7 +2005,7 @@ create_storage_locations_test_file(dir, SpaceId) ->
         guid = DirGuid,
         shares = [ShareId],
         children = [#object{guid = FileGuid}]
-    } = onenv_file_test_utils:create_and_sync_file_tree(
+    } = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_dir:guid(SpaceId), #dir_spec{
             shares = [#share_spec{}],
             mode = 8#707,

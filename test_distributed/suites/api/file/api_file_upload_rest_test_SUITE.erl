@@ -65,7 +65,7 @@ create_file_test(_Config) ->
             guid = FileGuid,
             name = UsedFileName
         }]
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
         mode = 8#704,
         shares = [#share_spec{}],
         % create a child file with full perms instead of default ones so that call to
@@ -306,7 +306,7 @@ create_file_at_path_test(_Config) ->
                 name = ChildDirName,
                 type = ?DIRECTORY_TYPE
             }]
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
         mode = 8#704,
         shares = [#share_spec{}],
         % create a child file with full perms instead of default ones so that call to
@@ -543,7 +543,7 @@ update_file_content_test(_Config) ->
         oct_background:get_provider_nodes(paris)
     ]),
 
-    #object{guid = DirGuid, shares = [DirShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid, shares = [DirShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{
             mode = 8#704,
             shares = [#share_spec{}],

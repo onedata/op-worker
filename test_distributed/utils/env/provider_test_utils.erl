@@ -7,7 +7,7 @@
 %%% This module contains test utility functions useful in tests using onenv.
 %%% @end
 %%%-------------------------------------------------------------------
--module(provider_onenv_test_utils).
+-module(provider_test_utils).
 -author("Michal Stanisz").
 
 -include_lib("ctool/include/aai/aai.hrl").

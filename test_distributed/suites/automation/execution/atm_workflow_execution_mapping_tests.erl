@@ -377,7 +377,7 @@ map_results_to_tree_forest_store() ->
         file_type = 'ANY',
         attributes = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
     },
-    FileObjects = onenv_file_test_utils:create_and_sync_file_tree(
+    FileObjects = file_tree_test_utils:create_and_sync_file_tree(
         user1, ?SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
     ),
     IteratedItems = lists:map(fun(#object{guid = Guid}) ->
@@ -438,7 +438,7 @@ map_from_file_list_to_object_list_store() ->
     FileAttrsToResolve = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)]),
     AtmFileDataSpec = #atm_file_data_spec{file_type = 'ANY', attributes = FileAttrsToResolve},
 
-    FileObjects = onenv_file_test_utils:create_and_sync_file_tree(
+    FileObjects = file_tree_test_utils:create_and_sync_file_tree(
         user1, ?SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
     ),
     InputItems = lists:map(fun(#object{guid = Guid}) ->

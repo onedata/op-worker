@@ -58,9 +58,9 @@ test_expired_session(_Config) ->
     Node = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
 
     UserId = oct_background:get_user_id(user2),
-    AccessToken = provider_onenv_test_utils:create_oz_temp_access_token(UserId),
+    AccessToken = provider_test_utils:create_oz_temp_access_token(UserId),
 
-    SessionId = provider_onenv_test_utils:create_session(Node, UserId, AccessToken),
+    SessionId = provider_test_utils:create_session(Node, UserId, AccessToken),
 
     SpaceName = oct_background:get_space_name(space1),
     FilePath = filepath_utils:join([<<"/">>, SpaceName, ?RAND_STR()]),

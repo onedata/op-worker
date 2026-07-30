@@ -72,7 +72,7 @@ rubbish_path_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     SessId = oct_background:get_user_session_id(user1, krakow),
 
-    #object{guid = SymlinkGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = SymlinkGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, #symlink_spec{symlink_value = <<"rubbish<>!@#xd">>}
     ),
 
@@ -83,7 +83,7 @@ non_existent_path_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     SessId = oct_background:get_user_session_id(user1, krakow),
 
-    #object{guid = SymlinkGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = SymlinkGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, #symlink_spec{symlink_value = <<"a/b">>}
     ),
 
@@ -97,7 +97,7 @@ path_with_file_in_the_middle_test(_Config) ->
     DirName = str_utils:rand_hex(10),
     FileName = str_utils:rand_hex(10),
 
-    [_, #object{guid = SymlinkGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+    [_, #object{guid = SymlinkGuid}] = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, [
             #dir_spec{name = DirName, children = [#file_spec{name = FileName}]},
             #symlink_spec{symlink_value = filename:join([DirName, FileName, "file2"])}
@@ -114,7 +114,7 @@ user_root_absolute_path_test(_Config) ->
     SpaceName = oct_background:get_space_name(space_krk),
     FileName = str_utils:rand_hex(10),
 
-    [_, #object{guid = SymlinkGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+    [_, #object{guid = SymlinkGuid}] = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, [
             #file_spec{name = FileName},
             #symlink_spec{symlink_value = filename:join(["/", SpaceName, FileName])}
@@ -135,7 +135,7 @@ space_absolute_path_test(_Config) ->
     [
         #object{children = [#object{guid = FileGuid}]},
         #object{guid = SymlinkGuid}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #dir_spec{name = DirName, children = [#file_spec{name = FileName}]},
         #symlink_spec{symlink_value = filename:join([SpaceIdPrefix, DirName, FileName])}
     ]),
@@ -152,7 +152,7 @@ relative_path_test(_Config) ->
     #object{children = [
         #object{guid = FileGuid},
         #object{guid = SymlinkGuid}
-    ]} = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, #dir_spec{children = [
+    ]} = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, #dir_spec{children = [
         #file_spec{name = FileName},
         #symlink_spec{symlink_value = FileName}
     ]}),
@@ -174,7 +174,7 @@ path_with_dots_test(_Config) ->
             #object{guid = Symlink2Guid},
             #object{guid = Symlink3Guid}
         ]}
-    ]} = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, #dir_spec{
+    ]} = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, #dir_spec{
         name = Dir1Name,
         children = [
             #file_spec{name = FileName},
@@ -197,7 +197,7 @@ symlink_to_itself_test(_Config) ->
 
     SymlinkName = str_utils:rand_hex(10),
 
-    #object{guid = SymlinkGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = SymlinkGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, #symlink_spec{name = SymlinkName, symlink_value = SymlinkName}
     ),
 
@@ -216,7 +216,7 @@ symlink_loop_test(_Config) ->
         #object{guid = Symlink1Guid},
         #object{guid = Symlink2Guid},
         #object{guid = Symlink3Guid}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #symlink_spec{name = Symlink1Name, symlink_value = Symlink2Name},
         #symlink_spec{name = Symlink2Name, symlink_value = Symlink3Name},
         #symlink_spec{name = Symlink3Name, symlink_value = Symlink1Name}
@@ -241,7 +241,7 @@ symlink_hops_limit_test(_Config) ->
 
     [
         #object{guid = FileGuid} | Symlinks
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #file_spec{name = FileName} | lists:reverse(SymlinkSpecs)
     ]),
 
@@ -268,7 +268,7 @@ symlink_chain_test(_Config) ->
             #object{children = [#object{guid = Symlink1Guid}]}
         ]},
         #object{guid = Symlink2Guid}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #dir_spec{name = Dir1Name, children = [
             #file_spec{name = FileName},
             #dir_spec{name = Dir2Name, children = [#symlink_spec{
@@ -297,7 +297,7 @@ symlink_in_share_test(_Config) ->
             #object{guid = File2Guid},
             #object{guid = Symlink1Guid}, #object{guid = Symlink2Guid}, #object{guid = Symlink3Guid}
         ]}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk, [
         #file_spec{name = File1Name},
         #dir_spec{name = DirName, shares = [#share_spec{}], children = [
             #file_spec{name = File2Name},

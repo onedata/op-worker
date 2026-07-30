@@ -250,7 +250,7 @@ download_file_in_blocks_test(_Config) ->
     FilePath = filename:join([RootPath, <<"upload_file_in_blocks">>]),
     Data = crypto:strong_rand_bytes(200),
 
-    onenv_file_test_utils:create_and_sync_file_tree(
+    file_tree_test_utils:create_and_sync_file_tree(
         user2,
         node_cache:get(root_dir_guid),
         #file_spec{
@@ -485,7 +485,7 @@ init_per_suite(Config) ->
         onenv_scenario = "1op-2nodes",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
-            #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk,
+            #object{guid = DirGuid} = file_tree_test_utils:create_and_sync_file_tree(user2, space_krk,
                 #dir_spec{
                     name = DateString
                 }, krakow

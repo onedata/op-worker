@@ -391,7 +391,7 @@ archive_dataset_attached_to_dir_test_base(Layout, IncludeDip) ->
         dataset = #dataset_object{
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
-        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+        }} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
             dataset = #dataset_spec{archives = [
                 #archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}
             ]},
@@ -406,7 +406,7 @@ archive_dataset_attached_to_file_test_base(Layout, IncludeDip) ->
         dataset = #dataset_object{
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
-        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
+        }} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
         dataset = #dataset_spec{archives = [#archive_spec{
             config = #archive_config{layout = Layout, include_dip = IncludeDip}
         }]},
@@ -421,7 +421,7 @@ archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     SpaceDirGuid = space_dir:guid(SpaceId),
     Size = 20,
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
         content = ?RAND_CONTENT(Size)
     }),
     {ok, #file_attr{guid = LinkGuid}} =
@@ -429,14 +429,14 @@ archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
     Json = ?RAND_JSON_METADATA(),
     ok = opt_file_metadata:set_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), json, Json, []),
     UserId = oct_background:get_user_id(?USER1),
-    onenv_file_test_utils:await_file_metadata_sync(oct_background:get_space_supporting_providers(?SPACE), UserId, #object{
+    file_tree_test_utils:await_file_metadata_sync(oct_background:get_space_supporting_providers(?SPACE), UserId, #object{
         guid = LinkGuid,
         metadata = #metadata_object{json = Json}
     }),
     #dataset_object{
         id = DatasetId,
         archives = [#archive_object{id = ArchiveId}]
-    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, LinkGuid, #dataset_spec{archives = [#archive_spec{
+    } = dataset_test_utils:set_up_and_sync_dataset(?USER1, LinkGuid, #dataset_spec{archives = [#archive_spec{
         config = #archive_config{layout = Layout, include_dip = IncludeDip}
     }]}),
 
@@ -459,7 +459,7 @@ archive_dataset_containing_symlink_to_directory_test_base(Layout, IncludeDip, Fo
     archive_dataset_containing_symlink_test_base(Layout, IncludeDip, FollowSymlinks, TargetSpec, Strategy).
 
 archive_dataset_containing_symlink_test_base(Layout, IncludeDip, FollowSymlinks, TargetSpec, Strategy) ->
-    #object{name = TargetName, content = Content} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, TargetSpec),
+    #object{name = TargetName, content = Content} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, TargetSpec),
     SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(oct_background:get_space_id(?SPACE)),
     LinkTarget = filename:join([SpaceIdPrefix, TargetName]),
     DatasetSpec = #dataset_spec{archives = [#archive_spec{
@@ -483,7 +483,7 @@ archive_dataset_containing_symlink_test_base(Layout, IncludeDip, FollowSymlinks,
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, Spec),
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, Spec),
     {FileCount, ExpSize} = case {Content, FollowSymlinks} of
         {_, false} -> {1, 0};
         {undefined, _} -> {0, 0};
@@ -540,7 +540,7 @@ archive_nested_datasets_test_base(ArchiveLayout, IncludeDip) ->
                 dataset = #dataset_object{id = DatasetDir22Id}
             }
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{ % dataset
             dataset = #dataset_spec{archives = [#archive_spec{
                 config = #archive_config{
@@ -615,7 +615,7 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
         dataset = #dataset_object{
             id = DatasetId,
             archives = [#archive_object{id = BaseArchiveId}]
-        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, 
+        }} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, 
             #dir_spec{
                 dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]},
                 children = [#file_spec{
@@ -675,7 +675,7 @@ nested_incremental_archive_test_base(Layout) ->
                 children = [#object{guid = FileGuid2}]
             }
         ]
-        } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+        } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, create_nested_archives = true}}]},
             children = [
@@ -729,7 +729,7 @@ modify_preserved_archive_test_base(Layout) ->
         dataset = #dataset_object{
             archives = [#archive_object{id = ArchiveId}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]},
             children = [#file_spec{content = ?RAND_CONTENT(), metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}]
@@ -755,7 +755,7 @@ share_archive_dir_test_base(Layout) ->
         dataset = #dataset_object{
             archives = [#archive_object{id = ArchiveId}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]}
         }),

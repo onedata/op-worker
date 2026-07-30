@@ -39,7 +39,7 @@ all() -> [
 %%%===================================================================
 
 storage_monitoring_test(_Config) ->
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, #file_spec{}),
+    #object{guid = Guid} = file_tree_test_utils:create_and_sync_file_tree(user1, space1, #file_spec{}),
     KrakowNode = oct_background:get_random_provider_node(krakow),
     User1KrakowSessId = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({ok, _}, lfm_proxy:stat(KrakowNode, User1KrakowSessId, #file_ref{guid = Guid})),

@@ -608,14 +608,14 @@ recall_test_setup(StructureSpec) ->
 
 recall_test_setup(StructureSpec, RootFileName) ->
     SessId = oct_background:get_user_session_id(?USER1, krakow),
-    CreatedTreeObject = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, StructureSpec, krakow),
+    CreatedTreeObject = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, StructureSpec, krakow),
     ArchiveId = lists:foldl(fun
         (#object{dataset = #dataset_object{archives = [#archive_object{id = Id}]}}, undefined) ->
             Id;
         (_, Acc) -> 
             Acc
     end, undefined, utils:ensure_list(CreatedTreeObject)),
-    #object{guid = TargetParentGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
+    #object{guid = TargetParentGuid} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}}, opt_archives:get_info(krakow, SessId, ArchiveId), ?ATTEMPTS),
     {ok, RecallRootFileGuid} = opt_archives:recall(krakow, SessId, ArchiveId, TargetParentGuid, RootFileName),
     FinalArchiveId = case opw_test_rpc:call(krakow, archive, get_related_dip_id, [ArchiveId]) of
@@ -709,7 +709,7 @@ recall_to_recalling_dir_test_base(Method) ->
         standard ->
             RecallRootFileGuid;
         symlink ->
-            SymlinkValue = onenv_file_test_utils:prepare_symlink_value(Node, SessId, RecallRootFileGuid),
+            SymlinkValue = file_tree_test_utils:prepare_symlink_value(Node, SessId, RecallRootFileGuid),
             {ok, #file_attr{guid = G}} = lfm_proxy:make_symlink(Node, SessId, #file_ref{guid = TargetParentGuid}, ?RAND_NAME(), SymlinkValue),
             G
     end,

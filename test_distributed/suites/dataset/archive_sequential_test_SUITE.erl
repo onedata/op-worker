@@ -118,7 +118,7 @@ archive_dataset_attached_to_space_dir(_Config) ->
     #dataset_object{
         id = DatasetId,
         archives = [#archive_object{id = ArchiveId}]
-    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, SpaceDirGuid, #dataset_spec{archives = 1}),
+    } = dataset_test_utils:set_up_and_sync_dataset(?USER1, SpaceDirGuid, #dataset_spec{archives = 1}),
     archive_sequential_test_base:archive_simple_dataset_test(SpaceDirGuid, DatasetId, ArchiveId).
 
 archive_big_tree_plain_layout(_Config) ->
@@ -185,7 +185,7 @@ delete_nested_archive_error(_Config) ->
                 dataset = #dataset_object{id = DatasetId}
             }
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{
                 config = #archive_config{create_nested_archives = true, layout = ?ARCHIVE_PLAIN_LAYOUT}
@@ -211,7 +211,7 @@ delete_not_finished_archive_error(_Config) ->
     #object{
         guid = Guid,
         dataset = #dataset_object{id = DatasetId, archives = [#archive_object{id = ArchiveId}]}
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]}
         }
@@ -256,7 +256,7 @@ audit_log_failed_dir_verification_test(_Config) ->
 errors_test_base(TraverseType, JobType) ->
     mock_error_requested_job(TraverseType, JobType),
     #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} =
-        onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+        file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
             dataset = #dataset_spec{archives = 1},
             children = [#file_spec{}, #dir_spec{}]
         }),
@@ -275,7 +275,7 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
         children = [
             #object{name = ChildFileName}
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
         dataset = #dataset_spec{archives = [
             #archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}
         ]},

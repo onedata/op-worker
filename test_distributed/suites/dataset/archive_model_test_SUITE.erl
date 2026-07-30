@@ -148,13 +148,13 @@ all() -> [
 
 archive_dataset_attached_to_dir(_Config) ->
     #object{dataset = #dataset_object{id = DatasetId}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{dataset = #dataset_spec{}}),
+        file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{dataset = #dataset_spec{}}),
     simple_archive_crud_test_base(DatasetId, ?DIRECTORY_TYPE).
 
 archive_dataset_attached_to_file(_Config) ->
     Size = 20,
     #object{dataset = #dataset_object{id = DatasetId}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{
+        file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{
             dataset = #dataset_spec{},
             content = ?RAND_CONTENT(Size)
         }),
@@ -166,19 +166,19 @@ archive_dataset_attached_to_hardlink(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     SpaceDirGuid = space_dir:guid(SpaceId),
     Size = 20,
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{
         content = ?RAND_CONTENT(Size)
     }),
     {ok, #file_attr{guid = LinkGuid}} =
         lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceDirGuid), ?RAND_NAME),
-    #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user1, LinkGuid),
+    #dataset_object{id = DatasetId} = dataset_test_utils:set_up_and_sync_dataset(user1, LinkGuid),
     simple_archive_crud_test_base(DatasetId, ?LINK_TYPE, Size).
 
 archive_dataset_attached_to_symlink(_Config) ->
-    #object{name = DirName} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{}),
+    #object{name = DirName} = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{}),
     SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(oct_background:get_space_id(?SPACE)),
     LinkTarget = filename:join([SpaceIdPrefix, DirName]),
-    #object{dataset = #dataset_object{id = DatasetId}} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{dataset = #dataset_object{id = DatasetId}} = file_tree_test_utils:create_and_sync_file_tree(
         user1, ?SPACE, #symlink_spec{symlink_value = LinkTarget, dataset = #dataset_spec{}}
     ),
     simple_archive_crud_test_base(DatasetId, ?SYMLINK_TYPE).
@@ -192,7 +192,7 @@ archivisation_of_detached_dataset_should_be_impossible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     #object{dataset = #dataset_object{id = DatasetId}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}}),
+        file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}}),
 
     ?assertMatch(
         ?ERR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>),
@@ -203,7 +203,7 @@ archive_of_detached_dataset_should_be_accessible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     #object{dataset = #dataset_object{id = DatasetId}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
+        file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
         opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
@@ -223,7 +223,7 @@ archive_of_dataset_associated_with_deleted_file_should_be_accessible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     #object{guid = Guid, dataset = #dataset_object{id = DatasetId}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
+        file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
         opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
@@ -243,7 +243,7 @@ archive_reattached_dataset(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     #object{dataset = #dataset_object{id = DatasetId}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
+        file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
         opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
@@ -267,7 +267,7 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     #object{dataset = #dataset_object{id = DatasetId}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
+        file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
         opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
@@ -324,7 +324,7 @@ iterate_over_100_archives_using_start_index_and_limit_10000(Config) ->
 archive_dataset_attached_to_space_dir(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     SpaceDirGuid = space_dir:guid(SpaceId),
-    #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user1, SpaceDirGuid),
+    #dataset_object{id = DatasetId} = dataset_test_utils:set_up_and_sync_dataset(user1, SpaceDirGuid),
     simple_archive_crud_test_base(DatasetId, ?DIRECTORY_TYPE).
 
 
@@ -336,7 +336,7 @@ archive_dataset_many_times(_Config) ->
 
     Count = 1000,
     #object{dataset = #dataset_object{id = DatasetId}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
+        file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     ExpArchiveIdsReversed = lists:map(fun(_) ->
         {ok, ArchiveId} = ?assertMatch({ok, _},
@@ -373,7 +373,7 @@ time_warp_test(_Config) ->
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
+    } = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
 
     time_test_utils:simulate_seconds_passing(-1),
 
@@ -396,7 +396,7 @@ create_and_modify_archive_privileges_test(_Config) ->
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId, config = ArchiveConfig}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
+    } = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
 
     CreateRequiredPrivileges = privileges:from_list([?SPACE_CREATE_ARCHIVES]),
     AllCreatePrivileges = privileges:from_list(CreateRequiredPrivileges ++ privileges:space_member()),
@@ -452,7 +452,7 @@ view_archive_privileges_test(_Config) ->
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId, config = ArchiveConfig}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
+    } = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
 
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
@@ -493,7 +493,7 @@ remove_archive_privileges_test(_Config) ->
                 #archive_object{id = ArchiveId2, config = ArchiveConfig2}
             ]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 2}}),
+    } = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 2}}),
 
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig1}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId1), ?ATTEMPTS),
@@ -663,7 +663,7 @@ end_per_group(_Group, Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     Workers = oct_background:get_all_providers_nodes(),
     CleaningWorker = oct_background:get_random_provider_node(krakow),
-    onenv_dataset_test_utils:cleanup_all_datasets(krakow, ?SPACE),
+    dataset_test_utils:cleanup_all_datasets(krakow, ?SPACE),
     lfm_test_utils:clean_space(CleaningWorker, Workers, SpaceId, ?ATTEMPTS),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
@@ -712,7 +712,7 @@ prepare_archive_iteration_test_environment(Config, ArchiveCount) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE,
+    }} = file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE,
         #file_spec{dataset = #dataset_spec{archives = ArchiveCount}}),
     
     lists_utils:pforeach(fun(#archive_object{id = ArchiveId, config = Config}) ->

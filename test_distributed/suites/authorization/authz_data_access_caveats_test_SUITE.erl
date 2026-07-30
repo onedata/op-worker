@@ -300,13 +300,13 @@ list_previously_non_existent_file(_Config) ->
     % List dir manually to use the same exact session with caveat for file not existing yet
     MainToken = get_main_access_token(),
     LsToken = tokens:confine(MainToken, ?CV_PATH([?LS_CPATH("ls_d2/f1")])),
-    LsSessionId = provider_onenv_test_utils:create_session(Node, UserId, LsToken),
+    LsSessionId = provider_test_utils:create_session(Node, UserId, LsToken),
 
     LSFun = fun(Guid) -> lfm_proxy:get_children(Node, LsSessionId, ?FILE_REF(Guid), 0, 100) end,
 
     ?assertEqual({ok, []}, LSFun(?LS_GUID("ls_d2"))),
 
-    [#object{guid = FileGuid}, _] = onenv_file_test_utils:create_and_sync_file_tree(
+    [#object{guid = FileGuid}, _] = file_tree_test_utils:create_and_sync_file_tree(
         ?LS_USER, ?LS_GUID("ls_d2"), [
             #file_spec{name = <<"f1">>},
             #file_spec{name = <<"f2">>}
@@ -335,7 +335,7 @@ list_files_recursively(_Config) ->
         ?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f3"), ?LS_CPATH("ls_d1/f5"),
         ?LS_CPATH("ls_d3/f1"), ?LS_CPATH("ls_f1")
     ])),
-    LsSessionWithPathCaveats = provider_onenv_test_utils:create_session(Node, UserId, LsTokenWithPathCaveats),
+    LsSessionWithPathCaveats = provider_test_utils:create_session(Node, UserId, LsTokenWithPathCaveats),
 
     ?assertMatch(
         [
@@ -348,7 +348,7 @@ list_files_recursively(_Config) ->
     LsTokenWithObjectIdsCaveats = tokens:confine(MainToken, ?CV_OBJECTID([
         ?LS_OBJECT_ID("ls_d1/f2"), ?LS_OBJECT_ID("ls_d3/d1"), ?LS_OBJECT_ID("ls_d3/f2")
     ])),
-    LsSessionWithObjectIdsCaveats = provider_onenv_test_utils:create_session(
+    LsSessionWithObjectIdsCaveats = provider_test_utils:create_session(
         Node, UserId, LsTokenWithObjectIdsCaveats
     ),
 
@@ -361,10 +361,10 @@ list_files_recursively(_Config) ->
 %% @private
 ls_setup() ->
     UserId = oct_background:get_user_id(?LS_USER),
-    MainToken = provider_onenv_test_utils:create_oz_temp_access_token(UserId),
+    MainToken = provider_test_utils:create_oz_temp_access_token(UserId),
     store_main_access_token(MainToken),
 
-    FileTreeObjects = onenv_file_test_utils:create_and_sync_file_tree(
+    FileTreeObjects = file_tree_test_utils:create_and_sync_file_tree(
         user1, ?LS_SPACE, ?LS_FILE_TREE_SPEC
     ),
     FileTreeDesc = ls_describe_file_tree(#{}, <<>>, FileTreeObjects),
@@ -445,7 +445,7 @@ ls_with_caveats(Guid, Caveats, Offset, Limit) ->
 
     MainToken = get_main_access_token(),
     LsToken = tokens:confine(MainToken, Caveats),
-    LsSessionId = provider_onenv_test_utils:create_session(Node, UserId, LsToken),
+    LsSessionId = provider_test_utils:create_session(Node, UserId, LsToken),
 
     lfm_proxy:get_children(Node, LsSessionId, ?FILE_REF(Guid), Offset, Limit).
 
@@ -481,10 +481,10 @@ allowed_ancestors_operations_test(_Config) ->
     {ok, DeepestDirObjectId} = file_id:guid_to_objectid(DeepestDirGuid),
 
     Token = tokens:confine(
-        provider_onenv_test_utils:create_oz_temp_access_token(UserId),
+        provider_test_utils:create_oz_temp_access_token(UserId),
         ?CV_OBJECTID([DeepestDirObjectId])
     ),
-    SessionIdWithCaveats = provider_onenv_test_utils:create_session(Node, UserId, Token),
+    SessionIdWithCaveats = provider_test_utils:create_session(Node, UserId, Token),
 
     lists:foldl(
         fun({{DirGuid, DirName}, Child}, {ParentPath, ParentGuid}) ->
@@ -581,7 +581,7 @@ data_access_caveats_cache_test(_Config) ->
             ]},
             #object{guid = OtherDirGuid}
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk_par_p, #dir_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk_par_p, #dir_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         children = [
             #dir_spec{name = <<"dir">>, children = [
@@ -595,11 +595,11 @@ data_access_caveats_cache_test(_Config) ->
 
     CheckCacheFun = fun(Rule) -> rpc:call(Node, permissions_cache, check_permission, Rule) end,
 
-    Token = tokens:confine(provider_onenv_test_utils:create_oz_temp_access_token(UserId), [
+    Token = tokens:confine(provider_test_utils:create_oz_temp_access_token(UserId), [
         ?CV_OBJECTID([DirObjectId]),
         ?CV_OBJECTID([FileObjectId])
     ]),
-    SessionId = provider_onenv_test_utils:create_session(Node, UserId, Token),
+    SessionId = provider_test_utils:create_session(Node, UserId, Token),
 
 
     %% CHECK guid_constraint CACHE
@@ -690,7 +690,7 @@ mv_test(_Config) ->
     #object{name = RootDirName, children = [
         #object{name = DirName},
         #object{name = FileName, guid = FileGuid}
-    ]} = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk_par_p, #dir_spec{
+    ]} = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk_par_p, #dir_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         children = [
             #dir_spec{},
@@ -704,14 +704,14 @@ mv_test(_Config) ->
     CanonicalNewPath = filepath_utils:join([<<"/">>, SpaceId, RootDirName, DirName, FileName]),
 
     UserId = oct_background:get_user_id(user1),
-    MainToken = provider_onenv_test_utils:create_oz_temp_access_token(UserId),
+    MainToken = provider_test_utils:create_oz_temp_access_token(UserId),
 
     TokenWithBothPaths = tokens:confine(MainToken, ?CV_PATH([CanonicalCurrentPath, CanonicalNewPath])),
-    SessionIdWithBothPathsConstraint = provider_onenv_test_utils:create_session(
+    SessionIdWithBothPathsConstraint = provider_test_utils:create_session(
         CheckNode, UserId, TokenWithBothPaths
     ),
     TokenWithNewPathOnly = tokens:confine(MainToken, ?CV_PATH([CanonicalNewPath])),
-    SessionIdWithNewPathOnlyConstraint = provider_onenv_test_utils:create_session(
+    SessionIdWithNewPathOnlyConstraint = provider_test_utils:create_session(
         CheckNode, UserId, TokenWithNewPathOnly
     ),
 
@@ -737,10 +737,10 @@ init_per_suite(Config) ->
         onenv_scenario = "2op",
         posthook = fun(NewConfig) ->
             % clean space
-            {ok, FileEntries} = onenv_file_test_utils:ls(user1, space_krk_par_p, 0, 10000),
+            {ok, FileEntries} = file_tree_test_utils:ls(user1, space_krk_par_p, 0, 10000),
 
             lists_utils:pforeach(fun({Guid, _}) ->
-                onenv_file_test_utils:rm_and_sync_file(user1, Guid)
+                file_tree_test_utils:rm_and_sync_file(user1, Guid)
             end, FileEntries),
 
             NewConfig

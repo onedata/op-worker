@@ -72,7 +72,7 @@ write_acl_metadata_test(Config) ->
             ?write_acl/binary
         >>
     },
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = <<"acl_test_file.txt">>,
             content = <<"data">>
@@ -165,7 +165,7 @@ acl_read_file_test(Config) ->
     % create test file with dummy data
     ?assert(not cdmi_test_utils:object_exists(FilePath, Config)),
 
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = <<"acl_test_file1">>,
             content = <<"data">>
@@ -214,7 +214,7 @@ acl_write_file_test(Config) ->
     % create test file with dummy data
     ?assert(not cdmi_test_utils:object_exists(FilePath, Config)),
 
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = <<"acl_test_file2">>,
             content = <<"data">>
@@ -274,7 +274,7 @@ acl_delete_file_test(Config) ->
     % create test file with dummy data
     ?assert(not cdmi_test_utils:object_exists(FilePath, Config)),
 
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = <<"acl_test_file3">>,
             content = <<"data">>
@@ -345,7 +345,7 @@ acl_read_write_dir_test(Config) ->
 
     %%--- read write dir test ------
     ?assert(not cdmi_test_utils:object_exists(Dirname, Config)),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+    file_tree_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
             name = <<"acl_test_dir1">>,
             children = [

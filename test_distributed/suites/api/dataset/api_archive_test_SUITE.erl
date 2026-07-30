@@ -102,13 +102,13 @@ create_archive(_Config) ->
 
     #object{
         dataset = #dataset_object{id = DatasetId, archives = [#archive_object{id = BaseArchiveId}]}
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 1
     }}),
 
     #object{
         dataset = #dataset_object{id = DetachedDatasetId}
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         state = ?DETACHED_DATASET
     }}),
 
@@ -354,7 +354,7 @@ get_archive_info(_Config) ->
             config = Config,
             description = Description
         }]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE,
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE,
         #file_spec{dataset = #dataset_spec{archives = 1}}, krakow
     ),
     
@@ -462,7 +462,7 @@ modify_archive_description(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE,
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE,
         #file_spec{dataset = #dataset_spec{archives = 30}}
     ),
 
@@ -584,7 +584,7 @@ get_dataset_archives(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         % pick random count of archives
         archives = rand:uniform(300)
     }}),
@@ -756,7 +756,7 @@ init_archive_delete_test(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 30
     }}),
 
@@ -905,7 +905,7 @@ init_archive_recall_test(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = [ArchiveObject]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 1
     }}),
 
@@ -1012,7 +1012,7 @@ maybe_create_recall_target_parent(Data) ->
 %% @private
 -spec create_recall_parent() -> file_id:objectid().
 create_recall_parent() ->
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #dir_spec{}),
+    #object{guid = Guid} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #dir_spec{}),
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     ObjectId.
 
@@ -1034,7 +1034,7 @@ get_archive_recall_test_base(Providers, Aspect) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = [#archive_object{id = ArchiveId}]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{
         content = crypto:strong_rand_bytes(20),
         dataset = #dataset_spec{archives = 1}
     }),
@@ -1169,7 +1169,7 @@ rest_recall_get_path_suffix(progress) -> <<"/recall/progress">>.
 get_archivisation_audit_log(_Config) ->
     #object{dataset = #dataset_object{
         archives = [#archive_object{id = ArchiveId}]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 1
     }}, krakow),
 
@@ -1259,7 +1259,7 @@ get_datasets_summary_for_archive_test(_Config) ->
         dataset = #dataset_spec{archives = 1}
     },
     #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user2, ?SPACE, StructureSpec, krakow),
+        file_tree_test_utils:create_and_sync_file_tree(user2, ?SPACE, StructureSpec, krakow),
     {ok, #archive_info{root_dir_guid = RootDirGuid}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         opw_test_rpc:call(krakow, archive_api, get_archive_info, [ArchiveId])),
     ?assertEqual({ok, #file_eff_dataset_summary{
@@ -1409,7 +1409,7 @@ init_per_group(_Group, Config) ->
     lfm_proxy:init(Config, false).
 
 end_per_group(_Group, Config) ->
-    onenv_dataset_test_utils:cleanup_all_datasets(?SPACE),
+    dataset_test_utils:cleanup_all_datasets(?SPACE),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 

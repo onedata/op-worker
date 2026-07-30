@@ -62,7 +62,7 @@ failure_test(Config) ->
 
 
 cm_failure_test_base(Config) ->
-    KilledCM = provider_onenv_test_utils:get_primary_cm_node(Config, krakow),
+    KilledCM = provider_test_utils:get_primary_cm_node(Config, krakow),
     [NodeExpectedToStopItself] = oct_background:get_provider_nodes(krakow),
 
     failure_test_utils:kill_nodes(Config, KilledCM),
@@ -127,7 +127,7 @@ create_initial_data_structure(Config) ->
         end, [{WorkerP1, P1}, {WorkerP2, P2}])
     end, [P1DirGuid, P2DirGuid]),
 
-    FailingProvider = provider_onenv_test_utils:find_importing_provider(Config, SpaceId),
+    FailingProvider = provider_test_utils:find_importing_provider(Config, SpaceId),
     [HealthyProvider] = Providers -- [FailingProvider],
     #{
         test_dirs => #{

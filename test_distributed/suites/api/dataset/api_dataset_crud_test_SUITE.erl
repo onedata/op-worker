@@ -73,7 +73,7 @@ establish_dataset_test(Config) ->
 
     #object{children = [#object{
         guid = FileGuid
-    }]} = onenv_file_test_utils:create_and_sync_file_tree(
+    }]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec([#dataset_spec{}])
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -139,7 +139,7 @@ build_establish_dataset_setup_fun(MemRef, SpaceId) ->
             guid = FileGuid,
             name = FileName,
             type = FileType
-        }]} = onenv_file_test_utils:create_and_sync_file_tree(
+        }]} = file_tree_test_utils:create_and_sync_file_tree(
             user3, SpaceId, build_test_file_tree_spec()
         ),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -282,7 +282,7 @@ get_dataset_test(Config) ->
         name = FileName,
         type = FileType,
         dataset = #dataset_object{id = DatasetId}
-    }]} = onenv_file_test_utils:create_and_sync_file_tree(
+    }]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec([
             #dataset_spec{state = State, protection_flags = ProtectionFlags}
         ])
@@ -305,7 +305,7 @@ get_dataset_test(Config) ->
             ct:pal(?FMT("Test get ~tp dataset after moving root file", [State])),
 
             NewFilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
-            onenv_file_test_utils:mv_and_sync_file(user3, FileGuid, NewFilePath),
+            file_tree_test_utils:mv_and_sync_file(user3, FileGuid, NewFilePath),
 
             DatasetRecordedFilePath = case State of
                 ?ATTACHED_DATASET -> NewFilePath;
@@ -319,7 +319,7 @@ get_dataset_test(Config) ->
 
             ct:pal(?FMT("Test get ~tp dataset after removing root file", [State])),
 
-            onenv_file_test_utils:rm_and_sync_file(user3, FileGuid),
+            file_tree_test_utils:rm_and_sync_file(user3, FileGuid),
 
             get_dataset_test_base(
                 DatasetId, undefined, detached, ProtectionFlags,
@@ -441,7 +441,7 @@ update_dataset_test(Config) ->
         name = FileName,
         type = FileType,
         dataset = #dataset_object{id = DatasetId}
-    }]} = onenv_file_test_utils:create_and_sync_file_tree(
+    }]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec([
             #dataset_spec{state = OriginalState, protection_flags = OriginalProtectionFlags}
         ])
@@ -618,7 +618,7 @@ delete_dataset_test(Config) ->
     Providers = [krakow, paris],
     SpaceId = oct_background:get_space_id(space_krk_par),
 
-    #object{children = Children} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{children = Children} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec(lists:map(fun(_) ->
             #dataset_spec{
                 state = random_dataset_state(),
@@ -766,14 +766,14 @@ random_dataset_state() ->
 
 
 %% @private
--spec build_test_file_tree_spec() -> onenv_file_test_utils:file_spec().
+-spec build_test_file_tree_spec() -> file_tree_test_utils:file_spec().
 build_test_file_tree_spec() ->
     build_test_file_tree_spec([undefined]).
 
 
 %% @private
--spec build_test_file_tree_spec([onenv_dataset_test_utils:dataset_spec()]) ->
-    onenv_file_test_utils:file_spec().
+-spec build_test_file_tree_spec([dataset_test_utils:dataset_spec()]) ->
+    file_tree_test_utils:file_spec().
 build_test_file_tree_spec(DatasetSpecs) ->
     ChildrenSpec = lists:map(fun(DatasetSpec) ->
         case api_test_utils:randomly_choose_file_type_for_test() of
@@ -913,13 +913,13 @@ init_per_group(_Group, Config) ->
             undefined;
         2 ->
             ct:pal("Establishing dataset for space root dir"),
-            DatasetObj = onenv_dataset_test_utils:set_up_and_sync_dataset(user3, space_krk_par),
+            DatasetObj = dataset_test_utils:set_up_and_sync_dataset(user3, space_krk_par),
             DatasetObj#dataset_object.id
     end,
     [{space_dir_dataset, SpaceDirDatasetId} | NewConfig].
 
 end_per_group(_Group, Config) ->
-    onenv_dataset_test_utils:cleanup_all_datasets(space_krk_par),
+    dataset_test_utils:cleanup_all_datasets(space_krk_par),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 

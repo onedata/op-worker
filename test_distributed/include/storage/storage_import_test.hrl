@@ -72,8 +72,8 @@
     space_path :: file_meta:path(),
     % concretized file tree spec (all names filled in) that was created on the
     % imported storage; undefined when the storage was left empty
-    file_tree_spec :: undefined | onenv_file_test_utils:object_spec()
-        | [onenv_file_test_utils:object_spec()],
+    file_tree_spec :: undefined | file_tree_test_utils:object_spec()
+        | [file_tree_test_utils:object_spec()],
     importing_provider_ctx :: #provider_ctx{},
     non_importing_provider_ctx :: #provider_ctx{}
 }).
