@@ -12,7 +12,7 @@
 -module(authz_qos_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz/authz_api_test.hrl").
+-include("authz/authz_api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 

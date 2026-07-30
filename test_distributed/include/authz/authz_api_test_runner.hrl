@@ -1,17 +1,17 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019-2024 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This file contains definitions of specs used by the authz api test runner.
-%%% Permission definitions themselves are kept in `permissions_test.hrl`.
+%%% Permission definitions themselves are kept in `authz_test.hrl`.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(AUTHZ_API_TEST_HRL).
--define(AUTHZ_API_TEST_HRL, 1).
+-ifndef(AUTHZ_API_TEST_RUNNER_HRL).
+-define(AUTHZ_API_TEST_RUNNER_HRL, 1).
 
 -include("authz/authz_test.hrl").
 -include_lib("ctool/include/errors.hrl").
