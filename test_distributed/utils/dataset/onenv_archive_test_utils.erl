@@ -75,7 +75,7 @@ set_up_archive(CreationProvider, UserId, DatasetId, #archive_spec{
     config = ConfigOrUndefined,
     description = AttrsOrUndefined
 }) ->
-    CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
+    CreationNode = oct_background:get_random_provider_node(CreationProvider),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     Config = utils:ensure_defined(ConfigOrUndefined, random_archive_config()),
     Description = utils:ensure_defined(AttrsOrUndefined, random_archive_description()),
@@ -108,7 +108,7 @@ await_archive_sync(_CreationProvider, _SyncProviders, _UserId, undefined, _) ->
     ok;
 
 await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id = ArchiveId}, DatasetId) ->
-    CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
+    CreationNode = oct_background:get_random_provider_node(CreationProvider),
     CreationNodeSessId = oct_background:get_user_session_id(UserId, CreationProvider),
 
     ?assertMatch(
@@ -117,7 +117,7 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
     ),
 
     lists:foreach(fun(SyncProvider) ->
-        SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
+        SyncNode = oct_background:get_random_provider_node(SyncProvider),
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
 
         ?assertMatch(

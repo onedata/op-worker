@@ -154,7 +154,7 @@ mv_and_sync_file(UserSelector, FileSelector, DstPath) ->
     mv_file(UserId, FileGuid, DstPath, MvProvider),
 
     lists:foreach(fun(Provider) ->
-        Node = ?OCT_RAND_OP_NODE(Provider),
+        Node = oct_background:get_random_provider_node(Provider),
         UserSessId = oct_background:get_user_session_id(UserId, Provider),
         ?assertEqual({ok, DstPath}, lfm_proxy:get_file_path(Node, UserSessId, FileGuid), ?ATTEMPTS)
     end, RestProviders).
@@ -172,7 +172,7 @@ rm_and_sync_file(UserSelector, FileSelector) ->
     rm_file(UserId, FileGuid, RmProvider),
 
     lists:foreach(fun(Provider) ->
-        Node = ?OCT_RAND_OP_NODE(Provider),
+        Node = oct_background:get_random_provider_node(Provider),
         UserSessId = oct_background:get_user_session_id(UserId, Provider),
         ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS)
     end, RestProviders).
@@ -302,7 +302,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
 }, _Mode, CustomLabelsMap) ->
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
-    CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
+    CreationNode = oct_background:get_random_provider_node(CreationProvider),
 
     {ok, FileGuid} = create_file(CreationNode, UserSessId, ParentGuid, FileName, FileMode),
     Content /= <<>> andalso write_file(CreationNode, UserSessId, FileGuid, Content),
@@ -407,7 +407,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
 }, Mode, CustomLabelsMap) ->
     DirName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
-    CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
+    CreationNode = oct_background:get_random_provider_node(CreationProvider),
 
     {ok, DirGuid} = create_dir(CreationNode, UserSessId, ParentGuid, DirName, DirMode),
 
@@ -463,7 +463,10 @@ create_shares(UserId, CreationProvider, SessId, FileGuid, ShareSpecs) ->
     }, {SharesAcc, HandlePerShareAcc}) ->
         {ok, ShareId} = ?assertMatch(
             {ok, _},
-            opt_shares:create(?OCT_RAND_OP_NODE(CreationProvider), SessId, ?FILE_REF(FileGuid), Name, Description),
+            opt_shares:create(
+                oct_background:get_random_provider_node(CreationProvider),
+                SessId, ?FILE_REF(FileGuid), Name, Description
+            ),
             ?ATTEMPTS
         ),
         case HasHandle of
@@ -523,7 +526,7 @@ await_sync(CreationProvider, SyncProviders, UserId, #object{
 await_file_attr_sync(SyncProviders, UserId, #object{guid = Guid} = Object) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
-        SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
+        SyncNode = oct_background:get_random_provider_node(SyncProvider),
         ExpObjectAttrs = Object#object{
             dataset = undefined,
             content = undefined,
@@ -546,7 +549,7 @@ await_file_metadata_sync(SyncProviders, UserId, #object{guid = Guid, metadata = 
 }}) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
-        SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
+        SyncNode = oct_background:get_random_provider_node(SyncProvider),
 
         await_json_metadata_sync(SyncNode, SessId, Guid, ExpJson),
         await_rdf_metadata_sync(SyncNode, SessId, Guid, ExpRdf),
@@ -613,7 +616,7 @@ await_file_distribution_sync(CreationProvider, SyncProviders, UserId, #object{
         false ->
             lists:foreach(fun(SyncProvider) ->
                 SessId = oct_background:get_user_session_id(UserId, SyncProvider),
-                SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
+                SyncNode = oct_background:get_random_provider_node(SyncProvider),
                 ?assertDistribution(SyncNode, SessId,
                     ?DISTS(
                         [CreationProvider | SyncProviders],
@@ -633,7 +636,7 @@ await_file_distribution_sync(CreationProvider, SyncProviders, UserId, #object{
     ok | no_return().
 await_dir_links_sync(SyncProviders, UserId, DirGuid, ExpChildrenList) ->
     lists:foreach(fun(SyncProvider) ->
-        SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
+        SyncNode = oct_background:get_random_provider_node(SyncProvider),
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         ?assertEqual({ok, ExpChildrenList}, ls(SyncNode, SessId, DirGuid), ?ATTEMPTS)
     end, SyncProviders).
@@ -686,7 +689,7 @@ await_parent_links_sync(SyncProviders, UserId, ParentGuid, #object{
     name = ChildName
 }) ->
     lists:foreach(fun(SyncProvider) ->
-        SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
+        SyncNode = oct_background:get_random_provider_node(SyncProvider),
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
 
         ?assertMatch(
@@ -781,7 +784,7 @@ create_xattrs(Node, SessionId, FileGuid, Xattrs) ->
 -spec mv_file(od_user:id(), file_id:file_guid(), file_meta:path(), oct_background:entity_selector()) ->
     ok.
 mv_file(UserId, FileGuid, DstPath, MvProvider) ->
-    MvNode = ?OCT_RAND_OP_NODE(MvProvider),
+    MvNode = oct_background:get_random_provider_node(MvProvider),
     UserSessId = oct_background:get_user_session_id(UserId, MvProvider),
 
     ?assertMatch({ok, _}, lfm_proxy:mv(MvNode, UserSessId, ?FILE_REF(FileGuid), DstPath)),
@@ -792,7 +795,7 @@ mv_file(UserId, FileGuid, DstPath, MvProvider) ->
 -spec rm_file(od_user:id(), file_id:file_guid(), oct_background:entity_selector()) ->
     ok.
 rm_file(UserId, FileGuid, RmProvider) ->
-    RmNode = ?OCT_RAND_OP_NODE(RmProvider),
+    RmNode = oct_background:get_random_provider_node(RmProvider),
     UserSessId = oct_background:get_user_session_id(UserId, RmProvider),
 
     ?assertMatch(ok, lfm_proxy:rm_recursive(RmNode, UserSessId, ?FILE_REF(FileGuid))).

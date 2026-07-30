@@ -409,8 +409,10 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_gs_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{}, {ok, Result}) ->
                         DirGuid = get_root_dir_guid(ArchiveId),
-                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, oct_background:get_user_id(user3), ?ARCHIVE_PRESERVED,
-                            Config, Description, undefined, undefined, DirGuid, oct_background:get_provider_id(krakow)),
+                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId,
+                            oct_background:get_user_id(user3), ?ARCHIVE_PRESERVED,
+                            Config, Description, undefined, undefined, DirGuid,
+                            oct_background:get_provider_id(krakow)),
                         ?assertEqual(ExpArchiveData, maps:without([<<"creationTime">>, <<"index">>, <<"relatedDip">>], Result)),
                         ?assertEqual(archive_config:should_include_dip(Config), maps:get(<<"relatedDip">>, Result) =/= null)
                     end
@@ -564,7 +566,7 @@ build_verify_modified_archive_description_fun(MemRef, Providers) ->
                 end,
 
                 lists:foreach(fun(Provider) ->
-                    Node = ?OCT_RAND_OP_NODE(Provider),
+                    Node = oct_background:get_random_provider_node(Provider),
                     UserSessId = oct_background:get_user_session_id(user3, Provider),
                     ?assertMatch({ok, #archive_info{description = ExpCurrentDescription}},
                         opt_archives:get_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
@@ -861,7 +863,7 @@ build_verify_archive_deleted_fun(MemRef, Providers, DatasetId) ->
                 end,
 
                 lists:foreach(fun(Provider) ->
-                    Node = ?OCT_RAND_OP_NODE(Provider),
+                    Node = oct_background:get_random_provider_node(Provider),
                     UserSessId = oct_background:get_user_session_id(user2, Provider),
                     ListOpts = #{offset => 0, limit => 1000},
                     ListArchiveFun = fun() ->
@@ -960,7 +962,7 @@ init_archive_recall_test(_Config) ->
 -spec validate_recall_result([oct_background:entity_selector()], file_id:file_guid()) -> ok.
 validate_recall_result(Providers, RootFileGuid) ->
     lists:foreach(fun(Provider) ->
-        Node = ?OCT_RAND_OP_NODE(Provider),
+        Node = oct_background:get_random_provider_node(Provider),
         UserSessId = oct_background:get_user_session_id(user2, Provider),
         ?assertMatch({ok, _}, lfm_proxy:stat(Node, UserSessId, #file_ref{guid = RootFileGuid}), ?ATTEMPTS)
     end, Providers).
@@ -1281,7 +1283,7 @@ verify_archive(
     PreservedCallback, DeletedCallback, Description
 ) ->
     lists:foreach(fun(Provider) ->
-        Node = ?OCT_RAND_OP_NODE(Provider),
+        Node = oct_background:get_random_provider_node(Provider),
         UserSessId = oct_background:get_user_session_id(UserId, Provider),
         ListOpts = #{offset => 0, limit => 1000},
         GetDatasetsFun =  fun() -> list_archive_ids(Node, UserSessId, DatasetId, ListOpts) end,
@@ -1382,12 +1384,12 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             dir_stats_test_utils:disable_stats_counting(NewConfig),
             SpaceId = oct_background:get_space_id(?SPACE),
-            ozt_spaces:set_privileges(SpaceId, ?OCT_USER_ID(user3), [
+            ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(user3), [
                 ?SPACE_MANAGE_DATASETS, ?SPACE_VIEW_ARCHIVES, ?SPACE_CREATE_ARCHIVES,
                 ?SPACE_REMOVE_ARCHIVES, ?SPACE_RECALL_ARCHIVES | privileges:space_member()
             ]),
             ozt_spaces:set_privileges(
-                SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
+                SpaceId, oct_background:get_user_id(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
 
             start_http_server(),

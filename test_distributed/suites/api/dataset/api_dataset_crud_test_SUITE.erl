@@ -722,7 +722,7 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
                 State = api_test_memory:get(MemRef, {dataset_state, DatasetId}),
 
                 lists:foreach(fun(Provider) ->
-                    Node = ?OCT_RAND_OP_NODE(Provider),
+                    Node = oct_background:get_random_provider_node(Provider),
                     UserSessId = oct_background:get_user_session_id(user2, Provider),
                     ListOpts = #{offset => 0, limit => 1000},
 
@@ -826,7 +826,7 @@ verify_dataset(
     CreationTime, RootFileGuid, RootFileType, RootFilePath
 ) ->
     lists:foreach(fun(Provider) ->
-        Node = ?OCT_RAND_OP_NODE(Provider),
+        Node = oct_background:get_random_provider_node(Provider),
         UserSessId = oct_background:get_user_session_id(UserId, Provider),
         ListOpts = #{offset => 0, limit => 1000},
 
@@ -886,11 +886,11 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             dir_stats_test_utils:disable_stats_counting(NewConfig),
             SpaceId = oct_background:get_space_id(space_krk_par),
-            ozt_spaces:set_privileges(SpaceId, ?OCT_USER_ID(user3), [
+            ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(user3), [
                 ?SPACE_MANAGE_DATASETS | privileges:space_member()
             ]),
             ozt_spaces:set_privileges(
-                SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
+                SpaceId, oct_background:get_user_id(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
             NewConfig
         end

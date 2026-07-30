@@ -136,10 +136,4 @@ end)).
 }).
 
 
--define(OCT_USER_ID(__USER_SELECTOR), oct_background:get_user_id(__USER_SELECTOR)).
--define(OCT_RAND_OP_NODE(__PROVIDER_SELECTOR),
-    oct_background:get_random_provider_node(__PROVIDER_SELECTOR)
-).
-
-
 -endif.

@@ -88,7 +88,7 @@ set_up_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
     protection_flags = ProtectionFlagsJson,
     archives = Archives
 }) ->
-    CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
+    CreationNode = oct_background:get_random_provider_node(CreationProvider),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     Flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
 
@@ -141,7 +141,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     protection_flags = ProtectionFlagsJson,
     archives = ArchiveObjs
 }) ->
-    CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
+    CreationNode = oct_background:get_random_provider_node(CreationProvider),
     CreationNodeSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     Flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
 
@@ -152,7 +152,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     ),
 
     lists_utils:pforeach(fun(SyncProvider) ->
-        SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
+        SyncNode = oct_background:get_random_provider_node(SyncProvider),
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
 
         ?assertEqual(
