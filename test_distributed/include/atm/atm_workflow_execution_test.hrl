@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2022-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
@@ -9,8 +9,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(ATM_WORKFLOW_EXECUTION_TEST).
--define(ATM_WORKFLOW_EXECUTION_TEST, 1).
+-ifndef(ATM_WORKFLOW_EXECUTION_TEST_HRL).
+-define(ATM_WORKFLOW_EXECUTION_TEST_HRL, 1).
 
 
 -include("file/file_tree_test.hrl").
