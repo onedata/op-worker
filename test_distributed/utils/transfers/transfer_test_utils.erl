@@ -385,7 +385,7 @@ grant_file_processing_permits(SuiteCtx, CountOrAll) ->
 await_gated_file_processing_job() ->
     receive
         ?FILE_PROCESSING_JOB_GATED_MSG -> ok
-    after timer:seconds(?ATTEMPTS) ->
+    after timer:seconds(?TRANSFER_ATTEMPTS) ->
         ct:fail(no_file_processing_job_awaiting_permit)
     end.
 
@@ -400,7 +400,7 @@ await_files_replicated(ProviderSelector, TransferId, ExpFilesReplicated) ->
             FilesReplicated;
         {error, _} = Error ->
             Error
-    end, ?ATTEMPTS).
+    end, ?TRANSFER_ATTEMPTS).
 
 
 -spec unmock_gated_file_processing(suite_ctx()) -> ok.
@@ -549,14 +549,14 @@ await_transfer_rerun_id(#transfer_test_suite_ctx{
         ) of
             {ok, #document{value = #transfer{rerun_id = RerunId}}} -> RerunId;
             {error, _} = Error -> Error
-        end, ?ATTEMPTS)
+        end, ?TRANSFER_ATTEMPTS)
     end, [CreationProviderSelector, OtherProviderSelector]).
 
 
 -spec await_transfer_ended(suite_ctx(), transfer:id(), file_tree_objects(), expected_transfer()) ->
     ok.
 await_transfer_ended(SuiteCtx, TransferId, TransferRootObjects, Overrides) ->
-    await_transfer_ended(SuiteCtx, TransferId, TransferRootObjects, Overrides, ?ATTEMPTS).
+    await_transfer_ended(SuiteCtx, TransferId, TransferRootObjects, Overrides, ?TRANSFER_ATTEMPTS).
 
 
 -spec await_transfer_ended(

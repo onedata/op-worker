@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
@@ -95,14 +95,8 @@ end
     scenario :: undefined | #scenario{}
 }).
 
--define(FILE_COUNTER, file_counter).
 -define(WORKER_POOL, worker_pool).
--define(WORKER_POOL_SIZE, 8).
 
--define(HIST(Value, Length), begin
-    __Hist = histogram:new(Length),
-    histogram:increment(__Hist, Value)
-end).
 
 -define(HIST_ASSERT(DomainsAndBytes, Length),
     fun(HistMap) ->
@@ -121,7 +115,6 @@ end).
     end
 ).
 
--define(MIN_HIST(DomainsAndBytes), ?HIST_ASSERT(DomainsAndBytes, ?MIN_HIST_LENGTH)).
 -define(HOUR_HIST(DomainsAndBytes), ?HIST_ASSERT(DomainsAndBytes, ?HOUR_HIST_LENGTH)).
 -define(DAY_HIST(DomainsAndBytes), ?HIST_ASSERT(DomainsAndBytes, ?DAY_HIST_LENGTH)).
 -define(MONTH_HIST(DomainsAndBytes), ?HIST_ASSERT(DomainsAndBytes, ?MONTH_HIST_LENGTH)).

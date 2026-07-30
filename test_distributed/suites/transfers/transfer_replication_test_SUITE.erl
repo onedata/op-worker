@@ -639,7 +639,7 @@ warp_time_during_replication_test(_Config) ->
                 MthSum >= TotalBytes
             }
         end,
-        ?ATTEMPTS
+        ?TRANSFER_ATTEMPTS
     ).
 
 

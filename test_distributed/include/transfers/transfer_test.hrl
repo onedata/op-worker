@@ -26,7 +26,7 @@
 }).
 
 
--define(ATTEMPTS, 60).
+-define(TRANSFER_ATTEMPTS, 60).
 % for transfers that take long to process (file trees with many nodes or a lot of data)
 -define(LARGE_TRANSFER_ATTEMPTS, 120).
 % for tests processing many files across one or many transfers

@@ -387,5 +387,5 @@ await_space_occupancy(ProviderSelector, SpaceId, ExpOccupancy) ->
     ?assertEqual(
         ExpOccupancy,
         transfer_test_utils:get_space_occupancy(ProviderSelector, SpaceId),
-        ?ATTEMPTS
+        ?TRANSFER_ATTEMPTS
     ).

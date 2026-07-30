@@ -419,7 +419,7 @@ await_callback_call(TransferId) ->
     {called, CallTime} = ?assertMatch({called, _}, opw_test_rpc:call(
         ?HTTP_SERVER_PROVIDER_SELECTOR, node_cache, get,
         [?CALLBACK_CALL_TIME_KEY(TransferId), undefined]
-    ), ?ATTEMPTS),
+    ), ?TRANSFER_ATTEMPTS),
     CallTime.
 
 
@@ -1748,7 +1748,7 @@ schedule_transfer_via_api(#transfer_test_suite_ctx{
         opw_test_rpc:call(CreationProviderSelector, middleware, handle, [Req])
     ),
     % Wait for transfer doc sync with the other provider
-    ?assertMatch({ok, _}, opw_test_rpc:call(OtherProviderSelector, transfer, get, [TransferId]), ?ATTEMPTS),
+    ?assertMatch({ok, _}, opw_test_rpc:call(OtherProviderSelector, transfer, get, [TransferId]), ?TRANSFER_ATTEMPTS),
     TransferId.
 
 
@@ -1799,7 +1799,7 @@ await_transfer_state(#transfer_test_suite_ctx{
                 end, ExpStatusFields);
             {error, _} = Error ->
                 Error
-        end, ?ATTEMPTS)
+        end, ?TRANSFER_ATTEMPTS)
     end, [CreationProviderSelector, OtherProviderSelector]).
 
 
