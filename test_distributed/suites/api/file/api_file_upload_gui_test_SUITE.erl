@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 

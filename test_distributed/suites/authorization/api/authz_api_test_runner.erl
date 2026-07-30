@@ -20,7 +20,7 @@
 -include("modules/dataset/archive.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").

@@ -13,7 +13,7 @@
 -author("Jakub Kudzia").
 
 
--include("onenv_test_utils.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/archivisation_tree.hrl").

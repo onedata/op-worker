@@ -15,7 +15,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("api_test_runner.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("api_file_test_utils.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/api_samples/common.hrl").

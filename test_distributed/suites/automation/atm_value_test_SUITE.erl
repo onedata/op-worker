@@ -16,7 +16,8 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

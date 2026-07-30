@@ -13,7 +13,8 @@
 -define(STORAGE_IMPORT_TEST_HRL, 1).
 
 
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
+-include("test_rpc.hrl").
 -include("space_setup_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 

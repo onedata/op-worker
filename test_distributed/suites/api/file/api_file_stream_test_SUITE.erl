@@ -15,7 +15,7 @@
 -include("api_file_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").

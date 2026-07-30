@@ -17,7 +17,8 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
+-include("test_rpc.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/provider_rpc_messages.hrl").

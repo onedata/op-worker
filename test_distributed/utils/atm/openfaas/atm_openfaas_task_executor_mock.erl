@@ -22,7 +22,7 @@
 
 -include("http/gui_paths.hrl").
 -include("modules/automation/atm_execution.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

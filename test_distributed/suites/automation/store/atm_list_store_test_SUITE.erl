@@ -13,7 +13,7 @@
 -author("Michal Stanisz").
 
 -include("modules/automation/atm_execution.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 

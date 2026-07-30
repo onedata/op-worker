@@ -13,11 +13,12 @@
 -define(ATM_WORKFLOW_EXECUTION_TEST, 1).
 
 
+-include("file/file_tree_test.hrl").
+-include("test_rpc.hrl").
 -include("atm/atm_test_schema.hrl").
 -include("atm/atm_test_schema_drafts.hrl").
 -include("atm/atm_test_store.hrl").
 -include("atm_workflow_execution_test_runner.hrl").
--include("onenv_test_utils.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

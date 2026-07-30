@@ -12,7 +12,7 @@
 -module(datasets_structure_test_SUITE).
 -author("Jakub Kudzia").
 
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/errors.hrl").

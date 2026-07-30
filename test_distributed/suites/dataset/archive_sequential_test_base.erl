@@ -13,7 +13,8 @@
 -author("Jakub Kudzia").
 
 
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
+-include("test_rpc.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/archivisation_tree.hrl").

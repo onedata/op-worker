@@ -25,7 +25,7 @@
 -include("api_test_runner.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("transfer_test.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").

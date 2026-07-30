@@ -6,24 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Definitions of macros and records used in file tests.
+%%% Records defining the specification of a file tree to be created in tests
+%%% and the objects describing the tree that was actually created.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(ONENV_TEST_UTILS_HRL).
--define(ONENV_TEST_UTILS_HRL, 1).
+-ifndef(FILE_TREE_TEST_HRL).
+-define(FILE_TREE_TEST_HRL, 1).
 
 
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
-
-
--define(rpc(__PROVIDER_SELECTOR, __EXPRESSION), opw_test_rpc:call(__PROVIDER_SELECTOR, fun() ->
-    __EXPRESSION
-end)).
-
--define(erpc(__PROVIDER_SELECTOR, __EXPRESSION), opw_test_rpc:insecure_call(__PROVIDER_SELECTOR, fun() ->
-    __EXPRESSION
-end)).
 
 
 -record(archive_spec, {

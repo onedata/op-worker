@@ -15,7 +15,7 @@
 -include("api_file_test_utils.hrl").
 -include("cdmi_test.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
 -define(PROVIDER_SELECTOR, krakow).

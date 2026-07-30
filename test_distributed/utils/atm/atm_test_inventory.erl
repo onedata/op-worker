@@ -13,8 +13,9 @@
 -module(atm_test_inventory).
 -author("Bartosz Walkowicz").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("atm/atm_test_schema.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 -export([

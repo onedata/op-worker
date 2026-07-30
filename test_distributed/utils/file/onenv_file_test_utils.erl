@@ -15,7 +15,7 @@
 -module(onenv_file_test_utils).
 -author("Bartosz Walkowicz").
 
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("distribution_assert.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").

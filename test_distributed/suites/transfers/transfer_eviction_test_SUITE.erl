@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("transfer_test.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/common_messages.hrl").

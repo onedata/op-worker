@@ -16,7 +16,6 @@
 -include("global_definitions.hrl").
 -include("http/cdmi.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
 
 -include_lib("ctool/include/test/test_utils.hrl").
 

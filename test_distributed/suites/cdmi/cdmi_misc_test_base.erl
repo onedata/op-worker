@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("cdmi_test.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 
 -include_lib("ctool/include/test/test_utils.hrl").
 

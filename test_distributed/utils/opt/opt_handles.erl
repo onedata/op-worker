@@ -13,7 +13,8 @@
 -module(opt_handles).
 -author("Katarzyna Such").
 
--include("onenv_test_utils.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("test_rpc.hrl").
 
 -export([get/3, get_metadata/3, get_public_handle_url/3]).
 -export([create/4, create/6]).
