@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Katarzyna Such
-%%% @copyright (C) 2023 ACK CYFRONET AGH
+%%% @copyright (C) 2023-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
@@ -13,8 +13,7 @@
 
 -include("http/rest.hrl").
 
--define(TIMEOUT, timer:seconds(5)).
--define(ATTEMPTS, 100).
+-define(CDMI_ATTEMPTS, 100).
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CDMI_CONTAINER_CONTENT_TYPE_HEADER, {?HDR_CONTENT_TYPE, <<"application/cdmi-container">>}).
@@ -25,7 +24,7 @@
 -define(FILE_SIZE_INFINITY, 9999).
 -define(FILE_CONTENT, <<"File content!">>).
 
--define(WORKERS(__CONFIG), [
+-define(CDMI_WORKERS(__CONFIG), [
     oct_background:get_random_provider_node(__CONFIG#cdmi_test_config.p1_selector),
     oct_background:get_random_provider_node(__CONFIG#cdmi_test_config.p2_selector)
 ]).
@@ -40,7 +39,7 @@
     space_selector = undefined :: undefined | oct_background:entity_selector()
 }).
 
--record(chunk, {
+-record(cdmi_chunk, {
     offset :: non_neg_integer(),
     size :: non_neg_integer()
 }).

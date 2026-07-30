@@ -268,8 +268,8 @@ download_file_in_blocks_test(_Config) ->
     ?assertEqual(Data, Response1),
     ?assertEqual(
         [
-            #chunk{offset = 0, size = 100},
-            #chunk{offset = 100, size = 100}
+            #cdmi_chunk{offset = 0, size = 100},
+            #cdmi_chunk{offset = 100, size = 100}
         ],
         get_read_chunks()
     ),
@@ -290,9 +290,9 @@ download_file_in_blocks_test(_Config) ->
 
     ?assertEqual(
         [
-            #chunk{offset = 33, size = 17},
-            #chunk{offset = 50, size = 50},
-            #chunk{offset = 100, size = 33}
+            #cdmi_chunk{offset = 33, size = 17},
+            #cdmi_chunk{offset = 50, size = 50},
+            #cdmi_chunk{offset = 100, size = 33}
         ],
         get_read_chunks()
     ).
@@ -516,7 +516,7 @@ init_per_testcase(download_file_in_blocks_test = Case, Config) ->
     test_utils:mock_new(Workers, [lfm], [passthrough]),
     test_utils:mock_expect(Workers, lfm, check_size_and_read, fun(FileHandle, Offset, ToRead) ->
         {ok, _, Data} = Res = meck:passthrough([FileHandle, Offset, ToRead]),
-        Self ! {read, #chunk{offset = Offset, size = byte_size(Data)}},
+        Self ! {read, #cdmi_chunk{offset = Offset, size = byte_size(Data)}},
         Res
     end),
     mock_storage_get_block_size(Workers),

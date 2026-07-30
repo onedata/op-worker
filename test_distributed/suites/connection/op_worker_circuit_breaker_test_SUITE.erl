@@ -19,6 +19,7 @@
 -include_lib("ctool/include/http/codes.hrl").
 
 -define(PROVIDER_SELECTOR, krakow).
+-define(ATTEMPTS, 100).
 -define(LOW_GUI_UPLOAD_RETRY_INTERVAL_SECONDS, 2).
 
 %% API

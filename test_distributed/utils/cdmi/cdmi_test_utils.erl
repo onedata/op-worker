@@ -114,7 +114,7 @@ open_file(ProviderSelector, Path, OpenMode) ->
 
 write_to_file(Path, Data, Offset, Config) ->
     WorkerP1 = oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-    {ok, FileHandle} = ?assertMatch({ok, _}, open_file(Config#cdmi_test_config.p1_selector, Path, write), ?ATTEMPTS),
+    {ok, FileHandle} = ?assertMatch({ok, _}, open_file(Config#cdmi_test_config.p1_selector, Path, write), ?CDMI_ATTEMPTS),
     Result = lfm_proxy:write(WorkerP1, FileHandle, Offset, Data),
     lfm_proxy:close(WorkerP1, FileHandle),
     Result.

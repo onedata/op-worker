@@ -71,8 +71,8 @@ copy_file_test(Config) ->
     % assert source file is created and destination does not exist
     ?assert(cdmi_test_utils:object_exists(FilePath, Config)),
     ?assertNot(cdmi_test_utils:object_exists(NewFilePath, Config)),
-    ?assertEqual(FileData, cdmi_test_utils:get_file_content(FilePath, Config), ?ATTEMPTS),
-    ?assertEqual({ok, FileAcl}, cdmi_test_utils:get_acl(FilePath, Config), ?ATTEMPTS),
+    ?assertEqual(FileData, cdmi_test_utils:get_file_content(FilePath, Config), ?CDMI_ATTEMPTS),
+    ?assertEqual({ok, FileAcl}, cdmi_test_utils:get_acl(FilePath, Config), ?CDMI_ATTEMPTS),
 
     % copy file using cdmi
     RequestHeaders = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
@@ -80,28 +80,28 @@ copy_file_test(Config) ->
     ?assertMatch(
         {ok, ?HTTP_201_CREATED, _, _},
         cdmi_test_utils:do_request(
-        ?WORKERS(Config), NewFilePath, put, RequestHeaders, RequestBody
+        ?CDMI_WORKERS(Config), NewFilePath, put, RequestHeaders, RequestBody
     )),
 
     % assert new file is created
-    ?assert(cdmi_test_utils:object_exists(FilePath, Config), ?ATTEMPTS),
-    ?assert(cdmi_test_utils:object_exists(NewFilePath, Config), ?ATTEMPTS),
-    ?assertEqual(FileData, cdmi_test_utils:get_file_content(NewFilePath, Config), ?ATTEMPTS),
-    ?assertEqual({ok, JsonMetadata}, cdmi_test_utils:get_json_metadata(NewFilePath, Config), ?ATTEMPTS),
+    ?assert(cdmi_test_utils:object_exists(FilePath, Config), ?CDMI_ATTEMPTS),
+    ?assert(cdmi_test_utils:object_exists(NewFilePath, Config), ?CDMI_ATTEMPTS),
+    ?assertEqual(FileData, cdmi_test_utils:get_file_content(NewFilePath, Config), ?CDMI_ATTEMPTS),
+    ?assertEqual({ok, JsonMetadata}, cdmi_test_utils:get_json_metadata(NewFilePath, Config), ?CDMI_ATTEMPTS),
     ?assertEqual([
         #xattr{name = <<"key1">>, value = <<"value1">>},
         #xattr{name = <<"key2">>, value = <<"value2">>},
         #xattr{name = ?JSON_METADATA_KEY, value = JsonMetadata}
-    ], cdmi_test_utils:get_xattrs(NewFilePath, Config), ?ATTEMPTS
+    ], cdmi_test_utils:get_xattrs(NewFilePath, Config), ?CDMI_ATTEMPTS
     ),
-    ?assertEqual({ok, FileAcl}, cdmi_test_utils:get_acl(NewFilePath, Config), ?ATTEMPTS).
+    ?assertEqual({ok, FileAcl}, cdmi_test_utils:get_acl(NewFilePath, Config), ?CDMI_ATTEMPTS).
 
 
 copy_dir_test(Config) ->
     Xattrs = #{<<"key1">> => <<"value1">>, <<"key2">> => <<"value2">>},
     UserId = oct_background:get_user_id(user2),
     UserName = oct_background:get_user_fullname(user2),
-    [WorkerP1, _WorkerP2] = ?WORKERS(Config),
+    [WorkerP1, _WorkerP2] = ?CDMI_WORKERS(Config),
     #object{guid = DirGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user2,
         node_cache:get(root_dir_guid),
@@ -158,7 +158,7 @@ copy_dir_test(Config) ->
         cdmi_test_utils:do_request(
             WorkerP1, NewDirPath, put, RequestHeaders, RequestBody
         ),
-        ?ATTEMPTS
+        ?CDMI_ATTEMPTS
     ),
 
     % assert source files still exists
@@ -170,12 +170,12 @@ copy_dir_test(Config) ->
     ?assert(cdmi_test_utils:object_exists(filename:join(DirPath, "3"), Config)),
 
     % assert destination files have been created
-    ?assert(cdmi_test_utils:object_exists(NewDirPath, Config), ?ATTEMPTS),
+    ?assert(cdmi_test_utils:object_exists(NewDirPath, Config), ?CDMI_ATTEMPTS),
     ?assertEqual([
         #xattr{name = <<"key1">>, value = <<"value1">>},
         #xattr{name = <<"key2">>, value = <<"value2">>}
-    ], cdmi_test_utils:get_xattrs(NewDirPath, Config), ?ATTEMPTS),
-    ?assertEqual({ok, DirAcl}, cdmi_test_utils:get_acl(NewDirPath, Config), ?ATTEMPTS),
+    ], cdmi_test_utils:get_xattrs(NewDirPath, Config), ?CDMI_ATTEMPTS),
+    ?assertEqual({ok, DirAcl}, cdmi_test_utils:get_acl(NewDirPath, Config), ?CDMI_ATTEMPTS),
     ?assert(cdmi_test_utils:object_exists(filename:join(NewDirPath, "dir1"), Config)),
     ?assert(cdmi_test_utils:object_exists(filename:join(NewDirPath, "dir2"), Config)),
     ?assert(cdmi_test_utils:object_exists(filename:join([NewDirPath, "dir1", "1"]), Config)),
@@ -198,18 +198,18 @@ move_file_test(Config) ->
 
     ?assert(cdmi_test_utils:object_exists(FilePath, Config)),
     ?assertNot(cdmi_test_utils:object_exists(NewMoveFilePath, Config)),
-    ?assertEqual(FileData, cdmi_test_utils:get_file_content(FilePath, Config), ?ATTEMPTS),
+    ?assertEqual(FileData, cdmi_test_utils:get_file_content(FilePath, Config), ?CDMI_ATTEMPTS),
 
     RequestHeaders = [cdmi_test_utils:user_2_token_header(),
         ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     RequestBody = json_utils:encode(#{<<"move">> => build_random_src_uri(FilePath, FileGuid)}),
     ?assertMatch(
         {ok, ?HTTP_201_CREATED, _Headers3, _Response3},
-        cdmi_test_utils:do_request(?WORKERS(Config), NewMoveFilePath, put, RequestHeaders, RequestBody)
+        cdmi_test_utils:do_request(?CDMI_WORKERS(Config), NewMoveFilePath, put, RequestHeaders, RequestBody)
     ),
-    ?assertNot(cdmi_test_utils:object_exists(FilePath, Config), ?ATTEMPTS),
-    ?assert(cdmi_test_utils:object_exists(NewMoveFilePath, Config), ?ATTEMPTS),
-    ?assertEqual(FileData, cdmi_test_utils:get_file_content(NewMoveFilePath, Config), ?ATTEMPTS).
+    ?assertNot(cdmi_test_utils:object_exists(FilePath, Config), ?CDMI_ATTEMPTS),
+    ?assert(cdmi_test_utils:object_exists(NewMoveFilePath, Config), ?CDMI_ATTEMPTS),
+    ?assertEqual(FileData, cdmi_test_utils:get_file_content(NewMoveFilePath, Config), ?CDMI_ATTEMPTS).
 
 
 move_dir_test(Config) ->
@@ -231,11 +231,11 @@ move_dir_test(Config) ->
     RequestBody = json_utils:encode(#{<<"move">> => build_random_src_uri(DirPath, DirGuid)}),
     ?assertMatch(
         {ok, ?HTTP_201_CREATED, _Headers2, _Response2},
-        cdmi_test_utils:do_request(?WORKERS(Config), NewMoveDirPath, put, RequestHeaders, RequestBody)
+        cdmi_test_utils:do_request(?CDMI_WORKERS(Config), NewMoveDirPath, put, RequestHeaders, RequestBody)
     ),
 
-    ?assertNot(cdmi_test_utils:object_exists(DirPath, Config), ?ATTEMPTS),
-    ?assert(cdmi_test_utils:object_exists(NewMoveDirPath, Config), ?ATTEMPTS).
+    ?assertNot(cdmi_test_utils:object_exists(DirPath, Config), ?CDMI_ATTEMPTS),
+    ?assert(cdmi_test_utils:object_exists(NewMoveDirPath, Config), ?CDMI_ATTEMPTS).
 
 
 %% tests if cdmi returns 'moved permanently' code when we forget about '/' in path
@@ -329,19 +329,19 @@ move_copy_conflict_test(Config) ->
         }, Config#cdmi_test_config.p1_selector
     ),
 
-    ?assertEqual(FileData, cdmi_test_utils:get_file_content(FilePath, Config), ?ATTEMPTS),
+    ?assertEqual(FileData, cdmi_test_utils:get_file_content(FilePath, Config), ?CDMI_ATTEMPTS),
 
     RequestHeaders = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     RequestBody = json_utils:encode(#{<<"move">> => FileUri, <<"copy">> => FileUri}),
     GetResponseErrorFun = fun() ->
         {ok, Code, _Headers, Response} = cdmi_test_utils:do_request(
-            ?WORKERS(Config), NewMoveFilePath, put, RequestHeaders, RequestBody
+            ?CDMI_WORKERS(Config), NewMoveFilePath, put, RequestHeaders, RequestBody
         ),
         {Code, json_utils:decode(Response)}
     end,
     ExpRestError = rest_test_utils:get_rest_error(?ERR_MALFORMED_DATA),
-    ?assertMatch(ExpRestError, GetResponseErrorFun(), ?ATTEMPTS),
-    ?assertEqual(FileData, cdmi_test_utils:get_file_content(FilePath, Config), ?ATTEMPTS).
+    ?assertMatch(ExpRestError, GetResponseErrorFun(), ?CDMI_ATTEMPTS),
+    ?assertEqual(FileData, cdmi_test_utils:get_file_content(FilePath, Config), ?CDMI_ATTEMPTS).
 
 
 %%%===================================================================
