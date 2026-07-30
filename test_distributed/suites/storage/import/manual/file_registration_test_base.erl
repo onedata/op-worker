@@ -28,7 +28,7 @@
 -module(file_registration_test_base).
 -author("Bartosz Walkowicz").
 
--include("file_registration_test.hrl").
+-include("storage/file_registration_test.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -124,10 +124,10 @@ register_file_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_select
         other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => SpaceId,
@@ -135,7 +135,7 @@ register_file_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_select
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"mtime">> => global_clock:timestamp_seconds(),
-        <<"size">> => byte_size(?TEST_DATA),
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
         <<"json">> => ?JSON1,
@@ -143,10 +143,10 @@ register_file_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_select
     })),
 
     % check whether file has been properly registered
-    ?assertFile(RegNode, RegSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+    ?assertFile(RegNode, RegSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
 
     % check whether file is visible on the other provider
-    ?assertFile(OtherNode, OtherSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
+    ?assertFile(OtherNode, OtherSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 register_file_with_conflict_test(SuiteCtx = #file_registration_test_suite_ctx{
@@ -162,10 +162,10 @@ register_file_with_conflict_test(SuiteCtx = #file_registration_test_suite_ctx{
         other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", <<FileName/binary, "_imported">>]),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     % Create a regular file with the same logical name to provoke an import
     % conflict. The registering storage may be readonly (HTTP), in which case the
@@ -177,12 +177,12 @@ register_file_with_conflict_test(SuiteCtx = #file_registration_test_suite_ctx{
         _ -> {RegNode, RegSessId}
     end,
     {ok, {ExistingFileGuid, Handle}} = lfm_proxy:create_and_open(CreationNode, CreationSessId, FilePath),
-    lfm_proxy:write(CreationNode, Handle, 0, ?TEST_DATA2),
+    lfm_proxy:write(CreationNode, Handle, 0, ?FILE_REGISTRATION_TEST_DATA2),
     lfm_proxy:close(CreationNode, Handle),
     % wait until the conflicting file is visible on the registering provider so
     % that the subsequent registration detects the name conflict
-    ?assertInLs(RegNode, RegSessId, FilePath, ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:stat(RegNode, RegSessId, ?FILE_REF(ExistingFileGuid)), ?ATTEMPTS),
+    ?assertInLs(RegNode, RegSessId, FilePath, ?FILE_REGISTRATION_ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(RegNode, RegSessId, ?FILE_REF(ExistingFileGuid)), ?FILE_REGISTRATION_ATTEMPTS),
 
     {ok, _, _, EncodedBody} = ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => SpaceId,
@@ -190,7 +190,7 @@ register_file_with_conflict_test(SuiteCtx = #file_registration_test_suite_ctx{
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"mtime">> => global_clock:timestamp_seconds(),
-        <<"size">> => byte_size(?TEST_DATA),
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
         <<"json">> => ?JSON1,
@@ -205,10 +205,10 @@ register_file_with_conflict_test(SuiteCtx = #file_registration_test_suite_ctx{
     RegisteredPath = filepath_utils:join([SpacePath, ConflictingName]),
 
     % check whether file has been properly registered
-    ?assertFile(RegNode, RegSessId, RegisteredPath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+    ?assertFile(RegNode, RegSessId, RegisteredPath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
 
     % check whether file is visible on the other provider
-    ?assertFile(OtherNode, OtherSessId, RegisteredPath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
+    ?assertFile(OtherNode, OtherSessId, RegisteredPath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 register_file_and_create_parents_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}) ->
@@ -221,11 +221,11 @@ register_file_and_create_parents_test(SuiteCtx = #file_registration_test_suite_c
         other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
-    DestinationPath = filename:join(["/", ?DIR_NAME, ?DIR_NAME, ?DIR_NAME, FileName]),
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
+    DestinationPath = filename:join(["/", ?FILE_REGISTRATION_DIR_NAME, ?FILE_REGISTRATION_DIR_NAME, ?FILE_REGISTRATION_DIR_NAME, FileName]),
     FilePath = filepath_utils:join([SpacePath, DestinationPath]),
     StorageFileId = FileName,
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => SpaceId,
@@ -233,7 +233,7 @@ register_file_and_create_parents_test(SuiteCtx = #file_registration_test_suite_c
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"mtime">> => global_clock:timestamp_seconds(),
-        <<"size">> => byte_size(?TEST_DATA),
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
         <<"json">> => ?JSON1,
@@ -241,10 +241,10 @@ register_file_and_create_parents_test(SuiteCtx = #file_registration_test_suite_c
     })),
 
     % check whether file has been properly registered
-    ?assertFile(RegNode, RegSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+    ?assertFile(RegNode, RegSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
 
     % check whether file is visible on the other provider
-    ?assertFile(OtherNode, OtherSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
+    ?assertFile(OtherNode, OtherSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 update_registered_file_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}) ->
@@ -257,11 +257,11 @@ update_registered_file_test(SuiteCtx = #file_registration_test_suite_ctx{test_us
         other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     DestinationPath = FileName,
     StorageFileId = FileName,
     FilePath = filepath_utils:join([SpacePath, FileName]),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => SpaceId,
@@ -269,7 +269,7 @@ update_registered_file_test(SuiteCtx = #file_registration_test_suite_ctx{test_us
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"mtime">> => global_clock:timestamp_seconds(),
-        <<"size">> => byte_size(?TEST_DATA),
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
         <<"json">> => ?JSON1,
@@ -277,12 +277,12 @@ update_registered_file_test(SuiteCtx = #file_registration_test_suite_ctx{test_us
     })),
 
     % check whether file has been properly registered
-    ?assertFile(RegNode, RegSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+    ?assertFile(RegNode, RegSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
 
     % check whether file is visible on the other provider
-    ?assertFile(OtherNode, OtherSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS),
+    ?assertFile(OtherNode, OtherSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS),
 
-    ok = update_source_file(SourceBackend, StorageFileId, ?TEST_DATA2),
+    ok = update_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA2),
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => SpaceId,
@@ -290,15 +290,15 @@ update_registered_file_test(SuiteCtx = #file_registration_test_suite_ctx{test_us
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"mtime">> => global_clock:timestamp_seconds(),
-        <<"size">> => byte_size(?TEST_DATA2),
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA2),
         <<"mode">> => <<"664">>
     })),
 
     % check whether file has been properly updated
-    ?assertFile(RegNode, RegSessId, FilePath, ?TEST_DATA2, ?XATTRS, ?JSON1, ?RDF1),
+    ?assertFile(RegNode, RegSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA2, ?XATTRS, ?JSON1, ?RDF1),
 
     % check whether file was updated on the other provider
-    ?assertFile(OtherNode, OtherSessId, FilePath, ?TEST_DATA2, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS),
+    ?assertFile(OtherNode, OtherSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA2, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS),
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => SpaceId,
@@ -308,17 +308,17 @@ update_registered_file_test(SuiteCtx = #file_registration_test_suite_ctx{test_us
         <<"xattrs">> => ?XATTRS2,
         <<"json">> => ?JSON2,
         <<"rdf">> => ?ENCODED_RDF2,
-        <<"size">> => byte_size(?TEST_DATA2),
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA2),
         <<"mode">> => <<"664">>
     })),
 
     XATTRS3 = maps:merge(?XATTRS, ?XATTRS2),
 
     % check whether file has been properly updated
-    ?assertFile(RegNode, RegSessId, FilePath, ?TEST_DATA2, XATTRS3, ?JSON2, ?RDF2),
+    ?assertFile(RegNode, RegSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA2, XATTRS3, ?JSON2, ?RDF2),
 
     % check whether file was updated on the other provider
-    ?assertFile(OtherNode, OtherSessId, FilePath, ?TEST_DATA2, XATTRS3, ?JSON2, ?RDF2, ?ATTEMPTS).
+    ?assertFile(OtherNode, OtherSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA2, XATTRS3, ?JSON2, ?RDF2, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 update_registered_file_with_not_matching_destination_test(
@@ -333,9 +333,9 @@ update_registered_file_with_not_matching_destination_test(
         other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     StorageFileId = filename:join(["/", FileName]),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     RegisteredFileName = str_utils:join_binary([FileName, <<"_registered">>]),
     FilePath = filepath_utils:join([SpacePath, RegisteredFileName]),
@@ -358,14 +358,14 @@ update_registered_file_with_not_matching_destination_test(
         ?assertFile(RegNode, RegSessId, FilePath, Data, ?XATTRS, ?JSON1, ?RDF1),
 
         % check whether file is visible on the other provider
-        ?assertFile(OtherNode, OtherSessId, FilePath, Data, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS),
+        ?assertFile(OtherNode, OtherSessId, FilePath, Data, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS),
 
         maps:get(<<"fileId">>, json_utils:decode(Body))
     end,
 
-    FileObjectId1 = RegisterAndCheckFun(?TEST_DATA),
-    ok = update_source_file(SourceBackend, StorageFileId, ?TEST_DATA2),
-    FileObjectId2 = RegisterAndCheckFun(?TEST_DATA2),
+    FileObjectId1 = RegisterAndCheckFun(?FILE_REGISTRATION_TEST_DATA),
+    ok = update_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA2),
+    FileObjectId2 = RegisterAndCheckFun(?FILE_REGISTRATION_TEST_DATA2),
     ?assertEqual(FileObjectId1, FileObjectId2).
 
 
@@ -381,10 +381,10 @@ stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_
         other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
     Timestamp = global_clock:timestamp_seconds(),
 
     ok = test_utils:mock_new(RegNode, [storage_driver], [passthrough]),
@@ -401,7 +401,7 @@ stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_
         <<"ctime">> => Timestamp,
         <<"uid">> => 0,
         <<"gid">> => 0,
-        <<"size">> => byte_size(?TEST_DATA),
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
         <<"json">> => ?JSON1,
@@ -413,10 +413,10 @@ stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_
     test_utils:mock_assert_num_calls(RegNode, storage_driver, stat, ['_'], 0),
 
     % check whether file has been properly registered
-    ?assertFile(RegNode, RegSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+    ?assertFile(RegNode, RegSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
 
     % check whether file is visible on the other provider
-    ?assertFile(OtherNode, OtherSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
+    ?assertFile(OtherNode, OtherSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled(
@@ -430,10 +430,10 @@ registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attrib
         registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     ?assertMatch({ok, ?HTTP_400_BAD_REQUEST, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => SpaceId,
@@ -457,7 +457,7 @@ registration_should_fail_if_file_is_missing(
         registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
 
@@ -485,24 +485,24 @@ registration_should_succeed_if_size_is_passed(
         other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => SpaceId,
         <<"destinationPath">> => FileName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"size">> => byte_size(?TEST_DATA)
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA)
     })),
 
     % check whether file has been properly registered
-    ?assertFile(RegNode, RegSessId, FilePath, ?TEST_DATA, #{}, #{}, <<>>),
+    ?assertFile(RegNode, RegSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, #{}, #{}, <<>>),
 
     % check whether file is visible on the other provider
-    ?assertFile(OtherNode, OtherSessId, FilePath, ?TEST_DATA, #{}, #{}, <<>>, ?ATTEMPTS).
+    ?assertFile(OtherNode, OtherSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, #{}, #{}, <<>>, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 interrupted_registration_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}) ->
@@ -517,10 +517,10 @@ interrupted_registration_test(SuiteCtx = #file_registration_test_suite_ctx{test_
         other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     mock_file_meta_save(RegProvider, FileName),
 
@@ -530,7 +530,7 @@ interrupted_registration_test(SuiteCtx = #file_registration_test_suite_ctx{test_
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"mtime">> => global_clock:timestamp_seconds(),
-        <<"size">> => byte_size(?TEST_DATA),
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
         <<"json">> => ?JSON1,
@@ -553,10 +553,10 @@ interrupted_registration_test(SuiteCtx = #file_registration_test_suite_ctx{test_
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, Body)),
 
     % check whether file has been properly registered
-    ?assertFile(RegNode, RegSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+    ?assertFile(RegNode, RegSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
 
     % check whether file is visible on the other provider
-    ?assertFile(OtherNode, OtherSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
+    ?assertFile(OtherNode, OtherSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 interrupted_registration_nested_file_test(
@@ -573,12 +573,12 @@ interrupted_registration_nested_file_test(
         other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    DirName = ?DIR_NAME,
-    FileName = ?FILE_NAME,
+    DirName = ?FILE_REGISTRATION_DIR_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     DestinationPath = filename:join(["/", DirName, FileName]),
     FilePath = filepath_utils:join([SpacePath, DestinationPath]),
     StorageFileId = filename:join(["/", FileName]),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     mock_file_meta_save(RegProvider, DirName),
 
@@ -588,7 +588,7 @@ interrupted_registration_nested_file_test(
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"mtime">> => global_clock:timestamp_seconds(),
-        <<"size">> => byte_size(?TEST_DATA),
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
         <<"json">> => ?JSON1,
@@ -614,10 +614,10 @@ interrupted_registration_nested_file_test(
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, Body)),
 
     % check whether file has been properly registered
-    ?assertFile(RegNode, RegSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+    ?assertFile(RegNode, RegSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
 
     % check whether file is visible on the other provider
-    ?assertFile(OtherNode, OtherSessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
+    ?assertFile(OtherNode, OtherSessId, FilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 register_many_files_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}) ->
@@ -631,10 +631,10 @@ register_many_files_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
     LogicalFilesCount = 40,
 
-    BaseFileName = ?FILE_NAME,
+    BaseFileName = ?FILE_REGISTRATION_FILE_NAME,
     StorageFileId = filename:join(["/", BaseFileName]),
     % create only 1 file on storage
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     % but register it as many logical files
     DestinationPaths = lists:map(fun(I) ->
@@ -651,16 +651,16 @@ register_many_files_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_
             <<"storageFileId">> => StorageFileId,
             <<"storageId">> => StorageId,
             <<"mtime">> => global_clock:timestamp_seconds(),
-            <<"size">> => byte_size(?TEST_DATA),
+            <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA),
             <<"mode">> => <<"664">>,
             <<"xattrs">> => ?XATTRS,
             <<"json">> => ?JSON1,
             <<"rdf">> => ?ENCODED_RDF1
         })),
         % check whether file has been properly registered
-        ?assertFile(RegNode, RegSessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+        ?assertFile(RegNode, RegSessId, LogicalFilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
         % check whether file is visible on the other provider
-        ?assertFile(OtherNode, OtherSessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
+        ?assertFile(OtherNode, OtherSessId, LogicalFilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS)
     end, DestinationPaths).
 
 
@@ -675,15 +675,15 @@ register_many_nested_files_test(SuiteCtx = #file_registration_test_suite_ctx{tes
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
     LogicalFilesCount = 40,
 
-    BaseFileName = ?FILE_NAME,
+    BaseFileName = ?FILE_REGISTRATION_FILE_NAME,
     StorageFileId = filename:join(["/", BaseFileName]),
     % create only 1 file on storage
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     % but register it as many logical files in the same directory
-    Dir1 = ?DIR_NAME,
-    Dir2 = ?DIR_NAME,
-    Dir3 = ?DIR_NAME,
+    Dir1 = ?FILE_REGISTRATION_DIR_NAME,
+    Dir2 = ?FILE_REGISTRATION_DIR_NAME,
+    Dir3 = ?FILE_REGISTRATION_DIR_NAME,
     ParentPath = filename:join([Dir1, Dir2, Dir3]),
     DestinationPaths = lists:map(fun(I) ->
         FileName = str_utils:format_bin("~ts_~tp", [BaseFileName, I]),
@@ -700,16 +700,16 @@ register_many_nested_files_test(SuiteCtx = #file_registration_test_suite_ctx{tes
             <<"storageFileId">> => StorageFileId,
             <<"storageId">> => StorageId,
             <<"mtime">> => global_clock:timestamp_seconds(),
-            <<"size">> => byte_size(?TEST_DATA),
+            <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA),
             <<"mode">> => <<"664">>,
             <<"xattrs">> => ?XATTRS,
             <<"json">> => ?JSON1,
             <<"rdf">> => ?ENCODED_RDF1
         })),
         % check whether file has been properly registered
-        ?assertFile(RegNode, RegSessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+        ?assertFile(RegNode, RegSessId, LogicalFilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
         % check whether file is visible on the other provider
-        ?assertFile(OtherNode, OtherSessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
+        ?assertFile(OtherNode, OtherSessId, LogicalFilePath, ?FILE_REGISTRATION_TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?FILE_REGISTRATION_ATTEMPTS)
     end, DestinationPaths).
 
 
@@ -736,12 +736,12 @@ register_file_with_size_smaller_than_real_test(
         other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    DeclaredSize = byte_size(?TEST_DATA) - 3,
-    ExpectedData = binary:part(?TEST_DATA, 0, DeclaredSize),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    DeclaredSize = byte_size(?FILE_REGISTRATION_TEST_DATA) - 3,
+    ExpectedData = binary:part(?FILE_REGISTRATION_TEST_DATA, 0, DeclaredSize),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     % a declared size smaller than the real file is accepted as is
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
@@ -756,12 +756,12 @@ register_file_with_size_smaller_than_real_test(
     % the logical size is the declared one and a read returns only that prefix
     ?assertMatch({ok, #file_attr{size = DeclaredSize}},
         lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
-    ?assertRead(RegNode, RegSessId, FilePath, 0, ExpectedData, ?ATTEMPTS),
+    ?assertRead(RegNode, RegSessId, FilePath, 0, ExpectedData, ?FILE_REGISTRATION_ATTEMPTS),
 
     % the same (truncated) view is propagated to the other provider
     ?assertMatch({ok, #file_attr{size = DeclaredSize}},
-        lfm_proxy:stat(OtherNode, OtherSessId, {path, FilePath}), ?ATTEMPTS),
-    ?assertRead(OtherNode, OtherSessId, FilePath, 0, ExpectedData, ?ATTEMPTS).
+        lfm_proxy:stat(OtherNode, OtherSessId, {path, FilePath}), ?FILE_REGISTRATION_ATTEMPTS),
+    ?assertRead(OtherNode, OtherSessId, FilePath, 0, ExpectedData, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 register_file_with_size_larger_than_real_test(
@@ -775,11 +775,11 @@ register_file_with_size_larger_than_real_test(
         registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    DeclaredSize = byte_size(?TEST_DATA) + 100,
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    DeclaredSize = byte_size(?FILE_REGISTRATION_TEST_DATA) + 100,
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     % a declared size larger than the real file is accepted without verification
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
@@ -798,8 +798,8 @@ register_file_with_size_larger_than_real_test(
     % though DeclaredSize bytes are requested, op-worker performs a short read of the
     % real content instead of zero-padding up to the (inflated) logical size.
     {ok, Handle} = ?assertMatch({ok, _},
-        lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read), ?ATTEMPTS),
-    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(RegNode, Handle, 0, DeclaredSize)),
+        lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read), ?FILE_REGISTRATION_ATTEMPTS),
+    ?assertEqual({ok, ?FILE_REGISTRATION_TEST_DATA}, lfm_proxy:read(RegNode, Handle, 0, DeclaredSize)),
     ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
 
 
@@ -813,7 +813,7 @@ registration_should_succeed_if_file_is_missing_and_existence_verification_is_dis
         registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
     DeclaredSize = 100,
@@ -839,7 +839,7 @@ registration_should_succeed_if_file_is_missing_and_existence_verification_is_dis
     % which maps to ENOENT (HTTP 404 / S3 NoSuchKey), so a read fails.
     {ok, Handle} = ?assertMatch({ok, _},
         lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read)),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:read(RegNode, Handle, 0, DeclaredSize), ?ATTEMPTS),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:read(RegNode, Handle, 0, DeclaredSize), ?FILE_REGISTRATION_ATTEMPTS),
     ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
 
 
@@ -853,7 +853,7 @@ registration_should_fail_if_file_is_missing_and_existence_verification_is_enable
         registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
     % NOTE: the source file is deliberately NOT placed on the storage
@@ -885,11 +885,11 @@ registration_should_verify_existence_without_detecting_attributes(
         registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    DeclaredSize = byte_size(?TEST_DATA) - 3,
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    DeclaredSize = byte_size(?FILE_REGISTRATION_TEST_DATA) - 3,
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     % with autoDetectAttributes disabled but verifyExistence enabled the file's
     % presence is confirmed while its attributes are taken from the caller: the
@@ -919,11 +919,11 @@ read_registered_file_after_source_removed_from_storage_test(
         registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    DataSize = byte_size(?TEST_DATA),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    DataSize = byte_size(?FILE_REGISTRATION_TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     % register normally (the file exists, attributes auto-detected)
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
@@ -946,7 +946,7 @@ read_registered_file_after_source_removed_from_storage_test(
     % ... but reading now fails with ENOENT because the data is gone from the storage.
     {ok, Handle} = ?assertMatch({ok, _},
         lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read)),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:read(RegNode, Handle, 0, DataSize), ?ATTEMPTS),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:read(RegNode, Handle, 0, DataSize), ?FILE_REGISTRATION_ATTEMPTS),
     ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
 
 
@@ -961,12 +961,12 @@ read_registered_file_after_source_modified_on_storage_test(
         registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    OriginalSize = byte_size(?TEST_DATA),
-    ShrunkData = binary:part(?TEST_DATA, 0, 2),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    OriginalSize = byte_size(?FILE_REGISTRATION_TEST_DATA),
+    ShrunkData = binary:part(?FILE_REGISTRATION_TEST_DATA, 0, 2),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     % register normally - size is auto-detected as the original size
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
@@ -989,7 +989,7 @@ read_registered_file_after_source_modified_on_storage_test(
     % ... while a read up to the stale size returns only the (now smaller) actual
     % storage content as a short read, instead of padding up to the original size.
     {ok, Handle} = ?assertMatch({ok, _},
-        lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read), ?ATTEMPTS),
+        lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read), ?FILE_REGISTRATION_ATTEMPTS),
     ?assertEqual({ok, ShrunkData}, lfm_proxy:read(RegNode, Handle, 0, OriginalSize)),
     ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
 
@@ -1005,10 +1005,10 @@ read_registered_file_when_storage_returns_error_test(
         registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
-    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?FILE_REGISTRATION_TEST_DATA),
 
     % register normally
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
@@ -1016,7 +1016,7 @@ read_registered_file_when_storage_returns_error_test(
         <<"destinationPath">> => FileName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"size">> => byte_size(?TEST_DATA)
+        <<"size">> => byte_size(?FILE_REGISTRATION_TEST_DATA)
     })),
 
     % make the storage return an error for the file's GET (without reading it first,
@@ -1027,7 +1027,7 @@ read_registered_file_when_storage_returns_error_test(
     % reading fails with EPERM (the error the HTTP 403 is mapped to).
     {ok, Handle} = ?assertMatch({ok, _},
         lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read)),
-    ?assertEqual({error, ?EPERM}, lfm_proxy:read(RegNode, Handle, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
+    ?assertEqual({error, ?EPERM}, lfm_proxy:read(RegNode, Handle, 0, byte_size(?FILE_REGISTRATION_TEST_DATA)), ?FILE_REGISTRATION_ATTEMPTS),
     ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
 
 
@@ -1045,7 +1045,7 @@ large_registered_file_should_be_correctly_replicated_to_other_provider_test(
         }
     } = init_testcase(?FUNCTION_NAME, SuiteCtx),
 
-    FileName = ?FILE_NAME,
+    FileName = ?FILE_REGISTRATION_FILE_NAME,
     FilePath = filepath_utils:join([SpacePath, FileName]),
     StorageFileId = filename:join(["/", FileName]),
     Size = ?LARGE_FILE_SIZE,
@@ -1066,7 +1066,7 @@ large_registered_file_should_be_correctly_replicated_to_other_provider_test(
     % wait until the file metadata is synced to the other provider; a stat does not pull
     % the data, so no on-the-fly replication masks the explicit transfer scheduled below
     ?assertMatch({ok, #file_attr{size = Size}},
-        lfm_proxy:stat(OtherNode, OtherSessId, {path, FilePath}), ?ATTEMPTS),
+        lfm_proxy:stat(OtherNode, OtherSessId, {path, FilePath}), ?FILE_REGISTRATION_ATTEMPTS),
 
     % explicitly replicate the whole file to the other provider and wait for completion;
     % as the file is larger than the rtransfer block size, the source reads it from the
@@ -1079,7 +1079,7 @@ large_registered_file_should_be_correctly_replicated_to_other_provider_test(
         replication_status = completed,
         files_replicated = 1,
         bytes_replicated = Size
-    }}}, rpc:call(RegNode, transfer, get, [TransferId]), 5 * ?ATTEMPTS),
+    }}}, rpc:call(RegNode, transfer, get, [TransferId]), 5 * ?FILE_REGISTRATION_ATTEMPTS),
 
     % the replica on the other provider (now served from its own local POSIX storage)
     % must be byte-for-byte identical to the source - any sub-range read misassembled
@@ -1092,7 +1092,7 @@ large_registered_file_should_be_correctly_replicated_to_other_provider_test(
         after
             lfm_proxy:close(OtherNode, Handle)
         end
-    end, ?ATTEMPTS).
+    end, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 register_shared_file_via_public_url_test(#file_registration_test_suite_ctx{
@@ -1131,9 +1131,9 @@ register_shared_file_via_public_url_test(#file_registration_test_suite_ctx{
             provider = OtherProvider, storage_spec = SourceStorageId, size = ?SUPPORT_SIZE
         }]
     }),
-    SourceFilePath = filepath_utils:join([<<"/", SourceSpaceName/binary>>, ?FILE_NAME]),
+    SourceFilePath = filepath_utils:join([<<"/", SourceSpaceName/binary>>, ?FILE_REGISTRATION_FILE_NAME]),
     {ok, {SourceGuid, Handle}} = lfm_proxy:create_and_open(OtherNode, OtherSessId, SourceFilePath),
-    {ok, _} = lfm_proxy:write(OtherNode, Handle, 0, ?TEST_DATA),
+    {ok, _} = lfm_proxy:write(OtherNode, Handle, 0, ?FILE_REGISTRATION_TEST_DATA),
     ok = lfm_proxy:close(OtherNode, Handle),
     {ok, ShareId} = ?assertMatch({ok, _},
         opt_shares:create(OtherNode, OtherSessId, ?FILE_REF(SourceGuid), <<"share">>)),
@@ -1172,19 +1172,19 @@ register_shared_file_via_public_url_test(#file_registration_test_suite_ctx{
     % Register the shared file (size intentionally omitted, so it must be detected via
     % HTTP HEAD) and verify it is readable through the public URL. Retries cover the
     % short delay before the freshly created share becomes publicly resolvable.
-    RegFileName = ?FILE_NAME,
+    RegFileName = ?FILE_REGISTRATION_FILE_NAME,
     RegFilePath = filepath_utils:join([<<"/", SpaceName/binary>>, RegFileName]),
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => RegSpaceId,
         <<"destinationPath">> => RegFileName,
         <<"storageFileId">> => PublicUrl,
         <<"storageId">> => HttpStorageId
-    }), ?ATTEMPTS),
+    }), ?FILE_REGISTRATION_ATTEMPTS),
 
-    ExpectedSize = byte_size(?TEST_DATA),
+    ExpectedSize = byte_size(?FILE_REGISTRATION_TEST_DATA),
     ?assertMatch({ok, #file_attr{size = ExpectedSize}},
-        lfm_proxy:stat(RegNode, RegSessId, {path, RegFilePath}), ?ATTEMPTS),
-    ?assertRead(RegNode, RegSessId, RegFilePath, 0, ?TEST_DATA, ?ATTEMPTS).
+        lfm_proxy:stat(RegNode, RegSessId, {path, RegFilePath}), ?FILE_REGISTRATION_ATTEMPTS),
+    ?assertRead(RegNode, RegSessId, RegFilePath, 0, ?FILE_REGISTRATION_TEST_DATA, ?FILE_REGISTRATION_ATTEMPTS).
 
 
 %%%===================================================================

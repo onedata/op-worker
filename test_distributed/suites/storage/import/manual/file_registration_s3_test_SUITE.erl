@@ -15,7 +15,7 @@
 -module(file_registration_s3_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("file_registration_test.hrl").
+-include("storage/file_registration_test.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 %% export for ct

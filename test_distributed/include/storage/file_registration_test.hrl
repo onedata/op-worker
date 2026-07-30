@@ -36,15 +36,15 @@
 }).
 
 
--define(ATTEMPTS, 30).
+-define(FILE_REGISTRATION_ATTEMPTS, 30).
 
 %% Names
--define(FILE_NAME, <<"file_", (?RAND_STR())/binary>>).
--define(DIR_NAME, <<"dir_", (?RAND_STR())/binary>>).
+-define(FILE_REGISTRATION_FILE_NAME, <<"file_", (?RAND_STR())/binary>>).
+-define(FILE_REGISTRATION_DIR_NAME, <<"dir_", (?RAND_STR())/binary>>).
 
 %% File content
--define(TEST_DATA, <<"abcdefgh">>).
--define(TEST_DATA2, <<"zyxwvut">>).
+-define(FILE_REGISTRATION_TEST_DATA, <<"abcdefgh">>).
+-define(FILE_REGISTRATION_TEST_DATA2, <<"zyxwvut">>).
 
 %% Extended attributes
 -define(XATTR_KEY(N), <<"xattrName", (integer_to_binary(N))/binary>>).
