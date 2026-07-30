@@ -225,7 +225,7 @@ init_per_suite(Config) ->
         test_utils:set_env(Workers, op_worker, ignore_async_subscriptions, false),
         initializer:setup_storage(NewConfig)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils, ?MODULE]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, datastore_pool_test_utils, ?MODULE]} | Config].
 
 init_per_testcase(Config) ->
     initializer:remove_pending_messages(),

@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
-%%% @author michal
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @author Michal Cwiertnia
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -9,7 +9,7 @@
 %%% This file contains utility functions for operating on pools.
 %%% @end
 %%%-------------------------------------------------------------------
--module(pool_utils).
+-module(datastore_pool_test_utils).
 -author("Michal Cwiertnia").
 
 -include("modules/datastore/datastore_models.hrl").

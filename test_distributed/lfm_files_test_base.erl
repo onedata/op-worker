@@ -2504,15 +2504,15 @@ open_failure_mock(Worker) ->
 
 print_mem_and_disc_docs_diff(Worker, MemEntriesBefore, CacheEntriesBefore,
     MemEntriesAfter, CacheEntriesAfter) ->
-    MemDiff = pool_utils:get_documents_diff(Worker, MemEntriesAfter,
+    MemDiff = datastore_pool_test_utils:get_documents_diff(Worker, MemEntriesAfter,
         MemEntriesBefore),
-    CacheDiff = pool_utils:get_documents_diff(Worker, CacheEntriesAfter,
+    CacheDiff = datastore_pool_test_utils:get_documents_diff(Worker, CacheEntriesAfter,
         CacheEntriesBefore),
     ct:pal("~n MemRes: ~tp ~n~n CacheRes: ~tp ~n", [MemDiff, CacheDiff]).
 
 get_mem_and_disc_entries(Worker) ->
-    {MemEntries, _} = pool_utils:get_pools_entries_and_sizes(Worker, memory),
-    {DiscEntries, _} = pool_utils:get_pools_entries_and_sizes(Worker, disc),
+    {MemEntries, _} = datastore_pool_test_utils:get_pools_entries_and_sizes(Worker, memory),
+    {DiscEntries, _} = datastore_pool_test_utils:get_pools_entries_and_sizes(Worker, disc),
     {MemEntries, DiscEntries}.
 
 get_session_file_handles_num(W, FileGuid, SessionId) ->
@@ -2778,7 +2778,7 @@ init_per_suite(Config) ->
         initializer:setup_storage(NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook},
-        {?LOAD_MODULES, [initializer, pool_utils, dir_stats_collector_test_base, ?MODULE]} | Config].
+        {?LOAD_MODULES, [initializer, datastore_pool_test_utils, dir_stats_collector_test_base, ?MODULE]} | Config].
 
 
 end_per_suite(Config) ->

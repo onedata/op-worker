@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -20,7 +20,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, start/0, stop/0, register/1, deregister/1, get/1]).
+-export([start/0, stop/0, register/1, deregister/1, get/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -45,13 +45,8 @@
 %%% API
 %%%===================================================================
 
--spec(start_link() ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-    gen_server:start_link(?SERVER, ?MODULE, [], []).
-
--spec(start() ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+-spec start() ->
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start() ->
     gen_server:start(?SERVER, ?MODULE, [], []).
 
@@ -72,15 +67,15 @@ get(HarvestingStreamPid) ->
 %%% gen_server callbacks
 %%%===================================================================
 
--spec(init(Args :: term()) ->
+-spec init(Args :: term()) ->
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore).
+    {stop, Reason :: term()} | ignore.
 init([]) ->
     {ok, #{}}.
 
--spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
+-spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: state()) ->
-    {reply, Reply :: term(), NewState :: state()}).
+    {reply, Reply :: term(), NewState :: state()}.
 handle_call(?REGISTER(HarvestingStreamPid, ChangesStreamPid), _From, State) ->
     {reply, ok, State#{HarvestingStreamPid => ChangesStreamPid}};
 handle_call(?DEREGISTER(HarvestingStreamPid), _From, State) ->
@@ -89,23 +84,23 @@ handle_call(?GET(HarvestingStreamPid), _From, State) ->
     {reply, maps:get(HarvestingStreamPid, State, undefined), State}.
 
 
--spec(handle_cast(Request :: term(), State :: state()) ->
-    {noreply, NewState :: state()}).
+-spec handle_cast(Request :: term(), State :: state()) ->
+    {noreply, NewState :: state()}.
 handle_cast(_Request, State) ->
     {noreply, State}.
 
--spec(handle_info(Info :: timeout() | term(), State :: state()) ->
-    {noreply, NewState :: state()}).
+-spec handle_info(Info :: timeout() | term(), State :: state()) ->
+    {noreply, NewState :: state()}.
 handle_info(_Info, State) ->
     {noreply, State}.
 
--spec(terminate(Reason :: normal, State :: state()) -> term()).
+-spec terminate(Reason :: normal, State :: state()) -> term().
 terminate(_Reason, _State) ->
     ok.
 
--spec(code_change(OldVsn :: term() | {down, term()}, State :: state(),
+-spec code_change(OldVsn :: term() | {down, term()}, State :: state(),
     Extra :: term()) ->
-    {ok, NewState :: state()} | {error, Reason :: term()}).
+    {ok, NewState :: state()} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 

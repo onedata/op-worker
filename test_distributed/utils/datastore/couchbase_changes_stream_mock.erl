@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -99,7 +99,7 @@ stream_next_change() ->
 %%% gen_server callbacks
 %%%===================================================================
 
--spec(init(Args :: term()) -> {ok, State :: #state{}}).
+-spec init(Args :: term()) -> {ok, State :: #state{}}.
 init([Callback, Since, Until, StreamPid]) ->
     couchbase_changes_stream_mock_registry:register(StreamPid),
     {ok, #state{
