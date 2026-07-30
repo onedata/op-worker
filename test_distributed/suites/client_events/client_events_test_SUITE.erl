@@ -11,7 +11,6 @@
 -module(client_events_test_SUITE).
 -author("Michal Wrzeszcz").
 
--include("client/fuse_test_utils.hrl").
 -include("modules/events/routing.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/event_messages.hrl").

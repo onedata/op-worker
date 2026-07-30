@@ -11,7 +11,6 @@
 -module(client_simulation_test_utils).
 -author("Michal Wrzeszcz").
 
--include("client/fuse_test_utils.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("test_utils/initializer.hrl").
