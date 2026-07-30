@@ -509,7 +509,7 @@ replication_continues_on_modified_storage_test(_Config) ->
     FileContent = ?RAND_CONTENT(),
     % 10 directories with 10 files each
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([10, 10], FileContent)
+        children = onenv_file_test_utils:gen_nested_tree_spec([10, 10], FileContent)
     }),
 
     % file replication jobs are gated (init_per_testcase) and no permits are
@@ -571,7 +571,7 @@ warp_time_during_replication_test(_Config) ->
     FileContent = ?RAND_CONTENT(),
     FileSize = byte_size(FileContent),
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec(
+        children = onenv_file_test_utils:gen_nested_tree_spec(
             [?WARP_TEST_FILES_COUNT], FileContent
         )
     }),

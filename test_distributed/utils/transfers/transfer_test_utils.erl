@@ -54,7 +54,6 @@
 %% API
 -export([
     remove_leftover_file_trees/2,
-    gen_nested_tree_spec/2,
     create_file_tree/3,
     ensure_initial_replicas/2,
     schedule_transfer/2,
@@ -170,28 +169,6 @@ remove_leftover_file_trees(#transfer_test_suite_ctx{
     lists_utils:pforeach(fun(ChildGuid) ->
         rm_leftover_file_tree(SpaceSelector, UserSelector, ChildGuid)
     end, LeftoverTreeGuids).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Generates a nested file tree spec of uniform branching, with all leaf
-%% files getting the given content. Consecutive list elements give the
-%% directory count on consecutive nesting levels and the last one gives
-%% the file count in every innermost directory. E.g.:
-%% - gen_nested_tree_spec([10, 10, 0], C) - 10 directories, each with
-%%   10 subdirectories, no files;
-%% - gen_nested_tree_spec([100], C) - 100 files.
-%% @end
-%%--------------------------------------------------------------------
--spec gen_nested_tree_spec([non_neg_integer()], binary()) ->
-    [onenv_file_test_utils:object_spec()].
-gen_nested_tree_spec([FilesCount], FileContent) ->
-    [#file_spec{content = FileContent} || _ <- lists:seq(1, FilesCount)];
-gen_nested_tree_spec([DirsCount | RestBranching], FileContent) ->
-    [
-        #dir_spec{children = gen_nested_tree_spec(RestBranching, FileContent)}
-        || _ <- lists:seq(1, DirsCount)
-    ].
 
 
 -spec create_file_tree(suite_ctx(), atom(), onenv_file_test_utils:object_spec()) ->

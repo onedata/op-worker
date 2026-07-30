@@ -26,6 +26,7 @@
 -export([
     resolve_file/1,
     ls/4,
+    gen_nested_tree_spec/2,
     create_file_tree/4,
     create_and_sync_file_tree/3, create_and_sync_file_tree/4,
     mv_and_sync_file/3, rm_and_sync_file/2, await_file_metadata_sync/3, prepare_symlink_value/3
@@ -79,6 +80,29 @@ ls(UserSelector, FileSelector, Offset, Limit) ->
     UserSessionId = oct_background:get_user_session_id(UserSelector, ProviderId),
 
     lfm_proxy:get_children(Node, UserSessionId, ?FILE_REF(FileGuid), Offset, Limit).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Builds a spec of a nested directory tree with uniform branching: consecutive
+%% list elements give the number of subdirectories on consecutive nesting levels
+%% and the LAST one gives the number of regular files in every innermost
+%% directory. All leaf files get the given content. E.g.:
+%% - gen_nested_tree_spec([13, 13, 13], C) - 13 directories, each with 13
+%%   subdirectories, each with 13 files (2379 nodes);
+%% - gen_nested_tree_spec([10, 10, 0], C) - 10 directories, each with 10
+%%   subdirectories, no files;
+%% - gen_nested_tree_spec([100], C) - 100 files.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_nested_tree_spec([non_neg_integer()], binary()) -> [object_spec()].
+gen_nested_tree_spec([FilesCount], FileContent) ->
+    [#file_spec{content = FileContent} || _ <- lists:seq(1, FilesCount)];
+gen_nested_tree_spec([DirsCount | RestBranching], FileContent) ->
+    [
+        #dir_spec{children = gen_nested_tree_spec(RestBranching, FileContent)}
+        || _ <- lists:seq(1, DirsCount)
+    ].
 
 
 -spec create_file_tree(od_user:id(), file_id:file_guid(), oct_background:entity_selector(), object_spec()) ->

@@ -1678,7 +1678,7 @@ force_start_test(SuiteCtx) ->
 force_stop_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
     %% [5, 5, 10] => 5 dirs x 5 subdirs x 10 files = 280 nodes
-    FileTreeSpec = storage_import_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR()),
+    FileTreeSpec = onenv_file_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR()),
 
     %% set up before init_testcase, as the initial scan auto-runs on space setup
     mock_import_file_started_notification(SuiteCtx, self()),

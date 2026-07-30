@@ -179,7 +179,6 @@
     advance_mocked_space_dir_mtime/3,
     init_testcase/3, init_testcase/4,
     setup_and_verify_initial_import/3, setup_and_verify_initial_import/4,
-    gen_nested_tree_spec/2,
     create_file_tree_on_storage/3,
     create_file_tree_via_remote_provider/2,
     delete_file_tree_from_storage/3,
@@ -370,25 +369,6 @@ setup_and_verify_initial_import(CaseName, FileTreeSpec, SuiteCtx, Opts) ->
     maps:get(verify_dir_stats, Opts, false) andalso verify_dir_stats(TestCaseCtx),
     assert_storage_import_monitoring_state(TestCaseCtx, maps:get(monitoring_overrides, Opts, #{})),
     TestCaseCtx.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Builds a declarative spec for a regular, nested directory tree from a branching
-%% list: the LAST element is the number of regular files at the leaf level, and
-%% each preceding element is the number of subdirectories at that level. All leaf
-%% files get the given content. E.g. gen_nested_tree_spec([13, 13, 13], C) yields
-%% 13 directories, each with 13 subdirectories, each with 13 files (2379 nodes).
-%% @end
-%%--------------------------------------------------------------------
--spec gen_nested_tree_spec([pos_integer()], binary()) -> [onenv_file_test_utils:object_spec()].
-gen_nested_tree_spec([FilesCount], FileContent) ->
-    [#file_spec{content = FileContent} || _ <- lists:seq(1, FilesCount)];
-gen_nested_tree_spec([DirsCount | RestBranching], FileContent) ->
-    [
-        #dir_spec{children = gen_nested_tree_spec(RestBranching, FileContent)}
-        || _ <- lists:seq(1, DirsCount)
-    ].
 
 
 %%--------------------------------------------------------------------
