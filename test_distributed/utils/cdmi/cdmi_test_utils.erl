@@ -1,14 +1,14 @@
-%%%-------------------------------------
+%%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015-2020 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
-%%%-------------------------------------
+%%%-------------------------------------------------------------------
 %%% @doc
 %%% CDMI tests utils.
 %%% @end
-%%%-------------------------------------
+%%%-------------------------------------------------------------------
 -module(cdmi_test_utils).
 -author("Tomasz Lichon").
 
@@ -36,12 +36,6 @@
 %%%===================================================================
 
 
-%% @private
-cdmi_endpoint(Node, Domain) ->
-    Port = rest_test_utils:get_https_server_port_str(Node),
-    str_utils:format("https://~ts~ts/cdmi/", [Domain, Port]).
-
-
 user_2_token_header() ->
     rest_test_utils:user_token_header(oct_background:get_user_access_token(user2)).
 
@@ -62,7 +56,7 @@ build_test_root_path(Config, TestName) ->
 get_cdmi_endpoint(Config) ->
     WorkerP1= oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
     Domain = opw_test_rpc:get_provider_domain(WorkerP1),
-    cdmi_test_utils:cdmi_endpoint(WorkerP1, Domain).
+    cdmi_endpoint(WorkerP1, Domain).
 
 
 do_request(Node, RestSubpath, Method, Headers) ->
@@ -214,6 +208,17 @@ do_request_base(Node, CdmiSubPath, Method, Headers, Body) ->
         Other ->
             Other
     end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+cdmi_endpoint(Node, Domain) ->
+    Port = rest_test_utils:get_https_server_port_str(Node),
+    str_utils:format("https://~ts~ts/cdmi/", [Domain, Port]).
 
 
 %% @private
