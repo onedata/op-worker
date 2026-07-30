@@ -378,7 +378,7 @@ map_results_to_tree_forest_store() ->
         attributes = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
     },
     FileObjects = file_tree_test_utils:create_and_sync_file_tree(
-        user1, ?SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
+        user1, ?ATM_SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
     ),
     IteratedItems = lists:map(fun(#object{guid = Guid}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
@@ -433,20 +433,20 @@ map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
 -spec map_from_file_list_to_object_list_store() ->
     ok.
 map_from_file_list_to_object_list_store() ->
-    UserSessionId = oct_background:get_user_session_id(user1, ?PROVIDER_SELECTOR),
+    UserSessionId = oct_background:get_user_session_id(user1, ?ATM_PROVIDER_SELECTOR),
 
     FileAttrsToResolve = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)]),
     AtmFileDataSpec = #atm_file_data_spec{file_type = 'ANY', attributes = FileAttrsToResolve},
 
     FileObjects = file_tree_test_utils:create_and_sync_file_tree(
-        user1, ?SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
+        user1, ?ATM_SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
     ),
     InputItems = lists:map(fun(#object{guid = Guid}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         #{<<"fileId">> => ObjectId}
     end, FileObjects),
     ExpOutputItems = lists:map(fun(#object{guid = Guid}) ->
-        {ok, FileAttrs} = ?rpc(?PROVIDER_SELECTOR, lfm:stat(
+        {ok, FileAttrs} = ?rpc(?ATM_PROVIDER_SELECTOR, lfm:stat(
             UserSessionId, ?FILE_REF(Guid), FileAttrsToResolve
         )),
         file_attr_translator:to_json(FileAttrs, current, FileAttrsToResolve)

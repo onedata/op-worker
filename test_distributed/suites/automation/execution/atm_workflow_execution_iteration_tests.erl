@@ -460,7 +460,7 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec 
 %% @private
 -spec create_initial_files() -> [file_tree_test_utils:object()].
 create_initial_files() ->
-    file_tree_test_utils:create_and_sync_file_tree(user1, ?SPACE_SELECTOR, lists:flatten([
+    file_tree_test_utils:create_and_sync_file_tree(user1, ?ATM_SPACE_SELECTOR, lists:flatten([
         #dir_spec{children = [
             #file_spec{name = <<"file1">>},
             #file_spec{name = <<"file2">>},

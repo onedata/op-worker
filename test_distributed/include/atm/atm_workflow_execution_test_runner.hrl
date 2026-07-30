@@ -19,17 +19,19 @@
 
 
 % default provider on which workflows shall be executed
--define(PROVIDER_SELECTOR, krakow).
-
-% default space in which workflows shall be executed
--define(SPACE_SELECTOR, space_krk).
-
-% default test inventory member with limited privileges
--define(USER_SELECTOR, user2).
 
 % message used for synchronous calls from the execution process to the test process
 % to enable applying hooks or modifying expectations before and after execution of
 % a specific step (execution process waits for an ACK before it proceeds).
+-define(ATM_PROVIDER_SELECTOR, krakow).
+
+% default space in which workflows shall be executed
+-define(ATM_SPACE_SELECTOR, space_krk).
+
+% default test inventory member with limited privileges
+-define(ATM_USER_SELECTOR, user2).
+
+
 -record(mock_call_report, {
     step :: atm_workflow_execution_test_runner:step_name(),
     timing :: atm_workflow_execution_test_runner:step_phase_timing(),
@@ -106,9 +108,9 @@
 }).
 
 -record(atm_workflow_execution_test_spec, {
-    provider = ?PROVIDER_SELECTOR :: oct_background:entity_selector(),
-    user = ?USER_SELECTOR :: oct_background:entity_selector(),
-    space = ?SPACE_SELECTOR :: oct_background:entity_selector(),
+    provider = ?ATM_PROVIDER_SELECTOR :: oct_background:entity_selector(),
+    user = ?ATM_USER_SELECTOR :: oct_background:entity_selector(),
+    space = ?ATM_SPACE_SELECTOR :: oct_background:entity_selector(),
 
     clock_status = normal :: normal | frozen,
 

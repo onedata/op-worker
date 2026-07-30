@@ -66,7 +66,7 @@ teardown(ProviderSelectors) ->
     unmock_workflow_execution_handler_steps(Workers),
     unmock_workflow_execution_factory(Workers),
 
-    atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR).
+    atm_openfaas_task_executor_mock:teardown(?ATM_PROVIDER_SELECTOR).
 
 
 -spec schedule_workflow_execution_as_test_process(

@@ -56,7 +56,7 @@
     }}
 }).
 
--define(rpc(__CALL), ?rpc(?PROVIDER_SELECTOR, __CALL)).
+-define(rpc(__CALL), ?rpc(?ATM_PROVIDER_SELECTOR, __CALL)).
 
 
 %%%===================================================================
@@ -191,7 +191,7 @@ schedule_atm_workflow_with_invalid_initial_store_content() ->
 -spec patch_workflow_schema_compatibility(od_atm_workflow_schema:id(), boolean()) ->
     {ok, od_atm_workflow_schema:doc()}.
 patch_workflow_schema_compatibility(AtmWorkflowSchemaId, IsCompatible) ->
-    SessionId = oct_background:get_user_session_id(?USER_SELECTOR, ?PROVIDER_SELECTOR),
+    SessionId = oct_background:get_user_session_id(?ATM_USER_SELECTOR, ?ATM_PROVIDER_SELECTOR),
 
     % enforce record pulled and cached in op
     {ok, Doc} = ?assertMatch({ok, _}, ?rpc(atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId))),
@@ -209,7 +209,7 @@ patch_workflow_schema_compatibility(AtmWorkflowSchemaId, IsCompatible) ->
 -spec patch_lambda_compatibility(od_atm_lambda:id(), boolean()) ->
     {ok, od_atm_lambda:doc()}.
 patch_lambda_compatibility(AtmLambdaId, IsCompatible) ->
-    SessionId = oct_background:get_user_session_id(?USER_SELECTOR, ?PROVIDER_SELECTOR),
+    SessionId = oct_background:get_user_session_id(?ATM_USER_SELECTOR, ?ATM_PROVIDER_SELECTOR),
 
     % enforce record pulled and cached in op
     {ok, Doc} = ?assertMatch({ok, _}, ?rpc(atm_lambda_logic:get(SessionId, AtmLambdaId))),
@@ -245,10 +245,10 @@ try_to_schedule_workflow_execution(
     AtmWorkflowSchemaRevisionNum,
     StoreInitialContents
 ) ->
-    SessionId = oct_background:get_user_session_id(?USER_SELECTOR, ?PROVIDER_SELECTOR),
-    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
+    SessionId = oct_background:get_user_session_id(?ATM_USER_SELECTOR, ?ATM_PROVIDER_SELECTOR),
+    SpaceId = oct_background:get_space_id(?ATM_SPACE_SELECTOR),
 
-    ?erpc(?PROVIDER_SELECTOR, mi_atm:schedule_workflow_execution(
+    ?erpc(?ATM_PROVIDER_SELECTOR, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
         StoreInitialContents, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined
     )).

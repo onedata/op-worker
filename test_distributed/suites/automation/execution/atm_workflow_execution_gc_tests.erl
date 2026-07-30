@@ -205,7 +205,7 @@ massive_garbage_collect_atm_workflow_executions() ->
 %% @private
 -spec set_env(atom(), term()) -> ok.
 set_env(EnvVar, EnvValue) ->
-    ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(EnvVar, EnvValue)).
+    ?rpc(?ATM_PROVIDER_SELECTOR, op_worker:set_env(EnvVar, EnvValue)).
 
 
 %% @private
@@ -257,10 +257,10 @@ run_atm_workflow_execution(Testcase, finished) ->
 -spec schedule_workflow_execution(od_atm_workflow_schema:id()) ->
     atm_workflow_execution:id().
 schedule_workflow_execution(AtmWorkflowSchemaId) ->
-    SessionId = oct_background:get_user_session_id(?USER_SELECTOR, ?PROVIDER_SELECTOR),
-    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
+    SessionId = oct_background:get_user_session_id(?ATM_USER_SELECTOR, ?ATM_PROVIDER_SELECTOR),
+    SpaceId = oct_background:get_space_id(?ATM_SPACE_SELECTOR),
 
-    {AtmWorkflowExecutionId, _} = ?rpc(?PROVIDER_SELECTOR, mi_atm:schedule_workflow_execution(
+    {AtmWorkflowExecutionId, _} = ?rpc(?ATM_PROVIDER_SELECTOR, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, 1, #{}, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined
     )),
     AtmWorkflowExecutionId.
@@ -269,8 +269,8 @@ schedule_workflow_execution(AtmWorkflowSchemaId) ->
 %% @private
 -spec list_suspended_workflows() -> [atm_workflow_execution:id()].
 list_suspended_workflows() ->
-    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
-    element(2, lists:unzip(?rpc(?PROVIDER_SELECTOR, atm_suspended_workflow_executions:list(
+    SpaceId = oct_background:get_space_id(?ATM_SPACE_SELECTOR),
+    element(2, lists:unzip(?rpc(?ATM_PROVIDER_SELECTOR, atm_suspended_workflow_executions:list(
         SpaceId, #{offset => 0, limit => 100000000000000000000000000000}
     )))).
 
@@ -278,8 +278,8 @@ list_suspended_workflows() ->
 %% @private
 -spec list_ended_workflows() -> [atm_workflow_execution:id()].
 list_ended_workflows() ->
-    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
-    element(2, lists:unzip(?rpc(?PROVIDER_SELECTOR, atm_ended_workflow_executions:list(
+    SpaceId = oct_background:get_space_id(?ATM_SPACE_SELECTOR),
+    element(2, lists:unzip(?rpc(?ATM_PROVIDER_SELECTOR, atm_ended_workflow_executions:list(
         SpaceId, #{offset => 0, limit => 100000000000000000000000000000}
     )))).
 
@@ -288,7 +288,7 @@ list_ended_workflows() ->
 -spec list_discarded_workflows() -> [atm_workflow_execution:id()].
 list_discarded_workflows() ->
     ?rpc(
-        ?PROVIDER_SELECTOR,
+        ?ATM_PROVIDER_SELECTOR,
         atm_discarded_workflow_executions:list(<<>>, 100000000000000000000000000000)
     ).
 
@@ -298,7 +298,7 @@ list_discarded_workflows() ->
     ok.
 await_workflow_execution_status(AtmWorkflowExecutionId, ExpStatus) ->
     GetStatusFun = fun() ->
-        case ?rpc(?PROVIDER_SELECTOR, atm_workflow_execution:get(AtmWorkflowExecutionId)) of
+        case ?rpc(?ATM_PROVIDER_SELECTOR, atm_workflow_execution:get(AtmWorkflowExecutionId)) of
             {ok, #document{value = #atm_workflow_execution{status = Status}}} ->
                 {ok, Status};
             {error, _} = Error ->
@@ -316,10 +316,10 @@ await_workflow_execution_status(AtmWorkflowExecutionId, ExpStatus) ->
 ) ->
     ok.
 expect_workflow_execution(paused, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision) ->
-    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
+    SpaceId = oct_background:get_space_id(?ATM_SPACE_SELECTOR),
 
     ExpInitialState = atm_workflow_execution_exp_state_builder:init(
-        ?PROVIDER_SELECTOR, SpaceId, frozen, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
+        ?ATM_PROVIDER_SELECTOR, SpaceId, frozen, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
     ),
     atm_workflow_execution_exp_state_builder:expect(ExpInitialState, [
         {lane_run, {1, 1}, started_preparing},
@@ -336,10 +336,10 @@ expect_workflow_execution(paused, AtmWorkflowExecutionId, AtmWorkflowSchemaRevis
     ]);
 
 expect_workflow_execution(finished, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision) ->
-    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
+    SpaceId = oct_background:get_space_id(?ATM_SPACE_SELECTOR),
 
     ExpInitialState = atm_workflow_execution_exp_state_builder:init(
-        ?PROVIDER_SELECTOR, SpaceId, frozen, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
+        ?ATM_PROVIDER_SELECTOR, SpaceId, frozen, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
     ),
     atm_workflow_execution_exp_state_builder:expect(ExpInitialState, [
         {lane_run, {1, 1}, started_preparing},
@@ -357,7 +357,7 @@ expect_workflow_execution(finished, AtmWorkflowExecutionId, AtmWorkflowSchemaRev
 %% @private
 -spec run_gc() -> ok.
 run_gc() ->
-    ?rpc(?PROVIDER_SELECTOR, atm_workflow_execution_garbage_collector:run()).
+    ?rpc(?ATM_PROVIDER_SELECTOR, atm_workflow_execution_garbage_collector:run()).
 
 
 %% @private
