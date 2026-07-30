@@ -12,7 +12,7 @@
 -module(fuse_test_utils).
 -author("Michal Stanisz").
 
--include("fuse_test_utils.hrl").
+-include("client/fuse_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/clproto_message_id.hrl").

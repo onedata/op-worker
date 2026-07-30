@@ -15,7 +15,7 @@
 
 -include("file/file_tree_test.hrl").
 -include("test_rpc.hrl").
--include("space_setup_utils.hrl").
+-include("env/space_setup_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 

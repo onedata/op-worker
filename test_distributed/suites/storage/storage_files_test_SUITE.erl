@@ -21,7 +21,7 @@
 -module(storage_files_test_SUITE).
 -author("Jakub Kudzia").
 
--include("space_setup_utils.hrl").
+-include("env/space_setup_utils.hrl").
 -include("storage_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").

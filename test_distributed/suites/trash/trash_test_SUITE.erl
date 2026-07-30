@@ -14,7 +14,7 @@
 
 -include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("distribution_assert.hrl").
+-include("file/distribution_assert.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").

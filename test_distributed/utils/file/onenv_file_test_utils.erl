@@ -16,7 +16,7 @@
 -author("Bartosz Walkowicz").
 
 -include("file/file_tree_test.hrl").
--include("distribution_assert.hrl").
+-include("file/distribution_assert.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

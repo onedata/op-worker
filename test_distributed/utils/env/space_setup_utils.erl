@@ -12,7 +12,7 @@
 -author("Katarzyna Such").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("space_setup_utils.hrl").
+-include("env/space_setup_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 

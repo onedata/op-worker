@@ -13,7 +13,7 @@
 -define(FILE_REGISTRATION_TEST_HRL, 1).
 
 
--include("space_setup_utils.hrl").
+-include("env/space_setup_utils.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").

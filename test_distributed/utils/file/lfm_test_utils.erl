@@ -12,7 +12,7 @@
 -module(lfm_test_utils).
 -author("Jakub Kudzia").
 
--include("lfm_test_utils.hrl").
+-include("file/lfm_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dataset/archivisation_tree.hrl").

@@ -15,7 +15,7 @@
 
 -behaviour(view_traverse).
 
--include("space_setup_utils.hrl").
+-include("env/space_setup_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/file_popularity/file_popularity_view.hrl").
 -include("modules/logical_file_manager/lfm.hrl").

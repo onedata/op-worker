@@ -12,7 +12,7 @@
 -module(quota_test_SUITE).
 -author("Rafal Slota").
 
--include("fuse_test_utils.hrl").
+-include("client/fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").

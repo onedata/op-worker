@@ -31,8 +31,8 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
--include("distribution_assert.hrl").
--include("lfm_test_utils.hrl").
+-include("file/distribution_assert.hrl").
+-include("file/lfm_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 

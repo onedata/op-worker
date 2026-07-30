@@ -13,8 +13,8 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("distribution_assert.hrl").
--include("space_setup_utils.hrl").
+-include("file/distribution_assert.hrl").
+-include("env/space_setup_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/datastore/datastore_models.hrl").

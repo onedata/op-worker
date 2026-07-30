@@ -11,7 +11,7 @@
 -module(file_deletion_test_SUITE).
 -author("Michal Wrona").
 
--include("fuse_test_utils.hrl").
+-include("client/fuse_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/aai/aai.hrl").

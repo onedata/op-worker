@@ -14,7 +14,7 @@
 -module(connection_layer_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("fuse_test_utils.hrl").
+-include("client/fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
