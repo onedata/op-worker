@@ -14,7 +14,6 @@
 -module(continuous_harvesting_stress_test_SUITE).
 -author("Jakub Kudzia").
 
--include("harvesting/harvesting_stress_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 

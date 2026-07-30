@@ -12,7 +12,13 @@
 -module(harvesting_stress_test_utils).
 -author("Jakub Kudzia").
 
--include("harvesting/harvesting_stress_test_utils.hrl").
+
+-define(HARVESTER_ID, <<"harvester1">>).
+-define(INDEX_ID, <<"index1">>).
+
+-define(HARVEST_METADATA(BatchSize), {harvest_metadata, BatchSize}).
+
+-define(TIMEOUT, timer:minutes(15)).
 
 %% API
 -export([mock_harvesting/1, mock_harvesting_stopped/1, harvesting_receive_loop/1,

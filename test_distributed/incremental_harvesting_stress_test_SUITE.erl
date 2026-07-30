@@ -14,9 +14,10 @@
 -module(incremental_harvesting_stress_test_SUITE).
 -author("Jakub Kudzia").
 
--include("harvesting/harvesting_stress_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+
+-define(SPACE_ID, <<"space1">>).
 
 %% export for ct
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
