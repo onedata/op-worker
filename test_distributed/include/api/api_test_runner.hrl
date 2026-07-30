@@ -157,53 +157,8 @@
     data_spec = undefined :: undefined | onenv_api_test_runner:data_spec()
 }).
 
--define(SPACE_2, <<"space2">>).
 -define(SPACE_KRK, <<"space_krk">>).
 -define(SPACE_KRK_PAR, <<"space_krk_par">>).
-
--define(USER_IN_SPACE_1, <<"user1">>).
--define(USER_IN_SPACE_1_AUTH, ?USER(?USER_IN_SPACE_1)).
--define(USER_IN_SPACE_KRK, <<"user1">>).
--define(USER_IN_SPACE_KRK_AUTH, ?USER(?USER_IN_SPACE_KRK)).
-
--define(USER_IN_SPACE_2, <<"user3">>).
--define(USER_IN_SPACE_2_AUTH, ?USER(?USER_IN_SPACE_2)).
--define(USER_IN_SPACE_KRK_PAR, <<"user3">>).
--define(USER_IN_SPACE_KRK_PAR_AUTH, ?USER(?USER_IN_SPACE_KRK_PAR)).
-
--define(USER_IN_BOTH_SPACES, <<"user2">>).
--define(USER_IN_BOTH_SPACES_AUTH, ?USER(?USER_IN_BOTH_SPACES)).
-
--define(SUPPORTED_CLIENTS_PER_NODE(__CONFIG), (fun() ->
-    [Provider1, Provider2] = ?config(op_worker_nodes, __CONFIG),
-    #{
-        Provider1 => [?USER_IN_SPACE_KRK_AUTH, ?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        Provider2 => [?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
-    }
-end)()).
-
--define(CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(__CONFIG), #client_spec{
-    correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-    unauthorized = [?NOBODY],
-    forbidden_not_in_space = [?USER_IN_SPACE_1_AUTH],
-    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
-}).
-% Special case -> any user can make requests for publicly accessibly resources,
-% but if request is being made using credentials by user not supported on specific provider
-% ?ERR_UNAUTHORIZED(?ERR_USER_NOT_SUPPORTED) should be returned
--define(CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS(__CONFIG), #client_spec{
-    correct = [?NOBODY, ?USER_IN_SPACE_KRK_AUTH, ?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-    unauthorized = [],
-    forbidden_not_in_space = [],
-    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
-}).
-
--define(SESS_ID(__USER, __NODE, __CONFIG),
-    ?config({session_id, {__USER, ?GET_DOMAIN(__NODE)}}, __CONFIG)
-).
--define(USER_IN_BOTH_SPACES_SESS_ID(__NODE, __CONFIG),
-    ?SESS_ID(?USER_IN_BOTH_SPACES, __NODE, __CONFIG)
-).
 
 -define(REST_ERROR(__ERROR), #{<<"error">> => errors:to_json(__ERROR)}).
 

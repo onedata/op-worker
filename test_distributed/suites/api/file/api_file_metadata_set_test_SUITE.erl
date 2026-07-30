@@ -465,7 +465,7 @@ set_file_xattrs_test(Config) ->
         }) ->
             case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
                 {?USER(UserId), true} when UserId /= User2Id andalso UserId /= User3Id ->
-                    % Only owner (?USER_IN_BOTH_SPACES) can set acl in posix mode
+                    % Only owner (user2) can set acl in posix mode
                     ?assertMatch({error, ?ENODATA}, get_xattr(TestNode, FileGuid, ?ACL_KEY), ?ATTEMPTS);
                 _ ->
                     assert_all_xattrs_set(Providers, FileGuid, Xattrs)
