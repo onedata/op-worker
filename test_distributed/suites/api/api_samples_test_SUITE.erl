@@ -151,7 +151,7 @@ public_file_api_samples_test_base(FileType, FileGuid, ShareId, FilePathInShare, 
                     prepare_args_fun = fun(#api_test_ctx{node = Node, data = Data0}) ->
                         % clear cached values for the xrootd config
                         rpc:call(Node, node_cache, clear, [{service_configuration, onezone}]),
-                        {TestedId, _} = api_test_utils:maybe_substitute_bad_id(ShareGuid, Data0),
+                        {TestedId, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareGuid, Data0),
                         #gs_args{
                             operation = get,
                             gri = #gri{type = op_file, id = TestedId, aspect = api_samples, scope = public}
@@ -238,7 +238,7 @@ private_file_api_samples_test_base(FileType, FileGuid) ->
                     name = <<"Get private file API samples using gs api">>,
                     type = gs,
                     prepare_args_fun = fun(#api_test_ctx{data = Data0}) ->
-                        {TestedId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+                        {TestedId, _} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
                         #gs_args{
                             operation = get,
                             gri = #gri{type = op_file, id = TestedId, aspect = api_samples, scope = private}

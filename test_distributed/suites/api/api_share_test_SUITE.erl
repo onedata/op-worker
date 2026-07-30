@@ -95,8 +95,8 @@ create_share_test(_Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     % Operations should be rejected even before checking if share exists
                     % (in case of using share file id) so it is not necessary to use
                     % valid share id
@@ -302,7 +302,7 @@ get_share_test(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_share_prepare_rest_args_fun(ShareId) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ShareId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data),
 
         #rest_args{
             method = get,
@@ -316,7 +316,7 @@ build_get_share_prepare_rest_args_fun(ShareId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_share_prepare_gs_args_fun(ShareId, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data0),
 
         #gs_args{
             operation = get,
@@ -419,7 +419,7 @@ update_share_test(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_update_share_prepare_rest_args_fun(ShareId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data0),
 
         #rest_args{
             method = patch,
@@ -435,7 +435,7 @@ build_update_share_prepare_rest_args_fun(ShareId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_update_share_prepare_gs_args_fun(ShareId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data0),
 
         #gs_args{
             operation = update,
@@ -538,7 +538,7 @@ build_delete_share_setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare) 
 build_delete_share_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         ShareId = choose_share_to_remove(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ShareId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data),
 
         #rest_args{
             method = delete,
@@ -553,7 +553,7 @@ build_delete_share_prepare_rest_args_fun(MemRef) ->
 build_delete_share_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ShareId = choose_share_to_remove(MemRef),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data0),
 
         #gs_args{
             operation = delete,

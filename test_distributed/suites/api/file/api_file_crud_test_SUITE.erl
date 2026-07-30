@@ -196,7 +196,7 @@ create_file_test_base(CreationType, MemRef) ->
 build_create_file_rest_args_fun(ParentId, CreationType, MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ParentId, Data1),
+        {Id, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(ParentId, Data1),
         Name = ?RANDOM_FILE_NAME(),
         api_test_memory:set(MemRef, name, Name),
         % replace name to unique here to avoid conflicts between tests
@@ -310,7 +310,7 @@ get_file_instance_test(_Config) ->
             client_spec = ClientSpec,
             prepare_args_fun = build_get_instance_prepare_gs_args_fun(FileGuid, private),
             validate_result_fun = build_get_instance_validate_gs_call_fun(ExpJsonFileDetails),
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, undefined, undefined
             )
         },
@@ -379,7 +379,7 @@ get_shared_file_instance_test(_Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             prepare_args_fun = build_get_instance_prepare_gs_args_fun(ShareRootFileGuid, public),
             validate_result_fun = build_get_instance_validate_gs_call_fun(ExpJsonShareRootFileDetails),
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, FileShareId1, undefined
             )
         },
@@ -440,8 +440,8 @@ get_file_instance_on_provider_not_supporting_space_test(_Config) ->
 -spec file_attrs_to_gs_json(node(), undefined | od_share:id(), #file_attr{}) -> map().
 file_attrs_to_gs_json(Node, ShareId, #file_attr{guid = FileGuid} = FileAttr) ->
     ProviderId = opw_test_rpc:get_provider_id(Node),
-    CurrentJson = api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, FileAttr),
-    DeprecatedFileAttr = api_test_utils:replace_attrs_with_deprecated(CurrentJson),
+    CurrentJson = api_file_attr_test_utils:file_attr_to_json(ShareId, gs, ProviderId, FileAttr),
+    DeprecatedFileAttr = api_file_attr_test_utils:replace_attrs_with_deprecated(CurrentJson),
     JsonFileAttr = maps:with(
         [onedata_file:attr_name_to_json(A) || A <- ?DEPRECATED_ALL_FILE_ATTRS] ++
         [onedata_file:attr_name_to_json(deprecated, A) || A <- ?DEPRECATED_ALL_FILE_ATTRS],
@@ -465,7 +465,7 @@ file_attrs_to_gs_json(Node, ShareId, #file_attr{guid = FileGuid} = FileAttr) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_instance_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data}) ->
-        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
+        {GriId, _} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data),
 
         #gs_args{
             operation = get,
@@ -547,7 +547,7 @@ update_file_instance_test(Config) ->
                     true
             end,
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 FileGuid, ShareId, update_file_instance_test_data_spec()
             )
         },
@@ -621,7 +621,7 @@ update_file_instance_test_data_spec() ->
     onenv_api_test_runner:prepare_args_fun().
 build_update_file_instance_test_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = update,
@@ -688,7 +688,7 @@ delete_file_instance_test(Config) ->
                 }
             ],
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 TopDirGuid, TopDirShareId, undefined
             )
         },
@@ -778,7 +778,7 @@ delete_file_instance_at_path_test(Config) ->
                 }
             ],
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 TopDirGuid, TopDirShareId, DataSpec
             )
         }
@@ -823,7 +823,7 @@ build_delete_instance_at_path_test_prepare_rest_args_fun(MemRef, TopDirGuid, Top
 
         DataWithoutPath = maps:remove(<<"path">>, Data),
 
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ParentId, DataWithoutPath),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ParentId, DataWithoutPath),
         RestPath = filepath_utils:join([<<"data">>, Id, <<"path">>, Path]),
 
         #rest_args{
@@ -957,7 +957,7 @@ build_delete_instance_test_prepare_rest_args_fun(MemRefOrGuid) ->
     fun(#api_test_ctx{data = Data}) ->
         BareGuid = ensure_guid(MemRefOrGuid),
         {ok, ObjectId} = file_id:guid_to_objectid(BareGuid),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ObjectId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ObjectId, Data),
 
         #rest_args{
             method = delete,
@@ -975,7 +975,7 @@ build_delete_instance_test_prepare_rest_args_fun(MemRefOrGuid) ->
 build_delete_instance_test_prepare_gs_args_fun(MemRefOrGuid, Scope) ->
     fun(#api_test_ctx{data = Data}) ->
         BareGuid = ensure_guid(MemRefOrGuid),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(BareGuid, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(BareGuid, Data),
 
         #gs_args{
             operation = delete,

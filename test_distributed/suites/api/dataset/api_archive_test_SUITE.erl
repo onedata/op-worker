@@ -429,7 +429,7 @@ get_archive_info(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_archive_prepare_rest_args_fun(ArchiveId) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data),
 
         #rest_args{
             method = get,
@@ -443,7 +443,7 @@ build_get_archive_prepare_rest_args_fun(ArchiveId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_archive_prepare_gs_args_fun(ArchiveId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
 
         #gs_args{
             operation = get,
@@ -513,7 +513,7 @@ modify_archive_description(_Config) ->
 build_update_archive_description_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
         api_test_memory:set(MemRef, archive_to_modify, ArchiveObject#archive_object{id = Id}),
 
         #rest_args{
@@ -531,7 +531,7 @@ build_update_archive_description_prepare_rest_args_fun(MemRef) ->
 build_update_archive_description_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
         api_test_memory:set(MemRef, archive_to_modify, ArchiveObject#archive_object{id = Id}),
 
         #gs_args{
@@ -659,7 +659,7 @@ get_dataset_archives(_Config) ->
 build_get_dataset_archives_prepare_rest_args_fun(ValidDatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidDatasetId, Data1),
+        {Id, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(ValidDatasetId, Data1),
 
         RestPath = <<"datasets/", Id/binary, "/archives">>,
 
@@ -677,7 +677,7 @@ build_get_dataset_archives_prepare_rest_args_fun(ValidDatasetId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_dataset_archives_prepare_gs_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #gs_args{
             operation = get,
@@ -806,7 +806,7 @@ init_archive_delete_test(_Config) ->
 build_init_delete_archive_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
         api_test_memory:set(MemRef, archive_to_delete, ArchiveObject#archive_object{id = Id}),
 
         #rest_args{
@@ -824,7 +824,7 @@ build_init_delete_archive_prepare_rest_args_fun(MemRef) ->
 build_init_delete_archive_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
         api_test_memory:set(MemRef, archive_to_delete, ArchiveObject#archive_object{id = Id}),
 
         #gs_args{
@@ -973,7 +973,7 @@ validate_recall_result(Providers, RootFileGuid) ->
 build_init_recall_archive_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         #archive_object{id = ArchiveId} = api_test_memory:get(MemRef, archive_object),
-        {Id, Data} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, Data} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
 
         #rest_args{
             method = post,
@@ -990,7 +990,7 @@ build_init_recall_archive_prepare_rest_args_fun(MemRef) ->
 build_init_recall_archive_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         #archive_object{id = ArchiveId} = api_test_memory:get(MemRef, archive_object),
-        {Id, Data} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, Data} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
 
         #gs_args{
             operation = create,
@@ -1123,7 +1123,7 @@ get_recall_validate_result(progress, rest, _ArchiveId, _DatasetId, RespBody) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_recall_archive_details_prepare_rest_args_fun(RootFileObjectId, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data} = api_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
+        {Id, Data} = api_data_spec_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
 
         #rest_args{
             method = get,
@@ -1139,7 +1139,7 @@ build_get_recall_archive_details_prepare_rest_args_fun(RootFileObjectId, Aspect)
     onenv_api_test_runner:prepare_args_fun().
 build_get_recall_archive_details_prepare_gs_args_fun(RootFileObjectId, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data} = api_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
+        {Id, Data} = api_data_spec_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
 
         #gs_args{
             operation = get,
@@ -1220,7 +1220,7 @@ get_archivisation_audit_log(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
 
         #gs_args{
             operation = get,

@@ -99,8 +99,8 @@ establish_dataset_test(Config) ->
                     validate_result_fun = build_establish_dataset_validate_gs_call_result_fun(MemRef, Config)
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     % Operations should be rejected even before checking if share exists
                     % (in case of using share file id) so it is not necessary to use
                     % valid share id
@@ -399,7 +399,7 @@ get_dataset_test_base(
     onenv_api_test_runner:prepare_args_fun().
 build_get_dataset_prepare_rest_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data),
 
         #rest_args{
             method = get,
@@ -413,7 +413,7 @@ build_get_dataset_prepare_rest_args_fun(DatasetId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_dataset_prepare_gs_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #gs_args{
             operation = get,
@@ -518,7 +518,7 @@ update_dataset_test(Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_update_dataset_prepare_rest_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #rest_args{
             method = patch,
@@ -534,7 +534,7 @@ build_update_dataset_prepare_rest_args_fun(DatasetId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_update_dataset_prepare_gs_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #gs_args{
             operation = update,
@@ -669,7 +669,7 @@ delete_dataset_test(Config) ->
 build_delete_dataset_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         DatasetId = choose_dataset_to_remove(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data),
         api_test_memory:set(MemRef, dataset_to_remove, Id),
 
         #rest_args{
@@ -685,7 +685,7 @@ build_delete_dataset_prepare_rest_args_fun(MemRef) ->
 build_delete_dataset_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         DatasetId = choose_dataset_to_remove(MemRef),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
         api_test_memory:set(MemRef, dataset_to_remove, Id),
 
         #gs_args{

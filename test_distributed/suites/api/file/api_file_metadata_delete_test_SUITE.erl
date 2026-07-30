@@ -188,12 +188,12 @@ delete_metadata_test_base(
             ],
             randomly_select_scenarios = RandomlySelectScenario,
             data_spec = begin
-                DataSpec1 = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                DataSpec1 = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                     FileGuid, ShareId, DataSpec
                 ),
                 case MetadataType of
                     <<"xattrs">> -> DataSpec1;
-                    _ -> api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(DataSpec1)
+                    _ -> api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(DataSpec1)
                 end
             end
         },
@@ -289,7 +289,7 @@ build_verify_fun(no_initial_metadata, FileGuid, MetadataType, _ExpMetadata, Node
     onenv_api_test_runner:prepare_args_fun().
 build_delete_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         Aspect = case MetadataType of
             <<"json">> -> json_metadata;
@@ -312,7 +312,7 @@ build_delete_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
     onenv_api_test_runner:prepare_args_fun().
 build_delete_metadata_prepare_rest_args_fun(MetadataType, FileGuid) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {FileId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {FileId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #rest_args{
             method = delete,

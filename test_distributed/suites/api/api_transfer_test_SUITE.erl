@@ -194,8 +194,8 @@ create_file_transfer(_Config) ->
                     validate_result_fun = build_create_transfer_validate_gs_call_result_fun(TestSuiteCtx, MemRef)
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     SharedFileGuid, SpaceId, ShareId,
                     build_op_transfer_spec(TestSuiteCtx, <<"file">>)
                 )
@@ -502,7 +502,7 @@ run_get_transfer_status_tests(TransferType, DataSourceType, Env, ExpState) ->
 %% @private
 build_get_transfer_status_prepare_rest_args_fun(#{transfer_id := TransferId}) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #rest_args{
             method = get,
@@ -514,7 +514,7 @@ build_get_transfer_status_prepare_rest_args_fun(#{transfer_id := TransferId}) ->
 %% @private
 build_get_transfer_status_prepare_gs_args_fun(#{transfer_id := TransferId}) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #gs_args{
             operation = get,
@@ -1022,7 +1022,7 @@ build_cancel_transfer_verify_fun(TestSuiteCtx, MemRef) ->
 build_cancel_transfer_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         #{transfer_id := TransferId} = get_transfer_details(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #rest_args{
             method = delete,
@@ -1035,7 +1035,7 @@ build_cancel_transfer_prepare_rest_args_fun(MemRef) ->
 build_cancel_transfer_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         #{transfer_id := TransferId} = get_transfer_details(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #gs_args{
             operation = delete,
@@ -1123,7 +1123,7 @@ rerun_transfer(_Config) ->
 build_rerun_transfer_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         #{transfer_id := TransferId} = get_transfer_details(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #rest_args{
             method = post,
@@ -1136,7 +1136,7 @@ build_rerun_transfer_prepare_rest_args_fun(MemRef) ->
 build_rerun_transfer_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         #{transfer_id := TransferId} = get_transfer_details(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #gs_args{
             operation = create,

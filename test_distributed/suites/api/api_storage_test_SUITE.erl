@@ -74,7 +74,7 @@ get_shared_storage_test_base(TargetProviders, SpaceId, StorageId, StorageName, P
                     name = <<"Get shared storage using gs api">>,
                     type = gs,
                     prepare_args_fun = fun(#api_test_ctx{data = Data0}) ->
-                        {TestedId, _} = api_test_utils:maybe_substitute_bad_id(StorageId, Data0),
+                        {TestedId, _} = api_data_spec_test_utils:maybe_substitute_bad_id(StorageId, Data0),
                         #gs_args{
                             operation = get,
                             gri = #gri{type = op_storage, id = TestedId, aspect = instance, scope = shared},

@@ -169,8 +169,8 @@ create_qos_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(MemRef, {instance, create})
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     FileToShareGuid, ?SPACE_2, ShareId, CreateDataSpec
                 )
             )
@@ -291,8 +291,8 @@ get_qos_summary_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(MemRef, qos_summary)
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(Guid, ShareId, undefined)
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(Guid, ShareId, undefined)
             )
         }
     ])),
@@ -579,7 +579,7 @@ prepare_args_fun_rest(MemRef, {instance, Method}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos),
 
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #rest_args{
             method = Method,
             path = <<"qos_requirements/", Id/binary>>
@@ -591,7 +591,7 @@ prepare_args_fun_rest(MemRef, qos_summary) ->
         Guid = api_test_memory:get(MemRef, guid),
 
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ObjectId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ObjectId, Data),
         #rest_args{
             method = get,
             path = <<"data/", Id/binary, "/qos/summary">>
@@ -636,7 +636,7 @@ prepare_args_fun_gs(MemRef, {instance, create}) ->
 prepare_args_fun_gs(MemRef, {instance, Method}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #gs_args{
             operation = Method,
             gri = #gri{type = op_qos, id = Id, aspect = instance, scope = private}
@@ -646,7 +646,7 @@ prepare_args_fun_gs(MemRef, {instance, Method}) ->
 prepare_args_fun_gs(MemRef, qos_summary) ->
     fun(#api_test_ctx{data = Data}) ->
         Guid = api_test_memory:get(MemRef, guid),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(Guid, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(Guid, Data),
         #gs_args{
             operation = get,
             gri = #gri{type = op_file, id = Id, aspect = qos_summary, scope = private}
@@ -681,7 +681,7 @@ prepare_args_fun_gs(_MemRef, {qos_transfer_stats_collection, schema, Type}) ->
 prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, layout, Type}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
-        {Id, UpdatedData} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        {Id, UpdatedData} = api_data_spec_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #gs_args{
             operation = get,
             gri = #gri{type = op_qos, id = Id, aspect = {transfer_stats_collection, Type}, scope = private},
@@ -692,7 +692,7 @@ prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, layout, Type}) ->
 prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, slice, Type}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
-        {Id, UpdatedData} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        {Id, UpdatedData} = api_data_spec_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #gs_args{
             operation = get,
             gri = #gri{type = op_qos, id = Id, aspect = {transfer_stats_collection, Type}, scope = private},

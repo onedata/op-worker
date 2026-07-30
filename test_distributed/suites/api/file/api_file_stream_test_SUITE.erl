@@ -504,7 +504,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) -
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, normal_mode, private),
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 <<"file_ids">>, DirGuid, undefined, DataSpec
             )
         },
@@ -517,7 +517,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) -
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, public),
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 <<"file_ids">>, DirGuid, DirShareId, DataSpec
             )
         },
@@ -839,7 +839,7 @@ rest_download_file_test(Config) ->
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, undefined, #data_spec{
                     optional = [<<"range">>],
                     correct_values = #{<<"range">> => RangesToTestPart1}
@@ -857,7 +857,7 @@ rest_download_file_test(Config) ->
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     optional = [<<"range">>],
                     correct_values = #{<<"range">> => RangesToTestPart2}
@@ -911,7 +911,7 @@ rest_download_file_at_path_test(Config) ->
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 BaseDirGuid, undefined, #data_spec{
                     optional = [<<"range">>, <<"path">>],
                     correct_values = #{
@@ -974,7 +974,7 @@ build_rest_download_file_at_path_prepare_args_fun(MemRef, TestMode) ->
 
         end,
 
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ParentId2, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ParentId2, Data0),
         DataWithoutPath = maps:remove(<<"path">>, Data1),
 
         RestPath = str_utils:join_as_binaries([<<"data">>, Id, <<"path">>, Path], <<"/">>),
@@ -1039,7 +1039,7 @@ rest_download_dir_test(Config) ->
             verify_fun = build_download_file_verify_fun(MemRef),
 
             % correct data is set up in build_rest_download_prepare_args_fun/2
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, undefined, DataSpec)
         },
         #scenario_spec{
@@ -1054,7 +1054,7 @@ rest_download_dir_test(Config) ->
             verify_fun = build_download_file_verify_fun(MemRef),
 
             % correct data is set up in build_rest_download_prepare_args_fun/2
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, DirShareId, DataSpec
             )
         }
@@ -1119,7 +1119,7 @@ rest_download_dir_at_path_test(_Config) ->
             verify_fun = build_download_file_verify_fun(MemRef),
 
             % correct data is set up in build_rest_download_prepare_args_fun/2
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, undefined, DataSpec)
         }
     ])).
@@ -1155,7 +1155,7 @@ build_rest_download_prepare_args_fun(MemRef, TestMode) ->
                 end
         end,
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
 
         RestPath = <<"data/", Id/binary, "/content">>,
         #rest_args{

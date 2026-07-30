@@ -74,8 +74,8 @@ set_file_rdf_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
     {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
-    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-        api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+    DataSpec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
             FileGuid, ShareId, #data_spec{
                 required = [<<"metadata">>],
                 correct_values = #{
@@ -174,8 +174,8 @@ set_file_json_metadata_test(Config) ->
 
     ExampleJson = #{<<"attr1">> => [0, 1, <<"val">>]},
 
-    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-        api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+    DataSpec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
             FileGuid, ShareId, #data_spec{
                 required = [<<"metadata">>],
                 optional = QsParams = [<<"filter_type">>, <<"filter">>],
@@ -323,8 +323,8 @@ set_file_primitive_json_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
     {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
-    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-        api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+    DataSpec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
             FileGuid, ShareId, #data_spec{
                 required = [<<"metadata">>],
                 correct_values = #{<<"metadata">> => [
@@ -421,7 +421,7 @@ set_file_xattrs_test(Config) ->
     User3Id = oct_background:get_user_id(user3),
     {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+    DataSpec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
         FileGuid, ShareId, #data_spec{
             required = [<<"metadata">>],
             correct_values = #{<<"metadata">> => [
@@ -675,7 +675,7 @@ build_set_metadata_prepare_rest_args_fun(MetadataType, ValidId, QsParams) ->
             false ->
                 skip;
             true ->
-                {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ValidId, Data0),
+                {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ValidId, Data0),
 
                 RestPath = ?NEW_ID_METADATA_REST_PATH(Id, MetadataType),
 
@@ -718,7 +718,7 @@ build_set_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
             <<"xattrs">> ->
                 {xattrs, Data0}
         end,
-        {GriId, Data2} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data1),
+        {GriId, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data1),
 
         #gs_args{
             operation = create,

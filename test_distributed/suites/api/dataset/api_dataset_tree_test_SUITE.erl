@@ -238,7 +238,7 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
 build_get_top_datasets_prepare_rest_args_fun(SpaceId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(SpaceId, Data1),
+        {Id, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(SpaceId, Data1),
 
         RestPath = <<"spaces/", Id/binary, "/datasets">>,
 
@@ -265,7 +265,7 @@ build_get_top_datasets_prepare_gs_args_fun(SpaceId) ->
 build_prepare_get_top_datasets_gs_args_fun(SpaceId, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {GriId, Data2} = api_test_utils:maybe_substitute_bad_id(SpaceId, Data1),
+        {GriId, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(SpaceId, Data1),
 
         #gs_args{
             operation = get,
@@ -380,7 +380,7 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
 build_get_child_datasets_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
+        {Id, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         RestPath = <<"datasets/", Id/binary, "/children">>,
 
@@ -399,7 +399,7 @@ build_get_child_datasets_prepare_rest_args_fun(ValidId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_child_datasets_prepare_gs_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #gs_args{
             operation = get,
@@ -574,8 +574,8 @@ get_file_dataset_summary_test_base(FileGuid, ExpSummary) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                     FileGuid, ?DUMMY_SHARE_ID, undefined
                 )
             )
@@ -617,7 +617,7 @@ build_getfile_dataset_summary_prepare_rest_args_fun(FileGuid) ->
 
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data1),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(FileObjectId, Data1),
 
         RestPath = <<"data/", Id/binary, "/dataset/summary">>,
 
@@ -630,7 +630,7 @@ build_getfile_dataset_summary_prepare_rest_args_fun(FileGuid) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_file_dataset_summary_prepare_gs_args_fun(FileGuid) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = get,

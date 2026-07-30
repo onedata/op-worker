@@ -103,7 +103,7 @@ create_file_test(_Config) ->
             validate_result_fun = build_create_file_validate_call_fun(MemRef, SpaceOwnerId),
             verify_fun = build_create_file_verify_fun(MemRef, DirGuid, Providers),
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     required = [<<"name">>],
                     optional = [<<"type">>, <<"mode">>, <<"offset">>, body, <<"update_existing">>, <<"posixPermissions">>],
@@ -170,7 +170,7 @@ create_file_test(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_create_file_prepare_args_fun(MemRef, ParentDirObjectId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {ParentId, Data1} = api_test_utils:maybe_substitute_bad_id(ParentDirObjectId, Data0),
+        {ParentId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ParentDirObjectId, Data0),
 
         Data2 = case maps:get(<<"name">>, Data1, undefined) of
             name_placeholder ->
@@ -350,7 +350,7 @@ create_file_at_path_test(_Config) ->
             validate_result_fun = build_create_file_validate_call_fun(MemRef, SpaceOwnerId),
             verify_fun = build_rest_create_file_at_path_verify_fun(MemRef, Providers),
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     required = [<<"path">>],
                     optional = [<<"type">>, <<"mode">>, <<"offset">>, body, <<"update_existing">>, <<"posixPermissions">>],
@@ -412,7 +412,7 @@ create_file_at_path_test(_Config) ->
 build_rest_create_file_at_path_prepare_args_fun(MemRef, RelRootDirGuid) ->
     fun(#api_test_ctx{data = Data0, node = TestNode}) ->
         {ok, RelRootDirObjectId} = file_id:guid_to_objectid(RelRootDirGuid),
-        {ParentId, Data1} = api_test_utils:maybe_substitute_bad_id(RelRootDirObjectId, Data0),
+        {ParentId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(RelRootDirObjectId, Data0),
         ChildDirName = api_test_memory:get(MemRef, child_dir_name),
         Name = str_utils:rand_hex(10),
         api_test_memory:set(MemRef, name, Name),
@@ -582,7 +582,7 @@ update_file_content_test(_Config) ->
             validate_result_fun = build_update_file_content_validate_call_fun(),
             verify_fun = build_update_file_content_verify_fun(MemRef, OriginalFileContent),
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     optional = [body, <<"offset">>],
                     correct_values = #{
@@ -641,7 +641,7 @@ build_update_file_content_prepare_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         FileGuid = api_test_memory:get(MemRef, file_guid),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
 
         #rest_args{
             method = put,
