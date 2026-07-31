@@ -19,10 +19,6 @@
 
 
 % default provider on which workflows shall be executed
-
-% message used for synchronous calls from the execution process to the test process
-% to enable applying hooks or modifying expectations before and after execution of
-% a specific step (execution process waits for an ACK before it proceeds).
 -define(ATM_PROVIDER_SELECTOR, krakow).
 
 % default space in which workflows shall be executed
@@ -31,7 +27,9 @@
 % default test inventory member with limited privileges
 -define(ATM_USER_SELECTOR, user2).
 
-
+% message used for synchronous calls from the execution process to the test process
+% to enable applying hooks or modifying expectations before and after execution of
+% a specific step (execution process waits for an ACK before it proceeds).
 -record(mock_call_report, {
     step :: atm_workflow_execution_test_runner:step_name(),
     timing :: atm_workflow_execution_test_runner:step_phase_timing(),
