@@ -1400,7 +1400,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     stop_http_server(),
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 
 init_per_group(_Group, Config) ->

@@ -783,7 +783,7 @@ end_per_testcase(_Case, Config) ->
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 
 %%%===================================================================

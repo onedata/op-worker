@@ -20,8 +20,6 @@
 
 %% API
 -export([kill_nodes/2, restart_nodes/2]).
-%% SetUp and TearDown helpers
--export([init_per_suite/2]).
 
 %%%===================================================================
 %%% API
@@ -57,16 +55,3 @@ restart_nodes(Config, Nodes) when is_list(Nodes) ->
     oct_background:update_background_config(UpdatedConfig);
 restart_nodes(Config, Node) ->
     restart_nodes(Config, [Node]).
-
-%%%===================================================================
-%%% SetUp and TearDown helpers
-%%%===================================================================
-
-init_per_suite(Config, Scenario) ->
-    Posthook = fun(NewConfig) ->
-        provider_test_utils:initialize(NewConfig)
-    end,
-    test_config:set_many(Config, [
-        {set_onenv_scenario, [Scenario]}, % name of yaml file in test_distributed/onenv_scenarios
-        {set_posthook, Posthook}
-    ]).

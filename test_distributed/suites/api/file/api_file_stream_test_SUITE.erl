@@ -1699,7 +1699,7 @@ end_per_suite(Config) ->
     Nodes = oct_background:get_all_providers_nodes(),
     test_utils:mock_unload(Nodes),
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 
 init_per_group(_Group, Config) ->

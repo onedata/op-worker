@@ -18,8 +18,6 @@
 
 %% API
 -export([
-    initialize/1,
-
     setup_sessions/1,
     create_session/2, create_session/3, create_session/4,
 
@@ -31,12 +29,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
--spec initialize(test_config:config()) -> test_config:config().
-initialize(Config) ->
-    NewConfig = oct_background:prepare_base_test_config(Config),
-    setup_sessions(NewConfig).
-
 
 -spec setup_sessions(test_config:config()) -> test_config:config().
 setup_sessions(Config) ->
@@ -87,20 +79,18 @@ create_session(Node, UserId, AccessToken, SessionMode) ->
     SessionId.
 
 
--spec find_importing_provider(test_config:config(), od_space:id()) -> od_provider:id() | undefined.
-find_importing_provider(_Config, SpaceId) ->
-    Providers = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
-    lists:foldl(fun
-        (ProviderId, undefined) ->
-            [OpNode | _] = oct_background:get_provider_nodes(ProviderId),
-            {ok, StorageId} = rpc:call(OpNode, space_logic, get_local_supporting_storage, [SpaceId]),
-            case rpc:call(OpNode, storage, is_imported, [StorageId]) of
-                true -> ProviderId;
-                false -> undefined
-            end;
-        (_ProviderId, ImportingProviderId) ->
-            ImportingProviderId
-    end, undefined, Providers).
+%% @doc The first of the given providers that supports the space with an imported
+%% storage, or undefined if none does. All of them must support the space.
+-spec find_importing_provider([od_provider:id()], od_space:id()) -> od_provider:id() | undefined.
+find_importing_provider(ProviderIds, SpaceId) ->
+    lists_utils:foldl_while(fun(ProviderId, Acc) ->
+        [OpNode | _] = oct_background:get_provider_nodes(ProviderId),
+        {ok, StorageId} = rpc:call(OpNode, space_logic, get_local_supporting_storage, [SpaceId]),
+        case rpc:call(OpNode, storage, is_imported, [StorageId]) of
+            true -> {halt, ProviderId};
+            false -> {cont, Acc}
+        end
+    end, undefined, ProviderIds).
 
 
 -spec create_oz_temp_access_token(UserId :: binary()) -> tokens:serialized().

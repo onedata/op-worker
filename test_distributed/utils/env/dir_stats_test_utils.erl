@@ -23,7 +23,7 @@
 
 
 %% API
--export([disable_stats_counting_ct_posthook/1, disable_stats_counting/1, enable_stats_counting/1]).
+-export([disable_stats_counting_ct_posthook/1, disable_stats_counting/1, unmock_stats_counting/1]).
 
 
 -type config() :: proplists:proplist().
@@ -47,7 +47,16 @@ disable_stats_counting(Config) ->
         Workers, dir_stats_service_state, get_extended_status, fun(_SpaceId) -> disabled end).
 
 
--spec enable_stats_counting(config()) -> ok.
-enable_stats_counting(Config) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Undoes disable_stats_counting/1, leaving the subsystem in whatever state the
+%% deployment configures - it does NOT turn stats counting on. Safe to call
+%% without a preceding disable (unloading a module that was never mocked is a
+%% no-op), which is how suites use it defensively at teardown: a deployment is
+%% reused across suites, so a leftover mock would silently affect the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec unmock_stats_counting(config()) -> ok.
+unmock_stats_counting(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [dir_stats_service_state]).
