@@ -1,12 +1,15 @@
 %%%-------------------------------------------------------------------
 %%% @author Wojciech Geisler
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for luma tests
+%%% Helpers for LUMA test suites: running a test case against the matrix of
+%%% storage configurations defined in luma/luma_test_utils.hrl, setting up the
+%%% mocks those configurations require, calling the LUMA mapping API on a node
+%%% and building storage helper user contexts.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_test_utils).
@@ -15,13 +18,12 @@
 -include("luma/luma_test_utils.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 
--export([run_test_for_all_storage_configs/5, clear_luma_db_for_all_storages/1,
+-export([run_test_for_all_storage_configs/4, clear_luma_db_for_all_storages/1,
     mock_stat_on_space_mount_dir/1, setup_local_feed_luma/3, mock_storage_is_imported/1, change_admin_creds/1]).
 
 % LUMA API
 -export([map_to_storage_creds/4, map_to_storage_creds/5, map_to_display_creds/4,
-    map_uid_to_onedata_user/4, map_acl_user_to_onedata_user/3, map_acl_group_to_onedata_group/3,
-    clear_luma_db/2]).
+    map_uid_to_onedata_user/4, map_acl_user_to_onedata_user/3, map_acl_group_to_onedata_group/3]).
 
 -export([new_ceph_user_ctx/2, new_cephrados_user_ctx/2, new_posix_user_ctx/2,
     new_s3_user_ctx/2, new_swift_user_ctx/3, new_glusterfs_user_ctx/2,
@@ -33,7 +35,8 @@
 %%% API functions
 %%%===================================================================
 
-run_test_for_all_storage_configs(TestCase, TestFun, Module, Config, StorageConfigs) when is_list(StorageConfigs) ->
+run_test_for_all_storage_configs(TestFun, Module, Config, StorageConfigs) when is_list(StorageConfigs) ->
+    {name, TestFunName} = erlang:fun_info(TestFun, name),
     lists:foreach(fun(StorageLumaConfig) ->
         Name = maps:get(name, StorageLumaConfig),
         try
@@ -41,18 +44,18 @@ run_test_for_all_storage_configs(TestCase, TestFun, Module, Config, StorageConfi
         catch
             Error:Reason:Stacktrace ->
                 ct:pal("Testcase \"~tp\" failed for config ~tp due to ~tp:~tp~nStacktrace: ~tp",
-                    [TestCase, Name, Error, Reason, Stacktrace]
+                    [TestFunName, Name, Error, Reason, Stacktrace]
                 ),
                 ct:fail("Failed testcase")
         end
     end, StorageConfigs);
-run_test_for_all_storage_configs(TestCase, TestFun, Module, Config, StorageConfig) ->
-    run_test_for_all_storage_configs(TestCase, TestFun, Module, Config, [StorageConfig]).
+run_test_for_all_storage_configs(TestFun, Module, Config, StorageConfig) ->
+    run_test_for_all_storage_configs(TestFun, Module, Config, [StorageConfig]).
 
 run_test(TestFun, Module, Config, StorageConfig) ->
     Config2 = Module:init_per_testcase(Config),
     try
-        TestFun(Config, StorageConfig)
+        TestFun(Config2, StorageConfig)
     after
         Module:end_per_testcase(Config2)
     end.
@@ -101,48 +104,48 @@ setup_local_feed_luma(Worker, Config, LocalFeedConfigFile) ->
 change_admin_creds(
     #document{value = #storage_config{helper = #helper{name = ?POSIX_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = luma_test_utils:new_posix_user_ctx(?UID1, ?ROOT_GID),
+    ChangedAdminCreds = new_posix_user_ctx(?UID1, ?ROOT_GID),
     {ChangedAdminCreds, StorageDoc#document{
         value = StorageConfig#storage_config{helper = ?POSIX_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
     #document{value = #storage_config{helper = #helper{name = ?CEPH_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = luma_test_utils:new_ceph_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
+    ChangedAdminCreds = new_ceph_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
     {ChangedAdminCreds, StorageDoc#document{
         value = StorageConfig#storage_config{helper = ?CEPH_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
     #document{value = #storage_config{helper = #helper{name = ?S3_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = luma_test_utils:new_s3_user_ctx(<<"ADMIN_ACCESS_KEY1">>, <<"ADMIN_SECRET_KEY">>),
+    ChangedAdminCreds = new_s3_user_ctx(<<"ADMIN_ACCESS_KEY1">>, <<"ADMIN_SECRET_KEY">>),
     {ChangedAdminCreds, StorageDoc#document{
         value = StorageConfig#storage_config{helper = ?S3_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
     #document{value = #storage_config{helper = #helper{name = ?SWIFT_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = luma_test_utils:new_swift_user_ctx(<<"ADMIN1">>, <<"ADMIN_PASSWD">>, <<"PROJECT_NAME">>),
+    ChangedAdminCreds = new_swift_user_ctx(<<"ADMIN1">>, <<"ADMIN_PASSWD">>, <<"PROJECT_NAME">>),
     {ChangedAdminCreds, StorageDoc#document{
         value = StorageConfig#storage_config{helper = ?SWIFT_HELPER(ChangedAdminCreds)}}};
 change_admin_creds(
     #document{value = #storage_config{helper = #helper{name = ?CEPHRADOS_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = luma_test_utils:new_cephrados_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
+    ChangedAdminCreds = new_cephrados_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
     {ChangedAdminCreds, StorageDoc#document{
         value = StorageConfig#storage_config{helper = ?CEPHRADOS_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
     #document{value = #storage_config{helper = #helper{name = ?GLUSTERFS_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = luma_test_utils:new_glusterfs_user_ctx(1, 0),
+    ChangedAdminCreds = new_glusterfs_user_ctx(1, 0),
     {ChangedAdminCreds, StorageDoc#document{
         value = StorageConfig#storage_config{helper = ?GLUSTERFS_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
     #document{value = #storage_config{helper = #helper{name = ?NULL_DEVICE_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = luma_test_utils:new_nulldevice_user_ctx(1, 0),
+    ChangedAdminCreds = new_nulldevice_user_ctx(1, 0),
     {ChangedAdminCreds, StorageDoc#document{
         value = StorageConfig#storage_config{helper = ?NULLDEVICE_HELPER(ChangedAdminCreds)}}
     };

@@ -19,10 +19,8 @@
 
 -define(STRIP_OK(Result), element(2, {ok, _} = Result)).
 
--define(TEST_BASE,
-    binary_to_atom(<<(atom_to_binary(?FUNCTION_NAME, latin1))/binary, "_base">>, latin1)).
 -define(RUN(Config, StorageConfigs, TestFun),
-    luma_test_utils:run_test_for_all_storage_configs(?TEST_BASE, TestFun, ?MODULE, Config, StorageConfigs)).
+    luma_test_utils:run_test_for_all_storage_configs(TestFun, ?MODULE, Config, StorageConfigs)).
 
 %%%===================================================================
 %%% Users and spaces macros
