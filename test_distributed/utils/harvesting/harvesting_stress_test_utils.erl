@@ -1,12 +1,14 @@
 %%%--------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This SUITE contains utils function used in stress tests of harvesting.
+%%% Helpers for harvesting stress test suites. Every space is mocked to be
+%%% harvested by a single harvester with a single index and the ids of files
+%%% submitted for harvesting are sent back to the test process.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(harvesting_stress_test_utils).
@@ -16,12 +18,12 @@
 -define(HARVESTER_ID, <<"harvester1">>).
 -define(INDEX_ID, <<"index1">>).
 
--define(HARVEST_METADATA(BatchSize), {harvest_metadata, BatchSize}).
+-define(HARVESTED_FILE_IDS(FileIds), {harvested_file_ids, FileIds}).
 
 -define(TIMEOUT, timer:minutes(15)).
 
 %% API
--export([mock_harvesting/1, mock_harvesting_stopped/1, harvesting_receive_loop/1,
+-export([mock_harvesting/1, mock_harvesting_stopped/1, await_files_harvested/1,
     revise_all_spaces/1, revise_space_harvesters/2, delete_harvesting_state/2, count_active_children/2]).
 
 %%%===================================================================
@@ -37,7 +39,7 @@ mock_harvesting(Node) ->
     ok = test_utils:mock_expect(Node, space_logic, harvest_metadata,
         fun(_SpaceId, _Destination, Batch, _MaxStreamSeq, _MaxSeq) ->
             FileIds = [maps:get(<<"fileId">>, Entry) || Entry <- Batch],
-            Self ! ?HARVEST_METADATA(FileIds),
+            Self ! ?HARVESTED_FILE_IDS(FileIds),
             {ok, #{}}
         end
     ).
@@ -48,23 +50,23 @@ mock_harvesting_stopped(Node) ->
     ok = test_utils:mock_expect(Node, harvester_logic, get_indices,
         fun(_SpaceId) -> {ok, []} end).
 
-harvesting_receive_loop(ExpectedFilesToHarvestCount) ->
-    harvesting_receive_loop(sets:new(), ExpectedFilesToHarvestCount).
+await_files_harvested(ExpectedFilesToHarvestCount) ->
+    await_files_harvested(sets:new(), ExpectedFilesToHarvestCount).
 
-harvesting_receive_loop(HarvestedFileIds, ExpectedFilesToHarvestCount) ->
+await_files_harvested(HarvestedFileIds, ExpectedFilesToHarvestCount) ->
     case sets:size(HarvestedFileIds) =:= ExpectedFilesToHarvestCount of
         true ->
             ok;
         false ->
             receive
-                ?HARVEST_METADATA(FileIds) ->
+                ?HARVESTED_FILE_IDS(FileIds) ->
                     NewHarvestedFileIds = sets:union(HarvestedFileIds, sets:from_list(FileIds)),
-                    harvesting_receive_loop(NewHarvestedFileIds, ExpectedFilesToHarvestCount)
+                    await_files_harvested(NewHarvestedFileIds, ExpectedFilesToHarvestCount)
             after
                 ?TIMEOUT ->
-                    ct:print("harvesting_receive_loop timeout with ~tp changes left.",
+                    ct:print("await_files_harvested timeout with ~tp changes left.",
                         [ExpectedFilesToHarvestCount - sets:size(HarvestedFileIds)]),
-                    ct:fail("harvesting_receive_loop timeout")
+                    ct:fail("await_files_harvested timeout")
             end
     end.
 
@@ -77,8 +79,8 @@ revise_all_spaces(Node) ->
 delete_harvesting_state(Worker, SpaceId) ->
     ok = rpc:call(Worker, harvesting_state, delete, [SpaceId]).
 
-count_active_children(Nodes, Ref) ->
+count_active_children(Nodes, SupervisorName) ->
     lists:foldl(fun(Node, Sum) ->
-        Result = rpc:call(Node, supervisor, count_children, [Ref]),
+        Result = rpc:call(Node, supervisor, count_children, [SupervisorName]),
         Sum + proplists:get_value(active, Result)
     end, 0, utils:ensure_list(Nodes)).

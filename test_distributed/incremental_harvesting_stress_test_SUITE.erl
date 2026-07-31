@@ -78,7 +78,7 @@ incremental_harvesting_test_base(Config) ->
     Stopwatch = stopwatch:start(),
     % start harvesting_stream
     harvesting_stress_test_utils:revise_all_spaces(Worker),
-    harvesting_stress_test_utils:harvesting_receive_loop(NewFilesSum),
+    harvesting_stress_test_utils:await_files_harvested(NewFilesSum),
 
     DiffSec = stopwatch:read_seconds(Stopwatch, float),
     AvgRate =  NewFilesSum /DiffSec,
