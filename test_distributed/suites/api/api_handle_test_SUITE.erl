@@ -53,6 +53,21 @@ all() -> [
 -define(SPACE_SELECTOR, space_krk_par).
 -define(METADATA_SCHEMA, <<"oai_dc">>).
 
+-define(EXAMPLE_METADATA1, <<
+    "<?xml version=\"1.0\" encoding=\"utf-8\"?>
+    <metadata>",
+    "    <dc:contributor>John Doe</dc:contributor>",
+    "</metadata>"
+>>).
+
+-define(EXAMPLE_METADATA2, <<
+    "<?xml version=\"1.0\" encoding=\"utf-8\"?>
+    <metadata>",
+    "    <dc:contributor>Jane Doe</dc:contributor>",
+    "    <dc:description>Lorem ipsum</dc:description>",
+    "</metadata>"
+>>).
+
 -define(ATTEMPTS, 30).
 
 
@@ -64,7 +79,7 @@ all() -> [
 create_handle_test(_Config) ->
     HServiceId = hd(ozt_handle_services:list_handle_services()),
     MemRef = api_test_memory:init(),
-    Metadata = opt_handles:example_metadata_variant(?METADATA_SCHEMA, 1),
+    Metadata = example_metadata_variant(?METADATA_SCHEMA, 1),
 
     ValidateResultFun = fun(_, {ok, #{
         <<"handleService">> := HServiceInDb,
@@ -75,7 +90,7 @@ create_handle_test(_Config) ->
         ExpectedHService = gri:serialize(#gri{
             type = op_handle_service, id = HServiceId, aspect = instance, scope = public
         }),
-        ExpectedMetadata = opt_handles:expected_metadata_after_publication(Metadata, Url),
+        ExpectedMetadata = expected_metadata_after_publication(Metadata, Url),
 
         ?assertMatch(
             {ExpectedHService, ?METADATA_SCHEMA, ExpectedMetadata},
@@ -155,7 +170,7 @@ get_public_handle_data_test(_Config) ->
     Provider = ?RAND_ELEMENT(?PROVIDERS),
     HServiceId = hd(ozt_handle_services:list_handle_services()),
     #object{shares = [ShareId]} = create_and_sync_shared_file_of_random_type(),
-    Metadata = opt_handles:example_metadata_variant(?METADATA_SCHEMA, 1),
+    Metadata = example_metadata_variant(?METADATA_SCHEMA, 1),
     HandleId = opt_handles:create(Provider, ?SPACE_OWNER_AND_HS_MEMBER, ShareId, HServiceId, ?METADATA_SCHEMA, Metadata),
     PublicHandleUrl = opt_handles:get_public_handle_url(Provider, ?SPACE_OWNER_AND_HS_MEMBER, HandleId),
 
@@ -168,7 +183,7 @@ get_public_handle_data_test(_Config) ->
                 type = op_handle_service, id = HServiceId, aspect = instance, scope = public
             }),
             <<"metadataSchema">> => ?METADATA_SCHEMA,
-            <<"metadataString">> => opt_handles:expected_metadata_after_publication(Metadata, PublicHandleUrl),
+            <<"metadataString">> => expected_metadata_after_publication(Metadata, PublicHandleUrl),
             <<"revision">> => 1,
             <<"url">> => PublicHandleUrl
         },
@@ -210,14 +225,14 @@ get_handle_prepare_gs_args_fun(HandleId) ->
 
 update_handle_test(_Config) ->
     MemRef = api_test_memory:init(),
-    MetadataAfterUpdate = opt_handles:example_metadata_variant(?METADATA_SCHEMA, 2),
+    MetadataAfterUpdate = example_metadata_variant(?METADATA_SCHEMA, 2),
 
     ValidateResultFun = fun(_, ok) ->
         HandleId = api_test_memory:get(MemRef, handle_id),
         PublicHandleUrl = opt_handles:get_public_handle_url(
             ?RAND_ELEMENT(?PROVIDERS), ?SPACE_OWNER_AND_HS_MEMBER, HandleId
         ),
-        ExpectedMetadata = opt_handles:expected_metadata_after_publication(MetadataAfterUpdate, PublicHandleUrl),
+        ExpectedMetadata = expected_metadata_after_publication(MetadataAfterUpdate, PublicHandleUrl),
         lists:foreach(fun(Provider) ->
             ?assertEqual(
                 ExpectedMetadata,
@@ -237,7 +252,7 @@ update_handle_test(_Config) ->
                 forbidden_not_in_space = [?NON_SPACE_MEMBER_AND_NON_HS_MEMBER]
             },
             setup_fun = build_update_delete_handle_setup_fun(
-                MemRef, opt_handles:example_metadata_variant(?METADATA_SCHEMA, 1)
+                MemRef, example_metadata_variant(?METADATA_SCHEMA, 1)
             ),
             scenario_templates = [
                 #scenario_template{
@@ -311,7 +326,7 @@ delete_handle_test(_Config) ->
                 forbidden_not_in_space = [?NON_SPACE_MEMBER_AND_NON_HS_MEMBER]
             },
             setup_fun = build_update_delete_handle_setup_fun(
-                MemRef, opt_handles:example_metadata_variant(?METADATA_SCHEMA, 1)
+                MemRef, example_metadata_variant(?METADATA_SCHEMA, 1)
             ),
             scenario_templates = [
                 #scenario_template{
@@ -359,6 +374,42 @@ create_and_sync_shared_file_of_random_type() ->
     file_tree_test_utils:create_and_sync_file_tree(
         ?SPACE_OWNER_AND_HS_MEMBER, ?SPACE_SELECTOR, FileSpec
     ).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec example_metadata_variant(od_handle:metadata_schema(), integer()) -> binary().
+example_metadata_variant(?METADATA_SCHEMA, 1) ->
+    ?EXAMPLE_METADATA1;
+example_metadata_variant(?METADATA_SCHEMA, 2) ->
+    ?EXAMPLE_METADATA2.
+
+
+%% @private
+%% @doc Publishing a handle makes Onezone inject the public handle url into the
+%% submitted metadata.
+-spec expected_metadata_after_publication(binary(), od_handle:public_handle()) -> binary().
+expected_metadata_after_publication(?EXAMPLE_METADATA1, PublicHandle) ->
+    <<
+        "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n",
+        "<metadata>\n",
+        "    <dc:identifier>", PublicHandle/binary, "</dc:identifier>",
+        "    <dc:contributor>John Doe</dc:contributor>",
+        "</metadata>"
+    >>;
+expected_metadata_after_publication(?EXAMPLE_METADATA2, PublicHandle) ->
+    <<
+        "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n",
+        "<metadata>\n",
+        "    <dc:identifier>", PublicHandle/binary, "</dc:identifier>",
+        "    <dc:contributor>Jane Doe</dc:contributor>",
+        "    <dc:description>Lorem ipsum</dc:description>",
+        "</metadata>"
+    >>.
 
 
 %%%===================================================================
