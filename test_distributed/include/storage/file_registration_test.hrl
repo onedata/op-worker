@@ -88,8 +88,8 @@
     fun(__Worker, __SessId, __FilePath, __Attempts) ->
         ?assertMatch(true, try
             __DirPath = filename:dirname(__FilePath),
-            {ok, __Children} = lfm_proxy:get_children(Worker, SessId, {path, __DirPath}, 0, 10000),
-            __ChildrenNames = [_N || {_G, _N} <- __Children],
+            {ok, __Children} = lfm_proxy:get_children(__Worker, __SessId, {path, __DirPath}, 0, 10000),
+            __ChildrenNames = [__ChildName || {_ChildGuid, __ChildName} <- __Children],
             lists:member(filename:basename(__FilePath), __ChildrenNames)
         catch
             _:_ ->
@@ -98,9 +98,15 @@
     end)(Worker, SessId, FilePath, Attempts)
 ).
 
--define(assertStat(Worker, SessId, FilePath, Attempts),
-    __Name = filename:basename(FilePath),
-    ?assertMatch({ok, #file_attr{name = __Name}}, lfm_proxy:stat(Worker, SessId, {path, FilePath}), Attempts)
+-define(assertStat(Worker, SessId, FilePath, Attempts), (
+    fun(__Worker, __SessId, __FilePath, __Attempts) ->
+        __ExpName = filename:basename(__FilePath),
+        ?assertMatch(
+            {ok, #file_attr{name = __RecvName}} when __RecvName =:= __ExpName,
+            lfm_proxy:stat(__Worker, __SessId, {path, __FilePath}),
+            __Attempts
+        )
+    end)(Worker, SessId, FilePath, Attempts)
 ).
 
 %% The file is (re)opened on every attempt. A handle opened on a provider before
@@ -125,8 +131,14 @@
 -define(assertXattrs(Worker, SessId, FilePath, Xattrs, Attempts),
     (fun(__Worker, __SessId, __FilePath, __Xattrs, __Attempts) ->
         ?assertEqual(#{}, maps:fold(fun(__K, __V, __Acc) ->
-            ?assertMatch({ok, #xattr{name = __K, value = __V}},
-                lfm_proxy:get_xattr(__Worker, __SessId, {path, __FilePath}, __K), __Attempts),
+            % the guard conditions must be joined with 'andalso', not a comma -
+            % a top level comma would split the macro arguments
+            ?assertMatch(
+                {ok, #xattr{name = __RecvKey, value = __RecvValue}} when
+                    __RecvKey =:= __K andalso __RecvValue =:= __V,
+                lfm_proxy:get_xattr(__Worker, __SessId, {path, __FilePath}, __K),
+                __Attempts
+            ),
             maps:without([__K], __Acc)
         end, __Xattrs, __Xattrs), __Attempts)
     end)(Worker, SessId, FilePath, Xattrs, Attempts)
@@ -139,19 +151,19 @@
 -define(assertJsonMetadata(Worker, SessId, FilePath, JSON, Attempts),
     (fun
         (__Worker, __SessId, __FilePath, __JSON, __Attempts) when map_size(__JSON) =:= 0 ->
-            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
+            __FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
                 ?ERR_POSIX(?ENODATA),
-                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, json, [], false),
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, __FileRef, json, [], false),
                 __Attempts
             );
         (__Worker, __SessId, __FilePath, __JSON, __Attempts) ->
-            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
+            __FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
-                {ok, __JSON},
-                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, json, [], false),
+                {ok, __RecvJson} when __RecvJson =:= __JSON,
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, __FileRef, json, [], false),
                 __Attempts
             )
     end)(Worker, SessId, FilePath, JSON, Attempts)
@@ -160,19 +172,19 @@
 -define(assertRdfMetadata(Worker, SessId, FilePath, RDF, Attempts),
     (fun
         (__Worker, __SessId, __FilePath, <<>>, __Attempts) ->
-            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
+            __FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
                 ?ERR_POSIX(?ENODATA),
-                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, rdf, [], false),
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, __FileRef, rdf, [], false),
                 __Attempts
             );
         (__Worker, __SessId, __FilePath, __RDF, __Attempts) ->
-            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
+            __FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
-                {ok, __RDF},
-                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, rdf, [], false),
+                {ok, __RecvRdf} when __RecvRdf =:= __RDF,
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, __FileRef, rdf, [], false),
                 __Attempts
             )
     end)(Worker, SessId, FilePath, RDF, Attempts)

@@ -1422,7 +1422,9 @@ should_not_import_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
         ImportingProviderCtx, SpaceFilePath, RecreatedContent
     ),
     %% the recreated file is LFM-created, the deleted-but-open one marker-guarded
-    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 0).
+    LfmCreatedCount = 1,
+    ReplicatedCount = 0,
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, LfmCreatedCount, ReplicatedCount).
 
 
 should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
@@ -1439,8 +1441,12 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
         suffixed_storage_file_id := SuffixedStorageFileId
     } = setup_recreated_file_with_suffix_on_storage(TestCaseCtx),
 
+    %% the recreated file is LFM-created, the deleted-but-open one marker-guarded
+    LfmCreatedCount = 1,
+    ReplicatedCount = 0,
+
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
-    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 0),
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, LfmCreatedCount, ReplicatedCount),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     ChangedContent = change_one_byte_of_storage_file(
@@ -1457,7 +1463,7 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
         NonImportingProviderCtx, RecreatedFileGuid, ChangedContent,
         ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
     ),
-    assert_suffixed_storage_file_update_detected(TestCaseCtx, _LfmCreated = 1, _Replicated = 0).
+    assert_suffixed_storage_file_update_detected(TestCaseCtx, LfmCreatedCount, ReplicatedCount).
 
 
 should_not_import_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
@@ -1488,7 +1494,9 @@ should_not_import_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
     assert_file_content_by_guid(ImportingProviderCtx, LocalFileGuid, LocalContent, ?STORAGE_IMPORT_ATTEMPTS),
     assert_file_content_by_guid(ImportingProviderCtx, RemoteFileGuid, RemoteContent, ?STORAGE_IMPORT_ATTEMPTS),
     %% the local file is LFM-created, the remote one lands on storage as a replica
-    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 1).
+    LfmCreatedCount = 1,
+    ReplicatedCount = 1,
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, LfmCreatedCount, ReplicatedCount).
 
 
 should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
@@ -1505,8 +1513,12 @@ should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
         suffixed_storage_file_id := SuffixedStorageFileId
     } = setup_replicated_file_with_suffix_on_storage(TestCaseCtx),
 
+    %% the local file is LFM-created, the remote one lands on storage as a replica
+    LfmCreatedCount = 1,
+    ReplicatedCount = 1,
+
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
-    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 1),
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, LfmCreatedCount, ReplicatedCount),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     ChangedContent = change_one_byte_of_storage_file(
@@ -1524,7 +1536,7 @@ should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
         NonImportingProviderCtx, RemoteFileGuid, ChangedContent,
         ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
     ),
-    assert_suffixed_storage_file_update_detected(TestCaseCtx, _LfmCreated = 1, _Replicated = 1).
+    assert_suffixed_storage_file_update_detected(TestCaseCtx, LfmCreatedCount, ReplicatedCount).
 
 
 %% --- config ---
