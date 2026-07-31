@@ -1,14 +1,15 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains implementation of generic mechanism for
-%%% tests of transfers.
-%%% It also contains implementation of test scenarios which are used to
-%%% compose test cases.
+%%% Generic mechanism for the (envup based) transfer test suites: sets up the
+%%% file tree declared in #transfer_test_spec{}, runs the declared scenario
+%%% and asserts the declared expectations. The scenarios themselves - the
+%%% building blocks test cases are composed of - are defined here as well and
+%%% referred to by name from the specs.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfers_test_mechanism).
@@ -35,29 +36,22 @@
 -export([
     % replication scenarios
     replicate_root_directory/2,
-    replicate_despite_protection_flags/2,
     replicate_each_file_separately/2,
 
     % replica eviction scenarios
     evict_root_directory/2,
-    evict_despite_protection_flags/2,
     evict_each_file_replica_separately/2,
 
     % migration scenarios
     migrate_root_directory/2,
-    migrate_despite_protection_flags/2,
     migrate_each_file_replica_separately/2
 ]).
 
--export([
-    move_transfer_ids_to_old_key/1,
-    get_transfer_ids/1
-]).
+-export([move_transfer_ids_to_old_key/1]).
 
-% functions exported to be called by rpc
+% functions executed by the worker pool via an MFA tuple
 -export([create_files_structure/11, create_file/7,
-    assert_file_visible/5, assert_file_distribution/6, prereplicate_file/6,
-    cast_files_prereplication/5, update_config/4]).
+    assert_file_visible/5, assert_file_distribution/6, prereplicate_file/6]).
 
 
 -define(UPDATE_TRANSFERS_KEY(__NodesTransferIdsAndFiles, __Config),
@@ -65,8 +59,6 @@
         __NodesTransferIdsAndFiles ++ __OldNodesTransferIdsAndFiles
     end, __Config, [])
 ).
-
--define(PROTECTION_FLAGS, ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)).
 
 %% Legacy (envup) suites identify users by name, onenv ones by oct_background placeholder.
 -type user_selector() :: binary() | oct_background:entity_selector().
@@ -138,30 +130,6 @@ replicate_root_directory(Config, #scenario{
     end, ReplicatingNodes),
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
--spec replicate_despite_protection_flags(test_config:config(), #scenario{}) ->
-    test_config:config().
-replicate_despite_protection_flags(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    {RootDirGuid, RootDirPath} = ?config(?ROOT_DIR_KEY, Config),
-    RootDirFileKey = file_key(RootDirGuid, RootDirPath, FileKeyType),
-
-    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        SessionId = ?DEFAULT_SESSION(TargetNode, Config),
-        lists:foreach(fun({DirGuid, _}) ->
-            ?assertMatch({ok, _}, opt_datasets:establish(TargetNode, SessionId, ?FILE_REF(DirGuid), ?PROTECTION_FLAGS))
-        end, ?config(?DIRS_KEY, Config)),
-
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, RootDirFileKey, Config, Type),
-        {TargetNode, Tid, RootDirGuid, RootDirPath}
-    end, ReplicatingNodes),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
 -spec replicate_each_file_separately(test_config:config(), #scenario{}) -> test_config:config().
 replicate_each_file_separately(Config, #scenario{
     user = User,
@@ -200,29 +168,6 @@ evict_root_directory(Config, #scenario{
         EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
         {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
         {EvictingNode, Tid, Guid, Path}
-    end, EvictingNodes),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
--spec evict_despite_protection_flags(test_config:config(), #scenario{}) -> test_config:config().
-evict_despite_protection_flags(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    evicting_nodes = EvictingNodes
-}) ->
-    {RootDirGuid, RootDirPath} = ?config(?ROOT_DIR_KEY, Config),
-    RootDirFileKey = file_key(RootDirGuid, RootDirPath, FileKeyType),
-
-    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
-        SessionId = ?DEFAULT_SESSION(EvictingNode, Config),
-        lists:foreach(fun({DirGuid, _}) ->
-            ?assertMatch({ok, _}, opt_datasets:establish(EvictingNode, SessionId, ?FILE_REF(DirGuid), ?PROTECTION_FLAGS))
-        end, ?config(?DIRS_KEY, Config)),
-
-        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, RootDirFileKey, Config, Type),
-        {EvictingNode, Tid, RootDirGuid, RootDirPath}
     end, EvictingNodes),
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
@@ -269,35 +214,6 @@ migrate_root_directory(Config, #scenario{
             {ok, Tid} = schedule_replica_migration(ScheduleNode, EvictingProviderId,
                 User, FileKey, Config, Type, ReplicatingProviderId),
             {EvictingNode, Tid, Guid, Path}
-        end, EvictingNodes)
-    end, ReplicatingNodes),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
--spec migrate_despite_protection_flags(test_config:config(), #scenario{}) ->
-    test_config:config().
-migrate_despite_protection_flags(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes,
-    evicting_nodes = EvictingNodes
-}) ->
-    {RootDirGuid, RootDirPath} = ?config(?ROOT_DIR_KEY, Config),
-    RootDirFileKey = file_key(RootDirGuid, RootDirPath, FileKeyType),
-
-    NodesTransferIdsAndFiles = lists:flatmap(fun(ReplicatingNode) ->
-        SessionId = ?DEFAULT_SESSION(ReplicatingNode, Config),
-        lists:foreach(fun({DirGuid, _}) ->
-            ?assertMatch({ok, _}, opt_datasets:establish(ReplicatingNode, SessionId, ?FILE_REF(DirGuid), ?PROTECTION_FLAGS))
-        end, ?config(?DIRS_KEY, Config)),
-
-        lists:map(fun(EvictingNode) ->
-            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
-            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            {ok, Tid} = schedule_replica_migration(ScheduleNode, EvictingProviderId,
-                User, RootDirFileKey, Config, Type, ReplicatingProviderId),
-            {EvictingNode, Tid, RootDirGuid, RootDirPath}
         end, EvictingNodes)
     end, ReplicatingNodes),
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
@@ -922,10 +838,6 @@ map_config_key(Key0, NewKey, Config) ->
             (Other) -> Other
         end
     end, 1, Config).
-
--spec get_transfer_ids(test_config:config()) -> [transfer:id()].
-get_transfer_ids(Config) ->
-    [Tid || {_, Tid, _, _} <- ?config(?TRANSFERS_KEY, Config, [])].
 
 -spec update_config(Key :: atom(), fun((term()) -> term()), test_config:config(), DefaultValue :: term()) ->
     test_config:config().
