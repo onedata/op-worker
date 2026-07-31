@@ -87,7 +87,7 @@ all() ->
 
 set_json_metadata(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
     JSON = #{<<"color">> => <<"blue">>},
 
@@ -124,7 +124,7 @@ set_json_metadata(Config) ->
 
 modify_json_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
 
     FileName = ?FILE_NAME,
     JSON = #{<<"color">> => <<"blue">>},
@@ -163,7 +163,7 @@ modify_json_metadata(Config) ->
 
 delete_json_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
 
     FileName = ?FILE_NAME,
     JSON = #{<<"color">> => <<"blue">>},
@@ -199,7 +199,7 @@ delete_json_metadata(Config) ->
 
 delete_file_with_json_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
 
     FileName = ?FILE_NAME,
     JSON = #{<<"color">> => <<"blue">>},
@@ -230,7 +230,7 @@ delete_file_with_json_metadata(Config) ->
 
 modify_json_many_times(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     Modifications = 10000,
     FileName = ?FILE_NAME,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
@@ -260,7 +260,7 @@ modify_json_many_times(Config) ->
 
 set_rdf_metadata(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
     RDF = ?DUMMY_RDF,
 
@@ -297,7 +297,7 @@ set_rdf_metadata(Config) ->
 
 modify_rdf_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
     RDF = ?DUMMY_RDF,
 
@@ -335,7 +335,7 @@ modify_rdf_metadata(Config) ->
 
 delete_rdf_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
 
     FileName = ?FILE_NAME,
     RDF = ?DUMMY_RDF,
@@ -371,7 +371,7 @@ delete_rdf_metadata(Config) ->
 
 delete_file_with_rdf_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
 
     FileName = ?FILE_NAME,
     RDF = ?DUMMY_RDF,
@@ -402,7 +402,7 @@ delete_file_with_rdf_metadata(Config) ->
 
 modify_rdf_many_times(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     Modifications = 10000,
     FileName = ?FILE_NAME,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
@@ -430,7 +430,7 @@ modify_rdf_many_times(Config) ->
 
 set_xattr_metadata(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
     XattrName = <<"name">>,
     XattrValue = <<"value">>,
@@ -514,7 +514,7 @@ cdmi_xattr_should_not_be_harvested(Config) ->
 
 modify_xattr_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
     XattrName = <<"name">>,
     XattrValue = <<"value">>,
@@ -562,7 +562,7 @@ modify_xattr_metadata(Config) ->
 
 delete_xattr_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
     XattrName = <<"name">>,
     XattrValue = <<"value">>,
@@ -601,7 +601,7 @@ delete_xattr_metadata(Config) ->
 
 delete_file_with_xattr_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
     XattrName = <<"name">>,
     XattrValue = <<"value">>,
@@ -635,7 +635,7 @@ delete_file_with_xattr_metadata(Config) ->
 
 modify_xattr_many_times(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     Modifications = 10000,
     FileName = ?FILE_NAME,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
@@ -665,7 +665,7 @@ modify_xattr_many_times(Config) ->
 
 modify_metadata_and_rename_file(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
 
     FileName = ?FILE_NAME,
     FileName2 = ?FILE_NAME,

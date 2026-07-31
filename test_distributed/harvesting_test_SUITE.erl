@@ -73,6 +73,9 @@ all() ->
         delete_entry_failure
     ]).
 
+% number of attempts to await a file created by the other provider
+-define(ATTEMPTS, 30).
+
 %%%====================================================================
 %%% Test function
 %%%====================================================================
@@ -120,7 +123,7 @@ harvest_space_doc_and_do_not_harvest_trash_doc(Config) ->
 
 create_file(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
@@ -152,7 +155,7 @@ create_file(Config) ->
 
 create_file_with_dataset(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
@@ -244,7 +247,7 @@ create_file_with_dataset(Config) ->
 
 create_file_and_hardlink(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
     HardlinkName = <<"hardlink">>,
 
@@ -297,7 +300,7 @@ create_file_and_hardlink(Config) ->
 
 create_dir_and_symlink(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     DirName = ?DIR_NAME,
     SymlinkName = <<"symlink">>,
 
@@ -352,7 +355,7 @@ create_dir_and_symlink(Config) ->
 
 rename_file(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
     FileName2 = ?FILE_NAME,
 
@@ -385,7 +388,7 @@ rename_file(Config) ->
 
 delete_file(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
@@ -419,7 +422,7 @@ delete_file(Config) ->
 changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_space(Config) ->
     % ?HARVESTER1 and ?HARVESTER2 are subscribed for ?SPACE_ID2
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
     FileName = ?FILE_NAME,
 
     JSON1 = #{<<"color">> => <<"blue">>},
@@ -448,7 +451,7 @@ changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_spa
 changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) ->
     % ?HARVESTER1 is subscribed for ?SPACE_ID3 and ?SPACE_ID4
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
 
     FileName = ?FILE_NAME,
     JSON1 = #{<<"color">> => <<"blue">>},
@@ -492,8 +495,8 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
 each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
     % ?HARVESTER3 is subscribed for ?SPACE_ID5 which is supported by both providers
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(WorkerP1),
-    SessId2 = ?SESS_ID(WorkerP2),
+    SessId = ?SESS_ID(WorkerP1, Config),
+    SessId2 = ?SESS_ID(WorkerP2, Config),
     ProviderId1 = ?PROVIDER_ID(WorkerP1),
     ProviderId2 = ?PROVIDER_ID(WorkerP2),
 
@@ -563,8 +566,8 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
 each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
     % ?HARVESTER3 is subscribed for ?SPACE_ID5 which is supported by both providers
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(WorkerP1),
-    SessId2 = ?SESS_ID(WorkerP2),
+    SessId = ?SESS_ID(WorkerP1, Config),
+    SessId2 = ?SESS_ID(WorkerP2, Config),
     ProviderId1 = ?PROVIDER_ID(WorkerP1),
     ProviderId2 = ?PROVIDER_ID(WorkerP2),
 
@@ -656,7 +659,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
 
 submit_entry_failure(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
 
     FileName = ?FILE_NAME,
     FileName2 = ?FILE_NAME,
@@ -754,7 +757,7 @@ submit_entry_failure(Config) ->
 
 delete_entry_failure(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
+    SessId = ?SESS_ID(Worker, Config),
 
     FileName = ?FILE_NAME,
     JSON1 = #{<<"color">> => <<"blue">>},

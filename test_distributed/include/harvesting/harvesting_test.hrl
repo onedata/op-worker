@@ -67,7 +67,7 @@
 -define(INDEX31, <<"index31">>).
 
 -define(USER_ID, <<"user1">>).
--define(SESS_ID(Worker),
+-define(SESS_ID(Worker, Config),
     ?config({session_id, {?USER_ID, ?GET_DOMAIN(Worker)}}, Config)).
 
 -define(PROVIDER_ID(Node), rpc:call(Node, oneprovider, get_id, [])).
@@ -83,14 +83,14 @@
 -define(DUMMY_RDF(Content),
     <<(?DUMMY_RDF)/binary, "_", (str_utils:to_binary(Content))/binary>>).
 
--define(ATTEMPTS, 30).
-
 %%%===================================================================
 %%% Metadata batches submitted by harvesting streams
 %%%
 %%% The message is sent to the test process by the space_logic mock
 %%% installed in harvesting_test_utils:init_per_testcase/2.
 %%%===================================================================
+
+-define(HARVEST_METADATA_TIMEOUT_SECONDS, 30).
 
 -define(HARVEST_METADATA, harvest_metadata).
 -define(HARVEST_METADATA(SpaceId, Destination, Batch, ExpProviderId),
@@ -99,17 +99,17 @@
 %% NOTE!!!
 %% This assert assumes that list ExpBatch is sorted in the order of increasing sequences
 -define(assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId),
-    ?assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, ?ATTEMPTS)).
--define(assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout),
+    ?assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, ?HARVEST_METADATA_TIMEOUT_SECONDS)).
+-define(assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, TimeoutSeconds),
     (
         (fun
-            AssertFun(__SpaceId, __Destination, [], __Unexpected, __ProviderId, __Timeout) ->
+            AssertFun(__SpaceId, __Destination, [], __Unexpected, __ProviderId, __TimeoutSeconds) ->
                 % all expected changes has been received
                 % resend these entries that were unexpected
                 self() ! ?HARVEST_METADATA(__SpaceId, __Destination, __Unexpected, __ProviderId),
                 ok;
-            AssertFun(__SpaceId, __Destination, __Batch, __Unexpected, __ProviderId, __Timeout) ->
-                __TimeoutInMillis = timer:seconds(__Timeout),
+            AssertFun(__SpaceId, __Destination, __Batch, __Unexpected, __ProviderId, __TimeoutSeconds) ->
+                __TimeoutInMillis = timer:seconds(__TimeoutSeconds),
                 receive
                     ?HARVEST_METADATA(
                         __RecvSpaceId,
@@ -123,26 +123,26 @@
                     ->
                         {__ExpBatchLeft, __NewUnexpected} = harvesting_test_utils:subtract_batches(__Batch, __ReceivedBatch),
                         AssertFun(__SpaceId, __Destination, __ExpBatchLeft, __Unexpected ++ __NewUnexpected,
-                            __ProviderId, __Timeout)
+                            __ProviderId, __TimeoutSeconds)
                 after
                     __TimeoutInMillis ->
                         __Args = [{module, ?MODULE},
                             {line, ?LINE},
-                            {expected, {__SpaceId, __Destination, __Batch, __ProviderId, __Timeout}},
+                            {expected, {__SpaceId, __Destination, __Batch, __ProviderId, __TimeoutSeconds}},
                             {value, timeout}],
                         ct:print("assertReceivedHarvestMetadata_failed: ~tp~n", [__Args]),
                         erlang:error({assertReceivedHarvestMetadata_failed, __Args})
                 end
-        end)(ExpSpaceId, ExpDestination, ExpBatch, [], ExpProviderId, Timeout)
+        end)(ExpSpaceId, ExpDestination, ExpBatch, [], ExpProviderId, TimeoutSeconds)
     )).
 
 -define(assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId),
-    ?assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, ?ATTEMPTS)).
--define(assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout),
+    ?assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, ?HARVEST_METADATA_TIMEOUT_SECONDS)).
+-define(assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, TimeoutSeconds),
     (
-        (fun AssertFun(__SpaceId, __Destination, __Batch, __Unexpected, __ProviderId, __Timeout) ->
+        (fun AssertFun(__SpaceId, __Destination, __Batch, __Unexpected, __ProviderId, __TimeoutSeconds) ->
             __Stopwatch = stopwatch:start(),
-            __TimeoutInMillis = timer:seconds(__Timeout),
+            __TimeoutInMillis = timer:seconds(__TimeoutSeconds),
             receive
                 __HM = ?HARVEST_METADATA(
                     __RecvSpaceId,
@@ -159,7 +159,7 @@
                     case length(__Batch2) < length(__Batch) of
                         false ->
                             AssertFun(__SpaceId, __Destination, __Batch, __Unexpected ++ __NewUnexpected,
-                                __ProviderId, max(__Timeout - __ElapsedTime, 0));
+                                __ProviderId, max(__TimeoutSeconds - __ElapsedTime, 0));
                         true ->
                             % __Batch2 is smaller than __Batch which means that one of changes, which was
                             % expected not to occur, actually occurred
@@ -177,7 +177,7 @@
                     self() ! ?HARVEST_METADATA(__SpaceId, __Destination, __Unexpected, __ProviderId),
                     ok
             end
-        end)(ExpSpaceId, ExpDestination, ExpBatch, [], ExpProviderId, Timeout)
+        end)(ExpSpaceId, ExpDestination, ExpBatch, [], ExpProviderId, TimeoutSeconds)
     )).
 
 -endif.
