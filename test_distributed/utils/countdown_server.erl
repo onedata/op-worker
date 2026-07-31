@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
@@ -71,7 +71,7 @@
 %%% API
 %%%===================================================================
 
--spec(start_link(pid(), node()) -> {ok, Pid :: pid()} | {error, Reason :: term()}).
+-spec start_link(pid(), node()) -> {ok, pid()} | {error, term()}.
 start_link(Parent, Node) ->
     gen_server:start_link({local, ?COUNTDOWN_SERVER(Node)}, ?MODULE, [Parent, Node], []).
 
@@ -132,7 +132,7 @@ decrease(Pid, CounterId, Data) when is_pid(Pid) ->
 %% CounterId and returns saved Data.
 %% @end
 %%-------------------------------------------------------------------
--spec await(node(), counter_id(), non_neg_integer()) -> data().
+-spec await(node(), counter_id(), time:millis()) -> data().
 await(Node, CounterId, Timeout) ->
     #{Node := #{CounterId := Data}} = await_all(Node, CounterId, Timeout),
     Data.
@@ -143,13 +143,13 @@ await(Node, CounterId, Timeout) ->
 %% map. Returns map of counters' data.
 %% @end
 %%-------------------------------------------------------------------
--spec await_all(node_counters(), non_neg_integer()) -> node_counters_data().
+-spec await_all(node_counters(), time:millis()) -> node_counters_data().
 await_all(NodesToCounters, Timeout) ->
     NumberOfCounters = count_counters(NodesToCounters),
     {CountersData, #{}} = await_many(NodesToCounters, Timeout, NumberOfCounters),
     CountersData.
 
--spec await_all(node(), counter_id() | [counter_id()], non_neg_integer()) -> node_counters_data().
+-spec await_all(node(), counter_id() | [counter_id()], time:millis()) -> node_counters_data().
 await_all(Node, CounterIds, Timeout) when is_list(CounterIds) ->
     await_all(#{Node => CounterIds}, Timeout);
 await_all(Node, CounterId, Timeout) ->
@@ -163,12 +163,12 @@ await_all(Node, CounterId, Timeout) ->
 %% map of not finished counters.
 %% @end
 %%-------------------------------------------------------------------
--spec await_many(node_counters(), non_neg_integer(), non_neg_integer()) ->
+-spec await_many(node_counters(), time:millis(), non_neg_integer()) ->
     {node_counters_data(), node_counters()}.
 await_many(NodesToCounters, Timeout, Count) ->
     await_many_internal(NodesToCounters, Timeout, Count, #{}, []).
 
--spec await_many(node(), counter_id() | [counter_id()], non_neg_integer(), non_neg_integer()) ->
+-spec await_many(node(), counter_id() | [counter_id()], time:millis(), non_neg_integer()) ->
     {node_counters_data(), node_counters()}.
 await_many(Node, CounterIds, Timeout, Count) when is_list(CounterIds) ->
     await_many(#{Node => CounterIds}, Timeout, Count);
@@ -181,11 +181,11 @@ await_many(Node, CounterId, Timeout, Count) ->
 %% Ensures that none of counters present in NodesToCounters are finished.
 %% @end
 %%-------------------------------------------------------------------
--spec not_received_any(node_counters(), non_neg_integer()) -> ok.
+-spec not_received_any(node_counters(), time:millis()) -> ok.
 not_received_any(NodesToCounters, Timeout) ->
     not_received_any_internal(NodesToCounters, Timeout, []).
 
--spec not_received_any(node(), counter_id() | [counter_id()], non_neg_integer()) -> ok.
+-spec not_received_any(node(), counter_id() | [counter_id()], time:millis()) -> ok.
 not_received_any(Node, CounterIds, Timeout) when is_list(CounterIds) ->
     not_received_any(#{Node => CounterIds}, Timeout);
 not_received_any(Node, CounterId, Timeout) ->
@@ -281,9 +281,9 @@ handle_info(Info, State) ->
 terminate(_Reason, _State) ->
     ok.
 
--spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
+-spec code_change(OldVsn :: term() | {down, term()}, State :: #state{},
     Extra :: term()) ->
-    {ok, NewState :: #state{}} | {error, Reason :: term()}).
+    {ok, NewState :: #state{}} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
