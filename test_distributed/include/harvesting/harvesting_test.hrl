@@ -112,11 +112,15 @@
                 __TimeoutInMillis = timer:seconds(__Timeout),
                 receive
                     ?HARVEST_METADATA(
-                        __SpaceId,
-                        __Destination,
+                        __RecvSpaceId,
+                        __RecvDestination,
                         __ReceivedBatch,
-                        __ProviderId
-                    ) ->
+                        __RecvProviderId
+                    ) when
+                        __RecvSpaceId =:= __SpaceId,
+                        __RecvDestination =:= __Destination,
+                        __RecvProviderId =:= __ProviderId
+                    ->
                         {__ExpBatchLeft, __NewUnexpected} = harvesting_test_utils:subtract_batches(__Batch, __ReceivedBatch),
                         AssertFun(__SpaceId, __Destination, __ExpBatchLeft, __Unexpected ++ __NewUnexpected,
                             __ProviderId, __Timeout)
@@ -137,21 +141,25 @@
 -define(assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout),
     (
         (fun AssertFun(__SpaceId, __Destination, __Batch, __Unexpected, __ProviderId, __Timeout) ->
-            Stopwatch = stopwatch:start(),
+            __Stopwatch = stopwatch:start(),
             __TimeoutInMillis = timer:seconds(__Timeout),
             receive
                 __HM = ?HARVEST_METADATA(
-                    __SpaceId,
-                    __Destination,
+                    __RecvSpaceId,
+                    __RecvDestination,
                     __ReceivedBatch,
-                    __ProviderId
-                ) ->
-                    ElapsedTime = stopwatch:read_seconds(Stopwatch),
+                    __RecvProviderId
+                ) when
+                    __RecvSpaceId =:= __SpaceId,
+                    __RecvDestination =:= __Destination,
+                    __RecvProviderId =:= __ProviderId
+                ->
+                    __ElapsedTime = stopwatch:read_seconds(__Stopwatch),
                     {__Batch2, __NewUnexpected} = harvesting_test_utils:subtract_batches(__Batch, __ReceivedBatch),
                     case length(__Batch2) < length(__Batch) of
                         false ->
                             AssertFun(__SpaceId, __Destination, __Batch, __Unexpected ++ __NewUnexpected,
-                                __ProviderId, max(__Timeout - ElapsedTime, 0));
+                                __ProviderId, max(__Timeout - __ElapsedTime, 0));
                         true ->
                             % __Batch2 is smaller than __Batch which means that one of changes, which was
                             % expected not to occur, actually occurred
