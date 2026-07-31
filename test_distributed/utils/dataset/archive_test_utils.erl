@@ -132,6 +132,11 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
 %%% Blocks the product's archive verification traverse right before it makes
 %%% the archive immutable, so that a test can modify the archived files and
 %%% only then let the traverse proceed.
+%%%
+%%% As the expectation fun below is evaluated on the provider node, this module
+%%% must be added to ?LOAD_MODULES of any suite gating the traverse - otherwise
+%%% the fun cannot be applied there and the block is never reached, which shows
+%%% up as await_gated_archive_verification/2 timing out.
 %%%===================================================================
 
 

@@ -425,7 +425,10 @@ finalize_archive_creation(FunctionName) ->
 
 init_per_suite(Config) ->
     opt:init_per_suite(
-        [{?LOAD_MODULES, [?MODULE, archive_verification_test_utils, dir_stats_test_utils, archive_sequential_test_base]} | Config],
+        [{?LOAD_MODULES, [
+            ?MODULE, archive_test_utils, archive_verification_test_utils,
+            dir_stats_test_utils, archive_sequential_test_base
+        ]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op-archive",
             envs = [{op_worker, op_worker, [
