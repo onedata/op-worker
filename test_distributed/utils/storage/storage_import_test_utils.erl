@@ -176,7 +176,6 @@
     clean_up_after_previous_run/2,
     mock_space_dir_statbuf_on_flat_storage/1, unmock_space_dir_statbuf_on_flat_storage/1,
     create_storage/3,
-    advance_mocked_space_dir_mtime/3,
     init_testcase/3, init_testcase/4,
     setup_and_verify_initial_import/3, setup_and_verify_initial_import/4,
     create_file_tree_on_storage/3,
@@ -669,6 +668,7 @@ mock_space_dir_statbuf_on_flat_storage(ImportingProviderSelector) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Moves the mocked flat-storage space root dir mtime (see
 %% mock_space_dir_statbuf_on_flat_storage/1) forward by the given number of

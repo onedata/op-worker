@@ -30,7 +30,6 @@
 -include_lib("inets/include/httpd.hrl").
 
 -record(http_test_server, {
-    httpd_pid :: pid(),
     doc_root :: file:filename_all(),
     endpoint :: binary()
 }).
@@ -44,7 +43,7 @@
 -define(INJECTED_ERRORS_KEY, {?MODULE, injected_errors}).
 
 %% API
--export([start/1, stop/2, stop_all/1]).
+-export([start/1, stop_all/1]).
 -export([add_file/4, remove_file/3, set_file_error/4]).
 -export([endpoint/1]).
 %% inets httpd callback module (runs on the op_worker node, registered first in the
@@ -52,7 +51,7 @@
 -export([do/1]).
 %% on-node routines (executed on op_worker via rpc)
 -export([
-    start_on_node/0, stop_on_node/2, stop_all_on_node/0,
+    start_on_node/0, stop_all_on_node/0,
     add_file_on_node/3, remove_file_on_node/2, set_file_error_on_node/2
 ]).
 
@@ -64,17 +63,11 @@
 
 -spec start(oct_background:node_selector()) -> handle().
 start(ProviderSelector) ->
-    {HttpdPid, DocRoot, Port} = opw_test_rpc:call(ProviderSelector, ?MODULE, start_on_node, []),
+    {DocRoot, Port} = opw_test_rpc:call(ProviderSelector, ?MODULE, start_on_node, []),
     #http_test_server{
-        httpd_pid = HttpdPid,
         doc_root = DocRoot,
         endpoint = <<"http://127.0.0.1:", (integer_to_binary(Port))/binary>>
     }.
-
-
--spec stop(oct_background:node_selector(), handle()) -> ok.
-stop(ProviderSelector, #http_test_server{httpd_pid = HttpdPid, doc_root = DocRoot}) ->
-    ok = opw_test_rpc:call(ProviderSelector, ?MODULE, stop_on_node, [HttpdPid, DocRoot]).
 
 
 %% @doc Stops all test http servers lingering on the node (e.g. left over by
@@ -112,7 +105,7 @@ endpoint(#http_test_server{endpoint = Endpoint}) ->
 
 
 %% @doc Runs on the op_worker node.
--spec start_on_node() -> {pid(), file:filename_all(), inet:port_number()}.
+-spec start_on_node() -> {file:filename_all(), inet:port_number()}.
 start_on_node() ->
     {ok, _} = application:ensure_all_started(inets),
     UniqueId = integer_to_list(erlang:unique_integer([positive, monotonic])),
@@ -137,9 +130,10 @@ start_on_node() ->
         {mime_type, "application/octet-stream"}
     ]),
     Port = proplists:get_value(port, httpd:info(HttpdPid, [port])),
-    {HttpdPid, DocRoot, Port}.
+    {DocRoot, Port}.
 
 
+%% @private
 %% @doc Runs on the op_worker node.
 -spec stop_on_node(pid(), file:filename_all()) -> ok.
 stop_on_node(HttpdPid, DocRoot) ->

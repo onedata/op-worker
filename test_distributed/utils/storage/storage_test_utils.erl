@@ -32,9 +32,7 @@
 
     read_file/2, read_file_info/2, list_dir/2,
     space_path/2, file_path/3,
-    get_space_mount_point/2, get_supporting_storage_id/2,
-    storage_mount_point/2, get_helper/2,
-    is_supporting_storage_posix_compatible/2, is_posix_compatible_storage/2,
+    get_supporting_storage_id/2, storage_mount_point/2,
 
     ensure_file_created_on_storage/2,
     ensure_dir_created_on_storage/2,
@@ -130,6 +128,7 @@ file_path(Worker, SpaceId, FilePath) ->
     filename:join([SpaceMnt, FilePath]).
 
 
+%% @private
 -spec get_space_mount_point(node(), od_space:id()) -> binary().
 get_space_mount_point(Worker, SpaceId) ->
     {ok, StorageId} = get_supporting_storage_id(Worker, SpaceId),
@@ -146,6 +145,7 @@ get_supporting_storage_id(Worker, SpaceId) ->
     rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId]).
 
 
+%% @private
 -spec get_helper(node(), storage:id()) -> helpers:helper().
 get_helper(Worker, StorageId) ->
     rpc:call(Worker, storage, get_helper, [StorageId]).
@@ -158,12 +158,7 @@ storage_mount_point(Worker, StorageId) ->
     maps:get(<<"mountPoint">>, HelperArgs).
 
 
--spec is_supporting_storage_posix_compatible(node(), od_space:id()) -> boolean().
-is_supporting_storage_posix_compatible(Worker, SpaceId) ->
-    {ok, StorageId} = get_supporting_storage_id(Worker, SpaceId),
-    is_posix_compatible_storage(Worker, StorageId).
-
-
+%% @private
 -spec is_posix_compatible_storage(node(), storage:id()) -> boolean().
 is_posix_compatible_storage(Worker, StorageId) ->
     Helper = get_helper(Worker, StorageId),
