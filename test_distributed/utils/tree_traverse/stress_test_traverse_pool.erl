@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2021-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -43,7 +43,7 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, TaskId) ->
     case tree_traverse:get_traverse_info(Job) of
         #{mode := precalculate_dir} ->
             {Doc, _} = file_ctx:get_file_doc(FileCtx),
-            Callback = fun(Args) -> process_file(Args) end,
+            Callback = fun process_file/1,
             {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, set_ev_options(Job)),
             case CalculationInfo of
                 {0, _} ->
@@ -58,7 +58,7 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, TaskId) ->
     end.
 
 do_slave_job(Job = #tree_traverse_slave{file_ctx = FileCtx}, _TaskId) ->
-    Callback = fun(Args) -> process_file(Args) end,
+    Callback = fun process_file/1,
     {Doc, _} = file_ctx:get_file_doc(FileCtx),
     {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, set_ev_options(Job)),
     case CalculationInfo of
@@ -84,7 +84,7 @@ init_pool(Config, Size) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [stress_test_traverse_pool, 5, 30, 10, [?MODULE]])),
 
-    CachePid = spawn(Worker, fun() -> stress_test_traverse_pool:cache_proc(#{
+    CachePid = spawn(Worker, fun() -> cache_proc(#{
         check_frequency => timer:minutes(1),
         size => Size
     }) end),
@@ -111,7 +111,7 @@ test_step(Config, Options, MultipathEV) ->
         undefined ->
             case files_stress_test_base:many_files_creation_tree_test_base(Config, Options) of
                 [stop | PhaseAns] ->
-                    stress_test_traverse_pool:start_traverse(Config,
+                    start_traverse(Config,
                         #{mode => undefined, multipath_ev => MultipathEV}, <<"1">>),
                     put(stress_phase, traverse),
                     PhaseAns;
@@ -119,10 +119,10 @@ test_step(Config, Options, MultipathEV) ->
                     Other
             end;
         traverse ->
-            {Stop, Ans} = stress_test_traverse_pool:process_task_description(Config, standard, <<"1">>),
+            {Stop, Ans} = process_task_description(Config, standard, <<"1">>),
             case Stop of
                 true ->
-                    stress_test_traverse_pool:start_traverse(Config,
+                    start_traverse(Config,
                         #{mode => precalculate_dir, multipath_ev => MultipathEV}, <<"2">>),
                     put(stress_phase, traverse2),
                     Ans;
@@ -130,10 +130,10 @@ test_step(Config, Options, MultipathEV) ->
                     Ans
             end;
         traverse2 ->
-            {Stop, Ans} = stress_test_traverse_pool:process_task_description(Config, precalculate_dir, <<"2">>),
+            {Stop, Ans} = process_task_description(Config, precalculate_dir, <<"2">>),
             case Stop of
                 true ->
-                    stress_test_traverse_pool:start_traverse(Config,
+                    start_traverse(Config,
                         #{mode => undefined, critical_section_level => parent, multipath_ev => MultipathEV}, <<"3">>),
                     put(stress_phase, traverse3),
                     Ans;
@@ -141,7 +141,7 @@ test_step(Config, Options, MultipathEV) ->
                     Ans
             end;
         traverse3 ->
-            {Stop, Ans} = stress_test_traverse_pool:process_task_description(Config, critical_section, <<"3">>),
+            {Stop, Ans} = process_task_description(Config, critical_section, <<"3">>),
             case Stop of
                 true -> [stop | Ans];
                 _ -> Ans
@@ -222,10 +222,7 @@ set_ev_options(Job) ->
 
     case maps:get(multipath_ev, TraverseInfo, false) of
         true ->
-            MergeCallback = fun(NewValue, ValueAcc, NewCalculationInfo, CalculationInfoAcc) ->
-                merge_paths_info(NewValue, ValueAcc, NewCalculationInfo, CalculationInfoAcc)
-            end,
-            Options#{use_referenced_key => true, merge_callback => MergeCallback};
+            Options#{use_referenced_key => true, merge_callback => fun merge_paths_info/4};
         false ->
             Options
     end.
