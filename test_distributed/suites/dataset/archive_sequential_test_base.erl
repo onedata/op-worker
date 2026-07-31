@@ -85,7 +85,7 @@ archive_dataset_tree_test_base(FileStructure, ArchiveLayout) ->
         opt_archives:archive_dataset(Node, SessId, DatasetId, #archive_config{layout = ArchiveLayout}, <<>>),
 
     % created files are empty therefore expected size is 0
-    archive_verification_test_utils:assert_archive_is_preserved(Node, SessId, ArchiveId, DatasetId, RootGuid, length(FileGuids), 0, ?LARGE_ATTEMPTS).
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessId, ArchiveId, DatasetId, RootGuid, length(FileGuids), 0, ?LARGE_ATTEMPTS).
 
 
 archive_simple_dataset_test(Guid, DatasetId, ArchiveId) ->
@@ -94,15 +94,15 @@ archive_simple_dataset_test(Guid, DatasetId, ArchiveId) ->
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
         UserId = oct_background:get_user_id(?USER1),
-        archive_verification_test_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?LARGE_ATTEMPTS),
-        archive_verification_test_utils:assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, false, ?SMALL_ATTEMPTS),
+        archive_check_test_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?LARGE_ATTEMPTS),
+        archive_check_test_utils:assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, false, ?SMALL_ATTEMPTS),
         {ok, #file_attr{type = Type, size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
         {FileCount, ExpSize} = case Type of
             ?DIRECTORY_TYPE -> {0, 0};
             ?SYMLINK_TYPE -> {1, 0};
             _ -> {1, Size}
         end,
-        archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize, ?LARGE_ATTEMPTS)
+        archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize, ?LARGE_ATTEMPTS)
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
 

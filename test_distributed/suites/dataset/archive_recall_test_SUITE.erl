@@ -599,7 +599,7 @@ recall_test_base(StructureSpec, SymlinkResolutionMode) ->
     SessId = oct_background:get_user_session_id(?USER1, krakow),
     {ArchiveId, TargetParentGuid, _RootFileGuid} = recall_test_setup(StructureSpec),
     {ok, ArchiveDataDirGuid} = opw_test_rpc:call(krakow, archive, get_data_dir_guid, [ArchiveId]),
-    archive_verification_test_utils:assert_copied(oct_background:get_random_provider_node(krakow), SessId, 
+    archive_check_test_utils:assert_copied(oct_background:get_random_provider_node(krakow), SessId, 
         get_direct_child(ArchiveDataDirGuid), get_direct_child(TargetParentGuid), SymlinkResolutionMode, ?ATTEMPTS),
     ?assertEqual(?ERROR_ALREADY_EXISTS, opt_archives:recall(krakow, SessId, ArchiveId, TargetParentGuid, default)).
 
@@ -910,7 +910,7 @@ check_mocked_slave_jobs_cancelled(SlaveJobsLeft, TimeoutSeconds) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_verification_test_utils, dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_check_test_utils, dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op",
             envs = [{op_worker, op_worker, [

@@ -118,7 +118,7 @@ nested_verification_bagit(_Config) ->
 init_per_suite(Config) ->
     opt:init_per_suite(
         [{?LOAD_MODULES, [
-            ?MODULE, archive_test_utils, archive_verification_test_utils,
+            ?MODULE, archive_test_utils, archive_check_test_utils,
             dir_stats_test_utils, archive_sequential_test_base
         ]} | Config],
         #onenv_test_config{

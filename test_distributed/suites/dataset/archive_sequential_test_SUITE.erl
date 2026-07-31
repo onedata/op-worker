@@ -198,7 +198,7 @@ delete_nested_archive_error(_Config) ->
     {ok, {[{_, ArchiveId}], _}} = ?assertMatch({ok, {[_], true}},
         opt_archives:list(Node, SessionId, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
     
-    archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, FileGuid, 1, 0, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, FileGuid, 1, 0, ?ATTEMPTS),
     ?assertEqual(?ERR_NESTED_ARCHIVE_DELETION_FORBIDDEN(ParentArchiveId), opt_archives:delete(Node, SessionId, ArchiveId)),
     ?assertEqual(ok, opt_archives:delete(Node, SessionId, ParentArchiveId)),
     ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_info(Node, SessionId, ArchiveId)),
@@ -221,7 +221,7 @@ delete_not_finished_archive_error(_Config) ->
     ?assertEqual(?ERR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(?ARCHIVE_PENDING, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING,
         ?ARCHIVE_VERIFICATION_FAILED, ?ARCHIVE_CANCELLED]), opt_archives:delete(Node, SessionId, ArchiveId)),
     finalize_archive_creation(?FUNCTION_NAME),
-    archive_verification_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, 0, 0, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, 0, 0, ?ATTEMPTS),
     ?assertEqual(ok, opt_archives:delete(Node, SessionId, ArchiveId)).
 
 
@@ -264,7 +264,7 @@ errors_test_base(TraverseType, JobType) ->
         archivisation -> ?ARCHIVE_FAILED;
         verification -> ?ARCHIVE_VERIFICATION_FAILED
     end,
-    archive_verification_test_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS).
+    archive_check_test_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS).
 
 
 audit_log_test_base(ExpectedState, FailedFileType) ->
@@ -281,7 +281,7 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
         ]},
         children = [#file_spec{}]
     }, krakow),
-    archive_verification_test_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS),
     PathFun = fun
         ([]) -> <<>>;
         (Tokens) -> filename:join(Tokens)
@@ -426,7 +426,7 @@ finalize_archive_creation(FunctionName) ->
 init_per_suite(Config) ->
     opt:init_per_suite(
         [{?LOAD_MODULES, [
-            ?MODULE, archive_test_utils, archive_verification_test_utils,
+            ?MODULE, archive_test_utils, archive_check_test_utils,
             dir_stats_test_utils, archive_sequential_test_base
         ]} | Config],
         #onenv_test_config{

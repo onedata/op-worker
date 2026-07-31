@@ -8,7 +8,7 @@
 %%% @doc
 %%% Utility functions for creating archives and awaiting their synchronization
 %%% between providers. Assertions about archives live in
-%%% archive_verification_test_utils.
+%%% archive_check_test_utils.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_test_utils).
@@ -24,7 +24,8 @@
 -export([
     set_up_archive/3,
     set_up_archive/4,
-    await_archive_sync/5
+    await_archive_sync/5,
+    create_archive_dir/5
 ]).
 -export([
     mock_gated_archive_verification/0,
@@ -125,6 +126,14 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
         ?assertEqual(true, lists:member(ArchiveId, ListArchivesFun()), ?ATTEMPTS)
 
     end, SyncProviders).
+
+
+%% @doc Creates the archive's directory in the space archivisation tree, bypassing
+%% archivisation - for tests that need the directory alone, without an archive.
+-spec create_archive_dir(node(), archive:id(), dataset:id(), od_space:id(), od_user:id()) ->
+    ok | {badrpc, term()}.
+create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId) ->
+    rpc:call(Node, archive_dir, ensure_exists, [ArchiveId, DatasetId, SpaceId, UserId]).
 
 %%%===================================================================
 %%% Archive verification traverse gate

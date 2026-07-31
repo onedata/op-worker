@@ -11,7 +11,7 @@
 %%% archive_test_utils.
 %%% @end
 %%%-------------------------------------------------------------------
--module(archive_verification_test_utils).
+-module(archive_check_test_utils).
 -author("Jakub Kudzia").
 
 
@@ -23,7 +23,6 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
--export([create_archive_dir/5]).
 -export([
     assert_archive_dir_structure_is_correct/7, assert_archive_stats/7, assert_archive_state/3, assert_archive_state/4,
     assert_archive_is_preserved/8, assert_incremental_archive_links/3,
@@ -39,10 +38,6 @@
 %===================================================================
 % API
 %===================================================================
-
-create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId) ->
-    rpc:call(Node, archive_dir, ensure_exists, [ArchiveId, DatasetId, SpaceId, UserId]).
-
 
 assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, Attempts) ->
     assert_archives_root_dir_exists(Node, SessionId, SpaceId, Attempts),
