@@ -625,30 +625,18 @@ assert_distribution(#transfer_test_suite_ctx{
     CreationNode = oct_background:get_random_provider_node(CreationProviderSelector),
     OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
 
-    FilesWithExpDistribution = lists:map(fun(#object{
-        guid = FileGuid, name = FileName, content = Content
-    }) ->
+    FilesWithExpDistribution = lists:map(fun(#object{guid = FileGuid, content = Content}) ->
         FileSize = maps:get(FileGuid, FileSizeOverrides, byte_size(Content)),
         ExpSizePerNode = case TransferType of
             replication -> [{CreationNode, FileSize}, {OtherNode, FileSize}];
             eviction -> [{CreationNode, FileSize}, {OtherNode, 0}];
             migration -> [{CreationNode, 0}, {OtherNode, FileSize}]
         end,
-        {FileName, FileGuid, ExpSizePerNode}
+        {FileGuid, ExpSizePerNode}
     end, collect_regular_files(TransferRootObjects)),
 
-    lists_utils:pforeach(fun({FileName, FileGuid, ExpSizePerNode}) ->
-        try
-            file_test_utils:await_distribution([CreationNode, OtherNode], FileGuid, ExpSizePerNode)
-        catch Class:Reason:Stacktrace ->
-            % the shared assert reports only the mismatched distributions, naming
-            % neither the file they belong to (of the many asserted in parallel)
-            % nor the expectation in the terms it was declared in
-            ct:pal("Unexpected distribution of file ~ts (~ts) after ~tp, expected:~n~tp", [
-                FileName, FileGuid, TransferType, ExpSizePerNode
-            ]),
-            erlang:raise(Class, Reason, Stacktrace)
-        end
+    lists_utils:pforeach(fun({FileGuid, ExpSizePerNode}) ->
+        file_test_utils:await_distribution([CreationNode, OtherNode], FileGuid, ExpSizePerNode)
     end, FilesWithExpDistribution).
 
 

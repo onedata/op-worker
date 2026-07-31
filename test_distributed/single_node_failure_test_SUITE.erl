@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("file/distribution_assert.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

@@ -38,7 +38,7 @@
 -export([
     await_size/3,
     await_content/3, await_content/4,
-    await_distribution/3,
+    await_distribution/3, await_distribution/5,
     await_xattr/4,
     await_attrs/4
 ]).
@@ -46,9 +46,15 @@
 
 -type offset() :: non_neg_integer().
 
+% Expected block distribution of a file: the size (or exact blocks) each provider
+% is expected to hold. A provider is named by its id or by any of its nodes.
+-type exp_distribution() :: [
+    {node() | od_provider:id(), file_meta:size() | [#file_block{} | [non_neg_integer()]]}
+].
+
 -type error() :: {error, term()}.
 
--export_type([offset/0]).
+-export_type([offset/0, exp_distribution/0]).
 
 
 -define(DEFAULT_ATTEMPTS, 60).
@@ -162,43 +168,55 @@ await_content(Nodes, FileGuid, ExpContent, Offset) ->
 -spec await_distribution(
     node() | [node()],
     file_id:file_guid() | [file_id:file_guid()],
-    [{node(), file_meta:size() | [fslogic_blocks:blocks()]}]
+    exp_distribution()
 ) ->
     ok | no_return().
-await_distribution(Nodes, Files, ExpSizeOrBlocksPerProvider) ->
+await_distribution(Nodes, Files, ExpDistribution) ->
+    await_distribution(Nodes, ?ROOT_SESS_ID, Files, ExpDistribution, ?DEFAULT_ATTEMPTS).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Awaits the expected block distribution of the given file(s) as seen on the
+%% given node(s). The expectation names each provider holding (or not holding)
+%% a replica - by its id or by any of its nodes - together with the size it is
+%% expected to hold, or the exact blocks when they are not a single prefix of
+%% the file.
+%% @end
+%%--------------------------------------------------------------------
+-spec await_distribution(
+    node() | [node()],
+    session:id(),
+    file_id:file_guid() | [file_id:file_guid()],
+    exp_distribution(),
+    non_neg_integer()
+) ->
+    ok | no_return().
+await_distribution(Nodes, SessionId, Files, ExpSizeOrBlocksPerProvider, Attempts) ->
     ExpDistribution = lists:sort(lists:map(fun
-        ({Node, ExpSize}) when is_integer(ExpSize) ->
+        ({ProviderRef, ExpSize}) when is_integer(ExpSize) ->
             #{
                 <<"blocks">> => case ExpSize of
                     0 -> [];
                     _ -> [[0, ExpSize]]
                 end,
-                <<"providerId">> => opw_test_rpc:get_provider_id(Node),
+                <<"providerId">> => resolve_provider_id(ProviderRef),
                 <<"totalBlocksSize">> => ExpSize
             };
-        ({Node, Blocks}) when is_list(Blocks) ->
+        ({ProviderRef, Blocks}) when is_list(Blocks) ->
+            NonEmptyBlocks = [
+                [Offset, Size] || {Offset, Size} <- normalize_blocks(Blocks), Size > 0
+            ],
             #{
-                <<"blocks">> => lists:foldr(fun
-                    (#file_block{offset = _Offset, size = 0}, Acc) ->
-                        Acc;
-                    (#file_block{offset = Offset, size = Size}, Acc) ->
-                        [[Offset, Size] | Acc]
-                end, [], Blocks),
-                <<"providerId">> => opw_test_rpc:get_provider_id(Node),
-                <<"totalBlocksSize">> => lists:sum(lists:map(fun(#file_block{size = Size}) ->
-                    Size
-                end, Blocks))
+                <<"blocks">> => NonEmptyBlocks,
+                <<"providerId">> => resolve_provider_id(ProviderRef),
+                <<"totalBlocksSize">> => lists:sum([Size || [_Offset, Size] <- NonEmptyBlocks])
             }
     end, ExpSizeOrBlocksPerProvider)),
 
-    FetchDistributionFun = fun(Node, FileGuid) ->
-        {ok, Distribution} = opt_file_metadata:get_distribution_deprecated(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
-        lists:sort(Distribution)
-    end,
-
     lists:foreach(fun(FileGuid) ->
         lists:foreach(fun(Node) ->
-            ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), ?DEFAULT_ATTEMPTS)
+            assert_distribution(Node, SessionId, FileGuid, ExpDistribution, Attempts)
         end, utils:ensure_list(Nodes))
     end, utils:ensure_list(Files)).
 
@@ -275,6 +293,72 @@ replicate_by_read(SourceNode, TargetNode, TargetSessionId, Files) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+%% @doc
+%% Names the file the assertion is about - the shared assert reports only the
+%% mismatched distributions, which says nothing about WHICH of the (possibly
+%% many, possibly concurrently asserted) files failed.
+%% @end
+-spec assert_distribution(node(), session:id(), file_id:file_guid(), [map()], non_neg_integer()) ->
+    ok | no_return().
+assert_distribution(Node, SessionId, FileGuid, ExpDistribution, Attempts) ->
+    try
+        ?assertEqual(ExpDistribution, fetch_distribution(Node, SessionId, FileGuid), Attempts)
+    catch Class:Reason:Stacktrace ->
+        ct:pal("Unexpected distribution of file ~ts (~ts) on node ~tp", [
+            describe_file(Node, SessionId, FileGuid), FileGuid, Node
+        ]),
+        erlang:raise(Class, Reason, Stacktrace)
+    end.
+
+
+%% @private
+%% @doc
+%% Any failure to fetch the distribution is returned as the compared value rather
+%% than raised - the file may simply not have reached this provider yet, and the
+%% assertion is supposed to keep retrying in such a case.
+%% @end
+-spec fetch_distribution(node(), session:id(), file_id:file_guid()) -> [map()] | term().
+fetch_distribution(Node, SessionId, FileGuid) ->
+    try
+        {ok, Distribution} = opt_file_metadata:get_distribution_deprecated(
+            Node, SessionId, ?FILE_REF(FileGuid)
+        ),
+        lists:sort(Distribution)
+    catch Class:Reason ->
+        {Class, Reason}
+    end.
+
+
+%% @private
+-spec describe_file(node(), session:id(), file_id:file_guid()) -> binary().
+describe_file(Node, SessionId, FileGuid) ->
+    try lfm_proxy:get_file_path(Node, SessionId, FileGuid) of
+        {ok, Path} -> Path;
+        Other -> str_utils:format_bin("<path unknown: ~tp>", [Other])
+    catch Class:Reason ->
+        str_utils:format_bin("<path unknown: ~tp:~tp>", [Class, Reason])
+    end.
+
+
+%% @private
+-spec resolve_provider_id(node() | od_provider:id()) -> od_provider:id().
+resolve_provider_id(ProviderId) when is_binary(ProviderId) -> ProviderId;
+resolve_provider_id(Node) when is_atom(Node) -> opw_test_rpc:get_provider_id(Node).
+
+
+%% @private
+%% Blocks may be declared either as #file_block{} records or in the same shape
+%% the product reports them in - [[Offset, Size]].
+-spec normalize_blocks([#file_block{} | [non_neg_integer()]]) ->
+    [{non_neg_integer(), non_neg_integer()}].
+normalize_blocks(Blocks) ->
+    lists:map(fun
+        (#file_block{offset = Offset, size = Size}) -> {Offset, Size};
+        ([Offset, Size]) -> {Offset, Size}
+    end, Blocks).
 
 
 %% @private

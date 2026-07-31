@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("file/distribution_assert.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("env/space_setup_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").

@@ -6,44 +6,26 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains macros with asserts to be used
-%%% for checking distribution of files' blocks in tests.
+%%% Vocabulary for declaring the expected distribution of a file's blocks among
+%%% providers. The assertion itself is file_test_utils:await_distribution/5 -
+%%% these macros only build its expectation and name the arguments in the order
+%%% the suites using them read best.
 %%% @end
 %%%-------------------------------------------------------------------
 
 -ifndef(DISTRIBUTION_ASSERT_HRL).
 -define(DISTRIBUTION_ASSERT_HRL, 1).
 
--include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/test/assertions.hrl").
+%% Expected distribution of a single provider: the size it holds, or its exact
+%% blocks (as [[Offset, Size]], the shape the product reports them in).
+-define(DIST(__ProviderId, __SizeOrBlocks), [{__ProviderId, __SizeOrBlocks}]).
 
--define(DIST(__ProviderId, __Size),
-    (fun
-        (P, 0) -> [#{<<"providerId">> => P, <<"blocks">> => []}];
-        (P, Blocks) when is_list(Blocks) -> [#{<<"providerId">> => P, <<"blocks">> => Blocks}];
-        (P, S) -> [#{<<"providerId">> => P, <<"blocks">> => [[0, S]]}]
-    end)(__ProviderId, __Size)).
-
--define(DISTS(ProviderIds, Sizes), lists:flatmap(fun({PId, __Size}) ->
-    ?DIST(PId, __Size)
-end, lists:zip(ProviderIds, Sizes))).
-
--define(normalizeDistribution(__Distributions), lists:sort(lists:map(fun(__Distribution) ->
-    __Distribution#{
-        <<"totalBlocksSize">> => lists:foldl(fun([_Offset, __Size], __SizeAcc) ->
-            __SizeAcc + __Size
-        end, 0, maps:get(<<"blocks">>, __Distribution))
-    }
-end, __Distributions))).
+-define(DISTS(ProviderIds, Sizes), lists:zip(ProviderIds, Sizes)).
 
 -define(assertDistribution(Worker, SessionId, ExpectedDistribution, FileGuid, Attempts),
-    ?assertEqual(?normalizeDistribution(ExpectedDistribution), try
-        {ok, __FileBlocks} = opt_file_metadata:get_distribution_deprecated(Worker, SessionId, ?FILE_REF(FileGuid)),
-        lists:sort(__FileBlocks)
-    catch
-        E:R:S ->
-            {E, R, S}
-    end, Attempts)).
+    file_test_utils:await_distribution(
+        Worker, SessionId, FileGuid, ExpectedDistribution, Attempts
+    )).
 
 
 -endif.

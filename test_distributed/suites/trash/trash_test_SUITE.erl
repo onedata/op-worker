@@ -15,6 +15,7 @@
 -include("authz/authz_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("file/distribution_assert.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
