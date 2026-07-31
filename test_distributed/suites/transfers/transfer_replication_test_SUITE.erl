@@ -649,7 +649,7 @@ warp_time_during_replication_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base],
+    ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base, permit_gate_test_utils],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [

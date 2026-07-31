@@ -1573,7 +1573,7 @@ await_transfer_cancelled(#transfer_test_suite_ctx{transfer_type = TransferType} 
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, transfer_test_utils],
+    ModulesToLoad = [?MODULE, transfer_test_utils, permit_gate_test_utils],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [

@@ -118,20 +118,13 @@
 
 -define(SPACE_ROOT_LS_LIMIT, 10000).
 
-% how long to wait, before unloading a mock of a module, for the processes
-% still executing its code to leave it (the unload purge would kill them)
--define(MOCKED_MODULE_CALLS_DRAIN_ATTEMPTS, 150).
--define(MOCKED_MODULE_CALLS_DRAIN_POLL_INTERVAL_MS, 100).
-
 % how much longer to poll a transfer that has already ended but does not match
 % the expectations - enough for the trailing dbsync revisions of the end state,
 % while orders of magnitude less than the full attempt budgets
 -define(ENDED_TRANSFER_GRACE_ATTEMPTS, 10).
 
--define(FILE_PROCESSING_PERMITS_KEY, file_processing_permits).
--define(FILE_PROCESSING_JOB_GATED_MSG, file_processing_job_gated).
--define(FILE_PROCESSING_PERMIT_POLL_INTERVAL_MS, 100).
--define(INFINITE_PERMITS, 1 bsl 50).
+% gate suspending the transfer's file jobs (see permit_gate_test_utils)
+-define(FILE_PROCESSING_GATE, transfer_file_processing).
 
 -define(FILE_PROCESSING_FAILURE_ENABLED_KEY, file_processing_failure_enabled).
 
@@ -333,22 +326,14 @@ remove_all_views(#transfer_test_suite_ctx{space_selector = SpaceSelector}) ->
 mock_gated_file_processing(SuiteCtx) ->
     TestProcess = self(),
     Nodes = get_file_processing_nodes(SuiteCtx),
-
-    lists:foreach(fun(Node) ->
-        % the permit counter must be created on the provider node (atomics are
-        % node-local); the node-wide cache entry keeps the ref alive (an ets
-        % table would die with its owner - the transient rpc process)
-        ok = opw_test_rpc:call(Node, fun() ->
-            node_cache:put(?FILE_PROCESSING_PERMITS_KEY, atomics:new(1, []))
-        end)
-    end, Nodes),
+    ok = permit_gate_test_utils:install(?FILE_PROCESSING_GATE, Nodes),
 
     WorkerModule = get_file_processing_worker_module(SuiteCtx),
     ok = test_utils:mock_new(Nodes, WorkerModule, [passthrough]),
     ok = test_utils:mock_expect(Nodes, WorkerModule, transfer_regular_file, fun(
         FileCtx, TransferParams
     ) ->
-        acquire_file_processing_permit(TestProcess),
+        permit_gate_test_utils:acquire_permit(?FILE_PROCESSING_GATE, TestProcess),
         meck:passthrough([FileCtx, TransferParams])
     end).
 
@@ -356,17 +341,9 @@ mock_gated_file_processing(SuiteCtx) ->
 -spec grant_file_processing_permits(suite_ctx(), pos_integer() | all) ->
     ok.
 grant_file_processing_permits(SuiteCtx, CountOrAll) ->
-    % permits are granted per provider node (irrelevant for the single-node
-    % providers the transfer suites run on)
-    lists:foreach(fun(Node) ->
-        ok = opw_test_rpc:call(Node, fun() ->
-            PermitsRef = node_cache:get(?FILE_PROCESSING_PERMITS_KEY),
-            case CountOrAll of
-                all -> atomics:put(PermitsRef, 1, ?INFINITE_PERMITS);
-                Count -> atomics:add(PermitsRef, 1, Count)
-            end
-        end)
-    end, get_file_processing_nodes(SuiteCtx)).
+    permit_gate_test_utils:grant_permits(
+        ?FILE_PROCESSING_GATE, get_file_processing_nodes(SuiteCtx), CountOrAll
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -379,11 +356,7 @@ grant_file_processing_permits(SuiteCtx, CountOrAll) ->
 %%--------------------------------------------------------------------
 -spec await_gated_file_processing_job() -> ok.
 await_gated_file_processing_job() ->
-    receive
-        ?FILE_PROCESSING_JOB_GATED_MSG -> ok
-    after timer:seconds(?TRANSFER_ATTEMPTS) ->
-        ct:fail(no_file_processing_job_awaiting_permit)
-    end.
+    permit_gate_test_utils:await_parked_job(?FILE_PROCESSING_GATE, ?TRANSFER_ATTEMPTS).
 
 
 -spec await_files_replicated(oct_background:entity_selector(), transfer:id(), non_neg_integer()) ->
@@ -401,22 +374,11 @@ await_files_replicated(ProviderSelector, TransferId, ExpFilesReplicated) ->
 
 -spec unmock_gated_file_processing(suite_ctx()) -> ok.
 unmock_gated_file_processing(SuiteCtx) ->
-    % release any still-parked jobs first - a process parked inside the mock
-    % call would be killed by the code purge on unload
-    grant_file_processing_permits(SuiteCtx, all),
-    Nodes = get_file_processing_nodes(SuiteCtx),
-    WorkerModule = get_file_processing_worker_module(SuiteCtx),
-    % released jobs need a moment to run their file processing to completion;
-    % purging them mid-call would lose their reports to the transfer traverse,
-    % leaving the transfer ongoing forever - each such transfer permanently
-    % occupies one of the (10) replication controller pool workers of the
-    % provider, and with all of them gone no replication or migration can even
-    % start on that provider until its restart (see replication_controller)
-    await_no_ongoing_calls_within_module(Nodes, WorkerModule),
-    test_utils:mock_unload(Nodes, WorkerModule),
-    lists:foreach(fun(Node) ->
-        ok = opw_test_rpc:call(Node, node_cache, clear, [?FILE_PROCESSING_PERMITS_KEY])
-    end, Nodes).
+    permit_gate_test_utils:uninstall(
+        ?FILE_PROCESSING_GATE,
+        get_file_processing_nodes(SuiteCtx),
+        get_file_processing_worker_module(SuiteCtx)
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -481,8 +443,8 @@ unmock_file_processing_failure(SuiteCtx = #transfer_test_suite_ctx{transfer_type
         eviction -> replica_deletion_req;
         _ -> replica_synchronizer
     end,
-    % see the analogous await in unmock_gated_file_processing/1
-    await_no_ongoing_calls_within_module(Nodes, MockedModule),
+    % see the analogous await in permit_gate_test_utils:uninstall/3
+    permit_gate_test_utils:await_no_ongoing_calls_within_module(Nodes, MockedModule),
     test_utils:mock_unload(Nodes, MockedModule),
     lists:foreach(fun(Node) ->
         ok = opw_test_rpc:call(Node, node_cache, clear, [?FILE_PROCESSING_FAILURE_ENABLED_KEY])
@@ -815,94 +777,6 @@ get_file_processing_nodes(#transfer_test_suite_ctx{
     other_provider_selector = OtherProviderSelector
 }) ->
     oct_background:get_provider_nodes(OtherProviderSelector).
-
-
-%% @private
-%% Executed on the provider nodes within the gate-mocked file processing job
-%% processes (see mock_gated_file_processing/1).
--spec acquire_file_processing_permit(pid()) -> ok.
-acquire_file_processing_permit(TestProcess) ->
-    PermitsRef = node_cache:get(?FILE_PROCESSING_PERMITS_KEY),
-    case try_acquire_file_processing_permit(PermitsRef) of
-        true ->
-            ok;
-        false ->
-            TestProcess ! ?FILE_PROCESSING_JOB_GATED_MSG,
-            wait_for_file_processing_permit(PermitsRef)
-    end.
-
-
-%% @private
--spec wait_for_file_processing_permit(atomics:atomics_ref()) -> ok.
-wait_for_file_processing_permit(PermitsRef) ->
-    case try_acquire_file_processing_permit(PermitsRef) of
-        true ->
-            ok;
-        false ->
-            timer:sleep(?FILE_PROCESSING_PERMIT_POLL_INTERVAL_MS),
-            wait_for_file_processing_permit(PermitsRef)
-    end.
-
-
-%% @private
--spec try_acquire_file_processing_permit(atomics:atomics_ref()) -> boolean().
-try_acquire_file_processing_permit(PermitsRef) ->
-    case atomics:sub_get(PermitsRef, 1, 1) of
-        Permits when Permits >= 0 ->
-            true;
-        _ ->
-            % return the overdrawn permit (the counter may transiently go
-            % negative under concurrent acquisitions but never loses permits)
-            atomics:add(PermitsRef, 1, 1),
-            false
-    end.
-
-
-%% @private
-%% Awaits until no process on the given nodes executes the code of the given
-%% (mocked) module - unloading a mock purges the module's code, killing any
-%% process executing it (the mock and the meck-renamed original alike). The
-%% await is bounded: on timeout a warning is logged and the caller proceeds
-%% with the unload (a test run must not hang on a wedged job forever).
--spec await_no_ongoing_calls_within_module([node()], module()) -> ok.
-await_no_ongoing_calls_within_module(Nodes, Module) ->
-    MatchedModules = [Module, meck_util:original_name(Module)],
-    lists:foreach(fun(Node) ->
-        await_no_ongoing_calls_within_module(
-            Node, MatchedModules, ?MOCKED_MODULE_CALLS_DRAIN_ATTEMPTS
-        )
-    end, Nodes).
-
-
-%% @private
--spec await_no_ongoing_calls_within_module(node(), [module()], non_neg_integer()) ->
-    ok.
-await_no_ongoing_calls_within_module(Node, MatchedModules, 0) ->
-    ct:pal(
-        "WARNING: unloading the mock of ~tp on node ~tp while some process is "
-        "still executing its code - the code purge will kill it",
-        [hd(MatchedModules), Node]
-    );
-await_no_ongoing_calls_within_module(Node, MatchedModules, AttemptsLeft) ->
-    AnyProcessExecutingModule = opw_test_rpc:call(Node, fun() ->
-        lists:any(fun(Pid) ->
-            case erlang:process_info(Pid, current_stacktrace) of
-                {current_stacktrace, Stacktrace} ->
-                    lists:any(fun(StackModule) ->
-                        lists:keymember(StackModule, 1, Stacktrace)
-                    end, MatchedModules);
-                undefined ->
-                    false
-            end
-        end, erlang:processes())
-    end),
-    case AnyProcessExecutingModule of
-        false ->
-            ok;
-        true ->
-            timer:sleep(?MOCKED_MODULE_CALLS_DRAIN_POLL_INTERVAL_MS),
-            await_no_ongoing_calls_within_module(Node, MatchedModules, AttemptsLeft - 1)
-    end.
 
 
 %% @private
