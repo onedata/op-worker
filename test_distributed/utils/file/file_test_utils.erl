@@ -1,12 +1,22 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions operating on files used in ct tests.
+%%% Operations on an ALREADY existing file, given its guid: reading its
+%%% attributes and content, and - the bulk of the module - the await_* family,
+%%% which retries an assertion until the expected state shows up on the given
+%%% node(s). Everything that has to reach another provider (metadata, content,
+%%% block distribution, xattrs) needs such an await rather than a plain read.
+%%%
+%%% Takes raw nodes and, unless a session id is given, acts as root.
+%%%
+%%% Siblings in this domain: file_tree_test_utils creates whole trees from specs
+%%% (and is the natural source of the guids used here); lfm_test_utils and
+%%% file_ops_test_utils are the envup era equivalents (see their docs).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_test_utils).

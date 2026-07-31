@@ -1,15 +1,26 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020-2021 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions operating on files used in ct tests.
+%%% Creates whole file trees declared as specs (#file_spec{}, #dir_spec{},
+%%% #symlink_spec{}, #hardlink_spec{} - see file/file_tree_test.hrl) and awaits
+%%% their propagation to every provider supporting the space, returning the
+%%% created tree as #object{} records with the concrete guids and names.
 %%%
-%%% FUTURE IMPROVEMENTS:
-%%% * flag to ensure files are created on storage
+%%% Everything is addressed by onenv selectors (user, space, provider), never by
+%%% a raw node and session id - the module picks the creating provider and the
+%%% ones to await on by itself.
+%%%
+%%% Siblings in this domain:
+%%%  * file_test_utils - operations and awaits on an ALREADY existing file;
+%%%  * storage_file_tree_test_utils - the same declarative trees, but created
+%%%    directly on a storage backend instead of through lfm;
+%%%  * lfm_test_utils, file_ops_test_utils - the envup era equivalents, taking
+%%%    explicit node + session id (see their docs).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_tree_test_utils).

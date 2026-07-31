@@ -6,7 +6,19 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for tests operations on files.
+%%% File operations for tests that would otherwise repeat the same node and
+%%% session id in every call: the pair is stored once (set_default_context/2)
+%%% and every later call takes just the file path. A test working with several
+%%% providers or users saves them under names (save_named_context/3) and picks
+%%% one per call with the *_with_ctx functions.
+%%%
+%%% The contexts live in the node-wide cache of the node running the test code,
+%%% so they are shared by everything running there and outlive the test case that
+%%% set them - hence clear_context/0, and hence a test must set its own context
+%%% rather than count on the one left by whatever ran before.
+%%%
+%%% Unlike the rest of this domain (see lfm_test_utils, file_ops_test_utils,
+%%% file_tree_test_utils), which name the node and session at every call.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_ct).
@@ -25,8 +37,6 @@
     create_with_ctx/2,
     unlink/1
 ]).
-
-% TODO VFS-7215 - merge this module with file_ops_test_utils
 
 -type ctx_name() :: any().
 

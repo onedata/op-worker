@@ -1,12 +1,29 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Util functions for operation on files using lfm_proxy.
+%%% Operations on files through lfm_proxy, taking an explicit node and session
+%%% id. Three groups of them:
+%%%  * creating and reading single files, addressed by PATH - including
+%%%    create_file/4,5, which makes either a regular file or a directory,
+%%%    depending on the file_type() given as its FIRST argument (that is what
+%%%    the API test suites parametrize their cases with);
+%%%  * creating a whole tree from branching counts - create_files_tree/4,5
+%%%    takes [{DirsPerLevel, FilesPerLevel}] rather than a declarative spec;
+%%%  * emptying a space: clean_space/3,4 removes everything (including the trash
+%%%    and archives directories) and asserts the space is empty afterwards -
+%%%    this is what most suites actually use this module for.
+%%%
+%%% The get_user1_* functions read the envup CT config (`?config({spaces,
+%%% <<"user1">>}, Config)' and the like) and therefore only work under envup.
+%%%
+%%% Siblings in this domain: file_tree_test_utils (declarative trees, onenv
+%%% selectors), file_test_utils (awaits on an existing file), file_ops_test_utils
+%%% (creating + verifying files across a node restart).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_test_utils).
@@ -26,7 +43,7 @@
 -export([get_xattrs/3]).
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
 
-% TODO VFS-7215 - merge this module with file_ops_test_utils
+% TODO VFS-7215 - merge this module with file_ops_test_utils (see the note there)
 
 -type file_type() :: binary(). % <<"file">> | <<"dir">>
 

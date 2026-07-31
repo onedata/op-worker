@@ -1,13 +1,22 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utils used to create files and dirs and verify their state
-%%% e.g. on other provider or after node restart.
+%%% Creates a batch of files and dirs and later verifies that they are all
+%%% intact - on another provider, or on the same one after a node restart or a
+%%% database error. The batch travels between the two as an opaque handle
+%%% (see create_files_and_dirs/5 -> verify_files_and_dirs/4), so a test does not
+%%% have to carry the guid lists itself.
+%%%
+%%% Takes an explicit node and session id (envup era, like lfm_test_utils).
+%%%
+%%% Siblings in this domain: lfm_test_utils (single files by path, tree by
+%%% branching counts, space cleanup), file_tree_test_utils (declarative trees
+%%% on onenv selectors), file_test_utils (awaits on an existing file).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_ops_test_utils).
@@ -32,7 +41,11 @@
     file_guids
 }).
 
-% TODO VFS-7215 - merge this module with lfm_test_utils
+% TODO VFS-7215 - merge this module with lfm_test_utils (both wrap lfm_proxy on
+% an explicit node + session id). Blocked on two things: create_file/4,5 exists
+% in both with the SAME arity but a different argument order and meaning, and the
+% merge touches every envup suite using either, so it needs test runs.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
