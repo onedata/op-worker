@@ -16,6 +16,20 @@
 -include("modules/datastore/qos.hrl").
 
 
+% entities of the onenv scenario the QoS suites are run against
+-define(USER_PLACEHOLDER, user2).
+-define(SPACE_PLACEHOLDER, space1).
+-define(SPACE_NAME, <<"space1">>).
+-define(SPACE_PATH, <<"/space1">>).
+-define(FILE_PATH(FileName), filename:join([?SPACE_PATH, FileName])).
+-define(SESS_ID(ProviderPlaceholder),
+    oct_background:get_user_session_id(?USER_PLACEHOLDER, ProviderPlaceholder)).
+
+% number of attempts to await QoS fulfillment and the resulting file distribution
+% NOTE: qualified with the domain, as qos_replica_protection_test_SUITE takes the
+% transfers test mechanism header, which defines ?ATTEMPTS of its own
+-define(QOS_ATTEMPTS, 60).
+
 % util names used in tests
 -define(QOS1, <<"Qos1">>).
 -define(QOS2, <<"Qos2">>).

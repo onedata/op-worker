@@ -68,11 +68,6 @@ all() -> [
 ].
 
 
--define(SPACE_PLACEHOLDER, space1).
--define(SPACE_PATH1, <<"/space1">>).
--define(PATH(Name), filename:join(?SPACE_PATH1, Name)).
--define(USER_PLACEHOLDER, user2).
--define(SESS_ID(ProviderPlaceholder), oct_background:get_user_session_id(?USER_PLACEHOLDER, ProviderPlaceholder)).
 
 
 -define(GET_CACHE_TABLE_SIZE(NODE, SPACE_ID),
@@ -88,7 +83,7 @@ all() -> [
     }
 ).
 
--define(NESTED_DIR_STRUCTURE(ParentDirname), {?SPACE_PATH1, [
+-define(NESTED_DIR_STRUCTURE(ParentDirname), {?SPACE_PATH, [
     {ParentDirname, [
         {<<"dir2">>, [
             {<<"dir3">>, [
@@ -101,7 +96,6 @@ all() -> [
     ]}
 ]}).
 
--define(ATTEMPTS, 60).
 
 %%%===================================================================
 %%% Tests functions.
@@ -119,8 +113,8 @@ bounded_cache_cleanup_test_base(Type) ->
     [ProviderId] = oct_background:get_provider_ids(),
     Node = oct_background:get_random_provider_node(ProviderId),
     Dirname = generator:gen_name(),
-    Dir1Path = filename:join([?SPACE_PATH1, Dirname]),
-    FilePath = filename:join([?SPACE_PATH1, Dirname, <<"dir2">>, <<"dir3">>, <<"dir4">>, <<"file41">>]),
+    Dir1Path = filename:join([?SPACE_PATH, Dirname]),
+    FilePath = filename:join([?SPACE_PATH, Dirname, <<"dir2">>, <<"dir3">>, <<"dir4">>, <<"file41">>]),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
 
     EffQosTestSpec = #effective_qos_test_spec{
@@ -171,14 +165,14 @@ simple_key_val_qos(_Config) ->
 
 effective_qos_for_file_in_directory(_Config) ->
     Dirname = generator:gen_name(),
-    DirPath = filename:join(?SPACE_PATH1, Dirname),
+    DirPath = filename:join(?SPACE_PATH, Dirname),
     FilePath = filename:join(DirPath, <<"file1">>),
     [ProviderId] = oct_background:get_provider_ids(),
 
     QosSpec = qos_test_base:effective_qos_for_file_in_directory_spec(DirPath, FilePath, ProviderId, [ProviderId]),
     TestSpec = #effective_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
-            dir_structure = {?SPACE_PATH1, [
+            dir_structure = {?SPACE_PATH, [
                 {Dirname, [
                     {<<"file1">>, ?QOS_TEST_DATA}
                 ]}
@@ -198,7 +192,7 @@ qos_cleanup_test(_Config) ->
     Name = generator:gen_name(),
     QosSpec = #fulfill_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
-            dir_structure = {?SPACE_PATH1, [
+            dir_structure = {?SPACE_PATH, [
                 {Name, ?QOS_TEST_DATA, [ProviderId]}
             ]}
 
@@ -207,7 +201,7 @@ qos_cleanup_test(_Config) ->
             #qos_to_add{
                 provider_selector = ProviderId,
                 qos_name = ?QOS1,
-                path = filename:join([?SPACE_PATH1, Name]),
+                path = filename:join([?SPACE_PATH, Name]),
                 expression = <<"providerId=", ProviderId/binary>>
             }
         ]
@@ -263,7 +257,7 @@ qos_audit_log_test_base(ExpectedStatus, Type) ->
     [ProviderId] = oct_background:get_provider_ids(),
     Node = oct_background:get_random_provider_node(ProviderId),
     Timestamp = opw_test_rpc:call(Node, global_clock, timestamp_millis, []),
-    FilePath = filename:join([?SPACE_PATH1, generator:gen_name()]),
+    FilePath = filename:join([?SPACE_PATH, generator:gen_name()]),
     {RootGuid, FileIds} = prepare_audit_log_test_env(Type, Node, ?SESS_ID(ProviderId), FilePath),
     {ok, QosEntryId} = opt_qos:add_qos_entry(Node, ?SESS_ID(ProviderId), ?FILE_REF(RootGuid), <<"providerId=", ProviderId/binary>>, 1),
     {BaseExpectedContent, ExpectedSeverity} = case ExpectedStatus of
@@ -453,7 +447,7 @@ add_qos_for_dir_and_check_effective_qos(#effective_qos_test_spec{
 create_test_file() ->
     [ProviderId] = oct_background:get_provider_ids(),
     Name = generator:gen_name(),
-    Path = ?PATH(Name),
+    Path = ?FILE_PATH(Name),
     _Guid = qos_test_utils:create_file(ProviderId, ?SESS_ID(ProviderId), Path, ?QOS_TEST_DATA),
     Path.
 
@@ -461,7 +455,7 @@ create_test_file() ->
 create_test_dir_with_file() ->
     [ProviderId] = oct_background:get_provider_ids(),
     Name = generator:gen_name(),
-    DirPath = ?PATH(Name),
+    DirPath = ?FILE_PATH(Name),
     _DirGuid = qos_test_utils:create_directory(ProviderId, ?SESS_ID(ProviderId), DirPath),
     FilePath = filename:join(DirPath, <<"file1">>),
     _FileGuid = qos_test_utils:create_file(ProviderId, ?SESS_ID(ProviderId), FilePath, ?QOS_TEST_DATA),

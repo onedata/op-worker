@@ -83,18 +83,11 @@ all() -> [
 ].
 
 
--define(PATH(FileName), filename:join([?SPACE_PATH1, FileName])).
 -define(DIRNAME(Name), <<"dir_", Name/binary>>).
 -define(FILENAME(Name), <<"file_", Name/binary>>).
 
--define(SPACE1_PLACEHOLDER, space1).
--define(SPACE_NAME, <<"space1">>).
--define(SPACE_PATH1, <<"/space1">>).
 
--define(USER_PLACEHOLDER, user2).
--define(SESS_ID(ProviderPlaceholder), oct_background:get_user_session_id(?USER_PLACEHOLDER, ProviderPlaceholder)).
 
--define(ATTEMPTS, 60).
 
 %%%====================================================================
 %%% Test function
@@ -409,7 +402,7 @@ qos_reconciliation_dir_test(_Config) ->
 basic_qos_reconciliation_test_base(DirStructureType) ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
-    SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
+    SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
 
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Filename),
@@ -428,14 +421,14 @@ basic_qos_reconciliation_test_base(DirStructureType) ->
     end, maps:get(files, GuidsAndPaths)),
     lists:foreach(fun(StoragePath) ->
         lists:foreach(fun(N) ->
-            ?assertEqual({ok, NewData}, read_file(N, StoragePath), ?ATTEMPTS)
+            ?assertEqual({ok, NewData}, read_file(N, StoragePath), ?QOS_ATTEMPTS)
         end, oct_background:get_provider_nodes(Provider2))
     end, StoragePaths).
 
 
 create_basic_qos_test_spec(DirStructureType, QosFilename) ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
-    SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
+    SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
     {DirStructure, DirStructureAfter} = case DirStructureType of
         simple ->
             {?simple_dir_structure(?SPACE_NAME, QosFilename, [Provider1]),
@@ -453,14 +446,14 @@ create_basic_qos_test_spec(DirStructureType, QosFilename) ->
             #qos_to_add{
                 provider_selector = Provider1,
                 qos_name = ?QOS1,
-                path = ?PATH(QosFilename),
+                path = ?FILE_PATH(QosFilename),
                 expression = <<"providerId=", Provider2/binary>>
             }
         ],
         expected_qos_entries = [
             #expected_qos_entry{
                 qos_name = ?QOS1,
-                file_key = {path, ?PATH(QosFilename)},
+                file_key = {path, ?FILE_PATH(QosFilename)},
                 qos_expression = [<<"providerId=", Provider2/binary>>],
                 replicas_num = 1,
                 possibility_check = {possible, Provider1}
@@ -468,7 +461,7 @@ create_basic_qos_test_spec(DirStructureType, QosFilename) ->
         ],
         expected_file_qos = [
             #expected_file_qos{
-                path = ?PATH(QosFilename),
+                path = ?FILE_PATH(QosFilename),
                 qos_entries = [?QOS1],
                 assigned_entries = #{
                     opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS1]
@@ -490,14 +483,14 @@ qos_transfer_stats_test(_Config) ->
     P1Node = oct_background:get_random_provider_node(Provider1),
     P2Node = oct_background:get_random_provider_node(Provider2),
     P3Node = oct_background:get_random_provider_node(Provider3),
-    SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
+    SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
 
     Name = generator:gen_name(),
-    Guid = qos_test_utils:create_file(Provider1, ?SESS_ID(Provider1), ?PATH(Name), ?QOS_TEST_DATA),
+    Guid = qos_test_utils:create_file(Provider1, ?SESS_ID(Provider1), ?FILE_PATH(Name), ?QOS_TEST_DATA),
     {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Guid), <<"providerId=", Provider2/binary>>, 1),
     % wait for qos entries to be dbsynced to other provider
-    ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
-    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P1Node, ?SESS_ID(Provider1), QosEntryId), ?ATTEMPTS),
+    ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2Node, ?SESS_ID(Provider2), QosEntryId), ?QOS_ATTEMPTS),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P1Node, ?SESS_ID(Provider1), QosEntryId), ?QOS_ATTEMPTS),
 
     check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
     check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [
@@ -513,8 +506,8 @@ qos_transfer_stats_test(_Config) ->
     NewData = crypto:strong_rand_bytes(8),
     lfm_test_utils:write_file(P3Node, ?SESS_ID(Provider3), Guid, NewData),
 
-    ?assertEqual(NewData, lfm_test_utils:read_file(P2Node, ?SESS_ID(Provider2), Guid, byte_size(NewData)), ?ATTEMPTS),
-    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
+    ?assertEqual(NewData, lfm_test_utils:read_file(P2Node, ?SESS_ID(Provider2), Guid, byte_size(NewData)), ?QOS_ATTEMPTS),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?QOS_ATTEMPTS),
 
     check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
     check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [
@@ -545,7 +538,7 @@ init_per_suite(Config) ->
             posthook = fun(NewConfig) ->
                 dir_stats_test_utils:disable_stats_counting(NewConfig),
                 [Provider1, Provider2, Provider3 | _] = oct_background:get_provider_ids(),
-                SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
+                SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
                 qos_test_utils:set_qos_parameters(Provider1, opt_spaces:get_storage_id(Provider1, SpaceId), #{
                     <<"type">> => <<"disk">>,
                     <<"tier">> => <<"t3">>,
@@ -597,13 +590,13 @@ run_tests(FileTypes, SourceProvider, TargetProviders, TestSpecFun) ->
             Filename = generator:gen_name(),
             InitialDirStructure = get_initial_structure_with_single_file(SourceProvider, Filename),
             ExpectedDirStructure = get_expected_structure_for_single_file(TargetProviders, Filename),
-            qos_test_utils:fulfill_qos_test_base(TestSpecFun(?PATH(Filename), InitialDirStructure, ExpectedDirStructure));
+            qos_test_utils:fulfill_qos_test_base(TestSpecFun(?FILE_PATH(Filename), InitialDirStructure, ExpectedDirStructure));
         (dir) ->
             ct:pal("Starting for dir"),
             Name = generator:gen_name(),
             InitialDirStructure = get_initial_structure_with_single_dir(SourceProvider, Name),
             ExpectedDirStructure = get_expected_structure_for_single_dir(TargetProviders, Name),
-            qos_test_utils:fulfill_qos_test_base(TestSpecFun(?PATH(?DIRNAME(Name)), InitialDirStructure, ExpectedDirStructure))
+            qos_test_utils:fulfill_qos_test_base(TestSpecFun(?FILE_PATH(?DIRNAME(Name)), InitialDirStructure, ExpectedDirStructure))
     end, FileTypes).
 
 
@@ -677,7 +670,7 @@ check_transfer_stats(Provider, QosEntryId, Type, ExpTimeSeriesNames, ExpectedFir
     end,
     lists:foreach(fun(TimeSeriesName) ->
         lists:foreach(fun(MetricName) ->
-            ?assert(kv_utils:is_key([TimeSeriesName, MetricName], GetSliceFun()), ?ATTEMPTS),
+            ?assert(kv_utils:is_key([TimeSeriesName, MetricName], GetSliceFun()), ?QOS_ATTEMPTS),
             Windows = kv_utils:get([TimeSeriesName, MetricName], GetSliceFun()),
             case ExpectedFirstWindow of
                 empty ->

@@ -65,7 +65,6 @@ all() -> [
     qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test
 ].
 
--define(SPACE_NAME, <<"space1">>).
 
 %%%===================================================================
 %%% Tests

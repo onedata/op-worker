@@ -83,16 +83,9 @@ all() -> [
 ].
 
 
--define(FILE_PATH(FileName), filename:join([?SPACE_PATH1, FileName])).
 
--define(SPACE_PLACEHOLDER, space1).
--define(SPACE_NAME, <<"space1">>).
--define(SPACE_PATH1, <<"/space1">>).
 
--define(USER_PLACEHOLDER, user2).
--define(SESS_ID(ProviderPlaceholder), oct_background:get_user_session_id(?USER_PLACEHOLDER, ProviderPlaceholder)).
 
--define(ATTEMPTS, 60).
 
 %%%====================================================================
 %%% Test functions
@@ -109,7 +102,7 @@ effective_qos_for_file_in_directory(_Config) ->
     lists:foreach(fun(ProviderAddingQos) ->
         ct:pal("Starting for provider: ~tp~n", [ProviderAddingQos]),
         DirName = generator:gen_name(),
-        DirPath = filename:join(?SPACE_PATH1, DirName),
+        DirPath = filename:join(?SPACE_PATH, DirName),
         FilePath = filename:join(DirPath, <<"file1">>),
 
         QosSpec = qos_test_base:effective_qos_for_file_in_directory_spec(DirPath, FilePath, ProviderAddingQos, Providers),
@@ -117,7 +110,7 @@ effective_qos_for_file_in_directory(_Config) ->
             #effective_qos_test_spec{
                 initial_dir_structure = #test_dir_structure{
                     provider = Provider1,
-                    dir_structure = {?SPACE_PATH1, [
+                    dir_structure = {?SPACE_PATH, [
                         {DirName, [
                             {<<"file1">>, ?QOS_TEST_DATA, [Provider1]}
                         ]}
@@ -127,7 +120,7 @@ effective_qos_for_file_in_directory(_Config) ->
                 expected_qos_entries = QosSpec#qos_spec.expected_qos_entries,
                 expected_effective_qos = QosSpec#qos_spec.expected_effective_qos,
                 expected_dir_structure = #test_dir_structure{
-                    dir_structure = {?SPACE_PATH1, [
+                    dir_structure = {?SPACE_PATH, [
                         {DirName, [
                             {<<"file1">>, ?QOS_TEST_DATA, [Provider1, Provider2]}
                         ]}
@@ -149,7 +142,7 @@ effective_qos_for_file_in_nested_directories(_Config) ->
     lists:foreach(fun(ProvidersAddingQos) ->
         ct:pal("Starting for providers: ~tp~n", [ProvidersAddingQos]),
         DirName = generator:gen_name(),
-        Dir1Path = filename:join(?SPACE_PATH1, DirName),
+        Dir1Path = filename:join(?SPACE_PATH, DirName),
         Dir2Path = filename:join(Dir1Path, <<"dir2">>),
         Dir3Path = filename:join(Dir2Path, <<"dir3">>),
         File21Path = filename:join(Dir2Path, <<"file21">>),
@@ -162,7 +155,7 @@ effective_qos_for_file_in_nested_directories(_Config) ->
             #effective_qos_test_spec{
                 initial_dir_structure = #test_dir_structure{
                     provider = Provider1,
-                    dir_structure = {?SPACE_PATH1, [
+                    dir_structure = {?SPACE_PATH, [
                         {DirName, [
                             {<<"dir2">>, [
                                 {<<"file21">>, ?QOS_TEST_DATA, [Provider1]},
@@ -177,7 +170,7 @@ effective_qos_for_file_in_nested_directories(_Config) ->
                 expected_qos_entries = QosSpec#qos_spec.expected_qos_entries,
                 expected_effective_qos = QosSpec#qos_spec.expected_effective_qos,
                 expected_dir_structure = #test_dir_structure{
-                    dir_structure = {?SPACE_PATH1, [
+                    dir_structure = {?SPACE_PATH, [
                         {DirName, [
                             {<<"dir2">>, [
                                 {<<"file21">>, ?QOS_TEST_DATA, [Provider1]},
@@ -204,7 +197,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure(_Config) ->
     lists:foreach(fun(WorkerConf) ->
         ct:pal("Starting for providers: ~tp~n", [WorkerConf]),
         DirName = generator:gen_name(),
-        Dir1Path = filename:join(?SPACE_PATH1, DirName),
+        Dir1Path = filename:join(?SPACE_PATH, DirName),
         Dir2Path = filename:join(Dir1Path, <<"dir2">>),
         Dir3Path = filename:join(Dir1Path, <<"dir3">>),
         File21Path = filename:join(Dir2Path, <<"file21">>),
@@ -216,7 +209,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure(_Config) ->
         add_qos_for_dir_and_check_effective_qos(
             #effective_qos_test_spec{
                 initial_dir_structure = #test_dir_structure{
-                    dir_structure = {?SPACE_PATH1, [
+                    dir_structure = {?SPACE_PATH, [
                         {DirName, [
                             {<<"dir2">>, [{<<"file21">>, ?QOS_TEST_DATA, [Provider1]}]},
                             {<<"dir3">>, [{<<"file31">>, ?QOS_TEST_DATA, [Provider1]}]}
@@ -227,7 +220,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure(_Config) ->
                 expected_qos_entries = QosSpec#qos_spec.expected_qos_entries,
                 expected_effective_qos = QosSpec#qos_spec.expected_effective_qos,
                 expected_dir_structure = #test_dir_structure{
-                    dir_structure = {?SPACE_PATH1, [
+                    dir_structure = {?SPACE_PATH, [
                         {DirName, [
                             {<<"dir2">>, [{<<"file21">>, ?QOS_TEST_DATA, [Provider1]}]},
                             {<<"dir3">>, [{<<"file31">>, ?QOS_TEST_DATA, [Provider1, Provider2]}]}
@@ -248,13 +241,13 @@ reconcile_qos_using_file_meta_posthooks_test(_Config) ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     SessId = ?SESS_ID(Provider1),
     DirName = <<"dir1">>,
-    DirPath = filename:join(?SPACE_PATH1, DirName),
+    DirPath = filename:join(?SPACE_PATH, DirName),
     FilePath = filename:join(DirPath, <<"file1">>),
 
     QosSpec = #fulfill_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
             provider = Provider1,
-            dir_structure = {?SPACE_PATH1, [
+            dir_structure = {?SPACE_PATH, [
                 {DirName, []}
             ]}
         },
@@ -333,7 +326,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     
     ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0,
         opt_qos:get_effective_file_qos(P1Node, ?SESS_ID(Provider1), ?FILE_REF(DirGuid)),
-        ?ATTEMPTS),
+        ?QOS_ATTEMPTS),
     
     Size = size(?QOS_TEST_DATA),
     ExpectedDistributionFun = fun(List) -> 
@@ -356,7 +349,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
         lists:foreach(fun(Provider) ->
             ?assertEqual({ok, ExpectedDistributionFun(ExpectedWorkersDistribution)},
                 opt_file_metadata:get_distribution_deprecated(oct_background:get_random_provider_node(Provider), 
-                    ?SESS_ID(Provider), ?FILE_REF(Guid)), ?ATTEMPTS
+                    ?SESS_ID(Provider), ?FILE_REF(Guid)), ?QOS_ATTEMPTS
             )
         end, Providers)
     end,
@@ -380,7 +373,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     save_matching_docs(P2Node, ?FUNCTION_NAME, [{qos_entry, QosEntryId}]),
     lists:foreach(fun(Provider) ->
         ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(
-            oct_background:get_random_provider_node(Provider), ?SESS_ID(Provider), QosEntryId), ?ATTEMPTS)
+            oct_background:get_random_provider_node(Provider), ?SESS_ID(Provider), QosEntryId), ?QOS_ATTEMPTS)
     end, Providers),
     CheckDistributionFun([{Provider1, Size}, {Provider2, 0}]),
     
@@ -474,13 +467,13 @@ setup_reevaluate_test(QosParam, Status) ->
     [Provider1, _Provider2 | _] = Providers = oct_background:get_provider_ids(),
     
     DirName = generator:gen_name(),
-    DirPath = filename:join(?SPACE_PATH1, DirName),
+    DirPath = filename:join(?SPACE_PATH, DirName),
     FileName = generator:gen_name(),
     
     QosSpec = #fulfill_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
             provider = Provider1,
-            dir_structure = {?SPACE_PATH1, [
+            dir_structure = {?SPACE_PATH, [
                 {DirName, [{FileName, ?QOS_TEST_DATA, [Provider1]}]}
             ]}
         },
@@ -602,11 +595,11 @@ qos_entry_deletion_test_base(DeletionType) ->
     end,
     
     % check that 5 transfers were cancelled (4 from initial traverse and 1 reconciliation)
-    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(Provider1), replica_synchronizer, cancel, 1, 5, ?ATTEMPTS),
+    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(Provider1), replica_synchronizer, cancel, 1, 5, ?QOS_ATTEMPTS),
     
     % check that qos_entry document is deleted
     lists:foreach(fun(Node) ->
-        ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Node, qos_entry, get, [QosEntryId]), ?ATTEMPTS)
+        ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Node, qos_entry, get, [QosEntryId]), ?QOS_ATTEMPTS)
     end, oct_background:get_all_providers_nodes()),
     
     % finish transfers to unlock waiting slave job processes
@@ -614,8 +607,8 @@ qos_entry_deletion_test_base(DeletionType) ->
     
     % check that 1 traverse was cancelled
     % (only initial traverse is cancelled, reconciliation traverse is started for 1 regular file so it is properly finished at this point)
-    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(Provider1), qos_traverse, task_canceled, '_', 1, ?ATTEMPTS),
-    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(Provider1), qos_traverse, task_finished, '_', 2, ?ATTEMPTS).
+    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(Provider1), qos_traverse, task_canceled, '_', 1, ?QOS_ATTEMPTS),
+    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(Provider1), qos_traverse, task_finished, '_', 2, ?QOS_ATTEMPTS).
 
 %%%===================================================================
 %%% QoS with hardlinks tests
@@ -711,7 +704,7 @@ add_qos_for_dir_and_check_effective_qos(TestSpec) ->
     qos_test_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries),
 
     % check documents
-    qos_test_utils:assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping, ?ATTEMPTS),
+    qos_test_utils:assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping, ?QOS_ATTEMPTS),
     qos_test_utils:assert_effective_qos(ExpectedEffectiveQos, QosNameIdMapping, true).
 
 
@@ -849,6 +842,6 @@ ensure_docs_received(MsgIdentifier, [{links, RecordType, _} | Tail]) ->
 wait_for_doc(MsgIdentifier, RecordType) ->
     receive {MsgIdentifier, RecordType, _} = Msg ->
         self() ! Msg
-    after timer:seconds(?ATTEMPTS) ->
+    after timer:seconds(?QOS_ATTEMPTS) ->
         throw({doc_not_received, RecordType, MsgIdentifier})
     end.

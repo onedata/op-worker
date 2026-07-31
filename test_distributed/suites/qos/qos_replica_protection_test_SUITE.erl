@@ -103,11 +103,6 @@ all() -> [
 %%    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately
 ].
 
--define(SPACE_PLACEHOLDER, space1).
--define(SPACE_NAME, <<"space1">>).
--define(FILE_PATH(FileName), filename:join(["/", ?SPACE_NAME, FileName])).
--define(USER_PLACEHOLDER, user2).
--define(SESS_ID(ProviderPlaceholder), oct_background:get_user_session_id(?USER_PLACEHOLDER, ProviderPlaceholder)).
 
 % qos for test providers
 -define(TEST_QOS(Val), #{
@@ -726,7 +721,7 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
             ?assertEqual(
                 {error, ?ENOENT},
                 lfm_proxy:stat(Node, ?SESS_ID(Provider), {path, <<"/", ?SPACE_NAME/binary, "/", Name/binary>>}),
-                ?ATTEMPTS)
+                ?QOS_ATTEMPTS)
         end, oct_background:get_provider_nodes(Provider))
     end, oct_background:get_provider_ids()),
 
@@ -738,7 +733,7 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
     % as otherwise it will skip eviction.
     assert_initial_local_blocks_knowledge(RunNode, GuidsAndPaths),
-    ?assert(opw_test_rpc:call(RunNode, space_quota, current_size, [SpaceId]) > 0, ?ATTEMPTS),
+    ?assert(opw_test_rpc:call(RunNode, space_quota, current_size, [SpaceId]) > 0, ?QOS_ATTEMPTS),
 
     Configuration =  #{
         enabled => true,
@@ -753,7 +748,7 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
         StoppedAt
     end,
     % wait for auto-cleaning run to finish
-    ?assertEqual(true, null =/= F(), ?ATTEMPTS),
+    ?assertEqual(true, null =/= F(), ?QOS_ATTEMPTS),
 
     ?assertMatch({ok, #{
         released_bytes := ReleasedBytes,
@@ -869,6 +864,6 @@ assert_initial_local_blocks_knowledge(Node, GuidsAndPaths) ->
     lists_utils:pforeach(fun({Guid, _Path}) ->
         lists_utils:pforeach(fun(P) ->
             ?assertMatch({ok, [_ | _]}, opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(
-                Node, Guid, P), ?ATTEMPTS)
+                Node, Guid, P), ?QOS_ATTEMPTS)
         end, [QosTargetProvider, FileCreationProvider])
     end, maps:get(files, GuidsAndPaths)).

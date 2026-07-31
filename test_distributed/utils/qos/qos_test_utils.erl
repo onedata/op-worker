@@ -1,12 +1,14 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Cwiertnia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains utils functions for QoS tests.
+%%% Helpers for QoS test suites: creating the initial file tree, adding QoS
+%%% requirements, awaiting their fulfillment and asserting the resulting
+%%% documents and file distribution.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(qos_test_utils).
@@ -27,12 +29,12 @@
 % util functions
 -export([
     fulfill_qos_test_base/1,
-    get_guid/2, get_guid/3,
+    get_guid/2,
     create_dir_structure/1, create_dir_structure/4,
     create_file/4, create_file/5, create_directory/3,
     create_and_open/4,
     wait_for_qos_fulfillment_in_parallel/2,
-    add_qos/1, add_multiple_qos/1,
+    add_multiple_qos/1,
     map_qos_names_to_ids/2,
     set_qos_parameters/3, reset_qos_parameters/0
 ]).
@@ -55,14 +57,10 @@
     gather_not_matching_statuses_on_all_nodes/3
 ]).
 
--define(USER_PLACEHOLDER, user2).
--define(SPACE, space1).
--define(SESS_ID(ProviderPlaceholder), oct_background:get_user_session_id(?USER_PLACEHOLDER, ProviderPlaceholder)).
 -define(GET_FILE_UUID(Node, SessId, FilePath),
-    file_id:guid_to_uuid(qos_test_utils:get_guid(Node, SessId, FilePath))
+    file_id:guid_to_uuid(resolve_guid(Node, SessId, FilePath))
 ).
 
--define(ATTEMPTS, 60).
 
 %%%====================================================================
 %%% Util functions
@@ -85,8 +83,8 @@ fulfill_qos_test_base(#fulfill_qos_test_spec{
     WaitForQos andalso wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries),
 
     % check file distribution and qos documents
-    ?assertMatch(ok, assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping, ?ATTEMPTS)),
-    ?assertMatch(ok, assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, true, ?ATTEMPTS)),
+    ?assertMatch(ok, assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping, ?QOS_ATTEMPTS)),
+    ?assertMatch(ok, assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, true, ?QOS_ATTEMPTS)),
     ?assertMatch(true, assert_distribution_in_dir_structure(ExpectedDirStructure, GuidsAndPaths)),
     {GuidsAndPaths, QosNameIdMapping}.
 
@@ -111,7 +109,7 @@ add_qos(#qos_to_add{
     Node = oct_background:get_random_provider_node(Provider),
 
     % ensure file exists
-    ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, {path, FilePath}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, {path, FilePath}), ?QOS_ATTEMPTS),
 
     case add_qos_by_rest(Provider, FilePath, QosExpression, ReplicasNum) of
         {ok, RespBody} ->
@@ -124,7 +122,7 @@ add_qos(#qos_to_add{
 
 add_qos_by_rest(Provider, FilePath, QosExpression, ReplicasNum) ->
     Node = oct_background:get_random_provider_node(Provider),
-    FileGuid = get_guid(Node, ?SESS_ID(Provider), FilePath),
+    FileGuid = resolve_guid(Node, ?SESS_ID(Provider), FilePath),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     URL = <<"qos_requirements">>,
     Headers = [rest_test_utils:user_token_header(oct_background:get_user_access_token(?USER_PLACEHOLDER)), 
@@ -134,7 +132,7 @@ add_qos_by_rest(Provider, FilePath, QosExpression, ReplicasNum) ->
         <<"replicasNum">> => ReplicasNum,
         <<"fileId">> => FileObjectId
     },
-    SpaceId = oct_background:get_space_id(?SPACE),
+    SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
     make_rest_request(Node, URL, post, Headers, ReqBody, SpaceId, [?SPACE_MANAGE_QOS]).
 
 
@@ -250,7 +248,8 @@ get_guid(Path, #{files := FilesGuidsAndPaths, dirs := DirsGuidsAndPaths}) ->
                    ({_, _}, Acc) -> Acc
     end, undefined, FilesGuidsAndPaths ++ DirsGuidsAndPaths).
 
-get_guid(Node, SessId, Path) ->
+%% @private
+resolve_guid(Node, SessId, Path) ->
     {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:resolve_guid(Node, SessId, Path)),
     Guid.
 
@@ -322,7 +321,7 @@ wait_for_qos_fulfilment(Node, QosEntryId, QosName, ExpectedFulfillmentStatus) ->
         end,
         {opt_qos:check_qos_status(Node, ?ROOT_SESS_ID, QosEntryId), ErrMsg}
     end,
-    assert_match_with_err_msg(Fun, {ok, ExpectedFulfillmentStatus}, ?ATTEMPTS, 1000).
+    assert_match_with_err_msg(Fun, {ok, ExpectedFulfillmentStatus}, ?QOS_ATTEMPTS, 1000).
 
 
 map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->
@@ -367,7 +366,7 @@ mock_transfers(Nodes) ->
 wait_for_file_transfer_start(FileGuid) ->
     receive {qos_slave_job, _Pid, FileGuid} = Msg ->
         self() ! Msg
-    after timer:seconds(?ATTEMPTS) ->
+    after timer:seconds(?QOS_ATTEMPTS) ->
         throw(reconciliation_transfer_not_started)
     end.
 
@@ -552,7 +551,7 @@ assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, FilterOther, Attemp
 assert_file_qos_document(
     Node, FileUuid, QosEntries, AssignedEntries, FilePath, FilterAssignedEntries, Attempts
 ) ->
-    {ok, StorageId} = opw_test_rpc:call(Node, space_logic, get_local_supporting_storage, [oct_background:get_space_id(?SPACE)]),
+    {ok, StorageId} = opw_test_rpc:call(Node, space_logic, get_local_supporting_storage, [oct_background:get_space_id(?SPACE_PLACEHOLDER)]),
     ExpectedFileQos = #file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
@@ -594,9 +593,9 @@ assert_effective_qos(ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntr
     }) ->
         % if not specified in tests spec, check document on all nodes
         Providers = ensure_providers(ProviderOrUndef),
-        ExpectedQosEntriesId = qos_test_utils:map_qos_names_to_ids(ExpectedQosEntriesWithNames, QosNameIdMapping),
+        ExpectedQosEntriesId = map_qos_names_to_ids(ExpectedQosEntriesWithNames, QosNameIdMapping),
         ExpectedAssignedEntriesId = maps:map(fun(_, QosNamesList) ->
-            qos_test_utils:map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
+            map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
         end, ExpectedAssignedEntries),
 
         lists:foreach(fun(Provider) ->
@@ -616,7 +615,7 @@ assert_effective_qos(ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntr
 
 assert_effective_qos(Provider, FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts) ->
     Node = oct_background:get_random_provider_node(Provider),
-    StorageId = opt_spaces:get_storage_id(Provider, oct_background:get_space_id(?SPACE)),
+    StorageId = opt_spaces:get_storage_id(Provider, oct_background:get_space_id(?SPACE_PLACEHOLDER)),
     ExpectedEffectiveQos = #effective_file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
@@ -627,7 +626,7 @@ assert_effective_qos(Provider, FilePath, QosEntries, AssignedEntries, FilterAssi
     ExpectedEffectiveQosSorted = sort_effective_qos(ExpectedEffectiveQos),
 
     GetSortedEffectiveQos = fun() ->
-        FileGuid = qos_test_utils:get_guid(Node, ?SESS_ID(Provider), FilePath),
+        FileGuid = resolve_guid(Node, ?SESS_ID(Provider), FilePath),
         {ok, EffQos} = get_effective_qos_by_lfm(Node, ?SESS_ID(Provider), FileGuid),
         EffQosSorted = sort_effective_qos(EffQos),
         ErrMsg = str_utils:format(
@@ -661,7 +660,7 @@ assert_distribution_in_dir_structure(#test_dir_structure{
     % if not specified in tests spec, check document on all nodes
     Providers = ensure_providers(ProvidersOrUndef),
 
-    assert_distribution_in_dir_structure(Providers, ExpectedDirStructure, <<"/">>, GuidsAndPaths, ?ATTEMPTS);
+    assert_distribution_in_dir_structure(Providers, ExpectedDirStructure, <<"/">>, GuidsAndPaths, ?QOS_ATTEMPTS);
 
 assert_distribution_in_dir_structure(ExpectedDirStructure, GuidsAndPaths) ->
     assert_distribution_in_dir_structure(#test_dir_structure{dir_structure = ExpectedDirStructure}, GuidsAndPaths).
