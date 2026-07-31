@@ -213,7 +213,7 @@ should_not_invalidate_file_after_replication_test(_Config) -> ?run_test().
 
 init_per_suite(Config) ->
     ModulesToLoad = [
-        ?MODULE, sd_test_utils, storage_file_setup_utils,
+        ?MODULE, sd_test_utils, storage_file_tree_test_utils,
         storage_import_test_utils, storage_import_update_test_base
     ],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{

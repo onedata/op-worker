@@ -11,18 +11,25 @@
 %%% imported/registered into a space. Operates via the storage helper, so it
 %%% works uniformly across storage types (POSIX, S3, ...).
 %%%
+%%% Entries can be handled one by one (create_file/4,5, chmod/4, stat/3, ...) or
+%%% declaratively, as whole trees (create_file_tree_on_storage/3 and its inverse
+%%% delete_file_tree_from_storage/3) - the storage side counterpart of
+%%% file_tree_test_utils, which builds the same kind of declared tree through lfm.
+%%%
 %%% NOTE: this module must be added to ?LOAD_MODULES of any suite that uses it,
 %%% as the on-node routines are executed on the op_worker node via rpc.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_file_setup_utils).
+-module(storage_file_tree_test_utils).
 -author("Bartosz Walkowicz").
 
+-include("storage/storage_file_tree_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("kernel/include/file.hrl").
 
 %% API
+-export([create_file_tree_on_storage/3, delete_file_tree_from_storage/3]).
 -export([create_file/4, create_file/5]).
 -export([create_fifo/3, create_fifo/4]).
 -export([create_dir/3, create_dir/4, chown/5]).
@@ -36,10 +43,69 @@
 -export([chmod_on_storage/3, truncate_on_storage/4, rename_on_storage/3, rmdir_on_storage/2]).
 -export([stat_on_storage/2, get_mtime_on_storage/2, set_mtime_on_storage/3, set_atime_and_mtime_on_storage/4]).
 
+% A single node of a declared storage file tree: either a generic onenv file/dir
+% spec, or a storage specific FIFO spec (created on storage but not imported).
+-type file_tree_node_spec() :: file_tree_test_utils:object_spec() | #storage_fifo_spec{}.
+-type file_tree_spec() ::
+    undefined
+    | file_tree_node_spec()
+    | [file_tree_node_spec()].
+
+-export_type([file_tree_node_spec/0, file_tree_spec/0]).
+
+% Max number of concurrent processes used to create/delete the top-level tree nodes
+% on the storage. Only the top-level siblings are parallelized (each subtree is
+% processed sequentially), so the total concurrency stays bounded by this value -
+% parallelizing every level would multiply across levels and overload the provider.
+-define(SETUP_PARALLELISM, 20).
+
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates the declared file tree directly on the storage (bypassing the logical
+%% filesystem) so that it can later be imported. Returns the spec with all file
+%% names concretized (undefined names are replaced with random ones), so that the
+%% same structure can be used for verification.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_file_tree_on_storage(oct_background:entity_selector(), storage:id(), file_tree_spec()) ->
+    file_tree_spec().
+create_file_tree_on_storage(_ProviderSelector, _StorageId, undefined) ->
+    undefined;
+create_file_tree_on_storage(ProviderSelector, StorageId, Specs) when is_list(Specs) ->
+    lists_utils:pmap(fun(Spec) ->
+        create_file_tree_on_storage(ProviderSelector, StorageId, Spec)
+    end, Specs, ?SETUP_PARALLELISM);
+create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
+    create_node_on_storage(ProviderSelector, StorageId, <<"/">>, Spec).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes a declared file tree directly from the storage (bypassing the logical
+%% filesystem) - the inverse of create_file_tree_on_storage/3, used by continuous
+%% (update) scan tests to simulate whole (sub)trees disappearing from the storage.
+%% Regular files are unlinked (their size taken from the declared content) and
+%% directories are removed bottom-up (the rmdir is a no-op on object storages -
+%% see rmdir_on_storage/2). The spec must be concretized (all names filled in) -
+%% e.g. the one returned by create_file_tree_on_storage/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_file_tree_from_storage(oct_background:entity_selector(), storage:id(), file_tree_spec()) ->
+    ok.
+delete_file_tree_from_storage(_ProviderSelector, _StorageId, undefined) ->
+    ok;
+delete_file_tree_from_storage(ProviderSelector, StorageId, Specs) when is_list(Specs) ->
+    lists_utils:pforeach(fun(Spec) ->
+        delete_file_tree_from_storage(ProviderSelector, StorageId, Spec)
+    end, Specs, ?SETUP_PARALLELISM);
+delete_file_tree_from_storage(ProviderSelector, StorageId, Spec) ->
+    delete_node_from_storage(ProviderSelector, StorageId, <<"/">>, Spec).
 
 
 -spec create_file(oct_background:node_selector(), storage:id(), helpers:file_id(), binary()) -> ok.
@@ -320,6 +386,86 @@ set_atime_and_mtime_on_storage(StorageId, StorageFileId, Atime, Mtime) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec create_node_on_storage(
+    oct_background:entity_selector(), storage:id(), file_meta:path(), file_tree_node_spec()
+) ->
+    file_tree_node_spec().
+create_node_on_storage(ProviderSelector, StorageId, ParentPath, DirSpec = #dir_spec{}) ->
+    #dir_spec{name = Name, mode = Mode, uid = Uid, gid = Gid, children = Children} =
+        ConcreteDirSpec = ensure_name(DirSpec),
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    ok = create_dir(ProviderSelector, StorageId, StorageFileId, Mode),
+    maybe_chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid),
+    ConcreteChildren = [
+        create_node_on_storage(ProviderSelector, StorageId, StorageFileId, ChildSpec)
+        || ChildSpec <- Children
+    ],
+    ConcreteDirSpec#dir_spec{children = ConcreteChildren};
+
+create_node_on_storage(ProviderSelector, StorageId, ParentPath, FileSpec = #file_spec{}) ->
+    #file_spec{name = Name, mode = Mode, content = Content, uid = Uid, gid = Gid} =
+        ConcreteFileSpec = ensure_name(FileSpec),
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    ok = create_file(ProviderSelector, StorageId, StorageFileId, Content, Mode),
+    maybe_chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid),
+    ConcreteFileSpec;
+
+create_node_on_storage(ProviderSelector, StorageId, ParentPath, FifoSpec = #storage_fifo_spec{}) ->
+    #storage_fifo_spec{name = Name} = ConcreteFifoSpec = ensure_name(FifoSpec),
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    ok = create_fifo(ProviderSelector, StorageId, StorageFileId),
+    ConcreteFifoSpec.
+
+
+%% @private
+-spec delete_node_from_storage(
+    oct_background:entity_selector(), storage:id(), file_meta:path(), file_tree_node_spec()
+) ->
+    ok.
+delete_node_from_storage(ProviderSelector, StorageId, ParentPath, #dir_spec{name = Name, children = Children}) ->
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    % delete all children first (required on POSIX, where a non-empty directory
+    % cannot be removed), then the now-empty directory itself
+    lists:foreach(fun(ChildSpec) ->
+        delete_node_from_storage(ProviderSelector, StorageId, StorageFileId, ChildSpec)
+    end, Children),
+    rmdir(ProviderSelector, StorageId, StorageFileId);
+delete_node_from_storage(ProviderSelector, StorageId, ParentPath, #file_spec{name = Name, content = Content}) ->
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    delete_file(ProviderSelector, StorageId, StorageFileId, byte_size(Content));
+delete_node_from_storage(ProviderSelector, StorageId, ParentPath, #storage_fifo_spec{name = Name}) ->
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    delete_file(ProviderSelector, StorageId, StorageFileId, 0).
+
+
+%% @private
+-spec maybe_chown(
+    oct_background:entity_selector(), storage:id(), helpers:file_id(),
+    luma:uid() | undefined, luma:gid() | undefined
+) ->
+    ok.
+maybe_chown(_ProviderSelector, _StorageId, _StorageFileId, undefined, _Gid) ->
+    ok;
+maybe_chown(_ProviderSelector, _StorageId, _StorageFileId, _Uid, undefined) ->
+    ok;
+maybe_chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid) ->
+    ok = chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid).
+
+
+%% @private
+-spec ensure_name(file_tree_node_spec()) -> file_tree_node_spec().
+ensure_name(DirSpec = #dir_spec{name = undefined}) ->
+    DirSpec#dir_spec{name = str_utils:rand_hex(20)};
+ensure_name(FileSpec = #file_spec{name = undefined}) ->
+    FileSpec#file_spec{name = str_utils:rand_hex(20)};
+ensure_name(FifoSpec = #storage_fifo_spec{name = undefined}) ->
+    FifoSpec#storage_fifo_spec{name = str_utils:rand_hex(20)};
+ensure_name(Spec) ->
+    Spec.
+
 
 
 %% @private

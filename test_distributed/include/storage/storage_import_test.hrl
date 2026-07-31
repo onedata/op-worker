@@ -13,7 +13,7 @@
 -define(STORAGE_IMPORT_TEST_HRL, 1).
 
 
--include("file/file_tree_test.hrl").
+-include("storage/storage_file_tree_test.hrl").
 -include("test_rpc.hrl").
 -include("env/space_setup_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -41,13 +41,6 @@
 -define(IF_POSIX(StorageType, Expr), StorageType =:= posix andalso (Expr)).
 
 
-%% Declares a FIFO (named pipe) to be created directly on the storage. A FIFO is a
-%% special (unsupported) file type that storage import must ignore - it is created
-%% on the storage but never imported into the logical filesystem.
--record(storage_fifo_spec, {
-    name = undefined :: undefined | binary()
-}).
-
 -record(storage_import_test_suite_ctx, {
     storage_type :: posix | s3,
     importing_provider_selector :: oct_background:entity_selector(),
@@ -72,8 +65,7 @@
     space_path :: file_meta:path(),
     % concretized file tree spec (all names filled in) that was created on the
     % imported storage; undefined when the storage was left empty
-    file_tree_spec :: undefined | file_tree_test_utils:object_spec()
-        | [file_tree_test_utils:object_spec()],
+    file_tree_spec :: storage_file_tree_test_utils:file_tree_spec(),
     importing_provider_ctx :: #provider_ctx{},
     non_importing_provider_ctx :: #provider_ctx{}
 }).

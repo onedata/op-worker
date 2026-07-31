@@ -82,7 +82,7 @@ empty_directory_deletion_test(SuiteCtx) ->
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_import_test_utils:delete_file_tree_from_storage(
+    storage_file_tree_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -117,7 +117,7 @@ non_empty_directory_deletion_test(SuiteCtx) ->
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_import_test_utils:delete_file_tree_from_storage(
+    storage_file_tree_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -167,7 +167,7 @@ import_continues_after_deletion_test(SuiteCtx) ->
 
     %% scan 2: the whole imported directory disappears from the storage
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_import_test_utils:delete_file_tree_from_storage(
+    storage_file_tree_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -187,7 +187,7 @@ import_continues_after_deletion_test(SuiteCtx) ->
     %% scan 3: a brand new directory (holding a file), of the same shape as the
     %% initial one, is created on the storage and must be imported normally
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    NewFileTreeSpec = storage_import_test_utils:create_file_tree_on_storage(
+    NewFileTreeSpec = storage_file_tree_test_utils:create_file_tree_on_storage(
         ImportingProviderSelector, ImportedStorageId,
         #dir_spec{children = [#file_spec{content = ?RAND_STR()}]}
     ),
@@ -251,13 +251,13 @@ recreate_file_deleted_by_sync_test(SuiteCtx) ->
     ),
     ?assertMatch(
         {ok, _},
-        storage_file_setup_utils:stat(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+        storage_file_tree_test_utils:stat(ImportingProviderSelector, ImportedStorageId, StorageFileId),
         ?STORAGE_IMPORT_ATTEMPTS
     ),
 
     %% the file disappears from the storage - scan 2 must delete it from the space
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_file_setup_utils:delete_file(
+    storage_file_tree_test_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, byte_size(InitialContent)
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -327,7 +327,7 @@ imported_file_delete_recreate_lifecycle_test(SuiteCtx) ->
     )),
     ?assertMatch(
         {error, ?ENOENT},
-        storage_file_setup_utils:stat(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+        storage_file_tree_test_utils:stat(ImportingProviderSelector, ImportedStorageId, StorageFileId),
         ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
     ),
 
@@ -341,14 +341,14 @@ imported_file_delete_recreate_lifecycle_test(SuiteCtx) ->
     ),
     ?assertMatch(
         {ok, _},
-        storage_file_setup_utils:stat(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+        storage_file_tree_test_utils:stat(ImportingProviderSelector, ImportedStorageId, StorageFileId),
         ?STORAGE_IMPORT_ATTEMPTS
     ),
 
     %% the storage file disappears - scan 2 must delete the recreated file from
     %% both providers
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_file_setup_utils:delete_file(
+    storage_file_tree_test_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, byte_size(RecreatedContent)
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -400,11 +400,11 @@ simultaneous_deletion_and_modification_test(SuiteCtx) ->
 
     %% delete one file and chmod its sibling, both directly on the storage
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_file_setup_utils:delete_file(
+    storage_file_tree_test_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId,
         filepath_utils:join([<<"/">>, DirName, DeletedFileName]), byte_size(DeletedContent)
     ),
-    storage_file_setup_utils:chmod(
+    storage_file_tree_test_utils:chmod(
         ImportingProviderSelector, ImportedStorageId,
         filepath_utils:join([<<"/">>, DirName, ModifiedFileName]), NewMode
     ),
@@ -455,7 +455,7 @@ file_deletion_purges_metadata_test(SuiteCtx) ->
         #xattr{name = <<"xattr_name">>, value = <<"xattr_value">>}),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_import_test_utils:delete_file_tree_from_storage(
+    storage_file_tree_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -506,7 +506,7 @@ nested_file_deletion_test(SuiteCtx) ->
 
     #file_spec{name = DeletedFileName, content = DeletedContent} = DeletedFileSpec,
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_file_setup_utils:delete_file(
+    storage_file_tree_test_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId,
         filepath_utils:join([<<"/">>, DirName, DeletedFileName]), byte_size(DeletedContent)
     ),
@@ -558,7 +558,7 @@ bulk_deletion_test(SuiteCtx) ->
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_import_test_utils:delete_file_tree_from_storage(
+    storage_file_tree_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2, #{}, ?LARGE_IMPORT_SCAN_ATTEMPTS),
@@ -610,7 +610,7 @@ create_subfiles_and_delete_before_import_is_finished_test(SuiteCtx) ->
     %% 1 wrapping dir + 5 + 25 subdirectories holding 250 files - large enough
     %% that the scan importing it is still running when the deletion strikes
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    FileTreeSpec = storage_import_test_utils:create_file_tree_on_storage(
+    FileTreeSpec = storage_file_tree_test_utils:create_file_tree_on_storage(
         ImportingProviderSelector, ImportedStorageId,
         #dir_spec{children = file_tree_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR())}
     ),
@@ -622,7 +622,7 @@ create_subfiles_and_delete_before_import_is_finished_test(SuiteCtx) ->
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_import_test_utils:delete_file_tree_from_storage(
+    storage_file_tree_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
 

@@ -1309,7 +1309,7 @@ create_posix_storage(ProviderSelector) ->
 %% @private
 -spec place_source_file(source_backend(), helpers:file_id(), binary()) -> ok.
 place_source_file({s3, ProviderSelector, StorageId}, StorageFileId, Content) ->
-    storage_file_setup_utils:create_file(ProviderSelector, StorageId, StorageFileId, Content);
+    storage_file_tree_test_utils:create_file(ProviderSelector, StorageId, StorageFileId, Content);
 place_source_file({http, ProviderSelector, Server}, StorageFileId, Content) ->
     http_storage_test_server:add_file(ProviderSelector, Server, StorageFileId, Content).
 
@@ -1317,7 +1317,7 @@ place_source_file({http, ProviderSelector, Server}, StorageFileId, Content) ->
 %% @private
 -spec update_source_file(source_backend(), helpers:file_id(), binary()) -> ok.
 update_source_file({s3, ProviderSelector, StorageId}, StorageFileId, Content) ->
-    storage_file_setup_utils:write_file(ProviderSelector, StorageId, StorageFileId, 0, Content);
+    storage_file_tree_test_utils:write_file(ProviderSelector, StorageId, StorageFileId, 0, Content);
 update_source_file({http, ProviderSelector, Server}, StorageFileId, Content) ->
     http_storage_test_server:add_file(ProviderSelector, Server, StorageFileId, Content).
 
@@ -1325,7 +1325,7 @@ update_source_file({http, ProviderSelector, Server}, StorageFileId, Content) ->
 %% @private
 -spec remove_source_file(source_backend(), helpers:file_id(), non_neg_integer()) -> ok.
 remove_source_file({s3, ProviderSelector, StorageId}, StorageFileId, CurrentSize) ->
-    storage_file_setup_utils:delete_file(ProviderSelector, StorageId, StorageFileId, CurrentSize);
+    storage_file_tree_test_utils:delete_file(ProviderSelector, StorageId, StorageFileId, CurrentSize);
 remove_source_file({http, ProviderSelector, Server}, StorageFileId, _CurrentSize) ->
     http_storage_test_server:remove_file(ProviderSelector, Server, StorageFileId).
 
@@ -1336,8 +1336,8 @@ remove_source_file({http, ProviderSelector, Server}, StorageFileId, _CurrentSize
 %% leave trailing bytes, so the file is deleted and recreated instead).
 -spec replace_source_file(source_backend(), helpers:file_id(), non_neg_integer(), binary()) -> ok.
 replace_source_file({s3, ProviderSelector, StorageId}, StorageFileId, CurrentSize, NewContent) ->
-    ok = storage_file_setup_utils:delete_file(ProviderSelector, StorageId, StorageFileId, CurrentSize),
-    storage_file_setup_utils:create_file(ProviderSelector, StorageId, StorageFileId, NewContent);
+    ok = storage_file_tree_test_utils:delete_file(ProviderSelector, StorageId, StorageFileId, CurrentSize),
+    storage_file_tree_test_utils:create_file(ProviderSelector, StorageId, StorageFileId, NewContent);
 replace_source_file({http, ProviderSelector, Server}, StorageFileId, _CurrentSize, NewContent) ->
     http_storage_test_server:add_file(ProviderSelector, Server, StorageFileId, NewContent).
 
