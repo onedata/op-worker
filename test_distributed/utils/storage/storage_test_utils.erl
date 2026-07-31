@@ -1,13 +1,21 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions used in tests that operate on provider's
-%%% storage via RPC.
+%%% Utility functions inspecting a provider's storage through the file system of
+%%% the node the storage is mounted on (rpc calls to the 'file' module) - hence
+%%% they only work for POSIX compatible storages, but in exchange they report
+%%% what the operating system sees (#file_info{}), independently of the storage
+%%% helper. Backs the assertion macros of storage_test.hrl.
+%%%
+%%% The two ensure_*_created_on_storage/2 functions are the odd ones out - they
+%%% go through lfm, not the storage - but they are named after their purpose
+%%% (materializing a file on the storage, as creating it logically does not
+%%% suffice) and are used together with the assertions below, hence they live here.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_test_utils).
@@ -45,7 +53,7 @@
     ok | no_return().
 assert_file_info(ExpectedValues, Worker, FilePath, Line, Attempts) when Attempts >= 0 ->
     try
-        {ok, FI} = storage_test_utils:read_file_info(Worker, FilePath),
+        {ok, FI} = read_file_info(Worker, FilePath),
         maps:foreach(fun(Field, ExpectedValue) ->
             assert_field(Field, ExpectedValue, FI)
         end, ExpectedValues)
@@ -152,13 +160,13 @@ storage_mount_point(Worker, StorageId) ->
 
 -spec is_supporting_storage_posix_compatible(node(), od_space:id()) -> boolean().
 is_supporting_storage_posix_compatible(Worker, SpaceId) ->
-    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Worker, SpaceId),
+    {ok, StorageId} = get_supporting_storage_id(Worker, SpaceId),
     is_posix_compatible_storage(Worker, StorageId).
 
 
 -spec is_posix_compatible_storage(node(), storage:id()) -> boolean().
 is_posix_compatible_storage(Worker, StorageId) ->
-    Helper = storage_test_utils:get_helper(Worker, StorageId),
+    Helper = get_helper(Worker, StorageId),
     helper:is_posix_compatible(Helper).
 
 
@@ -191,9 +199,9 @@ assert_file_owner_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessi
 -spec assert_file_attrs_on_posix_storage(node(), od_space:id(), file_meta:path(), session:id(), map()) ->
     ok | no_return().
 assert_file_attrs_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessionId, ExpAttrs) ->
-    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Node, SpaceId),
+    {ok, StorageId} = get_supporting_storage_id(Node, SpaceId),
 
-    case storage_test_utils:is_posix_compatible_storage(Node, StorageId) of
+    case is_posix_compatible_storage(Node, StorageId) of
         true ->
             {ok, UserId} = rpc:call(Node, session, get_user_id, [ExpOwnerSessionId]),
             {ok, UidAndGidAttrs} = rpc:call(Node, luma, map_to_storage_credentials, [
@@ -220,4 +228,4 @@ assert_file_attrs_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessi
 -spec get_storage_file_path(node(), od_space:id(), file_meta:path()) -> binary().
 get_storage_file_path(Node, SpaceId, LogicalPath) ->
     [_Sep, _SpaceName | PathTokens] = filepath_utils:split(LogicalPath),
-    storage_test_utils:file_path(Node, SpaceId, filepath_utils:join(PathTokens)).
+    file_path(Node, SpaceId, filepath_utils:join(PathTokens)).

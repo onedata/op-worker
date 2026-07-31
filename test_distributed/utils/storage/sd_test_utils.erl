@@ -1,13 +1,20 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Util functions for performing operations on storage using storage_driver
-%%% in tests.
+%%% in tests. Entries are addressed by a #sd_handle{} (built with new_handle/3,4),
+%%% which makes this the only test layer able to list a storage directory and
+%%% remove a storage subtree uniformly across storage types (see recursive_rm/2,3).
+%%%
+%%% NOTE: the operations are executed on the given op_worker node via rpc, with
+%%% the exception of the ones that merely compute on a handle already fetched
+%%% (new_child_handle/2, and the private type/2 and size/2) - those run on the
+%%% test node.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sd_test_utils).
@@ -87,7 +94,7 @@ write_file(Node, SDHandle, Offset, Data) ->
     end.
 
 read_file(Node, SDHandle, Offset, Size) ->
-    % this function opens and writes to file to ensure that file_handle is not deleted
+    % this function opens and reads the file to ensure that file_handle is not deleted
     % after RPC process dies
     Self = self(),
     rpc:call(Node, erlang, spawn, [fun() ->
@@ -256,7 +263,7 @@ setup_test_files_structure(W, RootHandle, [{Dirs, Files}], CreatedDirs, CreatedF
             true ->
                 ok;
             false ->
-                ok = sd_test_utils:mkdir(W, SubDirHandle, ?DEFAULT_DIR_PERMS)
+                ok = mkdir(W, SubDirHandle, ?DEFAULT_DIR_PERMS)
         end,
         NewDirId = storage_driver:get_storage_file_id(SubDirHandle),
         [NewDirId | CreatedDirsIn]
@@ -269,7 +276,7 @@ setup_test_files_structure(W, RootHandle, [{Dirs, Files} | Rest], CreatedDirs, C
             true ->
                 ok;
             false ->
-                ok = sd_test_utils:mkdir(W, SubDirHandle, ?DEFAULT_DIR_PERMS)
+                ok = mkdir(W, SubDirHandle, ?DEFAULT_DIR_PERMS)
         end,
         {CreatedDirsIn2, CreatedFilesIn2} =
             setup_test_files_structure(W, SubDirHandle, Rest, CreatedDirsIn, CreatedFilesIn, OnlyGenerateNames),
@@ -285,7 +292,7 @@ create_files(W, RootHandle, FilesNum, CreatedFiles, OnlyGenerateNames) ->
             true ->
                 ok;
             false ->
-                ok = sd_test_utils:create_file(W, SubDirHandle, ?DEFAULT_FILE_PERMS)
+                ok = create_file(W, SubDirHandle, ?DEFAULT_FILE_PERMS)
         end,
         NewFileId = storage_driver:get_storage_file_id(SubDirHandle),
         [NewFileId | CreatedFilesIn]
