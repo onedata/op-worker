@@ -733,7 +733,7 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
     % as otherwise it will skip eviction.
     assert_initial_local_blocks_knowledge(RunNode, GuidsAndPaths),
-    ?assert(opw_test_rpc:call(RunNode, space_quota, current_size, [SpaceId]) > 0, ?QOS_ATTEMPTS),
+    ?assert(opt_spaces:get_occupancy(RunNode, SpaceId) > 0, ?QOS_ATTEMPTS),
 
     Configuration =  #{
         enabled => true,

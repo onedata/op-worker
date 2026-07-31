@@ -288,7 +288,7 @@ periodical_autocleaning_should_evict_file_replica_when_it_is_replicated(Config) 
 
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [Size, Size]), Guid),
     ?assertFilesInView(KrkNode, SpaceId, [Guid]),
-    ?assertEqual(Size, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(Size, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     configure_autocleaning(KrkNode, SpaceId, #{
         enabled => true,
         target => 0,
@@ -322,7 +322,7 @@ forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated(
     ?assertEqual({ok, [[0, Size]]},
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(KrkNode, Guid, ParisId), ?ATTEMPTS),
     ?assertFilesInView(KrkNode, SpaceId, [Guid]),
-    ?assertEqual(Size, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(Size, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     configure_autocleaning(KrkNode, SpaceId, #{
         enabled => true,
         target => 0,
@@ -364,7 +364,7 @@ restart_autocleaning_run_test(Config) ->
     ?assertEqual({ok, [[0, Size]]},
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(KrkNode, Guid, ParisId), ?ATTEMPTS),
     ?assertFilesInView(KrkNode, SpaceId, [Guid]),
-    ?assertEqual(Size, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(Size, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     % pretend that there is a stalled autocleaning_run
     Ctx = rpc:call(KrkNode, autocleaning_run, get_ctx, []),
     Doc = #document{
@@ -419,7 +419,7 @@ autocleaning_should_evict_file_replica_replicated_by_job(Config) ->
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [0, Size]), Guid),
     schedule_file_replication(KrkNode, KrkSessId, Guid, KrkId, Size),
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [Size, Size]), Guid),
-    ?assertEqual(Size, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(Size, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [0, Size]), Guid),
     ?assertOneOfReports({ok, #{
         released_bytes := Size,
@@ -448,7 +448,7 @@ autocleaning_should_evict_file_replica_replicated_by_qos(Config) ->
     {ok, QosEntryId} = opt_qos:add_qos_entry(KrkNode, KrkSessId, ?FILE_REF(Guid), <<"providerId=", KrkId/binary>>, 1),
     ?assertMatch({ok, {#{QosEntryId := _}, _}}, opt_qos:get_effective_file_qos(KrkNode, KrkSessId, ?FILE_REF(Guid))),
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [Size, Size]), Guid),
-    ?assertEqual(Size, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(Size, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     ok = opt_qos:remove_qos_entry(KrkNode, KrkSessId, QosEntryId),
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [0, Size]), Guid),
     ?assertOneOfReports({ok, #{
@@ -498,15 +498,15 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
     }),
 
     ?assertFilesInView(KrkNode, SpaceId, Guids),
-    ?assertEqual(FilesNum * FileSize, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(FilesNum * FileSize, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     % "On the fly" replication of the ExtraFile will cause occupancy to exceed the Threshold.
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [0, ExtraFileSize]), EG),
     file_test_utils:replicate_by_read(ParisNode, KrkNode, KrkSessId, EG),
     {ok, [ARId]} = ?assertMatch({ok, [_]}, list(KrkNode, SpaceId), ?ATTEMPTS),
     ?assertRunFinished(KrkNode, ARId, ?BULK_EVICTION_ATTEMPTS),
-    ?assertEqual(true, current_size(KrkNode, SpaceId) =< Target, ?ATTEMPTS),
+    ?assertEqual(true, opt_spaces:get_occupancy(KrkNode, SpaceId) =< Target, ?ATTEMPTS),
     % ensure that not all files will be cleaned
-    ?assertEqual(true, current_size(KrkNode, SpaceId) >= 100, ?ATTEMPTS).
+    ?assertEqual(true, opt_spaces:get_occupancy(KrkNode, SpaceId) >= 100, ?ATTEMPTS).
 
 autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules(Config) ->
     #{
@@ -785,7 +785,7 @@ cancel_autocleaning_run(Config) ->
     }),
 
     ?assertFilesInView(KrkNode, SpaceId, Guids),
-    ?assertEqual(FilesNum * FileSize, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(FilesNum * FileSize, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     % "On the fly" replication of the ExtraFile will cause occupancy to exceed the Threshold.
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [0, ExtraFileSize]), EG),
     file_test_utils:replicate_by_read(ParisNode, KrkNode, KrkSessId, EG),
@@ -861,7 +861,7 @@ time_warp_test(Config) ->
     }),
 
     ?assertFilesInView(KrkNode, SpaceId, Guids),
-    ?assertEqual(FilesNum * FileSize, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(FilesNum * FileSize, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     StartTimeSeconds = 1000000000, % 10 ^ 9
 
     ok = time_test_utils:set_current_time_seconds(StartTimeSeconds),
@@ -1352,11 +1352,6 @@ list(Worker, SpaceId) ->
 -spec get_run_report(node(), autocleaning_run:id()) -> {ok, map()} | {error, term()}.
 get_run_report(Worker, ARId) ->
     rpc:call(Worker, autocleaning_api, get_run_report, [ARId]).
-
-%% @private
--spec current_size(node(), od_space:id()) -> non_neg_integer().
-current_size(Worker, SpaceId) ->
-    rpc:call(Worker, space_quota, current_size, [SpaceId]).
 
 %% @private
 -spec change_last_open(node(), file_id:file_guid(), NewLastOpen :: non_neg_integer()) ->

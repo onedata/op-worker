@@ -647,7 +647,7 @@ block_eviction_transfer(OpwNode) ->
 
 
 get_current_space_quota(Node, SpaceId) ->
-    rpc:call(Node, space_quota, current_size, [SpaceId]).
+    opt_spaces:get_occupancy(Node, SpaceId).
 
 enable_file_popularity(Node, SpaceId) ->
     ok = rpc:call(Node, file_popularity_api, enable, [SpaceId]).

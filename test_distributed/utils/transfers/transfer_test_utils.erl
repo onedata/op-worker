@@ -81,11 +81,7 @@
     assert_distribution/2, assert_distribution/3,
     assert_initial_distribution/2,
     await_distribution/3,
-    remove_all_transfers/1,
-
-    get_space_support_size/2,
-    get_space_occupancy/2,
-    set_space_occupancy/3
+    remove_all_transfers/1
 ]).
 
 -type transfer_type() :: replication | eviction | migration.
@@ -791,29 +787,6 @@ delete_transfer_ignoring_missing_doc(ProviderSelector, TransferId) ->
                 ok
         end
     end).
-
-
--spec get_space_support_size(oct_background:entity_selector(), od_space:id()) ->
-    non_neg_integer().
-get_space_support_size(ProviderSelector, SpaceId) ->
-    {ok, SupportSize} = opw_test_rpc:call(ProviderSelector, provider_logic, get_support_size, [SpaceId]),
-    SupportSize.
-
-
--spec get_space_occupancy(oct_background:entity_selector(), od_space:id()) ->
-    non_neg_integer().
-get_space_occupancy(ProviderSelector, SpaceId) ->
-    opw_test_rpc:call(ProviderSelector, space_quota, current_size, [SpaceId]).
-
-
--spec set_space_occupancy(oct_background:entity_selector(), od_space:id(), non_neg_integer()) ->
-    ok.
-set_space_occupancy(ProviderSelector, SpaceId, TargetSize) ->
-    CurrentSize = get_space_occupancy(ProviderSelector, SpaceId),
-    opw_test_rpc:call(ProviderSelector, space_quota, apply_size_change, [
-        SpaceId, TargetSize - CurrentSize
-    ]),
-    ok.
 
 
 %%%===================================================================

@@ -377,8 +377,8 @@ replication_with_exactly_enough_space_test(_Config) ->
     }),
 
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    SupportSize = transfer_test_utils:get_space_support_size(OtherProviderSelector, SpaceId),
-    transfer_test_utils:set_space_occupancy(
+    SupportSize = opt_spaces:get_support_size(OtherProviderSelector, SpaceId),
+    opt_spaces:set_occupancy(
         OtherProviderSelector, SpaceId, SupportSize - ?EXACT_FIT_FILE_SIZE
     ),
 
@@ -399,8 +399,8 @@ replication_into_full_space_test(_Config) ->
         }),
 
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    SupportSize = transfer_test_utils:get_space_support_size(OtherProviderSelector, SpaceId),
-    transfer_test_utils:set_space_occupancy(OtherProviderSelector, SpaceId, SupportSize),
+    SupportSize = opt_spaces:get_support_size(OtherProviderSelector, SpaceId),
+    opt_spaces:set_occupancy(OtherProviderSelector, SpaceId, SupportSize),
 
     TransferId = transfer_test_utils:schedule_transfer(TestSuiteCtx, FileObject),
     transfer_test_utils:await_transfer_ended(TestSuiteCtx, TransferId, FileObject, #{
@@ -702,7 +702,7 @@ init_per_testcase(Case, Config) when
     % leftover file trees of previous runs
     NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    OccupancyBefore = transfer_test_utils:get_space_occupancy(OtherProviderSelector, SpaceId),
+    OccupancyBefore = opt_spaces:get_occupancy(OtherProviderSelector, SpaceId),
     [{space_occupancy_before, OccupancyBefore} | NewConfig];
 
 init_per_testcase(Case, Config) when
@@ -752,7 +752,7 @@ end_per_testcase(Case, Config) when
     } = ?SUITE_CTX,
     SpaceId = oct_background:get_space_id(SpaceSelector),
     OccupancyBefore = ?config(space_occupancy_before, Config),
-    transfer_test_utils:set_space_occupancy(OtherProviderSelector, SpaceId, OccupancyBefore),
+    opt_spaces:set_occupancy(OtherProviderSelector, SpaceId, OccupancyBefore),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case = replication_continues_on_modified_storage_test, Config) ->

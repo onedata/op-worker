@@ -304,7 +304,7 @@ eviction_decreases_space_occupancy_test(_Config) ->
 
     % the shared space is used by the other test cases too - assert the
     % occupancy changes relative to the state before the initial replication
-    OccupancyBefore = transfer_test_utils:get_space_occupancy(OtherProviderSelector, SpaceId),
+    OccupancyBefore = opt_spaces:get_occupancy(OtherProviderSelector, SpaceId),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
     await_space_occupancy(OtherProviderSelector, SpaceId, OccupancyBefore + FileSize),
 
@@ -386,6 +386,6 @@ end_per_testcase(Case, Config) ->
 await_space_occupancy(ProviderSelector, SpaceId, ExpOccupancy) ->
     ?assertEqual(
         ExpOccupancy,
-        transfer_test_utils:get_space_occupancy(ProviderSelector, SpaceId),
+        opt_spaces:get_occupancy(ProviderSelector, SpaceId),
         ?TRANSFER_ATTEMPTS
     ).
