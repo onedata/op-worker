@@ -79,7 +79,7 @@
 -type mock_call_ctx() :: #atm_mock_call_ctx{}.
 -type hook() :: fun((mock_call_ctx()) -> ok).
 -type exp_state_diff_fun() :: fun((mock_call_ctx()) ->
-    false | {true, atm_workflow_execution_exp_state_builder:exp_state()}
+    false | {true, atm_workflow_execution_exp_state_builder:ctx()}
 ).
 -type exp_state_diff() ::
     exp_state_diff_fun() |
@@ -121,9 +121,9 @@
 -type test_spec() :: #atm_workflow_execution_test_spec{}.
 
 -export_type([
-    mock_call_ctx/0, hook/0, exp_state_diff_fun/0, exp_state_diff/0,
-    result_override/0, mock_strategy_spec/0, step_phase_selector/0, step_mock_spec/0,
-    lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
+    mock_call_ctx/0, mock_call_report/0, hook/0, exp_state_diff_fun/0, exp_state_diff/0,
+    result_override/0, mock_strategy/0, mock_strategy_spec/0, step_phase_selector/0,
+    step_mock_spec/0, lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
 ]).
 
 -type mock_call_report() :: #mock_call_report{}.
@@ -139,7 +139,7 @@
     current_run_num :: atm_lane_execution:run_num(),
     ongoing_incarnations :: [incarnation_test_spec()],
 
-    workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),
+    workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:ctx(),
     workflow_execution_exp_state_changed :: boolean(),
 
     prev_incarnations_executed_step_phases = [] :: [{non_neg_integer(), [step_phase_selector()]}],

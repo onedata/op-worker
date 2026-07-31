@@ -28,7 +28,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
--export([create_dir/4, create_file/4, create_file/5]).
+-export([create_file/4, create_file/5]).
 -export([create_files/4, create_files_and_dirs/5,
     verify_files_and_dirs/4, test_read_operations_on_error/4]).
 -export([write_byte_to_file/4, empty_write_to_file/4]).
@@ -104,6 +104,7 @@ test_read_operations_on_error(Worker, SessId, #test_data{dir_guids = DirGuids, f
     end, FileGuids).
 
 
+%% @private
 create_dir(Worker, SessId, ParentGuid, DirName) ->
     {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, ParentGuid, DirName, ?DEFAULT_DIR_PERMS)),
     DirGuid.

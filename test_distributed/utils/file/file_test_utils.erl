@@ -31,7 +31,6 @@
 
 -export([
     rand_xattr_name/1,
-    get_content/2, get_content/3,
     get_attrs/2, get_attrs/3, get_attrs/4,
     set_xattr/4
 ]).
@@ -64,11 +63,7 @@
 %%%===================================================================
 
 
--spec get_content(node(), file_id:file_guid()) -> {ok, binary()} | error().
-get_content(Node, FileGuid) ->
-    get_content(Node, FileGuid, 0).
-
-
+%% @private
 -spec get_content(node(), file_id:file_guid(), offset()) -> {ok, binary()} | error().
 get_content(Node, FileGuid, Offset) ->
     case get_attrs(Node, FileGuid) of
@@ -135,11 +130,9 @@ set_xattr(Node, FileGuid, Name, Value) ->
 -spec await_sync(node() | [node()], file_id:file_guid() | [file_id:file_guid()]) ->
     ok | no_return().
 await_sync(Nodes, Files) ->
-    Attempts = get_attempts(),
-
     lists:foreach(fun(Node) ->
         lists:foreach(fun(FileGuid) ->
-            ?assertMatch({ok, _}, get_attrs(Node, FileGuid), Attempts)
+            ?assertMatch({ok, _}, get_attrs(Node, FileGuid), ?DEFAULT_ATTEMPTS)
         end, utils:ensure_list(Files))
     end, utils:ensure_list(Nodes)).
 
@@ -147,10 +140,8 @@ await_sync(Nodes, Files) ->
 -spec await_size(node() | [node()], file_id:file_guid(), file_meta:size()) ->
     ok | no_return().
 await_size(Nodes, FileGuid, ExpFileSize) ->
-    Attempts = get_attempts(),
-
     lists:foreach(fun(Provider) ->
-        ?assertMatch({ok, #file_attr{size = ExpFileSize}}, get_attrs(Provider, FileGuid), Attempts)
+        ?assertMatch({ok, #file_attr{size = ExpFileSize}}, get_attrs(Provider, FileGuid), ?DEFAULT_ATTEMPTS)
     end, utils:ensure_list(Nodes)).
 
 
@@ -163,10 +154,8 @@ await_content(Nodes, FileGuid, ExpContent) ->
 -spec await_content(node() | [node()], file_id:file_guid(), ExpContent :: binary(), offset()) ->
     ok | no_return().
 await_content(Nodes, FileGuid, ExpContent, Offset) ->
-    Attempts = get_attempts(),
-
     lists:foreach(fun(Node) ->
-        ?assertEqual({ok, ExpContent}, get_content(Node, FileGuid, Offset), Attempts)
+        ?assertEqual({ok, ExpContent}, get_content(Node, FileGuid, Offset), ?DEFAULT_ATTEMPTS)
     end, utils:ensure_list(Nodes)).
 
 
@@ -177,8 +166,6 @@ await_content(Nodes, FileGuid, ExpContent, Offset) ->
 ) ->
     ok | no_return().
 await_distribution(Nodes, Files, ExpSizeOrBlocksPerProvider) ->
-    Attempts = get_attempts(),
-
     ExpDistribution = lists:sort(lists:map(fun
         ({Node, ExpSize}) when is_integer(ExpSize) ->
             #{
@@ -211,7 +198,7 @@ await_distribution(Nodes, Files, ExpSizeOrBlocksPerProvider) ->
 
     lists:foreach(fun(FileGuid) ->
         lists:foreach(fun(Node) ->
-            ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), Attempts)
+            ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), ?DEFAULT_ATTEMPTS)
         end, utils:ensure_list(Nodes))
     end, utils:ensure_list(Files)).
 
@@ -273,7 +260,7 @@ await_attrs(Node, FileGuid, ExpectedAttrsMap, Attempts) ->
 replicate_by_read(SourceNode, TargetNode, TargetSessionId, Files) ->
     lists_utils:pforeach(fun(FileGuid) ->
         {ok, #file_attr{size = FileSize}} = ?assertMatch(
-            {ok, _}, get_attrs(SourceNode, FileGuid), get_attempts()
+            {ok, _}, get_attrs(SourceNode, FileGuid), ?DEFAULT_ATTEMPTS
         ),
         await_size(TargetNode, FileGuid, FileSize),
 
@@ -288,12 +275,6 @@ replicate_by_read(SourceNode, TargetNode, TargetSessionId, Files) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec get_attempts() -> non_neg_integer().
-get_attempts() ->
-    node_cache:get(attempts, ?DEFAULT_ATTEMPTS).
 
 
 %% @private

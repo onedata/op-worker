@@ -514,7 +514,7 @@ delete_share_test(_Config) ->
 
 %% @private
 -spec build_delete_share_setup_fun(
-    [oct_background:entity_placeholder()], oct_background:entity_id(), file_tree_test_utils:file_spec(),
+    [oct_background:entity_placeholder()], oct_background:entity_id(), file_tree_test_utils:object_spec(),
     api_test_memory:mem_ref(), boolean()
 ) -> ok.
 build_delete_share_setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare) ->
@@ -669,14 +669,14 @@ share_root_accessed_via_public_data_mode_should_have_parent_set(_Config) ->
 
 %% @private
 -spec generate_random_file_spec() ->
-    {api_test_utils:file_type(), file_tree_test_utils:file_spec()}.
+    {api_test_utils:file_type(), file_tree_test_utils:object_spec()}.
 generate_random_file_spec() ->
     generate_random_file_spec([]).
 
 
 %% @private
--spec generate_random_file_spec([file_tree_test_utils:shares_spec()]) ->
-    {binary(), file_tree_test_utils:file_spec()}.
+-spec generate_random_file_spec([file_tree_test_utils:share_spec()]) ->
+    {binary(), file_tree_test_utils:object_spec()}.
 generate_random_file_spec(ShareSpecs) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     case FileType of

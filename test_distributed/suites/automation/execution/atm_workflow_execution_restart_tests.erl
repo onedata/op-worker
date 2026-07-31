@@ -364,7 +364,7 @@ expect_workflow_execution_paused(ExpState) ->
 
 
 %% @private
--spec assert_all_match_with_backend([atm_workflow_execution_exp_state_builder:exp_state()]) ->
+-spec assert_all_match_with_backend([atm_workflow_execution_exp_state_builder:ctx()]) ->
     ok.
 assert_all_match_with_backend(ExpAtmWorkflowExecutionStates) ->
     lists:foreach(fun(ExpAtmWorkflowExecutionState) ->

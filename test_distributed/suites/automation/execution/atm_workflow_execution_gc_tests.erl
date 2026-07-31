@@ -210,7 +210,7 @@ set_env(EnvVar, EnvValue) ->
 
 %% @private
 -spec run_atm_workflow_execution(term(), paused | finished) ->
-    atm_workflow_execution_exp_state_builder:exp_state().
+    atm_workflow_execution_exp_state_builder:ctx().
 run_atm_workflow_execution(Testcase, paused) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         clock_status = frozen,
@@ -361,7 +361,7 @@ run_gc() ->
 
 
 %% @private
--spec assert_all_match_with_backend([atm_workflow_execution_exp_state_builder:exp_state()]) ->
+-spec assert_all_match_with_backend([atm_workflow_execution_exp_state_builder:ctx()]) ->
     ok.
 assert_all_match_with_backend(ExpAtmWorkflowExecutionStates) ->
     lists_utils:pforeach(fun(ExpAtmWorkflowExecutionState) ->
@@ -370,7 +370,7 @@ assert_all_match_with_backend(ExpAtmWorkflowExecutionStates) ->
 
 
 %% @private
--spec assert_atm_workflow_executions_deleted([atm_workflow_execution_exp_state_builder:exp_state()]) ->
+-spec assert_atm_workflow_executions_deleted([atm_workflow_execution_exp_state_builder:ctx()]) ->
     ok.
 assert_atm_workflow_executions_deleted(ExpAtmWorkflowExecutionStates) ->
     lists_utils:pforeach(fun(ExpAtmWorkflowExecutionState) ->

@@ -765,14 +765,14 @@ random_dataset_state() ->
 
 
 %% @private
--spec build_test_file_tree_spec() -> file_tree_test_utils:file_spec().
+-spec build_test_file_tree_spec() -> file_tree_test_utils:object_spec().
 build_test_file_tree_spec() ->
     build_test_file_tree_spec([undefined]).
 
 
 %% @private
 -spec build_test_file_tree_spec([dataset_test_utils:dataset_spec()]) ->
-    file_tree_test_utils:file_spec().
+    file_tree_test_utils:object_spec().
 build_test_file_tree_spec(DatasetSpecs) ->
     ChildrenSpec = lists:map(fun(DatasetSpec) ->
         case api_test_utils:randomly_choose_file_type_for_test() of

@@ -431,7 +431,7 @@ gui_download_tarball_with_hardlinks_test(Config) ->
 %% @private
 -spec gui_download_test_base(
     test_config:config(),
-    file_tree_test_utils:object_spec() | [file_tree_test_utils:file_spec()],
+    file_tree_test_utils:object_spec() | [file_tree_test_utils:object_spec()],
     onenv_api_test_runner:client_spec(),
     binary()
 ) ->
@@ -442,7 +442,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix) ->
 %% @private
 -spec gui_download_test_base(
     test_config:config(),
-    file_tree_test_utils:object_spec() | [file_tree_test_utils:file_spec()],
+    file_tree_test_utils:object_spec() | [file_tree_test_utils:object_spec()],
     onenv_api_test_runner:client_spec(),
     binary(),
     #{
@@ -1360,7 +1360,7 @@ sync_first_file_block_test(_Config) ->
 %% @private
 -spec build_download_file_setup_fun(
     api_test_memory:mem_ref(),
-    file_tree_test_utils:object_spec() | [file_tree_test_utils:file_spec()]
+    file_tree_test_utils:object_spec() | [file_tree_test_utils:object_spec()]
 ) ->
     onenv_api_test_runner:setup_fun().
 build_download_file_setup_fun(MemRef, Spec) ->
