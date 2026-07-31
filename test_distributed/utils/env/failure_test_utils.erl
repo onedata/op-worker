@@ -1,12 +1,15 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utils used by ct_onenv tests that emulate node failures and db errors.
+%%% Utils used by onenv tests that emulate node failures and db errors: killing
+%%% provider nodes and bringing them back up. Restarting rebuilds everything the
+%%% test lost together with the node - mock manager, user sessions and lfm proxy
+%%% handles - and returns an updated config, which the caller must use onwards.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(failure_test_utils).
@@ -38,6 +41,10 @@ restart_nodes(Config, Nodes) when is_list(Nodes) ->
         ok = oct_environment:start_node(Config, Node)
     end, Nodes),
 
+    % the mock manager died with the node, so it must be started anew - done by
+    % calling the CT hook callback that normally does it after init_per_suite
+    % (it takes the nodes from the config passed as its 3rd argument and ignores
+    % the other two)
     cth_mock:post_init_per_suite(?MODULE, [], Config, []),
 
     lists:foreach(fun(Node) ->

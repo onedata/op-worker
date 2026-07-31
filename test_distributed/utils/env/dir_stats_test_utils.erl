@@ -1,12 +1,18 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2011 ACK CYFRONET AGH
+%%% @copyright (C) 2021-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Test utils for dir stats collecting.
+%%% Switches the dir stats collecting subsystem off for the whole deployment, by
+%%% mocking the module that answers whether it is active for a space. Tests that
+%%% do not exercise the statistics themselves use it to keep the collector from
+%%% interfering (extra file operations, extra events, changed dir mtimes).
+%%%
+%%% NOTE: switching it back on is NOT possible this way - see
+%%% unmock_stats_counting/1.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dir_stats_test_utils).

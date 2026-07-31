@@ -1,10 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @doc
-%%% This module contains test utility functions useful in tests using onenv.
+%%% Utility functions operating on the providers of an onenv deployment: creating
+%%% user sessions on their nodes (and the onezone access tokens such a session
+%%% needs) and locating a specific node/provider in the deployment.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(provider_test_utils).
@@ -115,11 +117,13 @@ create_oz_temp_access_token(UserId) ->
     SerializedAccessToken.
 
 
+%% @doc The primary cluster manager node of the given provider, i.e. the one whose
+%% pod is the first (`-0') replica of the provider's cluster manager stateful set.
 -spec get_primary_cm_node(test_config:config(), atom()) -> node() | undefined.
 get_primary_cm_node(Config, ProviderPlaceholder) ->
-    lists:foldl(fun(CMNode, CMAcc) ->
-        case string:str(atom_to_list(CMNode), atom_to_list(ProviderPlaceholder) ++ "-0") > 0 of
-            true -> CMNode;
-            false -> CMAcc
+    lists_utils:foldl_while(fun(CMNode, Acc) ->
+        case string:find(atom_to_list(CMNode), atom_to_list(ProviderPlaceholder) ++ "-0") of
+            nomatch -> {cont, Acc};
+            _ -> {halt, CMNode}
         end
     end, undefined, test_config:get_custom(Config, [cm_nodes])).
