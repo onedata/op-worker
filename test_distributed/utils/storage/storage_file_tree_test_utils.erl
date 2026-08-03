@@ -33,15 +33,17 @@
 -export([create_file/4, create_file/5]).
 -export([create_fifo/3, create_fifo/4]).
 -export([create_dir/3, create_dir/4, chown/5]).
--export([write_file/5, delete_file/4]).
+-export([write_file/5, read_file/5, delete_file/4]).
 -export([chmod/4, truncate/5, rename/4, rmdir/3]).
--export([stat/3, get_mtime/3, set_mtime/4, set_atime_and_mtime/5]).
+-export([stat/3, list_dir/5, get_mtime/3, set_mtime/4, set_atime_and_mtime/5]).
 %% on-node routines (executed on op_worker via rpc)
 -export([create_file_on_storage/3, write_to_storage_file/4, delete_file_on_storage/3]).
+-export([read_from_storage_file/4]).
 -export([create_fifo_on_storage/3]).
 -export([create_dir_on_storage/3, chown_on_storage/4]).
 -export([chmod_on_storage/3, truncate_on_storage/4, rename_on_storage/3, rmdir_on_storage/2]).
--export([stat_on_storage/2, get_mtime_on_storage/2, set_mtime_on_storage/3, set_atime_and_mtime_on_storage/4]).
+-export([stat_on_storage/2, list_dir_on_storage/4]).
+-export([get_mtime_on_storage/2, set_mtime_on_storage/3, set_atime_and_mtime_on_storage/4]).
 
 % A single node of a declared storage file tree: either a generic onenv file/dir
 % spec, or a storage specific FIFO spec (created on storage but not imported).
@@ -170,6 +172,18 @@ write_file(ProviderSelector, StorageId, StorageFileId, Offset, Content) ->
     ).
 
 
+%% @doc Reads the file content directly from the storage - e.g. to assert that a
+%% logical operation did (not) reach the storage.
+-spec read_file(
+    oct_background:node_selector(), storage:id(), helpers:file_id(), non_neg_integer(), non_neg_integer()
+) ->
+    {ok, binary()} | {error, term()}.
+read_file(ProviderSelector, StorageId, StorageFileId, Offset, Size) ->
+    opw_test_rpc:call(
+        ProviderSelector, ?MODULE, read_from_storage_file, [StorageId, StorageFileId, Offset, Size]
+    ).
+
+
 -spec delete_file(oct_background:node_selector(), storage:id(), helpers:file_id(), non_neg_integer()) ->
     ok.
 delete_file(ProviderSelector, StorageId, StorageFileId, CurrentSize) ->
@@ -217,6 +231,19 @@ rmdir(ProviderSelector, StorageId, StorageFileId) ->
 stat(ProviderSelector, StorageId, StorageFileId) ->
     opw_test_rpc:call(
         ProviderSelector, ?MODULE, stat_on_storage, [StorageId, StorageFileId]
+    ).
+
+
+%% @doc Lists the entries of a directory directly on the storage - e.g. to assert
+%% that no extra file was created there. POSIX-only, as object storages have no
+%% real directories to list this way (see rmdir_on_storage/2).
+-spec list_dir(
+    oct_background:node_selector(), storage:id(), helpers:file_id(), non_neg_integer(), non_neg_integer()
+) ->
+    {ok, [helpers:file_id()]} | {error, term()}.
+list_dir(ProviderSelector, StorageId, StorageFileId, Offset, Count) ->
+    opw_test_rpc:call(
+        ProviderSelector, ?MODULE, list_dir_on_storage, [StorageId, StorageFileId, Offset, Count]
     ).
 
 
@@ -282,6 +309,21 @@ write_to_storage_file(StorageId, StorageFileId, Offset, Content) ->
     {ok, FileHandle} = helpers:open(HelperHandle, StorageFileId, write),
     {ok, _} = helpers:write(FileHandle, Offset, Content),
     ok = helpers:release(FileHandle).
+
+
+%% @doc Runs on the op_worker node.
+-spec read_from_storage_file(storage:id(), helpers:file_id(), non_neg_integer(), non_neg_integer()) ->
+    {ok, binary()} | {error, term()}.
+read_from_storage_file(StorageId, StorageFileId, Offset, Size) ->
+    HelperHandle = get_helper_handle(StorageId),
+    case helpers:open(HelperHandle, StorageFileId, read) of
+        {ok, FileHandle} ->
+            Result = helpers:read(FileHandle, Offset, Size),
+            ok = helpers:release(FileHandle),
+            Result;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %% @doc Runs on the op_worker node.
@@ -353,6 +395,14 @@ rmdir_on_storage(StorageId, StorageFileId) ->
 stat_on_storage(StorageId, StorageFileId) ->
     HelperHandle = get_helper_handle(StorageId),
     helpers:getattr(HelperHandle, StorageFileId).
+
+
+%% @doc Runs on the op_worker node.
+-spec list_dir_on_storage(storage:id(), helpers:file_id(), non_neg_integer(), non_neg_integer()) ->
+    {ok, [helpers:file_id()]} | {error, term()}.
+list_dir_on_storage(StorageId, StorageFileId, Offset, Count) ->
+    HelperHandle = get_helper_handle(StorageId),
+    helpers:readdir(HelperHandle, StorageFileId, Offset, Count).
 
 
 %% @doc Runs on the op_worker node.
