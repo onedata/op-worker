@@ -84,7 +84,7 @@ report_file_synchronization_skipped(Id, FileGuid, FilePath, Reason) ->
     }).
 
 
--spec report_file_synchronization_failed(id(), file_id:file_guid(), file_meta:path(), {error, term()}) -> 
+-spec report_file_synchronization_failed(id(), file_id:file_guid(), file_meta:path(), errors:error()) -> 
     ok | {error, term()}.
 report_file_synchronization_failed(Id, FileGuid, FilePath, Error) ->
     ErrorJson = errors:to_json(Error),

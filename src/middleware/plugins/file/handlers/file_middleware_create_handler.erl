@@ -337,7 +337,15 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
         end
     catch
         throw:{error, _} = Error ->
-            throw(Error);
+            case errors:is_known_error(Error) of
+                true ->
+                    throw(Error);
+                false ->
+                    throw(?report_internal_server_error(?autoformat_with_msg(
+                        "Unexpected error during file registration",
+                        [Error]
+                    )))
+            end;
         throw:PosixErrno ->
             throw(?ERR_POSIX(?err_ctx(), PosixErrno))
     end;
