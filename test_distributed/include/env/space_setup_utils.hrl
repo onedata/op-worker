@@ -36,6 +36,9 @@
 -record(posix_storage_params, {
     mount_point :: binary(),
     imported_storage = false :: boolean(),
+    % a readonly storage must also be imported - the Oneprovider rejects any other
+    % combination (see storage:sanitize_readonly_option/2)
+    readonly = false :: boolean(),
     luma_feed = auto :: space_setup_utils:luma_feed_spec()
 }).
 

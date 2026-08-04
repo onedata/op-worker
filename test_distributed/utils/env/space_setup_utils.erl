@@ -40,7 +40,7 @@
 -define(STORAGE_DELETE_ATTEMPTS, 60).
 
 %% API
--export([create_storage/2, set_up_space/1]).
+-export([create_storage/2, delete_storage/2, set_up_space/1]).
 -export([clean_up_after_previous_run/2]).
 -export([mock_existence_of_unhealthy_storage/1]).
 
@@ -70,14 +70,15 @@ create_storage(Provider, #s3_storage_params{storage_path_type = StoragePathType,
     panel_test_rpc:add_storage(Provider, CreateStorageData);
 
 create_storage(Provider, #posix_storage_params{
-    mount_point = MountPoint, imported_storage = Imported, luma_feed = LumaFeed
+    mount_point = MountPoint, imported_storage = Imported, readonly = Readonly, luma_feed = LumaFeed
 }) ->
     ?assertMatch(ok, opw_test_rpc:call(Provider, filelib, ensure_path, [MountPoint])),
     panel_test_rpc:add_storage(Provider,
         #{?RAND_STR() => maps:merge(#{
             <<"type">> => <<"posix">>,
             <<"mountPoint">> => MountPoint,
-            <<"importedStorage">> => Imported
+            <<"importedStorage">> => Imported,
+            <<"readonly">> => Readonly
         }, luma_feed_args(LumaFeed))}
     );
 
@@ -120,6 +121,14 @@ create_storage(Provider, #http_storage_params{
         _ -> BaseArgs#{<<"maxEmulatedRangeReadFileSize">> => MaxEmulatedRangeReadFileSize}
     end,
     panel_test_rpc:add_storage(Provider, #{?RAND_STR() => Args}).
+
+
+%% @doc Storages supporting a space are deleted along with it by
+%% clean_up_after_previous_run/2; this is for the ones that support none
+%% (e.g. auxiliary storages set up by a suite for its own bookkeeping).
+-spec delete_storage(oct_background:node_selector(), storage:id()) -> ok.
+delete_storage(ProviderSelector, StorageId) ->
+    ?assertEqual(ok, opw_test_rpc:call(ProviderSelector, storage, delete, [StorageId]), ?STORAGE_DELETE_ATTEMPTS).
 
 
 -spec set_up_space(space_spec()) -> oct_background:entity_id().
@@ -209,12 +218,6 @@ get_local_storages(ProviderSelector, SpaceId) ->
         {ok, Storages} -> Storages;
         ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) -> []
     end.
-
-
-%% @private
--spec delete_storage(oct_background:node_selector(), storage:id()) -> ok.
-delete_storage(ProviderSelector, StorageId) ->
-    ?assertEqual(ok, opw_test_rpc:call(ProviderSelector, storage, delete, [StorageId]), ?STORAGE_DELETE_ATTEMPTS).
 
 
 %% @private
