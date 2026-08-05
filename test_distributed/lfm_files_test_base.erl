@@ -114,10 +114,6 @@
     lfm_sequential_writes_from_many_processes/1
 ]).
 
--export([
-    check_list_recursive_start_after/4, check_list_recursive_start_after/5
-]).
-
 -define(TIMEOUT, timer:seconds(10)).
 -define(REPEATS, 3).
 -define(SUCCESS_RATE, 100).
@@ -583,12 +579,13 @@ get_recursive_file_list(Config) ->
         end, CommonFileNames)}
     end, {[], []}, DirNames),
     
-    check_list_recursive_start_after(Worker, SessId1, MainDirGuid, AllExpectedFiles),
+    lfm_test_utils:assert_recursive_listing_from_each_start_after(Worker, SessId1, MainDirGuid, AllExpectedFiles),
     
     AllExpectedFilesInSpace = lists:map(fun({Guid, Path}) -> {Guid, filename:join([MainDirName, Path])} end, AllExpectedFiles),
     SpaceDirGuid = space_dir:guid(file_id:guid_to_space_id(MainDirGuid)),
     % use MainDirName prefix so this listing is independent of other files in space
-    check_list_recursive_start_after(Worker, SessId1, SpaceDirGuid, MainDirName, AllExpectedFilesInSpace),
+    lfm_test_utils:assert_recursive_listing_from_each_start_after(
+        Worker, SessId1, SpaceDirGuid, MainDirName, AllExpectedFilesInSpace),
     
     AllExpectedFilesNestedDir = lists:filtermap(fun({Guid, Path}) -> 
         case filepath_utils:is_descendant(Path, NestedDirName) of
@@ -598,17 +595,20 @@ get_recursive_file_list(Config) ->
                 false
         end
     end, AllExpectedFiles),
-    check_list_recursive_start_after(Worker, SessId1, NestedDirGuid, AllExpectedFilesNestedDir),
+    lfm_test_utils:assert_recursive_listing_from_each_start_after(
+        Worker, SessId1, NestedDirGuid, AllExpectedFilesNestedDir),
     
     % check that listing regular file returns this file
     {Num, {Guid, Path}} = lists_utils:random_element(lists:zip(lists:seq(1, length(AllExpectedFiles)), AllExpectedFiles)),
-    ?assertMatch({ok, [{Guid, <<".">>}], _, undefined}, get_files_recursively(Worker, SessId1, ?FILE_REF(Guid), #{limit => 1})),
+    ?assertMatch({ok, [{Guid, <<".">>}], _, undefined},
+        lfm_test_utils:get_files_recursively(Worker, SessId1, ?FILE_REF(Guid), #{limit => 1})),
     
     % check listing after removing file that StartAfter points to 
     lfm_ct:unlink(Guid),
     ExpectedTail = lists:nthtail(Num, AllExpectedFiles),
     ?assertMatch({ok, ExpectedTail, _, _}, 
-        get_files_recursively(Worker, SessId1, ?FILE_REF(MainDirGuid), #{start_after_path => Path, limit => length(AllExpectedFiles)})).
+        lfm_test_utils:get_files_recursively(Worker, SessId1, ?FILE_REF(MainDirGuid),
+            #{start_after_path => Path, limit => length(AllExpectedFiles)})).
 
 
 get_recursive_file_list_prefix_test_base(Config) ->
@@ -668,7 +668,8 @@ get_recursive_file_list_prefix_test_base(Config) ->
         AllExpectedFiles = lists:filter(fun({_G, P}) ->
             str_utils:binary_starts_with(P, Prefix)
         end, AllFiles),
-        check_list_recursive_start_after(Worker, SessId1, MainDirGuid, Prefix, AllExpectedFiles)
+        lfm_test_utils:assert_recursive_listing_from_each_start_after(
+            Worker, SessId1, MainDirGuid, Prefix, AllExpectedFiles)
     end, DirNames ++ NestedPrefixes ++ [<<"a">>, <<"b">>, <<"c">>, <<"d">>]).
 
 
@@ -698,13 +699,15 @@ get_recursive_file_list_inaccessible_paths_test_base(Config) ->
     % inaccessible paths are counted towards limit so result should not contain last file
     ExpectedResult1 = lists:sublist(AllFiles, length(AllFiles) - 1), 
     ?assertMatch({ok, ExpectedResult1, [EaccesDirName], _},
-        get_files_recursively(Worker, SessId2, ?FILE_REF(MainDirGuid), #{limit => length(AllFiles)})),
+        lfm_test_utils:get_files_recursively(Worker, SessId2, ?FILE_REF(MainDirGuid), #{limit => length(AllFiles)})),
     ?assertMatch({ok, AllFiles, [EaccesDirName], _},
-        get_files_recursively(Worker, SessId2, ?FILE_REF(MainDirGuid), #{limit => length(AllFiles) + 1})),
+        lfm_test_utils:get_files_recursively(Worker, SessId2, ?FILE_REF(MainDirGuid),
+            #{limit => length(AllFiles) + 1})),
     ?assertMatch({ok, AllFiles, [], _},
-        get_files_recursively(Worker, SessId2, ?FILE_REF(MainDirGuid), #{start_after_path => EaccesDirName, limit => length(AllFiles)})),
+        lfm_test_utils:get_files_recursively(Worker, SessId2, ?FILE_REF(MainDirGuid),
+            #{start_after_path => EaccesDirName, limit => length(AllFiles)})),
     ?assertMatch({error, ?EACCES},
-        get_files_recursively(Worker, SessId2, ?FILE_REF(EaccesDirGuid), #{limit => length(AllFiles)})).
+        lfm_test_utils:get_files_recursively(Worker, SessId2, ?FILE_REF(EaccesDirGuid), #{limit => length(AllFiles)})).
 
 
 get_recursive_file_list_should_read_xattrs(Config) ->
@@ -735,7 +738,7 @@ get_recursive_file_list_internal_multibatch(Config) ->
     ExpectedResult = lists:sort(fun({_Guid1, Path1}, {_Guid2, Path2}) -> Path1 =< Path2 end, GuidsAndPaths),
     
     ?assertMatch({ok, ExpectedResult, _, _},
-        get_files_recursively(Worker, SessId1, ?FILE_REF(MainDirGuid), #{limit => 1500})).
+        lfm_test_utils:get_files_recursively(Worker, SessId1, ?FILE_REF(MainDirGuid), #{limit => 1500})).
 
 
 echo_loop(Config) ->
@@ -2451,32 +2454,6 @@ lfm_sequential_writes_from_many_processes(Config) ->
     end, Json).
 
 
-
-%%%====================================================================
-%%% Helper funtions
-%%%====================================================================
-
-check_list_recursive_start_after(Worker, SessId, DirToListGuid, AllExpectedFiles) ->
-    check_list_recursive_start_after(Worker, SessId, DirToListGuid, <<>>, AllExpectedFiles).
-
-check_list_recursive_start_after(Worker, SessId, RootDirGuid, Prefix, AllExpectedFiles) ->
-    ?assertMatch({ok, AllExpectedFiles, _, _},
-        get_files_recursively(Worker, SessId, ?FILE_REF(RootDirGuid), #{limit => length(AllExpectedFiles), prefix => Prefix})),
-    lists:foreach(fun(Num) ->
-        {_, StartAfter} = lists:nth(Num, AllExpectedFiles),
-        ExpectedTail = lists:nthtail(Num, AllExpectedFiles),
-        ExpectedSingleFileListingRes = case ExpectedTail of
-            [File | _] -> [File];
-            [] -> []
-        end,
-        ?assertMatch({ok, ExpectedTail, _, _},
-            get_files_recursively(Worker, SessId, ?FILE_REF(RootDirGuid), 
-                #{start_after_path => StartAfter, limit => length(AllExpectedFiles), prefix => Prefix})),
-        ?assertMatch({ok, ExpectedSingleFileListingRes, _, _},
-            get_files_recursively(Worker, SessId, ?FILE_REF(RootDirGuid), 
-                #{start_after_path => StartAfter, limit => 1, prefix => Prefix}))
-    end, lists:seq(1, length(AllExpectedFiles))).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -2721,14 +2698,6 @@ produce_truncate_event(Worker, SessId, FileKey, Size) ->
     {ok, FileGuid} = rpc:call(Worker, lfm_file_key, ensure_guid, [SessId, FileKey]),
     ok = rpc:call(Worker, lfm_event_emitter, emit_file_truncated, [FileGuid, Size, SessId]).
 
-get_files_recursively(Worker, SessId, FileRef, Options) ->
-    case lfm_proxy:get_files_recursively(Worker, SessId, FileRef, Options, [guid, path]) of
-        {ok, Res, IP, Token} ->
-            {ok, lists:map(fun(#file_attr{guid = Guid, path = Path}) -> {Guid, Path} end, Res), IP, Token};
-        Other ->
-            Other
-    end.
-
 readdir_plus_read_xattrs_base(Config, ReadFun) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {MainDirPath, Files} = generate_dir(Config, 5),
@@ -2778,7 +2747,7 @@ init_per_suite(Config) ->
         initializer:setup_storage(NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook},
-        {?LOAD_MODULES, [initializer, datastore_pool_test_utils, dir_stats_collector_test_base, ?MODULE]} | Config].
+        {?LOAD_MODULES, [initializer, datastore_pool_test_utils, ?MODULE]} | Config].
 
 
 end_per_suite(Config) ->
