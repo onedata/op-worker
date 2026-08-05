@@ -68,6 +68,7 @@
     recursive_rm_should_succeed_but_should_leave_files_on_storage/1,
     truncate_should_fail/1,
     read_of_remote_file_should_succeed_but_not_create_local_replica/1,
+    closing_a_remotely_served_file_should_release_the_handle_on_the_serving_provider/1,
     read_of_empty_remote_file_should_succeed/1,
     write_to_remote_file_should_fail/1,
     truncate_of_remote_file_should_fail/1,
@@ -100,6 +101,7 @@ all() -> [
     recursive_rm_should_succeed_but_should_leave_files_on_storage,
     truncate_should_fail,
     read_of_remote_file_should_succeed_but_not_create_local_replica,
+    closing_a_remotely_served_file_should_release_the_handle_on_the_serving_provider,
     read_of_empty_remote_file_should_succeed,
     write_to_remote_file_should_fail,
     truncate_of_remote_file_should_fail,
@@ -354,6 +356,34 @@ read_of_remote_file_should_succeed_but_not_create_local_replica(Config) ->
         RoNode, RoSessId, ?DISTS(provider_ids(), [0, TestDataSize]), Guid, ?ATTEMPTS
     ),
     ?assertMatch({ok, []}, list_space_dir_on_storage(TestCtx)).
+
+
+closing_a_remotely_served_file_should_release_the_handle_on_the_serving_provider(Config) ->
+    TestCtx = #test_ctx{
+        ro_node = RoNode, ro_sess_id = RoSessId,
+        other_node = OtherNode, other_sess_id = OtherSessId
+    } = get_test_ctx(Config),
+
+    Guid = create_file_on_other_provider(TestCtx, ?FILE_NAME, ?TEST_DATA),
+    Uuid = file_id:guid_to_uuid(Guid),
+
+    % the open is served by the other provider, and it is there - not here - that
+    % the file ends up registered as opened
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), read)),
+    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(RoNode, Handle, 0, 100)),
+    ?assertEqual(true, is_file_opened(OtherNode, Uuid)),
+    ?assertEqual(false, is_file_opened(RoNode, Uuid)),
+
+    % closing has to reach that provider as well, or the file would stay open there
+    % for as long as the session lives, holding back its deletion among others
+    ok = lfm_proxy:close(RoNode, Handle),
+    ?assertEqual(false, is_file_opened(OtherNode, Uuid), ?ATTEMPTS),
+
+    % a file left open on the serving provider would linger in its listing, as a
+    % provider defers its part of a remote deletion for as long as it holds a handle
+    ?assertEqual(ok, lfm_proxy:unlink(RoNode, RoSessId, ?FILE_REF(Guid))),
+    ?assertMatch({ok, []},
+        lfm_proxy:get_children(OtherNode, OtherSessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS).
 
 
 read_of_empty_remote_file_should_succeed(Config) ->
@@ -1083,6 +1113,12 @@ read_from_storage(#test_ctx{readonly_storage_id = ReadonlyStorageId}, StorageFil
 list_space_dir_on_storage(#test_ctx{readonly_storage_id = ReadonlyStorageId}) ->
     % on an imported storage the storage root is the space root
     storage_file_tree_test_utils:list_dir(?RO_PROVIDER, ReadonlyStorageId, <<"/">>, 0, 10).
+
+
+%% @private
+-spec is_file_opened(node(), file_meta:uuid()) -> boolean().
+is_file_opened(Node, Uuid) ->
+    opw_test_rpc:call(Node, file_handles, is_file_opened, [Uuid]).
 
 
 %% @private
