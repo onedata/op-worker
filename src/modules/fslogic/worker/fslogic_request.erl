@@ -87,6 +87,14 @@ get_target_providers(UserCtx, File, #fuse_request{fuse_request = #file_request{
     file_request = #get_file_attr{}
 }}) ->
     get_target_providers_for_attr_req(UserCtx, File);
+get_target_providers(UserCtx, File, #fuse_request{fuse_request = #file_request{
+    file_request = #release{handle_id = HandleId}
+}}) ->
+    get_target_providers_for_handle(UserCtx, File, HandleId);
+get_target_providers(UserCtx, File, #fuse_request{fuse_request = #file_request{
+    file_request = #fsync{handle_id = HandleId}
+}}) when HandleId =/= undefined ->
+    get_target_providers_for_handle(UserCtx, File, HandleId);
 get_target_providers(UserCtx, File, Req) ->
     get_target_providers_for_file(UserCtx, File, infer_read_scope(Req)).
 
@@ -108,6 +116,28 @@ get_target_providers_for_attr_req(UserCtx, FileCtx) ->
             [oneprovider:get_id()];
         false ->
             get_target_providers_for_file(UserCtx, FileCtx)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Get providers capable of handling a request bound to an already opened file
+%% handle. A handle exists only on the provider that opened the file, so once
+%% one of them has done that on this provider's behalf, everything carrying the
+%% handle has to follow - regardless of where the content has meanwhile moved.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_target_providers_for_handle(
+    user_ctx:ctx(), file_partial_ctx:ctx(), storage_driver:handle_id()
+) ->
+    [oneprovider:id()].
+get_target_providers_for_handle(UserCtx, FilePartialCtx, HandleId) ->
+    case session_remote_handles:get(user_ctx:get_session_id(UserCtx), HandleId) of
+        {ok, ProviderId} ->
+            [ProviderId];
+        {error, _} ->
+            % not a handle of a handed over open - hence one of this provider
+            get_target_providers_for_file(UserCtx, FilePartialCtx)
     end.
 
 %%--------------------------------------------------------------------

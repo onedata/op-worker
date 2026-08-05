@@ -178,6 +178,7 @@ delete(SessId) ->
     ?update_counter(?EXOMETER_NAME(active_sessions), -1),
     session_helpers:delete_helpers(SessId),
     session_handles:remove_handles(SessId),
+    session_remote_handles:remove_all(SessId),
     session_open_files:invalidate_entries(SessId),
     datastore_model:delete(?CTX, SessId).
 
