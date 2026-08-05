@@ -42,6 +42,7 @@
 
 -include("env/space_setup_utils.hrl").
 -include("file/distribution_assert.hrl").
+-include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -82,7 +83,8 @@
     read_should_succeed_when_the_serving_provider_lacks_some_blocks/1,
     replication_job_should_fail/1,
     eviction_job_should_succeed_and_leave_the_file_readable/1,
-    migration_job_should_fail/1
+    migration_job_should_fail/1,
+    qos_requirement_should_stay_unfulfilled_and_leave_the_storage_file_unchanged/1
 ]).
 
 all() -> [
@@ -113,7 +115,8 @@ all() -> [
     read_should_succeed_when_the_serving_provider_lacks_some_blocks,
     replication_job_should_fail,
     eviction_job_should_succeed_and_leave_the_file_readable,
-    migration_job_should_fail
+    migration_job_should_fail,
+    qos_requirement_should_stay_unfulfilled_and_leave_the_storage_file_unchanged
 ].
 
 % The provider whose storage supporting the space is readonly, and the one backing
@@ -844,6 +847,47 @@ migration_job_should_fail(Config) ->
     ).
 
 
+qos_requirement_should_stay_unfulfilled_and_leave_the_storage_file_unchanged(Config) ->
+    TestCtx = #test_ctx{
+        ro_node = RoNode, ro_sess_id = RoSessId,
+        other_node = OtherNode, other_sess_id = OtherSessId
+    } = get_test_ctx(Config),
+    TestDataSize = byte_size(?TEST_DATA),
+    TestDataSize2 = byte_size(?TEST_DATA2),
+    [RoProviderId, _OtherProviderId] = provider_ids(),
+
+    {Guid, StorageFileId} = create_file_on_storage_and_register(TestCtx, ?FILE_NAME, ?TEST_DATA),
+
+    % invalidate the local replica, so that fulfilling a requirement for one would
+    % mean fetching the new content onto the readonly storage
+    {ok, OtherHandle} = ?assertMatch({ok, _},
+        lfm_proxy:open(OtherNode, OtherSessId, ?FILE_REF(Guid), write), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:write(OtherNode, OtherHandle, 0, ?TEST_DATA2)),
+    ok = lfm_proxy:close(OtherNode, OtherHandle),
+    ?assertDistribution(RoNode, RoSessId, ?DISTS(provider_ids(), [0, TestDataSize2]), Guid, ?ATTEMPTS),
+
+    % a QoS requirement enters the synchronizer without passing through the request
+    % routing that has reads of unavailable content served by another provider, so
+    % the check on the fetch itself is the only thing that can stop it here
+    {ok, QosEntryId} = ?assertMatch({ok, _}, opt_qos:add_qos_entry(
+        RoNode, RoSessId, ?FILE_REF(Guid), <<"providerId=", RoProviderId/binary>>, 1
+    )),
+
+    % the requirement is not left unattempted - the fetch is started and refused
+    ?assertEqual(
+        [<<"failed">>, <<"scheduled">>], list_qos_audit_log_statuses(RoNode, QosEntryId), ?ATTEMPTS
+    ),
+    ?assertEqual({ok, ?PENDING_QOS_STATUS}, opt_qos:check_qos_status(RoNode, RoSessId, QosEntryId)),
+
+    % the storage file still holds the content it was registered with, and the
+    % readonly provider gained no blocks of the new one
+    ?assertEqual({ok, ?TEST_DATA}, read_from_storage(TestCtx, StorageFileId, 0, TestDataSize)),
+    ?assertDistribution(RoNode, RoSessId, ?DISTS(provider_ids(), [0, TestDataSize2]), Guid, ?ATTEMPTS),
+
+    % for as long as the requirement exists, the failed file is retried periodically
+    ?assertEqual(ok, opt_qos:remove_qos_entry(RoNode, RoSessId, QosEntryId)).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1039,6 +1083,19 @@ read_from_storage(#test_ctx{readonly_storage_id = ReadonlyStorageId}, StorageFil
 list_space_dir_on_storage(#test_ctx{readonly_storage_id = ReadonlyStorageId}) ->
     % on an imported storage the storage root is the space root
     storage_file_tree_test_utils:list_dir(?RO_PROVIDER, ReadonlyStorageId, <<"/">>, 0, 10).
+
+
+%% @private
+%% @doc Statuses reported to the audit log of a QoS requirement, sorted so that
+%% the assertions do not depend on the order the log is browsed in.
+-spec list_qos_audit_log_statuses(node(), qos_entry:id()) -> [binary()] | {error, term()}.
+list_qos_audit_log_statuses(Node, QosEntryId) ->
+    case opw_test_rpc:call(Node, qos_entry_audit_log, browse_content, [QosEntryId, #{}]) of
+        {ok, #{<<"logEntries">> := LogEntries}} ->
+            lists:sort([Status || #{<<"content">> := #{<<"status">> := Status}} <- LogEntries]);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %% @private
