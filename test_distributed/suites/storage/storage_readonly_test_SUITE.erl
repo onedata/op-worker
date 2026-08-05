@@ -346,8 +346,10 @@ remote_rename_should_not_rename_file_on_storage(Config) ->
     % file should be renamed on the readonly provider
     ?assertMatch({ok, [{Guid, TargetFileName}]},
         lfm_proxy:get_children(RoNode, RoSessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(RoNode, RoSessId, {path, ?PATH(TargetFileName)})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(RoNode, RoSessId, {path, ?PATH(FileName)})),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(RoNode, RoSessId, {path, ?PATH(TargetFileName)}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(RoNode, RoSessId, {path, ?PATH(FileName)}), ?ATTEMPTS),
 
     await_file_location_synchronization(),
 
@@ -393,8 +395,10 @@ remote_move_should_not_rename_file_on_storage(Config) ->
     % file should be moved on the readonly provider
     ?assertMatch({ok, [{Guid, TargetFileName}]},
         lfm_proxy:get_children(RoNode, RoSessId, {path, ?PATH(TargetDir)}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(RoNode, RoSessId, {path, ?PATH(TargetPath)})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(RoNode, RoSessId, {path, ?PATH(FileName)})),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(RoNode, RoSessId, {path, ?PATH(TargetPath)}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(RoNode, RoSessId, {path, ?PATH(FileName)}), ?ATTEMPTS),
 
     await_file_location_synchronization(),
 
