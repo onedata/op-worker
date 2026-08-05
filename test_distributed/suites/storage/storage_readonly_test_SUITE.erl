@@ -13,6 +13,15 @@
 %%% is always an imported one - the Oneprovider rejects any other combination
 %%% (see storage:sanitize_readonly_option/2).
 %%%
+%%% The contract the tests pin down is twofold:
+%%%   * every operation that would have to write to the readonly storage fails
+%%%     with ?EROFS - including the ones that reach the storage only indirectly,
+%%%     like a replication targeting the readonly provider;
+%%%   * reading a file always succeeds, no matter whether its content happens to
+%%%     be on the readonly storage. Content that is not there (or is no longer
+%%%     up to date) is served by another provider supporting the space, and the
+%%%     readonly provider never gains a replica of it along the way.
+%%%
 %%% ATTENTION !!!
 %%% Krakow registers a second, regular read-write storage under THE SAME MOUNT
 %%% POINT as the readonly one. It supports no space and exists solely so that
@@ -57,17 +66,22 @@
     unlink_should_succeed_but_should_leave_files_on_storage/1,
     recursive_rm_should_succeed_but_should_leave_files_on_storage/1,
     truncate_should_fail/1,
+    read_of_remote_file_should_succeed_but_not_create_local_replica/1,
+    read_of_empty_remote_file_should_succeed/1,
+    write_to_remote_file_should_fail/1,
+    truncate_of_remote_file_should_fail/1,
     remote_chmod_should_not_change_mode_on_storage/1,
     remote_rename_should_not_rename_file_on_storage/1,
     remote_move_should_not_rename_file_on_storage/1,
     remote_unlink_should_not_trigger_unlinking_files_on_local_storage/1,
     remote_recursive_rm_should_not_trigger_removal_of_files_on_local_storage/1,
     remote_truncate_should_not_trigger_truncate_on_storage/1,
-    replication_on_the_fly_should_fail/1,
-    remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged/1,
-    remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged2/1,
+    remote_overwrite_should_invalidate_local_replica_but_leave_storage_file_unchanged/1,
+    remote_partial_overwrite_should_invalidate_changed_block_but_leave_storage_file_unchanged/1,
+    read_on_open_handle_after_remote_overwrite_should_return_new_content/1,
+    read_should_succeed_when_the_serving_provider_lacks_some_blocks/1,
     replication_job_should_fail/1,
-    eviction_job_should_succeed/1,
+    eviction_job_should_succeed_and_leave_the_file_readable/1,
     migration_job_should_fail/1
 ]).
 
@@ -83,17 +97,22 @@ all() -> [
     unlink_should_succeed_but_should_leave_files_on_storage,
     recursive_rm_should_succeed_but_should_leave_files_on_storage,
     truncate_should_fail,
+    read_of_remote_file_should_succeed_but_not_create_local_replica,
+    read_of_empty_remote_file_should_succeed,
+    write_to_remote_file_should_fail,
+    truncate_of_remote_file_should_fail,
     remote_chmod_should_not_change_mode_on_storage,
     remote_rename_should_not_rename_file_on_storage,
     remote_move_should_not_rename_file_on_storage,
     remote_unlink_should_not_trigger_unlinking_files_on_local_storage,
     remote_recursive_rm_should_not_trigger_removal_of_files_on_local_storage,
     remote_truncate_should_not_trigger_truncate_on_storage,
-    replication_on_the_fly_should_fail,
-    remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged,
-    remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged2,
+    remote_overwrite_should_invalidate_local_replica_but_leave_storage_file_unchanged,
+    remote_partial_overwrite_should_invalidate_changed_block_but_leave_storage_file_unchanged,
+    read_on_open_handle_after_remote_overwrite_should_return_new_content,
+    read_should_succeed_when_the_serving_provider_lacks_some_blocks,
     replication_job_should_fail,
-    eviction_job_should_succeed,
+    eviction_job_should_succeed_and_leave_the_file_readable,
     migration_job_should_fail
 ].
 
@@ -119,6 +138,8 @@ all() -> [
 -define(RAND_RANGE, 1000000000).
 -define(TEST_DATA, <<"abcdefgh">>).
 -define(TEST_DATA2, <<"0123456789">>).
+% written over a single byte of ?TEST_DATA, and picked so as not to occur in it
+-define(CHANGED_BYTE, <<"#">>).
 -define(ATTEMPTS, 30).
 
 -record(test_ctx, {
@@ -161,14 +182,26 @@ mkdir_should_succeed(Config) ->
 
 
 read_should_succeed(Config) ->
-    TestCtx = #test_ctx{ro_node = RoNode, ro_sess_id = RoSessId} = get_test_ctx(Config),
+    TestCtx = #test_ctx{
+        ro_node = RoNode, ro_sess_id = RoSessId,
+        other_node = OtherNode, other_sess_id = OtherSessId
+    } = get_test_ctx(Config),
+    TestDataSize = byte_size(?TEST_DATA),
 
     {Guid, _} = create_file_on_storage_and_register(TestCtx, ?FILE_NAME, ?TEST_DATA),
 
     % check whether file can be read
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), read)),
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(RoNode, Handle, 0, 100)),
-    ok = lfm_proxy:close(RoNode, Handle).
+    ok = lfm_proxy:close(RoNode, Handle),
+
+    % the whole file is on the local storage, so serving the read must not have
+    % engaged the other provider - had it done so, the other provider would have
+    % had to fetch the content first, which shows in the distribution it reports
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(OtherNode, OtherSessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ?assertDistribution(
+        OtherNode, OtherSessId, ?DISTS(provider_ids(), [TestDataSize, 0]), Guid, ?ATTEMPTS
+    ).
 
 
 write_should_fail(Config) ->
@@ -299,6 +332,60 @@ truncate_should_fail(Config) ->
     % file should still have old size
     TestDataSize = byte_size(?TEST_DATA),
     ?assertMatch({ok, #statbuf{st_size = TestDataSize}}, stat_on_storage(TestCtx, StorageFileId)).
+
+
+read_of_remote_file_should_succeed_but_not_create_local_replica(Config) ->
+    TestCtx = #test_ctx{ro_node = RoNode, ro_sess_id = RoSessId} = get_test_ctx(Config),
+    TestDataSize = byte_size(?TEST_DATA),
+
+    Guid = create_file_on_other_provider(TestCtx, ?FILE_NAME, ?TEST_DATA),
+
+    % the file has no counterpart on the readonly storage and can never get one,
+    % so the read has to be served by the other provider
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), read)),
+    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(RoNode, Handle, 0, 100)),
+    ok = lfm_proxy:close(RoNode, Handle),
+
+    % reading must not have left a replica behind on the readonly provider
+    ?assertDistribution(
+        RoNode, RoSessId, ?DISTS(provider_ids(), [0, TestDataSize]), Guid, ?ATTEMPTS
+    ),
+    ?assertMatch({ok, []}, list_space_dir_on_storage(TestCtx)).
+
+
+read_of_empty_remote_file_should_succeed(Config) ->
+    TestCtx = #test_ctx{ro_node = RoNode, ro_sess_id = RoSessId} = get_test_ctx(Config),
+
+    % an empty file needs no content fetched, which must not be mistaken for its
+    % content being available on the readonly storage - there is no file there
+    Guid = create_file_on_other_provider(TestCtx, ?FILE_NAME, <<>>),
+
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), read)),
+    ?assertEqual({ok, <<>>}, lfm_proxy:read(RoNode, Handle, 0, 100)),
+    ok = lfm_proxy:close(RoNode, Handle),
+
+    ?assertMatch({ok, []}, list_space_dir_on_storage(TestCtx)).
+
+
+write_to_remote_file_should_fail(Config) ->
+    TestCtx = #test_ctx{ro_node = RoNode, ro_sess_id = RoSessId} = get_test_ctx(Config),
+
+    Guid = create_file_on_other_provider(TestCtx, ?FILE_NAME, ?TEST_DATA),
+
+    % having the other provider serve the reads of this file must not turn into
+    % a way around the readonly storage for the writes
+    ?assertEqual({error, ?EROFS}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), write)),
+    ?assertEqual({error, ?EROFS}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), rdwr)).
+
+
+truncate_of_remote_file_should_fail(Config) ->
+    TestCtx = #test_ctx{ro_node = RoNode, ro_sess_id = RoSessId} = get_test_ctx(Config),
+    TestDataSize = byte_size(?TEST_DATA),
+
+    Guid = create_file_on_other_provider(TestCtx, ?FILE_NAME, ?TEST_DATA),
+
+    ?assertEqual({error, ?EROFS}, lfm_proxy:truncate(RoNode, RoSessId, ?FILE_REF(Guid), 0)),
+    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(RoNode, RoSessId, ?FILE_REF(Guid))).
 
 
 remote_chmod_should_not_change_mode_on_storage(Config) ->
@@ -518,22 +605,7 @@ remote_truncate_should_not_trigger_truncate_on_storage(Config) ->
     ?assertMatch({ok, #statbuf{st_size = TestDataSize}}, stat_on_storage(TestCtx, StorageFileId2)).
 
 
-replication_on_the_fly_should_fail(Config) ->
-    #test_ctx{
-        ro_node = RoNode, ro_sess_id = RoSessId,
-        other_node = OtherNode, other_sess_id = OtherSessId
-    } = get_test_ctx(Config),
-    TestDataSize = byte_size(?TEST_DATA),
-
-    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(OtherNode, OtherSessId, ?PATH(?FILE_NAME)),
-    {ok, _} = lfm_proxy:write(OtherNode, Handle, 0, ?TEST_DATA),
-    ok = lfm_proxy:close(OtherNode, Handle),
-
-    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(RoNode, RoSessId, ?FILE_REF(Guid)), ?ATTEMPTS),
-    ?assertEqual({error, ?EROFS}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), read)).
-
-
-remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged(Config) ->
+remote_overwrite_should_invalidate_local_replica_but_leave_storage_file_unchanged(Config) ->
     TestCtx = #test_ctx{
         ro_node = RoNode, ro_sess_id = RoSessId,
         other_node = OtherNode, other_sess_id = OtherSessId
@@ -553,22 +625,33 @@ remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged(Conf
 
     ?assertEqual({error, ?EROFS}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), rdwr), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{size = TestDataSize2}}, lfm_proxy:stat(RoNode, RoSessId, ?FILE_REF(Guid)), ?ATTEMPTS),
-    ?assertEqual({ok, ?TEST_DATA}, read_from_storage(TestCtx, StorageFileId, 0, TestDataSize)).
+
+    % the storage file still holds the previous content, which must neither be
+    % served as the file's content nor be brought up to date by the read - the
+    % latter would mean writing to the readonly storage
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), read)),
+    ?assertEqual({ok, ?TEST_DATA2}, lfm_proxy:read(RoNode, Handle2, 0, 100)),
+    ok = lfm_proxy:close(RoNode, Handle2),
+
+    ?assertEqual({ok, ?TEST_DATA}, read_from_storage(TestCtx, StorageFileId, 0, TestDataSize)),
+    ?assertDistribution(RoNode, RoSessId, ?DISTS(provider_ids(), [0, TestDataSize2]), Guid, ?ATTEMPTS).
 
 
-remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged2(Config) ->
+remote_partial_overwrite_should_invalidate_changed_block_but_leave_storage_file_unchanged(Config) ->
     TestCtx = #test_ctx{
         ro_node = RoNode, ro_sess_id = RoSessId,
         other_node = OtherNode, other_sess_id = OtherSessId
     } = get_test_ctx(Config),
     TestDataSize = byte_size(?TEST_DATA),
     ChangedByteOffset = 5,
+    <<Prefix:ChangedByteOffset/binary, _ChangedByte:1/binary, Suffix/binary>> = ?TEST_DATA,
+    NewContent = <<Prefix/binary, ?CHANGED_BYTE/binary, Suffix/binary>>,
 
     {Guid, StorageFileId} = create_file_on_storage_and_register(TestCtx, ?FILE_NAME, ?TEST_DATA),
 
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(OtherNode, OtherSessId, ?FILE_REF(Guid), rdwr), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(OtherNode, Handle, 0, TestDataSize), ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:write(OtherNode, Handle, ChangedByteOffset, <<"#">>)),
+    ?assertMatch({ok, _}, lfm_proxy:write(OtherNode, Handle, ChangedByteOffset, ?CHANGED_BYTE)),
     ok = lfm_proxy:close(OtherNode, Handle),
 
     % only the changed byte on the readonly provider should be invalidated
@@ -582,31 +665,124 @@ remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged2(Con
 
     ?assertEqual({error, ?EROFS}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), rdwr), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(RoNode, RoSessId, ?FILE_REF(Guid)), ?ATTEMPTS),
-    ?assertEqual({ok, ?TEST_DATA}, read_from_storage(TestCtx, StorageFileId, 0, TestDataSize)).
+
+    % a single invalidated byte is enough for the file to stop being servable from
+    % the storage, even though all its other bytes are still up to date there -
+    % and fetching that byte must not fill it in on the readonly storage
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), read)),
+    ?assertEqual({ok, NewContent}, lfm_proxy:read(RoNode, Handle2, 0, 100)),
+    ok = lfm_proxy:close(RoNode, Handle2),
+
+    ?assertEqual({ok, ?TEST_DATA}, read_from_storage(TestCtx, StorageFileId, 0, TestDataSize)),
+    ?assertDistribution(
+        RoNode, RoSessId, ?DISTS(provider_ids(), [ExpectedRoProviderBlocks, TestDataSize]), Guid, ?ATTEMPTS
+    ).
 
 
-replication_job_should_fail(Config) ->
-    #test_ctx{
+read_on_open_handle_after_remote_overwrite_should_return_new_content(Config) ->
+    TestCtx = #test_ctx{
         ro_node = RoNode, ro_sess_id = RoSessId,
         other_node = OtherNode, other_sess_id = OtherSessId
     } = get_test_ctx(Config),
     TestDataSize = byte_size(?TEST_DATA),
-    [RoProviderId, OtherProviderId] = provider_ids(),
+    TestDataSize2 = byte_size(?TEST_DATA2),
 
-    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(OtherNode, OtherSessId, ?PATH(?FILE_NAME)),
-    {ok, _} = lfm_proxy:write(OtherNode, Handle, 0, ?TEST_DATA),
+    {Guid, StorageFileId} = create_file_on_storage_and_register(TestCtx, ?FILE_NAME, ?TEST_DATA),
+
+    % open the file while its whole content is still available on the local storage
+    {ok, RoHandle} = ?assertMatch({ok, _}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), read)),
+    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(RoNode, RoHandle, 0, 100)),
+
+    {ok, OtherHandle} = ?assertMatch({ok, _},
+        lfm_proxy:open(OtherNode, OtherSessId, ?FILE_REF(Guid), write), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:write(OtherNode, OtherHandle, 0, ?TEST_DATA2)),
+    ok = lfm_proxy:close(OtherNode, OtherHandle),
+
+    ?assertDistribution(RoNode, RoSessId, ?DISTS(provider_ids(), [0, TestDataSize2]), Guid, ?ATTEMPTS),
+
+    % the handle was opened before the local replica was invalidated, but reading
+    % through it must neither fall back to the outdated content on the storage nor
+    % refresh it there
+    ?assertEqual({ok, ?TEST_DATA2}, lfm_proxy:read(RoNode, RoHandle, 0, 100), ?ATTEMPTS),
+    ok = lfm_proxy:close(RoNode, RoHandle),
+
+    ?assertEqual({ok, ?TEST_DATA}, read_from_storage(TestCtx, StorageFileId, 0, TestDataSize)),
+    ?assertDistribution(RoNode, RoSessId, ?DISTS(provider_ids(), [0, TestDataSize2]), Guid, ?ATTEMPTS).
+
+
+read_should_succeed_when_the_serving_provider_lacks_some_blocks(Config) ->
+    TestCtx = #test_ctx{
+        ro_node = RoNode, ro_sess_id = RoSessId,
+        other_node = OtherNode, other_sess_id = OtherSessId
+    } = get_test_ctx(Config),
+    TestDataSize = byte_size(?TEST_DATA),
+    [RoProviderId, _OtherProviderId] = provider_ids(),
+    ChangedByteOffset = 5,
+    <<Prefix:ChangedByteOffset/binary, _ChangedByte:1/binary, Suffix/binary>> = ?TEST_DATA,
+    NewContent = <<Prefix/binary, ?CHANGED_BYTE/binary, Suffix/binary>>,
+
+    {Guid, StorageFileId} = create_file_on_storage_and_register(TestCtx, ?FILE_NAME, ?TEST_DATA),
+
+    % overwrite a single byte on the other provider without reading the file first,
+    % so that it ends up holding that byte and nothing else
+    {ok, Handle} = ?assertMatch({ok, _},
+        lfm_proxy:open(OtherNode, OtherSessId, ?FILE_REF(Guid), write), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:write(OtherNode, Handle, ChangedByteOffset, ?CHANGED_BYTE)),
     ok = lfm_proxy:close(OtherNode, Handle),
 
-    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(RoNode, RoSessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ExpectedRoProviderBlocks = [
+        [0, ChangedByteOffset],
+        [ChangedByteOffset + 1, TestDataSize - (ChangedByteOffset + 1)]
+    ],
+    ?assertDistribution(
+        RoNode, RoSessId,
+        ?DISTS(provider_ids(), [ExpectedRoProviderBlocks, [[ChangedByteOffset, 1]]]), Guid, ?ATTEMPTS
+    ),
+    % the distribution above is gathered from each provider directly, so it says
+    % nothing about what the other one already learned through dbsync - await that
+    % separately: as long as it believes the readonly provider still holds the
+    % changed byte, it merges its fetch across that byte (see
+    % replica_finder:consolidate_requested_blocks/2) and pulls it back along with
+    % the rest, overwriting its own newer version of it
+    % @TODO VFS-13758 not needed once a fetch is no longer merged across a hole
+    % that the fetching provider filled with its own newer write
+    ?assertEqual(
+        {ok, ExpectedRoProviderBlocks},
+        opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(OtherNode, Guid, RoProviderId),
+        ?ATTEMPTS
+    ),
+
+    % neither provider holds the whole file - the one serving the read has to
+    % fetch the missing blocks, and the only source of them is the readonly storage
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), read)),
+    ?assertEqual({ok, NewContent}, lfm_proxy:read(RoNode, Handle2, 0, 100)),
+    ok = lfm_proxy:close(RoNode, Handle2),
+
+    % serving the file made the other provider a holder of a complete replica,
+    % while the readonly provider gained nothing
+    ?assertDistribution(
+        RoNode, RoSessId, ?DISTS(provider_ids(), [ExpectedRoProviderBlocks, TestDataSize]), Guid, ?ATTEMPTS
+    ),
+    ?assertEqual({ok, ?TEST_DATA}, read_from_storage(TestCtx, StorageFileId, 0, TestDataSize)).
+
+
+replication_job_should_fail(Config) ->
+    TestCtx = #test_ctx{ro_node = RoNode, ro_sess_id = RoSessId} = get_test_ctx(Config),
+    TestDataSize = byte_size(?TEST_DATA),
+    [RoProviderId, OtherProviderId] = provider_ids(),
+
+    Guid = create_file_on_other_provider(TestCtx, ?FILE_NAME, ?TEST_DATA),
     ?assertDistribution(RoNode, RoSessId, ?DISTS([RoProviderId, OtherProviderId], [0, TestDataSize]), Guid, ?ATTEMPTS),
 
+    % reading such a file is served by the other provider, but replicating it is
+    % an explicit request for a local copy - and that one has nowhere to be put
     ?assertEqual(
         ?ERR_POSIX(?EROFS),
         opt_transfers:schedule_file_replication(RoNode, RoSessId, ?FILE_REF(Guid), RoProviderId)
     ).
 
 
-eviction_job_should_succeed(Config) ->
+eviction_job_should_succeed_and_leave_the_file_readable(Config) ->
     TestCtx = #test_ctx{
         ro_node = RoNode, ro_sess_id = RoSessId,
         other_node = OtherNode, other_sess_id = OtherSessId
@@ -639,23 +815,23 @@ eviction_job_should_succeed(Config) ->
         RoNode, RoSessId, ?DISTS([RoProviderId, OtherProviderId], [0, TestDataSize]), Guid, ?ATTEMPTS
     ),
 
-    % file should still exist on storage
-    ?assertEqual({ok, ?TEST_DATA}, read_from_storage(TestCtx, StorageFileId, 0, TestDataSize)).
+    % the storage file outlives the eviction, but its blocks are gone from the
+    % metadata - the file has to be served by the other provider from now on
+    ?assertEqual({ok, ?TEST_DATA}, read_from_storage(TestCtx, StorageFileId, 0, TestDataSize)),
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(RoNode, RoSessId, ?FILE_REF(Guid), read)),
+    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(RoNode, Handle2, 0, 100)),
+    ok = lfm_proxy:close(RoNode, Handle2),
+    ?assertDistribution(
+        RoNode, RoSessId, ?DISTS([RoProviderId, OtherProviderId], [0, TestDataSize]), Guid, ?ATTEMPTS
+    ).
 
 
 migration_job_should_fail(Config) ->
-    #test_ctx{
-        ro_node = RoNode, ro_sess_id = RoSessId,
-        other_node = OtherNode, other_sess_id = OtherSessId
-    } = get_test_ctx(Config),
+    TestCtx = #test_ctx{ro_node = RoNode, ro_sess_id = RoSessId} = get_test_ctx(Config),
     TestDataSize = byte_size(?TEST_DATA),
     [RoProviderId, OtherProviderId] = provider_ids(),
 
-    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(OtherNode, OtherSessId, ?PATH(?FILE_NAME)),
-    {ok, _} = lfm_proxy:write(OtherNode, Handle, 0, ?TEST_DATA),
-    ok = lfm_proxy:close(OtherNode, Handle),
-
-    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(RoNode, RoSessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    Guid = create_file_on_other_provider(TestCtx, ?FILE_NAME, ?TEST_DATA),
     ?assertDistribution(RoNode, RoSessId, ?DISTS([RoProviderId, OtherProviderId], [0, TestDataSize]), Guid, ?ATTEMPTS),
 
     % migration is a replication to the readonly provider followed by an eviction
@@ -801,6 +977,30 @@ create_file_on_storage_and_register(TestCtx = #test_ctx{
         #{<<"size">> => byte_size(Content)}
     ])),
     {Guid, StorageFileId}.
+
+
+%% @private
+%% @doc Creates the file on the other provider and awaits its synchronization to
+%% the readonly one. Such a file exists in the space but has no counterpart on
+%% the readonly storage, and the readonly provider has no way of ever giving it
+%% one - the sole way for a file to get onto that storage is registration.
+-spec create_file_on_other_provider(test_ctx(), file_meta:name(), binary()) -> file_id:file_guid().
+create_file_on_other_provider(#test_ctx{
+    ro_node = RoNode,
+    ro_sess_id = RoSessId,
+    other_node = OtherNode,
+    other_sess_id = OtherSessId
+}, FileName, Content) ->
+    ContentSize = byte_size(Content),
+
+    {ok, {Guid, Handle}} = ?assertMatch({ok, _},
+        lfm_proxy:create_and_open(OtherNode, OtherSessId, ?PATH(FileName))),
+    ?assertMatch({ok, ContentSize}, lfm_proxy:write(OtherNode, Handle, 0, Content)),
+    ok = lfm_proxy:close(OtherNode, Handle),
+
+    ?assertMatch({ok, #file_attr{size = ContentSize}},
+        lfm_proxy:stat(RoNode, RoSessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    Guid.
 
 
 %% @private
