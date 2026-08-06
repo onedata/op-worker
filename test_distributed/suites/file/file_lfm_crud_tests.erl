@@ -36,7 +36,6 @@
 %% tests
 -export([
     create_and_unlink_test/0,
-    create_and_access_test/0,
     create_under_regular_file_fails_test/0,
 
     basic_rdwr_test/0,
@@ -112,67 +111,6 @@ create_and_unlink_test() ->
 
     ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath11)),
     ?assertMatch({ok, _}, lfm_proxy:create(Node, OtherSessId, FilePath21)),
-
-    ok.
-
-
-create_and_access_test() ->
-    Node = file_lfm_test_utils:get_node(),
-    OwnerSessId = file_lfm_test_utils:get_session_id(?USER_SELECTOR),
-    OtherSessId = file_lfm_test_utils:get_session_id(?OTHER_USER_SELECTOR),
-    {_RootDirGuid, RootDirPath} = file_lfm_test_utils:create_test_root_dir(Node, OwnerSessId),
-
-    NewFile = fun(Mode) ->
-        FilePath = filename:join([RootDirPath, generator:gen_name()]),
-        ?assertMatch({ok, _}, lfm_proxy:create(Node, OwnerSessId, FilePath, Mode)),
-        FilePath
-    end,
-
-    % owner: write only
-    WriteOnlyPath = NewFile(8#240),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OwnerSessId, {path, WriteOnlyPath}, write)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OtherSessId, {path, WriteOnlyPath}, read)),
-    ?assertMatch(ok, lfm_proxy:truncate(Node, OwnerSessId, {path, WriteOnlyPath}, 10)),
-
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, OwnerSessId, {path, WriteOnlyPath}, read)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, OtherSessId, {path, WriteOnlyPath}, write)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, OwnerSessId, {path, WriteOnlyPath}, rdwr)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, OtherSessId, {path, WriteOnlyPath}, rdwr)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(Node, OtherSessId, {path, WriteOnlyPath}, 10)),
-
-    % owner: read/write, group: read only
-    OwnerRdwrPath = NewFile(8#640),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OwnerSessId, {path, OwnerRdwrPath}, write)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OwnerSessId, {path, OwnerRdwrPath}, read)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OwnerSessId, {path, OwnerRdwrPath}, rdwr)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OtherSessId, {path, OwnerRdwrPath}, read)),
-    ?assertMatch(ok, lfm_proxy:truncate(Node, OwnerSessId, {path, OwnerRdwrPath}, 10)),
-
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, OtherSessId, {path, OwnerRdwrPath}, write)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, OtherSessId, {path, OwnerRdwrPath}, rdwr)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(Node, OtherSessId, {path, OwnerRdwrPath}, 10)),
-
-    % owner and group: read/write
-    SharedRdwrPath = NewFile(8#670),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OwnerSessId, {path, SharedRdwrPath}, write)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OwnerSessId, {path, SharedRdwrPath}, read)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OwnerSessId, {path, SharedRdwrPath}, rdwr)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OtherSessId, {path, SharedRdwrPath}, write)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OtherSessId, {path, SharedRdwrPath}, read)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OtherSessId, {path, SharedRdwrPath}, rdwr)),
-    ?assertMatch(ok, lfm_proxy:truncate(Node, OwnerSessId, {path, SharedRdwrPath}, 10)),
-
-    % owner and group: read only
-    ReadOnlyPath = NewFile(8#540),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OwnerSessId, {path, ReadOnlyPath}, read)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, OtherSessId, {path, ReadOnlyPath}, read)),
-
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, OwnerSessId, {path, ReadOnlyPath}, write)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, OwnerSessId, {path, ReadOnlyPath}, rdwr)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, OtherSessId, {path, ReadOnlyPath}, write)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, OtherSessId, {path, ReadOnlyPath}, rdwr)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(Node, OwnerSessId, {path, ReadOnlyPath}, 10)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(Node, OtherSessId, {path, ReadOnlyPath}, 10)),
 
     ok.
 

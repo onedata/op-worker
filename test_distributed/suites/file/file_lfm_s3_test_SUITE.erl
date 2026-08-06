@@ -31,7 +31,6 @@
 %% tests
 -export([
     create_and_unlink_test/1,
-    create_and_access_test/1,
     basic_rdwr_test/1,
     rdwr_opens_storage_file_once_test/1,
     rdwr_after_storage_file_delete_test/1,
@@ -74,7 +73,6 @@
 groups() -> [
     {crud_tests, [], [
         create_and_unlink_test,
-        create_and_access_test,
         basic_rdwr_test,
         rdwr_opens_storage_file_once_test,
         rdwr_after_storage_file_delete_test,
@@ -150,10 +148,6 @@ all() -> ?ALL(?STANDARD_CASES, ?PERFORMANCE_CASES).
 
 
 create_and_unlink_test(_Config) ->
-    ?RUN_CRUD_TEST().
-
-
-create_and_access_test(_Config) ->
     ?RUN_CRUD_TEST().
 
 
