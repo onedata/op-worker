@@ -344,13 +344,10 @@ echo_loop_test_base(Config) ->
 
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
-            % dir stats would give every directory a size, while the attr tests assert
-            % that a directory has none - as it had on the deployment they were written for
-            dir_stats_test_utils:disable_stats_counting(NewConfig),
             % undo what a previously interrupted run may have left behind on a reused deployment
             file_lfm_listing_tests:ensure_default_fold_cache_timeout(),
             file_lfm_crud_tests:ensure_storage_driver_unmocked(),
@@ -359,9 +356,8 @@ init_per_suite(Config) ->
     }).
 
 
-end_per_suite(Config) ->
-    oct_background:end_per_suite(),
-    dir_stats_test_utils:unmock_stats_counting(Config).
+end_per_suite(_Config) ->
+    oct_background:end_per_suite().
 
 
 init_per_group(_Group, Config) ->

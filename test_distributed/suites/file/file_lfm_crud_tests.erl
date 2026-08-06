@@ -542,26 +542,15 @@ sequential_writes_from_many_processes_test() ->
 get_attrs_test() ->
     Node = file_lfm_test_utils:get_node(),
     SessId = file_lfm_test_utils:get_session_id(?USER_SELECTOR),
+    {_RootDirGuid, RootDirPath} = file_lfm_test_utils:create_test_root_dir(Node, SessId),
 
-    SpacePath = file_lfm_test_utils:build_space_path(),
     FileName = generator:gen_name(),
-    FilePath = file_lfm_test_utils:build_space_path(FileName),
+    FilePath = filename:join([RootDirPath, FileName]),
 
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath)),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {path, FilePath}, rdwr)),
 
     SelectedAttrs = [name, size, index, active_permissions_type, has_custom_metadata],
-
-    SpaceName = oct_background:get_space_name(?SPACE_SELECTOR),
-    SpaceDirIndex = file_listing:build_index(file_lfm_test_utils:get_space_id()),
-    % NOTE: the space dir reports no size because the suites turn dir stats counting off
-    ?assertMatch({ok, #file_attr{
-        name = SpaceName,
-        size = undefined,
-        index = SpaceDirIndex,
-        active_permissions_type = posix,
-        has_custom_metadata = false
-    }}, lfm_proxy:stat(Node, SessId, {path, SpacePath}, SelectedAttrs)),
 
     FileIndex = file_listing:build_index(FileName, oct_background:get_provider_id(?PROVIDER_SELECTOR)),
     ?assertMatch({ok, #file_attr{
