@@ -187,15 +187,16 @@ cp_dir_into_itself_fails_test() ->
     SourcePath = filename:join([RootDirPath, SourceName]),
     {ok, SourceGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, SessId, SourcePath)),
 
-    GrandChildPath = filename:join([SourcePath, generator:gen_name(), generator:gen_name()]),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, SessId, GrandChildPath)),
+    % NOTE: lfm_proxy:mkdir creates only the leaf, so the whole branch is made at once
+    {ok, #file_attr{guid = GrandChildGuid}} = ?assertMatch({ok, _}, lfm_proxy:create_dir_at_path(
+        Node, SessId, SourceGuid, filename:join(lists_utils:generate(fun generator:gen_name/0, 2)))),
 
     SymlinkGuid = create_symlink_to(Node, SessId, RootDirPath, SourceGuid),
 
     ?assertMatch({error, ?EINVAL}, lfm_proxy:cp(
         Node, SessId, ?FILE_REF(SourceGuid), {path, SourcePath}, SourceName)),
     ?assertMatch({error, ?EINVAL}, lfm_proxy:cp(
-        Node, SessId, ?FILE_REF(SourceGuid), {path, GrandChildPath}, SourceName)),
+        Node, SessId, ?FILE_REF(SourceGuid), ?FILE_REF(GrandChildGuid), SourceName)),
     ?assertMatch({error, ?EINVAL}, lfm_proxy:cp(
         Node, SessId, ?FILE_REF(SourceGuid), ?FILE_REF(SymlinkGuid), generator:gen_name())),
 
