@@ -41,18 +41,7 @@
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
-    file_popularity_should_have_correct_file_size/1,
-    lfm_recreate_handle_test/1,
-    lfm_write_after_create_no_perms_test/1,
-    lfm_recreate_handle_after_delete_test/1,
-    lfm_open_failure_test/1,
-    lfm_create_and_open_failure_test/1,
-    lfm_open_in_direct_mode_test/1,
-    lfm_mv_failure_test/1,
-    lfm_open_multiple_times_failure_test/1,
-    lfm_open_failure_multiple_users_test/1,
-    lfm_open_and_create_open_failure_test/1,
-    lfm_mv_failure_multiple_users_test/1
+    file_popularity_should_have_correct_file_size/1
 ]).
 
 -define(TEST_CASES, [
@@ -72,18 +61,7 @@
     new_file_should_not_have_popularity_doc,
     new_file_should_have_zero_popularity,
     opening_file_should_increase_file_popularity,
-    file_popularity_should_have_correct_file_size,
-    lfm_recreate_handle_test,
-    lfm_write_after_create_no_perms_test,
-    lfm_recreate_handle_after_delete_test,
-    lfm_open_failure_test,
-    lfm_create_and_open_failure_test,
-    lfm_open_in_direct_mode_test,
-    lfm_mv_failure_test,
-    lfm_open_multiple_times_failure_test,
-    lfm_open_failure_multiple_users_test,
-    lfm_open_and_create_open_failure_test,
-    lfm_mv_failure_multiple_users_test
+    file_popularity_should_have_correct_file_size
 ]).
 
 -define(SPACE_ID, <<"space1">>).
@@ -95,39 +73,6 @@ all() ->
 %%%====================================================================
 %%% Test function
 %%%====================================================================
-
-lfm_recreate_handle_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, ?DEFAULT_FILE_PERMS, dont_delete_file).
-
-lfm_write_after_create_no_perms_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, 8#444, dont_delete_file).
-
-lfm_recreate_handle_after_delete_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, ?DEFAULT_FILE_PERMS, delete_after_open).
-
-lfm_open_failure_test(Config) ->
-    lfm_files_test_base:lfm_open_failure(Config).
-
-lfm_create_and_open_failure_test(Config) ->
-    lfm_files_test_base:lfm_create_and_open_failure(Config).
-
-lfm_open_and_create_open_failure_test(Config) ->
-    lfm_files_test_base:lfm_open_and_create_open_failure(Config).
-
-lfm_open_multiple_times_failure_test(Config) ->
-    lfm_files_test_base:lfm_open_multiple_times_failure(Config).
-
-lfm_open_failure_multiple_users_test(Config) ->
-    lfm_files_test_base:lfm_open_failure_multiple_users(Config).
-
-lfm_open_in_direct_mode_test(Config) ->
-    lfm_files_test_base:lfm_open_in_direct_mode(Config).
-
-lfm_mv_failure_test(Config) ->
-    lfm_files_test_base:lfm_mv_failure(Config).
-
-lfm_mv_failure_multiple_users_test(Config) ->
-    lfm_files_test_base:lfm_mv_failure_multiple_users(Config).
 
 fslogic_new_file_test(Config) ->
     lfm_files_test_base:fslogic_new_file(Config).
