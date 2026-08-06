@@ -23,6 +23,10 @@
 -define(PROVIDER_SELECTOR, krakow).
 -define(SPACE_SELECTOR, space_krk).
 
+% Only the 1op scenario deploys a second space, so this may be used solely by
+% tests wired into file_lfm_posix_test_SUITE.
+-define(OTHER_SPACE_SELECTOR, space1).
+
 % NOTE: neither acting user may be the space owner. The owner omits ALL file
 % permission checks (data_access_control:assert_access_granted_for_space_owner/3),
 % which would not fail a test outright - it would silently turn every EACCES
@@ -49,5 +53,6 @@
 -define(RUN_COPY_TEST(), ?RUN_TEST(file_lfm_copy_tests)).
 -define(RUN_STORAGE_TEST(), ?RUN_TEST(file_lfm_storage_tests)).
 -define(RUN_STORAGE_TEST(__ARGS), ?RUN_TEST(file_lfm_storage_tests, __ARGS)).
+-define(RUN_HANDLES_TEST(), ?RUN_TEST(file_lfm_handles_tests)).
 
 -endif.

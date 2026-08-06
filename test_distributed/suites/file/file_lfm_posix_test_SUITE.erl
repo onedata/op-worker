@@ -49,6 +49,17 @@
     ensure_dir_test/1,
     create_dir_at_path_test/1,
 
+    recreate_handle_test/1,
+    write_with_creation_handle_without_write_perms_test/1,
+    recreate_handle_after_delete_test/1,
+    direct_io_open_registers_no_storage_handle_test/1,
+    open_failure_test/1,
+    create_and_open_failure_test/1,
+    open_failure_does_not_affect_other_session_test/1,
+    mv_between_spaces_failure_test/1,
+    monitored_open_releases_handle_on_process_death_test/1,
+    list_process_handles_test/1,
+
     storage_file_is_created_on_open_test/1,
     mv_before_storage_file_creation_test/1,
     truncate_before_storage_file_creation_test/1,
@@ -110,6 +121,19 @@ groups() -> [
         create_dir_at_path_test
     ]},
 
+    {handles_tests, [], [
+        recreate_handle_test,
+        write_with_creation_handle_without_write_perms_test,
+        recreate_handle_after_delete_test,
+        direct_io_open_registers_no_storage_handle_test,
+        open_failure_test,
+        create_and_open_failure_test,
+        open_failure_does_not_affect_other_session_test,
+        mv_between_spaces_failure_test,
+        monitored_open_releases_handle_on_process_death_test,
+        list_process_handles_test
+    ]},
+
     {storage_tests, [], [
         storage_file_is_created_on_open_test,
         mv_before_storage_file_creation_test,
@@ -164,6 +188,7 @@ groups() -> [
 
 -define(STANDARD_CASES, [
     {group, crud_tests},
+    {group, handles_tests},
     {group, storage_tests},
     {group, copy_tests},
     {group, children_listing_tests},
@@ -262,6 +287,51 @@ ensure_dir_test(_Config) ->
 
 create_dir_at_path_test(_Config) ->
     ?RUN_CRUD_TEST().
+
+
+%%%===================================================================
+%%% Handle tests
+%%%===================================================================
+
+
+recreate_handle_test(_Config) ->
+    ?RUN_HANDLES_TEST().
+
+
+write_with_creation_handle_without_write_perms_test(_Config) ->
+    ?RUN_HANDLES_TEST().
+
+
+recreate_handle_after_delete_test(_Config) ->
+    ?RUN_HANDLES_TEST().
+
+
+direct_io_open_registers_no_storage_handle_test(_Config) ->
+    ?RUN_HANDLES_TEST().
+
+
+open_failure_test(_Config) ->
+    ?RUN_HANDLES_TEST().
+
+
+create_and_open_failure_test(_Config) ->
+    ?RUN_HANDLES_TEST().
+
+
+open_failure_does_not_affect_other_session_test(_Config) ->
+    ?RUN_HANDLES_TEST().
+
+
+mv_between_spaces_failure_test(_Config) ->
+    ?RUN_HANDLES_TEST().
+
+
+monitored_open_releases_handle_on_process_death_test(_Config) ->
+    ?RUN_HANDLES_TEST().
+
+
+list_process_handles_test(_Config) ->
+    ?RUN_HANDLES_TEST().
 
 
 %%%===================================================================
@@ -418,13 +488,13 @@ echo_loop_test_base(Config) ->
 
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [file_lfm_storage_tests]} | Config], #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, [file_lfm_storage_tests, file_lfm_handles_tests]} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
             % undo what a previously interrupted run may have left behind on a reused deployment
             file_lfm_listing_tests:ensure_default_fold_cache_timeout(),
-            file_lfm_crud_tests:ensure_storage_driver_unmocked(),
+            file_lfm_test_utils:ensure_storage_driver_unmocked(),
             file_lfm_copy_tests:ensure_default_ls_batch_limit(),
             NewConfig
         end

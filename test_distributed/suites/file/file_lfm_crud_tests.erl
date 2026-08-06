@@ -66,9 +66,6 @@
     echo_loop_test_performance_spec/0, echo_loop_test_base/1
 ]).
 
-%% suite setup helpers
--export([ensure_storage_driver_unmocked/0]).
-
 -define(REPEATS, 3).
 -define(SUCCESS_RATE, 100).
 
@@ -680,23 +677,6 @@ echo_loop_test_base(Config) ->
         description = "Aggregated time of all operations"}.
 
 
-%%%===================================================================
-%%% Suite setup helpers
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% rdwr_opens_storage_file_once_test mocks storage_driver for the duration of a
-%% single case and unloads it itself. A run interrupted in between would leave
-%% the mock in place on a reused deployment, so this is called defensively from
-%% the init_per_suite posthook (unloading a module that was never mocked is a
-%% no-op).
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_storage_driver_unmocked() -> ok.
-ensure_storage_driver_unmocked() ->
-    test_utils:mock_unload(oct_background:get_provider_nodes(?PROVIDER_SELECTOR), [storage_driver]).
 
 
 %%%===================================================================

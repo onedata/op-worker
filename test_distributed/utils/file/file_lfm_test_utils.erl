@@ -26,6 +26,7 @@
 -export([get_node/0, get_session_id/1, set_direct_io/2]).
 -export([get_space_id/0, get_space_dir_guid/0, build_space_path/0, build_space_path/1]).
 -export([create_test_root_dir/2]).
+-export([ensure_storage_driver_unmocked/0]).
 
 
 %%%===================================================================
@@ -93,3 +94,16 @@ create_test_root_dir(Node, SessId) ->
     DirPath = build_space_path(generator:gen_name()),
     {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, SessId, DirPath)),
     {DirGuid, DirPath}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Several tests mock storage_driver for the duration of a single case and
+%% unload it themselves. A run interrupted in between would leave the mock in
+%% place on a reused deployment, so this is called defensively from the
+%% init_per_suite posthook (unloading a module that was never mocked is a no-op).
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_storage_driver_unmocked() -> ok.
+ensure_storage_driver_unmocked() ->
+    test_utils:mock_unload(oct_background:get_provider_nodes(?PROVIDER_SELECTOR), [storage_driver]).
