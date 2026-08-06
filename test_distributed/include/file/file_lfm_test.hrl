@@ -31,9 +31,13 @@
 -define(USER_SELECTOR, user2).
 -define(OTHER_USER_SELECTOR, user3).
 
--define(RUN_TEST(__TESTS_MODULE),
+-define(RUN_TEST(__TESTS_MODULE), ?RUN_TEST(__TESTS_MODULE, [])).
+
+% __ARGS are passed on to the test body, for the few tests whose expectations
+% differ between the storage types the suites run on.
+-define(RUN_TEST(__TESTS_MODULE, __ARGS),
     try
-        __TESTS_MODULE:?FUNCTION_NAME()
+        erlang:apply(__TESTS_MODULE, ?FUNCTION_NAME, __ARGS)
     catch __TYPE:__REASON:__STACKTRACE ->
         ?ct_pal_exception("Test failed due to", __TYPE, __REASON, __STACKTRACE),
         error(test_failed)
@@ -43,5 +47,7 @@
 -define(RUN_LISTING_TEST(), ?RUN_TEST(file_lfm_listing_tests)).
 -define(RUN_CRUD_TEST(), ?RUN_TEST(file_lfm_crud_tests)).
 -define(RUN_COPY_TEST(), ?RUN_TEST(file_lfm_copy_tests)).
+-define(RUN_STORAGE_TEST(), ?RUN_TEST(file_lfm_storage_tests)).
+-define(RUN_STORAGE_TEST(__ARGS), ?RUN_TEST(file_lfm_storage_tests, __ARGS)).
 
 -endif.

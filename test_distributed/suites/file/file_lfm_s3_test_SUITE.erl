@@ -47,6 +47,10 @@
     rm_recursive_of_space_dir_fails_test/1,
     close_deleted_open_files_test/1,
 
+    mv_before_storage_file_creation_test/1,
+    truncate_before_storage_file_creation_test/1,
+    sparse_files_test/1,
+
     cp_file_test/1,
     cp_empty_dir_test/1,
     cp_dir_with_children_test/1,
@@ -96,6 +100,12 @@ groups() -> [
         close_deleted_open_files_test
     ]},
 
+    {storage_tests, [], [
+        mv_before_storage_file_creation_test,
+        truncate_before_storage_file_creation_test,
+        sparse_files_test
+    ]},
+
     {copy_tests, [], [
         cp_file_test,
         cp_empty_dir_test,
@@ -139,6 +149,7 @@ groups() -> [
 
 -define(STANDARD_CASES, [
     {group, crud_tests},
+    {group, storage_tests},
     {group, copy_tests},
     {group, children_listing_tests},
     {group, children_listing_with_pagination_token_tests},
@@ -224,6 +235,23 @@ rm_recursive_of_space_dir_fails_test(_Config) ->
 
 close_deleted_open_files_test(_Config) ->
     ?RUN_CRUD_TEST().
+
+
+%%%===================================================================
+%%% Storage tests
+%%%===================================================================
+
+
+mv_before_storage_file_creation_test(_Config) ->
+    ?RUN_STORAGE_TEST().
+
+
+truncate_before_storage_file_creation_test(_Config) ->
+    ?RUN_STORAGE_TEST().
+
+
+sparse_files_test(_Config) ->
+    ?RUN_STORAGE_TEST([check_size_and_read]).
 
 
 %%%===================================================================
@@ -343,7 +371,7 @@ echo_loop_test_base(Config) ->
 
 
 init_per_suite(Config) ->
-    opt:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, [file_lfm_storage_tests]} | Config], #onenv_test_config{
         onenv_scenario = "1op_s3",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
