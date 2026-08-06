@@ -65,6 +65,15 @@
     cp_dir_into_itself_fails_test/1,
     mv_dir_into_symlink_to_itself_fails_test/1,
 
+    create_share_test/1,
+    remove_share_test/1,
+    share_root_getattr_test/1,
+    share_child_getattr_test/1,
+    share_get_parent_test/1,
+    share_list_test/1,
+    share_read_test/1,
+    guest_cannot_access_unshared_file_test/1,
+
     get_children_attrs_of_empty_dir_test/1,
     get_children_attrs_with_zero_limit_test/1,
     get_children_attrs_with_zero_offset_test/1,
@@ -132,6 +141,17 @@ groups() -> [
         mv_dir_into_symlink_to_itself_fails_test
     ]},
 
+    {shares_tests, [], [
+        create_share_test,
+        remove_share_test,
+        share_root_getattr_test,
+        share_child_getattr_test,
+        share_get_parent_test,
+        share_list_test,
+        share_read_test,
+        guest_cannot_access_unshared_file_test
+    ]},
+
     {children_listing_tests, [], [
         get_children_attrs_of_empty_dir_test,
         get_children_attrs_with_zero_limit_test,
@@ -170,6 +190,7 @@ groups() -> [
     {group, handles_tests},
     {group, storage_tests},
     {group, copy_tests},
+    {group, shares_tests},
     {group, children_listing_tests},
     {group, children_listing_with_pagination_token_tests},
     {group, recursive_listing_tests},
@@ -332,6 +353,43 @@ mv_dir_into_symlink_to_itself_fails_test(_Config) ->
 
 
 %%%===================================================================
+%%% Share tests
+%%%===================================================================
+
+
+create_share_test(_Config) ->
+    ?RUN_SHARES_TEST().
+
+
+remove_share_test(_Config) ->
+    ?RUN_SHARES_TEST().
+
+
+share_root_getattr_test(_Config) ->
+    ?RUN_SHARES_TEST().
+
+
+share_child_getattr_test(_Config) ->
+    ?RUN_SHARES_TEST().
+
+
+share_get_parent_test(_Config) ->
+    ?RUN_SHARES_TEST().
+
+
+share_list_test(_Config) ->
+    ?RUN_SHARES_TEST().
+
+
+share_read_test(_Config) ->
+    ?RUN_SHARES_TEST().
+
+
+guest_cannot_access_unshared_file_test(_Config) ->
+    ?RUN_SHARES_TEST().
+
+
+%%%===================================================================
 %%% Listing tests
 %%%===================================================================
 
@@ -431,6 +489,7 @@ init_per_suite(Config) ->
             file_lfm_listing_tests:ensure_default_fold_cache_timeout(),
             file_lfm_test_utils:ensure_storage_driver_unmocked(),
             file_lfm_copy_tests:ensure_default_ls_batch_limit(),
+            file_lfm_shares_tests:ensure_share_management_privileges(),
             NewConfig
         end
     }).

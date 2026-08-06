@@ -54,5 +54,6 @@
 -define(RUN_STORAGE_TEST(), ?RUN_TEST(file_lfm_storage_tests)).
 -define(RUN_STORAGE_TEST(__ARGS), ?RUN_TEST(file_lfm_storage_tests, __ARGS)).
 -define(RUN_HANDLES_TEST(), ?RUN_TEST(file_lfm_handles_tests)).
+-define(RUN_SHARES_TEST(), ?RUN_TEST(file_lfm_shares_tests)).
 
 -endif.
