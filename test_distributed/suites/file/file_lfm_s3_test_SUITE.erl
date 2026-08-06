@@ -47,6 +47,12 @@
     rm_recursive_of_space_dir_fails_test/1,
     close_deleted_open_files_test/1,
 
+    cp_file_test/1,
+    cp_empty_dir_test/1,
+    cp_dir_with_children_test/1,
+    cp_dir_into_itself_fails_test/1,
+    mv_dir_into_symlink_to_itself_fails_test/1,
+
     get_children_attrs_of_empty_dir_test/1,
     get_children_attrs_with_zero_limit_test/1,
     get_children_attrs_with_zero_offset_test/1,
@@ -90,6 +96,14 @@ groups() -> [
         close_deleted_open_files_test
     ]},
 
+    {copy_tests, [], [
+        cp_file_test,
+        cp_empty_dir_test,
+        cp_dir_with_children_test,
+        cp_dir_into_itself_fails_test,
+        mv_dir_into_symlink_to_itself_fails_test
+    ]},
+
     {children_listing_tests, [], [
         get_children_attrs_of_empty_dir_test,
         get_children_attrs_with_zero_limit_test,
@@ -125,6 +139,7 @@ groups() -> [
 
 -define(STANDARD_CASES, [
     {group, crud_tests},
+    {group, copy_tests},
     {group, children_listing_tests},
     {group, children_listing_with_pagination_token_tests},
     {group, recursive_listing_tests},
@@ -209,6 +224,31 @@ rm_recursive_of_space_dir_fails_test(_Config) ->
 
 close_deleted_open_files_test(_Config) ->
     ?RUN_CRUD_TEST().
+
+
+%%%===================================================================
+%%% Copy tests
+%%%===================================================================
+
+
+cp_file_test(_Config) ->
+    ?RUN_COPY_TEST().
+
+
+cp_empty_dir_test(_Config) ->
+    ?RUN_COPY_TEST().
+
+
+cp_dir_with_children_test(_Config) ->
+    ?RUN_COPY_TEST().
+
+
+cp_dir_into_itself_fails_test(_Config) ->
+    ?RUN_COPY_TEST().
+
+
+mv_dir_into_symlink_to_itself_fails_test(_Config) ->
+    ?RUN_COPY_TEST().
 
 
 %%%===================================================================
@@ -310,6 +350,7 @@ init_per_suite(Config) ->
             % undo what a previously interrupted run may have left behind on a reused deployment
             file_lfm_listing_tests:ensure_default_fold_cache_timeout(),
             file_lfm_crud_tests:ensure_storage_driver_unmocked(),
+            file_lfm_copy_tests:ensure_default_ls_batch_limit(),
             NewConfig
         end
     }).

@@ -42,5 +42,6 @@
 
 -define(RUN_LISTING_TEST(), ?RUN_TEST(file_lfm_listing_tests)).
 -define(RUN_CRUD_TEST(), ?RUN_TEST(file_lfm_crud_tests)).
+-define(RUN_COPY_TEST(), ?RUN_TEST(file_lfm_copy_tests)).
 
 -endif.
