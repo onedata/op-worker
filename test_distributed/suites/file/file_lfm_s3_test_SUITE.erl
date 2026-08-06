@@ -38,7 +38,7 @@
     write_and_read_all_subranges_test/1,
     write_and_check_test/1,
     file_gap_test/1,
-    sequential_writes_from_many_processes_test/1,
+    writes_are_visible_to_subsequent_opens_test/1,
     get_attrs_test/1,
     truncate_test/1,
     truncate_and_write_test/1,
@@ -81,7 +81,7 @@ groups() -> [
         write_and_read_all_subranges_test,
         write_and_check_test,
         file_gap_test,
-        sequential_writes_from_many_processes_test,
+        writes_are_visible_to_subsequent_opens_test,
         get_attrs_test,
         truncate_test,
         truncate_and_write_test,
@@ -181,7 +181,7 @@ file_gap_test(_Config) ->
     ?RUN_CRUD_TEST().
 
 
-sequential_writes_from_many_processes_test(_Config) ->
+writes_are_visible_to_subsequent_opens_test(_Config) ->
     ?RUN_CRUD_TEST().
 
 

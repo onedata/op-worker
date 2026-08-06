@@ -45,7 +45,7 @@
     write_and_read_all_subranges_test/0,
     write_and_check_test/0,
     file_gap_test/0,
-    sequential_writes_from_many_processes_test/0,
+    writes_are_visible_to_subsequent_opens_test/0,
 
     get_attrs_test/0,
 
@@ -305,14 +305,17 @@ close_deleted_open_files_test() ->
 ensure_dir_test() ->
     Node = file_lfm_test_utils:get_node(),
     SessId = file_lfm_test_utils:get_session_id(?USER_SELECTOR),
-    SpaceDirGuid = file_lfm_test_utils:get_space_dir_guid(),
+    {RootDirGuid, _RootDirPath} = file_lfm_test_utils:create_test_root_dir(Node, SessId),
 
-    % all the concurrent calls must converge on the same directory tree
-    DirName = generator:gen_name(),
-    RelPath = filename:join([DirName, DirName, DirName]),
-    lists_utils:pforeach(fun(_) ->
-        ?assertMatch({ok, _}, lfm_proxy:ensure_dir(Node, SessId, SpaceDirGuid, RelPath, ?DEFAULT_DIR_MODE))
+    RelPath = filename:join(lists_utils:generate(fun generator:gen_name/0, 3)),
+
+    % all the concurrent calls must converge on the same directory
+    CreatedGuids = lists_utils:pmap(fun(_) ->
+        {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:ensure_dir(
+            Node, SessId, RootDirGuid, RelPath, ?DEFAULT_DIR_MODE)),
+        DirGuid
     end, lists:seq(1, 100)),
+    ?assertEqual(1, length(lists:usort(CreatedGuids))),
 
     ok.
 
@@ -320,15 +323,15 @@ ensure_dir_test() ->
 create_dir_at_path_test() ->
     Node = file_lfm_test_utils:get_node(),
     SessId = file_lfm_test_utils:get_session_id(?USER_SELECTOR),
-    SpaceDirGuid = file_lfm_test_utils:get_space_dir_guid(),
+    {RootDirGuid, _RootDirPath} = file_lfm_test_utils:create_test_root_dir(Node, SessId),
 
-    RelPath = filename:join(lists:duplicate(8, generator:gen_name())),
+    RelPath = filename:join(lists_utils:generate(fun generator:gen_name/0, 8)),
 
     {ok, #file_attr{guid = DirGuid}} = ?assertMatch({ok, _}, lfm_proxy:create_dir_at_path(
-        Node, SessId, SpaceDirGuid, RelPath)),
+        Node, SessId, RootDirGuid, RelPath)),
     % repeating the call must return the already existing directory
     ?assertMatch({ok, #file_attr{guid = DirGuid}}, lfm_proxy:create_dir_at_path(
-        Node, SessId, SpaceDirGuid, RelPath)),
+        Node, SessId, RootDirGuid, RelPath)),
 
     ok.
 
@@ -501,32 +504,30 @@ file_gap_test() ->
     ok.
 
 
-sequential_writes_from_many_processes_test() ->
+writes_are_visible_to_subsequent_opens_test() ->
     Node = file_lfm_test_utils:get_node(),
     SessId = file_lfm_test_utils:get_session_id(?USER_SELECTOR),
-    SpaceDirGuid = file_lfm_test_utils:get_space_dir_guid(),
+    {RootDirGuid, _RootDirPath} = file_lfm_test_utils:create_test_root_dir(Node, SessId),
 
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
-        Node, SessId, SpaceDirGuid, ?RAND_STR(), ?DEFAULT_FILE_MODE)),
+        Node, SessId, RootDirGuid, ?RAND_STR(), ?DEFAULT_FILE_MODE)),
 
-    % every process appends its own key to the json document stored in the file;
-    % none of the updates may be lost
-    WritersNum = 1024,
+    % each round rewrites the whole json document stored in the file, adding its
+    % own key to what the previous round left there - no update may be lost
+    RoundsNum = 1024,
     ValueSize = 1024,
-    lists_utils:pforeach(fun(Key) ->
-        critical_section:run(?FUNCTION_NAME, fun() ->
-            {ok, Handle} = lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), rdwr),
-            Json = read_json(Node, Handle),
-            lfm_proxy:write(Node, Handle, 0, json_utils:encode(
-                Json#{integer_to_binary(Key) => ?RAND_STR(ValueSize)})),
-            % note: lfm:fsync is called on close
-            lfm_proxy:close(Node, Handle)
-        end)
-    end, lists:seq(1, WritersNum)),
+    lists:foreach(fun(Key) ->
+        {ok, Handle} = lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), rdwr),
+        Json = read_json(Node, Handle),
+        lfm_proxy:write(Node, Handle, 0, json_utils:encode(
+            Json#{integer_to_binary(Key) => ?RAND_STR(ValueSize)})),
+        % note: lfm:fsync is called on close
+        lfm_proxy:close(Node, Handle)
+    end, lists:seq(1, RoundsNum)),
 
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), rdwr)),
     FinalJson = read_json(Node, Handle),
-    ?assertEqual(WritersNum, maps:size(FinalJson)),
+    ?assertEqual(RoundsNum, maps:size(FinalJson)),
     maps:foreach(fun(_Key, Value) ->
         ?assertEqual(ValueSize, byte_size(Value))
     end, FinalJson),
