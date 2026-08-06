@@ -135,6 +135,8 @@ stages:
         - events_reliability
         - events_reliability_2op
         - file_deletion
+        - file_lfm_posix
+        - file_lfm_s3
         - file_lifecycle
         - file_links_reconciliation_traverse
         - file_popularity
@@ -1082,6 +1084,20 @@ file_deletion:
     - <<: *ct_logs
       name: ct_logs_file_deletion.tar.gz
 
+file_lfm_posix:
+  <<: *ct-onenv-job
+  key: FILELFMPOS
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_file_lfm_posix.tar.gz
+
+file_lfm_s3:
+  <<: *ct-onenv-job
+  key: FILELFMS3
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_file_lfm_s3.tar.gz
+
 file_lifecycle:
   <<: *ct-job
   key: FIL
@@ -2016,6 +2032,8 @@ Coverage report:
     - artifact: ct_logs_events_reliability.tar.gz
     - artifact: ct_logs_events_reliability_2op.tar.gz
     - artifact: ct_logs_file_deletion.tar.gz
+    - artifact: ct_logs_file_lfm_posix.tar.gz
+    - artifact: ct_logs_file_lfm_s3.tar.gz
     - artifact: ct_logs_file_lifecycle.tar.gz
     - artifact: ct_logs_file_links_reconciliation_traverse.tar.gz
     - artifact: ct_logs_file_popularity.tar.gz
