@@ -801,10 +801,6 @@ ensure_default_fold_cache_timeout() ->
 %%%===================================================================
 
 
-
-
-
-
 %% @private
 -spec create_dir_with_files(node(), session:id(), non_neg_integer()) ->
     {file_meta:path(), [file_meta:name()]}.

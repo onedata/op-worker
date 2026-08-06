@@ -143,7 +143,7 @@ open_failure_test() ->
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
         Node, SessId, filename:join([RootDirPath, generator:gen_name()]))),
 
-    with_server_side_io(SessId, fun() ->
+    with_server_side_io([SessId], fun() ->
         {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), rdwr)),
         ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(Node, Handle, 0, ?TEST_DATA)),
         ?assertEqual(ok, lfm_proxy:close(Node, Handle)),
@@ -170,7 +170,7 @@ create_and_open_failure_test() ->
     SessId = file_lfm_test_utils:get_session_id(?USER_SELECTOR),
     {RootDirGuid, RootDirPath} = file_lfm_test_utils:create_test_root_dir(Node, SessId),
 
-    with_server_side_io(SessId, fun() ->
+    with_server_side_io([SessId], fun() ->
         OpenedFilesBefore = list_opened_files(Node),
         mock_failing_storage_open(Node),
 
@@ -202,7 +202,9 @@ open_failure_does_not_affect_other_session_test() ->
     FilePath = filename:join([RootDirPath, generator:gen_name()]),
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath)),
 
-    with_server_side_io(SessId, fun() ->
+    % both sessions must have the provider do the io, so that the mocked storage
+    % open is what the other session's open trips over
+    with_server_side_io([SessId, OtherSessId], fun() ->
         {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), rdwr)),
         ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(Node, Handle, 0, ?TEST_DATA)),
 
@@ -244,7 +246,7 @@ mv_between_spaces_failure_test() ->
     OtherSpaceName = oct_background:get_space_name(?OTHER_SPACE_SELECTOR),
     TargetPath = filename:join([<<"/">>, OtherSpaceName, generator:gen_name()]),
 
-    with_server_side_io(SessId, fun() ->
+    with_server_side_io([SessId], fun() ->
         OpenedFilesBefore = list_opened_files(Node),
         mock_failing_storage_open(Node),
 
@@ -271,29 +273,27 @@ monitored_open_releases_handle_on_process_death_test() ->
         FileGuid
     end,
 
-    % a handle opened plainly outlives the process that opened it
+    % NOTE: the file stays registered as open, rather than the provider holding a
+    % handle to the storage file - the client does the io itself (see
+    % direct_io_open_registers_no_storage_handle_test)
+
+    % a file opened plainly stays open after the process that opened it dies
     PlainFileGuid = NewFile(),
-    {PlainPid, PlainHandle} = open_in_new_process(Node, SessId, PlainFileGuid, open),
-    PlainHandleId = lfm_context:get_handle_id(PlainHandle),
-    ?assertMatch({ok, _}, get_session_handle_by_id(Node, SessId, PlainHandleId), ?ATTEMPTS),
+    {PlainPid, _} = open_in_new_process(Node, SessId, PlainFileGuid, open),
+    ?assertEqual(true, is_file_opened(Node, PlainFileGuid), ?ATTEMPTS),
     ?assertEqual(?ERROR_NOT_FOUND, get_process_handles(Node, PlainPid), ?ATTEMPTS),
 
     kill_and_await_death(PlainPid),
-    ?assertMatch({ok, _}, get_session_handle_by_id(Node, SessId, PlainHandleId), ?ATTEMPTS),
     ?assertEqual(true, is_file_opened(Node, PlainFileGuid), ?ATTEMPTS),
 
-    % a monitored handle is released along with that process
+    % a file opened with monitoring is released along with that process
     MonitoredFileGuid = NewFile(),
     {MonitoredPid, MonitoredHandle} = open_in_new_process(
         Node, SessId, MonitoredFileGuid, monitored_open),
-    MonitoredHandleId = lfm_context:get_handle_id(MonitoredHandle),
-    ?assertMatch({ok, _}, get_session_handle_by_id(Node, SessId, MonitoredHandleId), ?ATTEMPTS),
     ?assertEqual(true, is_file_opened(Node, MonitoredFileGuid), ?ATTEMPTS),
     ?assertEqual({ok, [MonitoredHandle]}, get_process_handles(Node, MonitoredPid), ?ATTEMPTS),
 
     kill_and_await_death(MonitoredPid),
-    ?assertEqual(?ERROR_NOT_FOUND, get_session_handle_by_id(
-        Node, SessId, MonitoredHandleId), ?ATTEMPTS),
     ?assertEqual(false, is_file_opened(Node, MonitoredFileGuid), ?ATTEMPTS),
     ?assertEqual(?ERROR_NOT_FOUND, get_process_handles(Node, MonitoredPid), ?ATTEMPTS),
 
@@ -314,13 +314,14 @@ list_process_handles_test() ->
     FilesNum = 230,
     BatchSize = 50,
 
+    % NOTE: a handle refers to the file by its id on the storage, not by its guid
     ExpectedFileIds = lists:sort(lists:map(fun(_) ->
-        FileName = generator:gen_name(),
         {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
-            Node, SessId, RootDirGuid, FileName, ?DEFAULT_FILE_MODE)),
+            Node, SessId, RootDirGuid, generator:gen_name(), ?DEFAULT_FILE_MODE)),
         open_in_new_process(Node, SessId, FileGuid, monitored_open),
-        {ok, CanonicalPath} = lfm_proxy:get_file_path(Node, SessId, FileGuid),
-        CanonicalPath
+        {ok, #file_location{file_id = FileId}} = ?assertMatch({ok, _},
+            lfm_proxy:get_file_location(Node, SessId, ?FILE_REF(FileGuid))),
+        FileId
     end, lists:seq(1, FilesNum))),
 
     ListAll = fun ListAll(StartFromId) ->
@@ -357,14 +358,20 @@ list_process_handles_test() ->
 %% free to unload the mock itself midway.
 %% @end
 %%--------------------------------------------------------------------
--spec with_server_side_io(session:id(), fun(() -> term())) -> ok.
-with_server_side_io(SessId, Fun) ->
-    file_lfm_test_utils:set_direct_io(SessId, false),
+-spec with_server_side_io([session:id()], fun(() -> term())) -> ok.
+with_server_side_io(SessIds, Fun) ->
+    SetDirectIo = fun(IsDirectIo) ->
+        lists:foreach(fun(SessId) ->
+            file_lfm_test_utils:set_direct_io(SessId, IsDirectIo)
+        end, SessIds)
+    end,
+
+    SetDirectIo(false),
     try
         Fun(),
         ok
     after
-        file_lfm_test_utils:set_direct_io(SessId, true),
+        SetDirectIo(true),
         ok = test_utils:mock_unload(file_lfm_test_utils:get_node(), [storage_driver])
     end.
 
@@ -421,14 +428,7 @@ get_process_handles(Node, Pid) ->
     {ok, storage_driver:handle()} | {error, term()}.
 get_session_handle(Node, SessId, TestHandle) ->
     Context = rpc:call(Node, ets, lookup_element, [lfm_handles, TestHandle, 2]),
-    get_session_handle_by_id(Node, SessId, lfm_context:get_handle_id(Context)).
-
-
-%% @private
--spec get_session_handle_by_id(node(), session:id(), storage_driver:handle_id()) ->
-    {ok, storage_driver:handle()} | {error, term()}.
-get_session_handle_by_id(Node, SessId, HandleId) ->
-    rpc:call(Node, session_handles, get, [SessId, HandleId]).
+    rpc:call(Node, session_handles, get, [SessId, lfm_context:get_handle_id(Context)]).
 
 
 %% @private
@@ -440,7 +440,8 @@ is_file_opened(Node, FileGuid) ->
 %% @private
 -spec is_file_used_by_session(node(), file_id:file_guid(), session:id()) -> boolean().
 is_file_used_by_session(Node, FileGuid, SessId) ->
-    rpc:call(Node, file_handles, is_used_by_session, [file_id:guid_to_uuid(FileGuid), SessId]).
+    FileCtx = rpc:call(Node, file_ctx, new_by_guid, [FileGuid]),
+    rpc:call(Node, file_handles, is_used_by_session, [FileCtx, SessId]).
 
 
 %%--------------------------------------------------------------------
