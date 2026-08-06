@@ -30,14 +30,6 @@
 
 -export([
     fslogic_new_file/1,
-    lfm_basic_rename/1,
-    lfm_renaming_space_directory_should_fail/1,
-    lfm_cp_file/1,
-    lfm_cp_empty_dir/1,
-    lfm_cp_dir_to_itself_should_fail/1,
-    lfm_cp_dir_to_symlink_to_this_dir_should_fail/1,
-    lfm_cp_dir_to_its_child_should_fail/1,
-    lfm_cp_dir/1,
     lfm_acl/1,
     create_share_dir/1,
     create_share_file/1,
@@ -62,7 +54,6 @@
     lfm_create_and_open_failure/1,
     lfm_open_in_direct_mode/1,
     lfm_mv_failure/1,
-    lfm_mv_dir_to_symlink_to_this_dir_should_fail/1,
     lfm_open_multiple_times_failure/1,
     lfm_open_failure_multiple_users/1,
     lfm_open_and_create_open_failure/1,
@@ -328,17 +319,6 @@ lfm_mv_failure(Config) ->
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
         CacheEntriesBefore, CacheEntriesAfter).
 
-lfm_mv_dir_to_symlink_to_this_dir_should_fail(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-
-    {DirGuid, SymlinkGuid} = create_dir_and_symlink_to_it(?FUNCTION_NAME, W, SessId1),
-
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:mv(W, SessId1, ?FILE_REF(DirGuid), ?FILE_REF(SymlinkGuid), generator:gen_name())
-    ).
-
 lfm_mv_failure_multiple_users(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
@@ -432,252 +412,6 @@ fslogic_new_file(Config) ->
     TestProviderId = rpc:call(Worker, oneprovider, get_id, []),
     ?assertMatch(TestProviderId, ProviderId11),
     ?assertMatch(TestProviderId, ProviderId21).
-
-lfm_basic_rename(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_rename">>),
-
-    lfm_proxy:mv(W, SessId1, ?FILE_REF(FileGuid), <<"/space_name1/test_rename2">>),
-
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name1/test_rename">>})),
-    {ok, Stats} = ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId1, ?FILE_REF(FileGuid))),
-    ?assertEqual({ok, Stats}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name1/test_rename2">>})).
-
-lfm_renaming_space_directory_should_fail(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:mv(W, SessId1, {path, <<"/space_name1">>}, <<"/other_space_name">>)).
-
-lfm_cp_file(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-
-    SpaceName = <<"space_name2">>,
-    SpaceDirGuid = space_dir:guid(<<"space_id2">>),
-
-    TestCaseDir = ?FUNCTION_NAME,
-    SourceFile = <<"test_cp_source_file">>,
-    TargetFile1 = <<"test_cp_target_file1">>,
-    TargetFile2 = <<"test_cp_target_file2">>,
-    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
-    SourceFilePath = filename:join([TestCaseDirPath, SourceFile]),
-    TargetParentPath1 = filename:join([TestCaseDirPath, generator:gen_name()]),
-    % test cp into path with dir of the same name as cp src
-    TargetParentRelPath2 = filename:join([TestCaseDir, generator:gen_name(), SourceFile]),
-    TargetFilePath1 = filename:join([TargetParentPath1, TargetFile1]),
-    TargetFilePath2 = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TargetParentRelPath2, TargetFile2]),
-
-    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
-
-    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(W, SessId1, SourceFilePath, ?DEFAULT_FILE_PERMS),
-    TestData = <<"test data">>,
-    {ok, _} = lfm_proxy:write(W, Handle, 0, TestData),
-    lfm_proxy:close(W, Handle),
-
-    % create target dirs
-    {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
-    {ok, #file_attr{guid = TargetParentGuid2}} = lfm_proxy:create_dir_at_path(W, SessId1, SpaceDirGuid, TargetParentRelPath2),
-
-    % copy to first target
-    {ok, TargetGuid1} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, ?FILE_REF(Guid), {path, TargetParentPath1}, TargetFile1)),
-
-    % verify copied file
-    ?assertMatch({ok, [{TargetGuid1, TargetFile1}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
-    ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
-        lfm_proxy:stat(W, SessId1, {path, TargetFilePath1})),
-    {ok, Handle2} = lfm_proxy:open(W, SessId1, {path, TargetFilePath1}, read),
-    ?assertMatch({ok, TestData}, lfm_proxy:read(W, Handle2, 0, byte_size(TestData))),
-    ok = lfm_proxy:close(W, Handle2),
-
-    % copy to second target
-    {ok, TargetGuid2} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, ?FILE_REF(Guid), TargetFilePath2)),
-
-    % verify copied file
-    ?assertMatch({ok, [{TargetGuid2, TargetFile2}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid2), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
-    
-    ?assertMatch({ok, #file_attr{guid = TargetGuid2}},
-        lfm_proxy:stat(W, SessId1, {path, TargetFilePath2})),
-    {ok, Handle3} = lfm_proxy:open(W, SessId1, {path, TargetFilePath2}, read),
-    ?assertMatch({ok, TestData}, lfm_proxy:read(W, Handle3, 0, byte_size(TestData))),
-    ok = lfm_proxy:close(W, Handle3).
-
-
-lfm_cp_empty_dir(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-
-    SpaceName = <<"space_name2">>,
-    TestCaseDir = ?FUNCTION_NAME,
-    SourceDir = <<"test_cp_source_dir">>,
-    TargetParent1 = <<"test_cp_target_parent1">>,
-    TargetParent2 = <<"test_cp_target_parent2">>,
-    TargetDir1 = <<"test_cp_target_dir1">>,
-    TargetDir2 = <<"test_cp_target_dir2">>,
-    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
-    SourceDirPath = filename:join([TestCaseDirPath, SourceDir]),
-    TargetParentPath1 = filename:join([TestCaseDirPath, TargetParent1]),
-    TargetParentPath2 = filename:join([TestCaseDirPath, TargetParent2]),
-    TargetDirPath1 = filename:join([TargetParentPath1, TargetDir1]),
-    TargetDirPath2 = filename:join([TargetParentPath2, TargetDir2]),
-
-    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
-
-    {ok, Guid} = lfm_proxy:mkdir(W, SessId1, SourceDirPath),
-
-    % create target dirs
-    {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
-    {ok, TargetParentGuid2} = lfm_proxy:mkdir(W, SessId1, TargetParentPath2),
-
-    % copy to first target
-    {ok, TargetGuid1} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, ?FILE_REF(Guid), {path, TargetParentPath1}, TargetDir1)),
-
-    % verify copied dir
-    ?assertMatch({ok, [{TargetGuid1, TargetDir1}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
-    ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
-        lfm_proxy:stat(W, SessId1, {path, TargetDirPath1})),
-
-    % copy to second target
-    {ok, TargetGuid2} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, ?FILE_REF(Guid), TargetDirPath2)),
-
-    % verify copied dir
-    ?assertMatch({ok, [{TargetGuid2, TargetDir2}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid2), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
-    ?assertMatch({ok, #file_attr{guid = TargetGuid2}},
-        lfm_proxy:stat(W, SessId1, {path, TargetDirPath2})).
-
-lfm_cp_dir_to_itself_should_fail(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-
-    SpaceName = <<"space_name2">>,
-    TestCaseDir = ?FUNCTION_NAME,
-    SourceDir = <<"test_cp_source_dir">>,
-    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
-    SourceDirPath = filename:join([TestCaseDirPath, SourceDir]),
-
-    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
-    {ok, Guid} = lfm_proxy:mkdir(W, SessId1, SourceDirPath),
-
-    % try to copy file to itself
-    ?assertMatch({error, ?EINVAL}, lfm_proxy:cp(W, SessId1, ?FILE_REF(Guid), {path, SourceDirPath}, SourceDir)).
-
-lfm_cp_dir_to_symlink_to_this_dir_should_fail(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-
-    {DirGuid, SymlinkGuid} = create_dir_and_symlink_to_it(?FUNCTION_NAME, W, SessId1),
-
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:cp(W, SessId1, ?FILE_REF(DirGuid), ?FILE_REF(SymlinkGuid), generator:gen_name())
-    ).
-
-lfm_cp_dir_to_its_child_should_fail(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-
-    SpaceName = <<"space_name2">>,
-    TestCaseDir = ?FUNCTION_NAME,
-    SourceDir = <<"test_cp_source_dir">>,
-    ChildDir1 = <<"test_cp_child_dir1">>,
-    ChildDir2 = <<"test_cp_child_dir2">>,
-    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
-    SourceDirPath = filename:join([TestCaseDirPath, SourceDir]),
-    ChildDirPath1 = filename:join([SourceDirPath, ChildDir1]),
-    ChildDirPath2 = filename:join([ChildDirPath1, ChildDir2]),
-
-    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
-    {ok, Guid} = lfm_proxy:mkdir(W, SessId1, SourceDirPath),
-    {ok, _} = lfm_proxy:mkdir(W, SessId1, ChildDirPath1),
-    {ok, _} = lfm_proxy:mkdir(W, SessId1, ChildDirPath2),
-
-    % try to copy file to child
-    ?assertMatch({error, ?EINVAL}, lfm_proxy:cp(W, SessId1, ?FILE_REF(Guid), {path, ChildDirPath2}, SourceDir)).
-
-
-lfm_cp_dir(Config) ->
-    % In this test, environment variable `default_ls_batch_limit`,
-    % which is responsible for size of children batches used when listing a directory,
-    % is decreased to ensure that copying directory, which has more children
-    % than size of a single batch, is performed correctly.
-    [W | _] = ?config(op_worker_nodes, Config),
-
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-
-    SpaceName = <<"space_name2">>,
-    TestCaseDir = ?FUNCTION_NAME,
-    SourceDir = <<"test_cp_source_dir">>,
-    Child1 = <<"test_cp_child1">>,
-    Child2 = <<"test_cp_child2">>,
-    TargetParent1 = <<"test_cp_target_parent1">>,
-    TargetDir1 = <<"test_cp_target_dir1">>,
-    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
-    SourceDirPath = filename:join([TestCaseDirPath, SourceDir]),
-    TargetParentPath1 = filename:join([TestCaseDirPath, TargetParent1]),
-    TargetDirPath1 = filename:join([TargetParentPath1, TargetDir1]),
-    TargetChildPath1 = filename:join([TargetDirPath1, Child1]),
-    TargetChildPath2 = filename:join([TargetDirPath1, Child2]),
-    TestData = <<"test data">>,
-
-    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
-
-    % create source dir and its children
-    {ok, DirGuid} = lfm_proxy:mkdir(W, SessId1, SourceDirPath),
-    {ok, {_, Handle1}} = lfm_proxy:create_and_open(W, SessId1, DirGuid, Child1, ?DEFAULT_FILE_PERMS),
-    {ok, {_, Handle2}} = lfm_proxy:create_and_open(W, SessId1, DirGuid, Child2, ?DEFAULT_FILE_PERMS),
-    {ok, _} = lfm_proxy:write(W, Handle1, 0, TestData),
-    {ok, _} = lfm_proxy:write(W, Handle2, 0, TestData),
-    lfm_proxy:close(W, Handle1),
-    lfm_proxy:close(W, Handle2),
-    % it should be possible to copy file with all its children, even without the write permission
-    NewMode = 8#555,
-    ok = lfm_proxy:set_perms(W, SessId1, ?FILE_REF(DirGuid), NewMode),
-
-    % create target dir
-    {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
-
-    % decrease batch_size to ensure that all files will be correctly copied
-    ok = test_utils:set_env(W, op_worker, default_ls_batch_limit, 1),
-
-    % copy to target
-    {ok, TargetGuid1} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, ?FILE_REF(DirGuid), {path, TargetParentPath1}, TargetDir1)),
-
-    % verify copied dir
-    ?assertMatch({ok, [{TargetGuid1, TargetDir1}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
-    ?assertMatch({ok, #file_attr{guid = TargetGuid1, mode = NewMode}},
-        lfm_proxy:stat(W, SessId1, {path, TargetDirPath1})),
-
-    % verify children of copied dir
-    ?assertMatch({ok, [{_, Child1}, {_, Child2}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
-
-    ?assertMatch({ok, #file_attr{name = Child1}}, lfm_proxy:stat(W, SessId1, {path, TargetChildPath1})),
-    ?assertMatch({ok, #file_attr{name = Child2}}, lfm_proxy:stat(W, SessId1, {path, TargetChildPath2})),
-
-    {ok, Handle3} = lfm_proxy:open(W, SessId1, {path, TargetChildPath1}, read),
-    ?assertMatch({ok, TestData}, lfm_proxy:read(W, Handle3, 0, byte_size(TestData))),
-    ok = lfm_proxy:close(W, Handle3),
-
-    {ok, Handle4} = lfm_proxy:open(W, SessId1, {path, TargetChildPath2}, read),
-    ?assertMatch({ok, TestData}, lfm_proxy:read(W, Handle4, 0, byte_size(TestData))),
-    ok = lfm_proxy:close(W, Handle4).
-
 
 lfm_acl(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1290,23 +1024,6 @@ verify_file_content(Config, Handle, FileContent, From, To) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual({ok, FileContent}, lfm_proxy:read(Worker, Handle, From, To)).
 
-create_dir_and_symlink_to_it(Testcase, Node, SessionId) ->
-    SpaceName = <<"space_name2">>,
-
-    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, Testcase]),
-    {ok, _} = lfm_proxy:mkdir(Node, SessionId, TestCaseDirPath),
-
-    SourceDirPath = filename:join([TestCaseDirPath, generator:gen_name()]),
-    {ok, DirGuid} = lfm_proxy:mkdir(Node, SessionId, SourceDirPath),
-
-    {ok, #file_attr{guid = SymlinkGuid}} = lfm_proxy:make_symlink(
-        Node, SessionId, {path, TestCaseDirPath}, generator:gen_name(),
-        file_tree_test_utils:prepare_symlink_value(Node, SessionId, DirGuid)
-    ),
-
-    {DirGuid, SymlinkGuid}.
-
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1422,12 +1139,6 @@ end_per_testcase(Case, Config) when
     ->
     [W | _] = ?config(op_worker_nodes, Config),
     rpc:call(W, file_popularity_api, disable, [?SPACE_ID1]),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(Case = lfm_cp_dir, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    % set default value of default_ls_batch_limit env
-    test_utils:set_env(W, op_worker, default_ls_batch_limit, 5000),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->

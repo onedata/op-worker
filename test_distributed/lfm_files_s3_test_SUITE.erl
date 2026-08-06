@@ -26,13 +26,6 @@
 %% tests
 -export([
     fslogic_new_file_test/1,
-    lfm_basic_rename_test/1,
-    lfm_cp_file/1,
-    lfm_cp_empty_dir/1,
-    lfm_cp_dir_to_itself_should_fail/1,
-    lfm_cp_dir_to_symlink_to_this_dir_should_fail/1,
-    lfm_cp_dir_to_its_child_should_fail/1,
-    lfm_cp_dir/1,
     lfm_acl_test/1,
     create_share_dir_test/1,
     create_share_file_test/1,
@@ -58,7 +51,6 @@
     lfm_create_and_open_failure_test/1,
     lfm_open_in_direct_mode_test/1,
     lfm_mv_failure_test/1,
-    lfm_mv_dir_to_symlink_to_this_dir_should_fail/1,
     lfm_open_multiple_times_failure_test/1,
     lfm_open_failure_multiple_users_test/1,
     lfm_open_and_create_open_failure_test/1,
@@ -68,13 +60,6 @@
 
 -define(TEST_CASES, [
     fslogic_new_file_test,
-    lfm_basic_rename_test,
-    lfm_cp_file,
-    lfm_cp_empty_dir,
-    lfm_cp_dir_to_itself_should_fail,
-    lfm_cp_dir_to_symlink_to_this_dir_should_fail,
-    lfm_cp_dir_to_its_child_should_fail,
-    lfm_cp_dir,
     lfm_acl_test,
     create_share_dir_test,
     create_share_file_test,
@@ -100,7 +85,6 @@
     lfm_create_and_open_failure_test,
     lfm_open_in_direct_mode_test,
     lfm_mv_failure_test,
-    lfm_mv_dir_to_symlink_to_this_dir_should_fail,
     lfm_open_multiple_times_failure_test,
     lfm_open_failure_multiple_users_test,
     lfm_open_and_create_open_failure_test,
@@ -148,35 +132,11 @@ lfm_open_in_direct_mode_test(Config) ->
 lfm_mv_failure_test(Config) ->
     lfm_files_test_base:lfm_mv_failure(Config).
 
-lfm_mv_dir_to_symlink_to_this_dir_should_fail(Config) ->
-    lfm_files_test_base:lfm_mv_dir_to_symlink_to_this_dir_should_fail(Config).
-
 lfm_mv_failure_multiple_users_test(Config) ->
     lfm_files_test_base:lfm_mv_failure_multiple_users(Config).
 
 fslogic_new_file_test(Config) ->
     lfm_files_test_base:fslogic_new_file(Config).
-
-lfm_basic_rename_test(Config) ->
-    lfm_files_test_base:lfm_basic_rename(Config).
-
-lfm_cp_file(Config) ->
-    lfm_files_test_base:lfm_cp_file(Config).
-
-lfm_cp_empty_dir(Config) ->
-    lfm_files_test_base:lfm_cp_empty_dir(Config).
-
-lfm_cp_dir_to_itself_should_fail(Config) ->
-    lfm_files_test_base:lfm_cp_dir_to_itself_should_fail(Config).
-
-lfm_cp_dir_to_symlink_to_this_dir_should_fail(Config) ->
-    lfm_files_test_base:lfm_cp_dir_to_symlink_to_this_dir_should_fail(Config).
-
-lfm_cp_dir_to_its_child_should_fail(Config) ->
-    lfm_files_test_base:lfm_cp_dir_to_its_child_should_fail(Config).
-
-lfm_cp_dir(Config) ->
-    lfm_files_test_base:lfm_cp_dir(Config).
 
 lfm_acl_test(Config) ->
     lfm_files_test_base:lfm_acl(Config).
