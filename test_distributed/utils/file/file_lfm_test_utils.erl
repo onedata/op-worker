@@ -26,7 +26,7 @@
 -export([get_node/0, get_session_id/1, set_direct_io/2]).
 -export([get_space_id/0, get_space_dir_guid/0, build_space_path/0, build_space_path/1]).
 -export([create_test_root_dir/2]).
--export([ensure_storage_driver_unmocked/0]).
+-export([ensure_storage_driver_unmocked/0, ensure_direct_io/0]).
 
 
 %%%===================================================================
@@ -99,11 +99,29 @@ create_test_root_dir(Node, SessId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Several tests mock storage_driver for the duration of a single case and
-%% unload it themselves. A run interrupted in between would leave the mock in
-%% place on a reused deployment, so this is called defensively from the
-%% init_per_suite posthook (unloading a module that was never mocked is a no-op).
+%% unload it themselves. A case killed by its timetrap never gets that far, so
+%% this is called defensively from end_per_testcase and, for a run that died
+%% without running even that, from the init_per_suite posthook (unloading a
+%% module that was never mocked is a no-op).
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_storage_driver_unmocked() -> ok.
 ensure_storage_driver_unmocked() ->
     test_utils:mock_unload(oct_background:get_provider_nodes(?PROVIDER_SELECTOR), [storage_driver]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Counterpart of the above for the tests that need the provider to do the io -
+%% they turn direct io off for the duration of a single case and turn it back on
+%% themselves. Left off, it would silently move every later case onto the other
+%% io path. Sessions do not outlive a run (their nonce is drawn anew per
+%% oct_background:init_per_suite), so unlike a mock this needs no defence at the
+%% suite level - only between the test cases of one run.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_direct_io() -> ok.
+ensure_direct_io() ->
+    lists:foreach(fun(UserSelector) ->
+        set_direct_io(get_session_id(UserSelector), true)
+    end, [?USER_SELECTOR, ?OTHER_USER_SELECTOR]).

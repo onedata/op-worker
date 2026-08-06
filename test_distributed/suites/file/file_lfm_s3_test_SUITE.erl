@@ -513,6 +513,16 @@ init_per_testcase(_Case, Config) ->
 
 
 end_per_testcase(_Case, _Config) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    lfm_test_utils:clean_space(Node, [Node], oct_background:get_space_id(space_krk), ?ATTEMPTS),
+    % NOTE: the tests that tamper with any of the below restore it themselves,
+    % but a test case killed by its timetrap never gets to do so - and unlike the
+    % case body, end_per_testcase is run by CT even then (see
+    % test_server:handle_tc_exit/2). Hence the unconditional restore here, ahead
+    % of the space cleanup, which is the part that may itself fail.
+    file_lfm_listing_tests:ensure_default_fold_cache_timeout(),
+    file_lfm_copy_tests:ensure_default_ls_batch_limit(),
+    file_lfm_test_utils:ensure_storage_driver_unmocked(),
+    file_lfm_test_utils:ensure_direct_io(),
+
+    Node = file_lfm_test_utils:get_node(),
+    lfm_test_utils:clean_space(Node, [Node], file_lfm_test_utils:get_space_id(), ?ATTEMPTS),
     lfm_ct:clear_context().
