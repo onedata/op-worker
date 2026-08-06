@@ -56,7 +56,7 @@
 ]).
 
 %% suite setup helpers
--export([ensure_share_management_privileges/0]).
+-export([grant_share_management_privileges/0]).
 
 -define(SHARE_NAME, <<"share_name">>).
 
@@ -328,13 +328,14 @@ guest_cannot_access_unshared_file_test() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Managing shares takes a space privilege that a plain space member does not
-%% have by default. Granting it is left to the init_per_suite posthook rather
-%% than done by the tests, so that they are free of setting privileges back and
-%% forth - which on a reused deployment survives an interrupted run.
+%% have by default. To be called from init_per_group, as it is what this group
+%% of tests needs of the environment rather than something the tests set and
+%% unset. It states the privileges outright instead of adding to whatever is
+%% there, so a run interrupted midway leaves nothing to repair.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_share_management_privileges() -> ok.
-ensure_share_management_privileges() ->
+-spec grant_share_management_privileges() -> ok.
+grant_share_management_privileges() ->
     ozt_spaces:set_privileges(?SPACE_SELECTOR, ?USER_SELECTOR, [
         ?SPACE_MANAGE_SHARES | privileges:space_member()
     ]).

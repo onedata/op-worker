@@ -554,7 +554,6 @@ init_per_suite(Config) ->
             file_lfm_listing_tests:ensure_default_fold_cache_timeout(),
             file_lfm_test_utils:ensure_storage_driver_unmocked(),
             file_lfm_copy_tests:ensure_default_ls_batch_limit(),
-            file_lfm_shares_tests:ensure_share_management_privileges(),
             NewConfig
         end
     }).
@@ -563,6 +562,10 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
+
+init_per_group(shares_tests, Config) ->
+    file_lfm_shares_tests:grant_share_management_privileges(),
+    lfm_proxy:init(Config, false);
 
 init_per_group(_Group, Config) ->
     lfm_proxy:init(Config, false).
