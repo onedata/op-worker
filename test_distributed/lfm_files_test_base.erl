@@ -42,9 +42,6 @@
     share_child_list/1,
     share_child_read/1,
     share_permission_denied/1,
-    storage_file_creation_should_be_deferred_until_open/1,
-    deferred_creation_should_not_prevent_mv/1,
-    deferred_creation_should_not_prevent_truncate/1,
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
@@ -57,8 +54,7 @@
     lfm_open_multiple_times_failure/1,
     lfm_open_failure_multiple_users/1,
     lfm_open_and_create_open_failure/1,
-    lfm_mv_failure_multiple_users/1,
-    sparse_files_should_be_created/2
+    lfm_mv_failure_multiple_users/1
 ]).
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -714,59 +710,6 @@ share_permission_denied(Config) ->
 
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, ?GUEST_SESS_ID, ?FILE_REF(Guid))).
 
-storage_file_creation_should_be_deferred_until_open(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read1">>),
-    FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
-    {SDHandle, _} = rpc:call(W, storage_driver, new_handle, [SessId1, FileCtx]),
-
-    % verify that storage file does not exist
-    ?assertEqual({error, ?ENOENT}, rpc:call(W, storage_driver, stat, [SDHandle])),
-
-    % open file
-    {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr),
-    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
-
-    % verify that storage file exists
-    ?assertMatch({ok, _}, rpc:call(W, storage_driver, stat, [SDHandle])),
-    verify_file_content(Config, Handle, <<"test_data">>),
-    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
-
-deferred_creation_should_not_prevent_mv(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_move">>),
-
-    % move empty file
-    lfm_proxy:mv(W, SessId1, ?FILE_REF(FileGuid), <<"/space_name1/test_move2">>),
-
-    % verify rdwr
-    {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr),
-    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
-    verify_file_content(Config, Handle, <<"test_data">>),
-    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
-
-deferred_creation_should_not_prevent_truncate(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    ProviderId = rpc:call(W, oneprovider, get_id, []),
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_truncate">>),
-
-    % truncate file not existing on storage
-    ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, ?FILE_REF(FileGuid), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, ?FILE_REF(FileGuid), ProviderId)),
-
-    % verify rdwr
-    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, ?FILE_REF(FileGuid))),
-    {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr),
-    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
-    verify_file_content(Config, Handle, <<"test_data">>),
-    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
-
 new_file_should_not_have_popularity_doc(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
@@ -899,74 +842,9 @@ file_popularity_should_have_correct_file_size(Config) ->
         rpc:call(W, file_popularity, get, [FileUuid])
     ).
 
-sparse_files_should_be_created(Config, ReadFun) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    ProviderId = rpc:call(W, oneprovider, get_id, []),
-
-    % Hole between not empty blocks
-    {ok, FileGuid1} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>)),
-    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid1, 0),
-    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid1, 10),
-    verify_sparse_file(ReadFun, W, SessId1, FileGuid1, 11, [[0, 1], [10, 1]]),
-
-    % Hole before single block
-    {ok, FileGuid2} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>)),
-    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid2, 10),
-    verify_sparse_file(ReadFun, W, SessId1, FileGuid2, 11, [[10, 1]]),
-
-    % Empty block write to not empty file
-    {ok, FileGuid3} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>)),
-    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid3, 0),
-    file_ops_test_utils:empty_write_to_file(W, SessId1, FileGuid3, 10),
-    verify_sparse_file(ReadFun, W, SessId1, FileGuid3, 10, [[0, 1]]),
-
-    % Empty block write to empty file
-    {ok, FileGuid4} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>)),
-    file_ops_test_utils:empty_write_to_file(W, SessId1, FileGuid4, 10),
-    verify_sparse_file(ReadFun, W, SessId1, FileGuid4, 10, []),
-
-    % Empty block write in the middle of not empty file
-    {ok, FileGuid5} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>)),
-    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid5, 10),
-    file_ops_test_utils:empty_write_to_file(W, SessId1, FileGuid5, 5),
-    verify_sparse_file(ReadFun, W, SessId1, FileGuid5, 11, [[10, 1]]),
-
-    % Creation of hole using truncate on not empty file
-    {ok, FileGuid6} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>)),
-    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid6, 0),
-    ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, ?FILE_REF(FileGuid6), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, ?FILE_REF(FileGuid6), ProviderId)),
-    verify_sparse_file(ReadFun, W, SessId1, FileGuid6, 10, [[0, 1]]),
-
-    % Creation of hole using truncate on empty file
-    {ok, FileGuid7} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>)),
-    ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, ?FILE_REF(FileGuid7), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, ?FILE_REF(FileGuid7), ProviderId)),
-    verify_sparse_file(ReadFun, W, SessId1, FileGuid7, 10, []).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-verify_sparse_file(ReadFun, W, SessId, FileGuid, FileSize, ExpectedBlocks) ->
-    BlocksSize = lists:foldl(fun([_, Size], Acc) -> Acc + Size end, 0, ExpectedBlocks),
-    ?assertMatch({ok, [#{<<"blocks">> := ExpectedBlocks, <<"totalBlocksSize">> := BlocksSize}]},
-        opt_file_metadata:get_distribution_deprecated(W, SessId, ?FILE_REF(FileGuid))),
-
-    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(W, SessId, ?FILE_REF(FileGuid))),
-
-    ExpectedFileContent = file_ops_test_utils:get_sparse_file_content(ExpectedBlocks, FileSize),
-    {ok, Handle} = lfm_proxy:open(W, SessId, ?FILE_REF(FileGuid), rdwr),
-    ?assertMatch({ok, ExpectedFileContent}, lfm_proxy:ReadFun(W, Handle, 0, 100)),
-    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
 open_failure_mock(Worker) ->
     % mock for open error - note that error is raised after

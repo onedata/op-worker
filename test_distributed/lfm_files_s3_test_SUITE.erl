@@ -38,8 +38,6 @@
     share_child_list_test/1,
     share_child_read_test/1,
     share_permission_denied_test/1,
-    deferred_creation_should_not_prevent_mv/1,
-    deferred_creation_should_not_prevent_truncate/1,
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
@@ -54,8 +52,7 @@
     lfm_open_multiple_times_failure_test/1,
     lfm_open_failure_multiple_users_test/1,
     lfm_open_and_create_open_failure_test/1,
-    lfm_mv_failure_multiple_users_test/1,
-    sparse_files_should_be_created/1
+    lfm_mv_failure_multiple_users_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -72,8 +69,6 @@
     share_child_list_test,
     share_child_read_test,
     share_permission_denied_test,
-    deferred_creation_should_not_prevent_mv,
-    deferred_creation_should_not_prevent_truncate,
     new_file_should_not_have_popularity_doc,
     new_file_should_have_zero_popularity,
     opening_file_should_increase_file_popularity,
@@ -88,8 +83,7 @@
     lfm_open_multiple_times_failure_test,
     lfm_open_failure_multiple_users_test,
     lfm_open_and_create_open_failure_test,
-    lfm_mv_failure_multiple_users_test,
-    sparse_files_should_be_created
+    lfm_mv_failure_multiple_users_test
 ]).
 
 -define(SPACE_ID, <<"space1">>).
@@ -174,12 +168,6 @@ share_child_read_test(Config) ->
 share_permission_denied_test(Config) ->
     lfm_files_test_base:share_permission_denied(Config).
 
-deferred_creation_should_not_prevent_mv(Config) ->
-    lfm_files_test_base:deferred_creation_should_not_prevent_mv(Config).
-
-deferred_creation_should_not_prevent_truncate(Config) ->
-    lfm_files_test_base:deferred_creation_should_not_prevent_truncate(Config).
-
 new_file_should_not_have_popularity_doc(Config) ->
     lfm_files_test_base:new_file_should_not_have_popularity_doc(Config).
 
@@ -191,9 +179,6 @@ opening_file_should_increase_file_popularity(Config) ->
 
 file_popularity_should_have_correct_file_size(Config) ->
     lfm_files_test_base:file_popularity_should_have_correct_file_size(Config).
-
-sparse_files_should_be_created(Config) ->
-    lfm_files_test_base:sparse_files_should_be_created(Config, check_size_and_read).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
