@@ -1106,7 +1106,7 @@ file_lfm_symlinks:
       name: ct_logs_file_lfm_symlinks.tar.gz
 
 file_lifecycle:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: FIL
   artifacts:
     - <<: *ct_logs
