@@ -47,6 +47,11 @@
     delete_during_open_with_deletion_marker_test/1,
     delete_during_open_with_storage_rename_test/1,
 
+    delete_of_opened_file_moves_it_on_storage_test/1,
+    name_of_deleted_opened_file_can_be_reused_test/1,
+    release_before_deleted_file_is_moved_on_storage_test/1,
+    release_after_deleted_file_is_moved_on_storage_test/1,
+
     rename_to_opened_file_test/1,
     create_file_existing_on_disk_test/1
 ]).
@@ -59,7 +64,12 @@ all() -> [
     open_before_creation_times_are_reported_test,
     cancelled_create_leaves_no_storage_file_test,
     delete_during_open_with_deletion_marker_test,
-    delete_during_open_with_storage_rename_test
+    delete_during_open_with_storage_rename_test,
+
+    delete_of_opened_file_moves_it_on_storage_test,
+    name_of_deleted_opened_file_can_be_reused_test,
+    release_before_deleted_file_is_moved_on_storage_test,
+    release_after_deleted_file_is_moved_on_storage_test
     %%    rename_to_opened_file_test, % TODO VFS-5290
     %%    create_file_existing_on_disk_test % TODO VFS-5271
 ].
@@ -69,7 +79,8 @@ all() -> [
 % modules mocked by the test cases; unloaded after every one of them regardless
 % of which ones it actually used
 -define(MOCKED_MODULES, [
-    file_meta, file_req, fslogic_delete, fslogic_event_emitter, sd_utils, times_api
+    file_meta, file_req, fslogic_delete, fslogic_event_emitter, sd_utils,
+    storage_driver, times_api
 ]).
 
 -define(TIMEOUT, timer:seconds(30)).
@@ -248,6 +259,71 @@ delete_during_open_with_storage_rename_test(Config) ->
 
 
 %%%====================================================================
+%%% Test functions concerning deletion of an opened file
+%%%====================================================================
+
+
+delete_of_opened_file_moves_it_on_storage_test(Config) ->
+    Node = get_node(),
+    SessId = get_session_id(),
+    SpaceId = ?SPACE_ID(Config),
+
+    {FileGuid, FilePath} = create_and_open_file(Node, SessId, SpaceId),
+    ?assertEqual([filename:basename(FilePath)], list_space_files_on_storage(Node, SpaceId)),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Node, SessId, ?FILE_REF(FileGuid))),
+
+    % the file is gone from the file tree, but as long as it is open its storage
+    % file lives on, moved to a hidden directory in the root of the storage
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid))),
+    ?assertEqual([], list_space_files_on_storage(Node, SpaceId)),
+    ?assertEqual([FileGuid], list_deleted_open_files_on_storage(Node, SpaceId)),
+
+    ExpStorageFileId = filename:join([?DELETED_OPENED_FILES_DIR, FileGuid]),
+    ?assertMatch({ok, #file_location{file_id = ExpStorageFileId}},
+        lfm_proxy:get_file_location(Node, SessId, ?FILE_REF(FileGuid))),
+
+    % releasing the last handle finally removes the storage file
+    ?assertEqual(ok, lfm_proxy:close_all(Node)),
+    ?assertEqual([], list_deleted_open_files_on_storage(Node, SpaceId)).
+
+
+name_of_deleted_opened_file_can_be_reused_test(Config) ->
+    Node = get_node(),
+    SessId = get_session_id(),
+    SpaceId = ?SPACE_ID(Config),
+
+    {FileGuid, FilePath} = create_and_open_file(Node, SessId, SpaceId),
+    FileName = filename:basename(FilePath),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Node, SessId, ?FILE_REF(FileGuid))),
+    ?assertEqual([], list_space_files_on_storage(Node, SpaceId)),
+    ?assertEqual([FileGuid], list_deleted_open_files_on_storage(Node, SpaceId)),
+
+    % the freed name can be taken over by a new file tree entry, whose storage
+    % file takes the very path the deleted one used to occupy
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, SessId, FilePath)),
+    ChildPath = filename:join([FilePath, generator:gen_name()]),
+    {ok, {ChildGuid, _}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Node, SessId, ChildPath)),
+    ?assertEqual([FileName], list_space_files_on_storage(Node, SpaceId)),
+
+    ?assertEqual(ok, lfm_proxy:close_all(Node)),
+    ?assertEqual([], list_deleted_open_files_on_storage(Node, SpaceId)),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Node, SessId, ?FILE_REF(ChildGuid))),
+    ?assertEqual(ok, lfm_proxy:unlink(Node, SessId, ?FILE_REF(DirGuid))),
+    ?assertEqual([], list_space_files_on_storage(Node, SpaceId)).
+
+
+release_before_deleted_file_is_moved_on_storage_test(Config) ->
+    release_during_deletion_of_opened_file_test_base(Config, before_move).
+
+
+release_after_deleted_file_is_moved_on_storage_test(Config) ->
+    release_during_deletion_of_opened_file_test_base(Config, after_move).
+
+
+%%%====================================================================
 %%% Test functions awaiting the product to catch up
 %%%====================================================================
 
@@ -365,9 +441,69 @@ delete_during_open_test_base(Config) ->
     ok.
 
 
+%% @private
+%% @doc
+%% Releases the handle to a deleted file while its storage file is being moved
+%% to the hidden directory for deleted open files - either just before or just
+%% after the move itself. Whichever order the two end up in, nothing may be left
+%% behind on the storage.
+%% @end
+-spec release_during_deletion_of_opened_file_test_base(
+    test_config:config(), before_move | after_move
+) ->
+    ok | no_return().
+release_during_deletion_of_opened_file_test_base(Config, When) ->
+    Node = get_node(),
+    SessId = get_session_id(),
+    SpaceId = ?SPACE_ID(Config),
+    Master = self(),
+
+    {FileGuid, _FilePath} = create_and_open_file(Node, SessId, SpaceId),
+    TargetFileId = filename:join([?DELETED_OPENED_FILES_DIR, FileGuid]),
+
+    mock(Node, storage_driver, mv, case When of
+        before_move ->
+            fun(Handle, FileId) ->
+                case FileId of
+                    TargetFileId -> ?SUSPEND_UNTIL_RESUMED(Master);
+                    _ -> ok
+                end,
+                meck:passthrough([Handle, FileId])
+            end;
+        after_move ->
+            fun(Handle, FileId) ->
+                Ans = meck:passthrough([Handle, FileId]),
+                case FileId of
+                    TargetFileId -> ?SUSPEND_UNTIL_RESUMED(Master);
+                    _ -> ok
+                end,
+                Ans
+            end
+    end),
+
+    UnlinkResult = run_asynchronously(fun() ->
+        lfm_proxy:unlink(Node, SessId, ?FILE_REF(FileGuid))
+    end),
+
+    SuspendedProc = await_suspension(),
+    ?assertEqual(ok, lfm_proxy:close_all(Node)),
+    resume(SuspendedProc),
+
+    ?assertEqual(ok, UnlinkResult()),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid))),
+
+    % the hidden directory was created, so the move was indeed attempted, but the
+    % file released in the meantime must not have been left in it
+    ?assert(has_deleted_open_files_dir(Node, SpaceId)),
+    ?assertEqual([], list_space_files_on_storage(Node, SpaceId)),
+    ?assertEqual([], list_deleted_open_files_on_storage(Node, SpaceId)),
+    ok.
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
+
 
 init_per_suite(Config) ->
     opt:init_per_suite([{?LOAD_MODULES, [?MODULE]} | Config], #onenv_test_config{
@@ -571,28 +707,53 @@ get_storage_file_id(Node, TestHandle) ->
 
 
 %% @private
-%% @doc Number of files the space has on its storage.
 -spec count_space_files_on_storage(node(), od_space:id()) -> non_neg_integer().
 count_space_files_on_storage(Node, SpaceId) ->
-    count_storage_dir_entries(Node, storage_test_utils:space_path(Node, SpaceId)).
+    length(list_space_files_on_storage(Node, SpaceId)).
+
+
+%% @private
+-spec count_deleted_open_files_on_storage(node(), od_space:id()) -> non_neg_integer().
+count_deleted_open_files_on_storage(Node, SpaceId) ->
+    length(list_deleted_open_files_on_storage(Node, SpaceId)).
+
+
+%% @private
+%% @doc Names of the files the space has on its storage.
+-spec list_space_files_on_storage(node(), od_space:id()) -> [binary()].
+list_space_files_on_storage(Node, SpaceId) ->
+    list_storage_dir(Node, storage_test_utils:space_path(Node, SpaceId)).
 
 
 %% @private
 %% @doc
-%% Number of files in the hidden storage directory, to which the files deleted
-%% while being open are moved until their handles are released.
+%% Names of the files in the hidden storage directory, to which the files deleted
+%% while being open are moved until their handles are released. The directory sits
+%% in the root of the storage, shared by all the spaces it supports.
 %% @end
--spec count_deleted_open_files_on_storage(node(), od_space:id()) -> non_neg_integer().
-count_deleted_open_files_on_storage(Node, SpaceId) ->
-    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Node, SpaceId),
-    MountPoint = storage_test_utils:storage_mount_point(Node, StorageId),
-    count_storage_dir_entries(Node, filename:join([MountPoint, ?DELETED_OPENED_FILES_DIR])).
+-spec list_deleted_open_files_on_storage(node(), od_space:id()) -> [binary()].
+list_deleted_open_files_on_storage(Node, SpaceId) ->
+    list_storage_dir(Node, deleted_open_files_path(Node, SpaceId)).
 
 
 %% @private
--spec count_storage_dir_entries(node(), binary()) -> non_neg_integer().
-count_storage_dir_entries(Node, DirPath) ->
+-spec has_deleted_open_files_dir(node(), od_space:id()) -> boolean().
+has_deleted_open_files_dir(Node, SpaceId) ->
+    storage_test_utils:list_dir(Node, deleted_open_files_path(Node, SpaceId)) =/= {error, ?ENOENT}.
+
+
+%% @private
+-spec deleted_open_files_path(node(), od_space:id()) -> binary().
+deleted_open_files_path(Node, SpaceId) ->
+    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Node, SpaceId),
+    MountPoint = storage_test_utils:storage_mount_point(Node, StorageId),
+    filename:join([MountPoint, ?DELETED_OPENED_FILES_DIR]).
+
+
+%% @private
+-spec list_storage_dir(node(), binary()) -> [binary()].
+list_storage_dir(Node, DirPath) ->
     case storage_test_utils:list_dir(Node, DirPath) of
-        {ok, Entries} -> length(Entries);
-        {error, ?ENOENT} -> 0
+        {ok, Entries} -> lists:sort([list_to_binary(Entry) || Entry <- Entries]);
+        {error, ?ENOENT} -> []
     end.
