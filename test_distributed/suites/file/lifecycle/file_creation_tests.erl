@@ -73,8 +73,8 @@ concurrent_opens_create_one_storage_file_test(Config) ->
     {ok, Handle1} = ?assertMatch({ok, _}, OpenResult1),
     {ok, Handle2} = ?assertMatch({ok, _}, OpenResult2),
     ?assertEqual(
-        file_lifecycle_test_utils:get_storage_file_id(Node, Handle1),
-        file_lifecycle_test_utils:get_storage_file_id(Node, Handle2)
+        file_lifecycle_test_utils:get_handle_storage_file_id(Node, Handle1),
+        file_lifecycle_test_utils:get_handle_storage_file_id(Node, Handle2)
     ),
 
     ?assertEqual(1, file_lifecycle_test_utils:count_space_files_on_storage(Node, SpaceId)).
@@ -101,8 +101,8 @@ open_during_create_test(Config) ->
     {ok, Handle1} = ?assertMatch({ok, _}, OpenResult),
     {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {path, FilePath}, read)),
     ?assertEqual(
-        file_lifecycle_test_utils:get_storage_file_id(Node, Handle1),
-        file_lifecycle_test_utils:get_storage_file_id(Node, Handle2)
+        file_lifecycle_test_utils:get_handle_storage_file_id(Node, Handle1),
+        file_lifecycle_test_utils:get_handle_storage_file_id(Node, Handle2)
     ),
 
     ?assertEqual(1, file_lifecycle_test_utils:count_space_files_on_storage(Node, SpaceId)).
@@ -241,12 +241,12 @@ open_during_create_and_open_test_base(Config, InstallMockFun) ->
 
     {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {path, FilePath}, rdwr)),
     ?assertEqual(
-        file_lifecycle_test_utils:get_storage_file_id(Node, Handle1),
-        file_lifecycle_test_utils:get_storage_file_id(Node, Handle2)
+        file_lifecycle_test_utils:get_handle_storage_file_id(Node, Handle1),
+        file_lifecycle_test_utils:get_handle_storage_file_id(Node, Handle2)
     ),
     ?assertEqual(
-        file_lifecycle_test_utils:get_storage_file_id(Node, Handle1),
-        file_lifecycle_test_utils:get_storage_file_id(Node, CreationHandle)
+        file_lifecycle_test_utils:get_handle_storage_file_id(Node, Handle1),
+        file_lifecycle_test_utils:get_handle_storage_file_id(Node, CreationHandle)
     ),
 
     ?assertEqual(1, file_lifecycle_test_utils:count_space_files_on_storage(Node, SpaceId)),

@@ -86,6 +86,13 @@ all() -> [
     storage_driver, times_api
 ]).
 
+% Test cases whose subject is how the Oneprovider copes with a storage that
+% cannot rename a file; every other case gets a POSIX storage, which is what the
+% assertions on the storage contents by file name require.
+-define(OBJECT_STORAGE_CASES, [
+    delete_during_open_with_deletion_marker_test
+]).
+
 
 %%%====================================================================
 %%% Creation tests
@@ -159,10 +166,15 @@ rename_to_opened_file_test(Config) ->
 
 
 init_per_suite(Config) ->
-    LoadModules = [file_creation_tests, file_deletion_tests],
+    % NOTE: every module whose code runs on the provider node must be listed - the
+    % test modules because their mocks ship functions there, and
+    % storage_file_tree_test_utils because it dispatches to itself over rpc
+    LoadModules = [file_creation_tests, file_deletion_tests, storage_file_tree_test_utils],
 
     opt:init_per_suite([{?LOAD_MODULES, LoadModules} | Config], #onenv_test_config{
-        onenv_scenario = "1op",
+        % NOTE: the scenario is needed for the s3 volume it deploys, not for the
+        % space it sets up - every case builds a storage and a space of its own
+        onenv_scenario = "1op_s3",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60}
         ]}],
@@ -186,7 +198,7 @@ init_per_testcase(Case, Config) ->
         owner = ?USER_SELECTOR,
         supports = [#support_spec{
             provider = ?PROVIDER_SELECTOR,
-            storage_spec = file_lifecycle_test_utils:create_posix_storage(),
+            storage_spec = create_storage_for(Case),
             size = 1073741824
         }]
     }),
@@ -205,6 +217,15 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec create_storage_for(atom()) -> storage:id().
+create_storage_for(Case) ->
+    case lists:member(Case, ?OBJECT_STORAGE_CASES) of
+        true -> file_lifecycle_test_utils:create_s3_storage();
+        false -> file_lifecycle_test_utils:create_posix_storage()
+    end.
 
 
 %% @private

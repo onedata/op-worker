@@ -28,7 +28,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
--export([get_node/0, get_session_id/0, create_posix_storage/0]).
+-export([get_node/0, get_session_id/0, create_posix_storage/0, create_s3_storage/0]).
 -export([mock/4]).
 -export([
     run_asynchronously/1,
@@ -37,7 +37,7 @@
 ]).
 -export([await_suspension/0, resume/1]).
 -export([build_space_path/3, build_file_path/3, create_file/3, create_and_open_file/3]).
--export([get_storage_file_id/2]).
+-export([get_handle_storage_file_id/2, locate_on_storage/3]).
 -export([
     list_space_files_on_storage/2, count_space_files_on_storage/2,
     list_deleted_open_files_on_storage/2, count_deleted_open_files_on_storage/2,
@@ -70,6 +70,23 @@ get_session_id() ->
 create_posix_storage() ->
     space_setup_utils:create_storage(?PROVIDER_SELECTOR, #posix_storage_params{
         mount_point = <<"/mnt/st_", (generator:gen_name())/binary>>
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Counterpart of the above for the cases concerning an object storage, which
+%% the Oneprovider treats differently in that it cannot rename a storage file
+%% (see helper:is_rename_supported/1). A bucket of its own per storage keeps the
+%% guarantee the posix storages give - that a case starts with an empty one.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_s3_storage() -> storage:id().
+create_s3_storage() ->
+    space_setup_utils:create_storage(?PROVIDER_SELECTOR, #s3_storage_params{
+        storage_path_type = <<"flat">>,
+        hostname = space_setup_utils:build_s3_hostname(?PROVIDER_SELECTOR),
+        bucket_name = ?RAND_STR(15)
     }).
 
 
@@ -198,15 +215,44 @@ create_and_open_file(Node, SessId, SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Id of the storage file behind an lfm handle, as seen by the provider.
+%% Id of the storage file behind an lfm handle, as seen by the provider - for
+%% checking that two handles ended up pointing at the same storage file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_file_id(node(), term()) -> helpers:file_id().
-get_storage_file_id(Node, TestHandle) ->
+-spec get_handle_storage_file_id(node(), term()) -> helpers:file_id().
+get_handle_storage_file_id(Node, TestHandle) ->
     lfm_context:get_file_id(rpc:call(Node, ets, lookup_element, [lfm_handles, TestHandle, 2])).
 
 
-%% @doc Names of the files the space has on its storage.
+%%--------------------------------------------------------------------
+%% @doc
+%% Where the given file sits on the storage, in the form taken by
+%% storage_file_tree_test_utils:stat/3 - which is how a case checks the presence
+%% of a single storage file regardless of the storage type. Locate the file while
+%% it still exists; the returned location outlives it, which is what lets a case
+%% check what became of the storage file after the file itself was deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec locate_on_storage(node(), od_space:id(), file_id:file_guid()) ->
+    {storage:id(), helpers:file_id()}.
+locate_on_storage(Node, SpaceId, FileGuid) ->
+    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Node, SpaceId),
+    {StorageId, storage_test_utils:get_storage_file_id(Node, FileGuid)}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Names of the files the space has on its storage.
+%%
+%% NOTE: this and the three functions below work on POSIX storages only. They
+%% reach the storage through its mount point on the provider node, which an
+%% object storage does not have; more fundamentally, an object storage keeps a
+%% file under an id derived from its uuid rather than from its name or path (see
+%% storage_file_id:raw_flat/2), so there is nothing there to list by name. Cases
+%% running on an object storage assert on a single file at a time instead, via
+%% locate_on_storage/3 above and storage_file_tree_test_utils:stat/3.
+%% @end
+%%--------------------------------------------------------------------
 -spec list_space_files_on_storage(node(), od_space:id()) -> [binary()].
 list_space_files_on_storage(Node, SpaceId) ->
     list_storage_dir(Node, storage_test_utils:space_path(Node, SpaceId)).

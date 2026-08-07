@@ -28,7 +28,6 @@
 -include("file/file_lifecycle_test.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -50,43 +49,53 @@
 % so that a retry of the very same operation is let through
 -define(SUSPENDED_ONCE, suspended_once).
 
+-define(ATTEMPTS, 30).
+
+-define(FILE_CONTENT, <<"file_content">>).
+
 
 %%%====================================================================
 %%% Test functions concerning deletion during an open
 %%%====================================================================
 
 
+%% NOTE: runs on an object storage, which cannot rename a storage file and so
+%% takes the deletion marker method (fslogic_delete:get_open_file_handling_method/1
+%% -> helper:is_rename_supported/1) of its own accord - no mock involved.
 delete_during_open_with_deletion_marker_test(Config) ->
     Node = file_lifecycle_test_utils:get_node(),
-    SpaceId = ?SPACE_ID(Config),
 
-    % with the deletion marker method the storage file is left under its
-    % original path until the handle is released
-    file_lifecycle_test_utils:mock(Node, fslogic_delete, get_open_file_handling_method,
-        fun(FileCtx) ->
-            case file_ctx:get_space_id_const(FileCtx) of
-                SpaceId -> {?SET_DELETION_MARKER, FileCtx};
-                _ -> meck:passthrough([FileCtx])
-            end
-        end
-    ),
+    {_FileGuid, StorageId, StorageFileId} = delete_during_open_test_base(Config),
 
-    delete_during_open_test_base(Config),
+    % with the deletion marker method the storage file stays right where it was
+    % until the handle is released
+    ?assertMatch({ok, _},
+        storage_file_tree_test_utils:stat(?PROVIDER_SELECTOR, StorageId, StorageFileId)),
 
-    ?assertEqual(1, file_lifecycle_test_utils:count_space_files_on_storage(Node, SpaceId)),
-    ?assertEqual(0, file_lifecycle_test_utils:count_deleted_open_files_on_storage(Node, SpaceId)).
+    % releasing the handle removes it, marker and all; unlike the rename method,
+    % whose cleanup on release the other cases already cover, this path has no
+    % storage move to sequence it, hence the attempts
+    ?assertEqual(ok, lfm_proxy:close_all(Node)),
+    ?assertEqual({error, ?ENOENT},
+        storage_file_tree_test_utils:stat(?PROVIDER_SELECTOR, StorageId, StorageFileId), ?ATTEMPTS).
 
 
 delete_during_open_with_storage_rename_test(Config) ->
     Node = file_lifecycle_test_utils:get_node(),
     SpaceId = ?SPACE_ID(Config),
 
-    % a POSIX storage defaults to the rename method, which moves the storage
-    % file to a hidden directory the moment the file is deleted
-    delete_during_open_test_base(Config),
+    {FileGuid, StorageId, StorageFileId} = delete_during_open_test_base(Config),
 
-    ?assertEqual(0, file_lifecycle_test_utils:count_space_files_on_storage(Node, SpaceId)),
-    ?assertEqual(1, file_lifecycle_test_utils:count_deleted_open_files_on_storage(Node, SpaceId)).
+    % a POSIX storage supports rename, hence the method that moves the storage
+    % file to a hidden directory the moment the file is deleted
+    ?assertEqual({error, ?ENOENT},
+        storage_file_tree_test_utils:stat(?PROVIDER_SELECTOR, StorageId, StorageFileId)),
+    ?assertEqual([], file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
+    ?assertEqual([FileGuid],
+        file_lifecycle_test_utils:list_deleted_open_files_on_storage(Node, SpaceId)),
+
+    ?assertEqual(ok, lfm_proxy:close_all(Node)),
+    ?assertEqual([], file_lifecycle_test_utils:list_deleted_open_files_on_storage(Node, SpaceId)).
 
 
 %%%====================================================================
@@ -192,10 +201,15 @@ rename_to_opened_file_test(Config) ->
 %% @doc
 %% Deletes a file while it is being opened - the open is suspended halfway
 %% through, after the storage file has been opened - and checks that the open
-%% still succeeds. What is left on the storage depends on the method of handling
-%% deletion of an opened file and is asserted by the calling test case.
+%% still succeeds. What becomes of the storage file depends on the method of
+%% handling deletion of an opened file and is asserted by the calling test case,
+%% for which the file and the location of its storage file are returned. NOTE:
+%% the location is resolved before the deletion and keeps pointing at where the
+%% storage file was back then; that a storage file was there to begin with is
+%% asserted here, so that a later ENOENT can only mean it went away.
 %% @end
--spec delete_during_open_test_base(test_config:config()) -> ok | no_return().
+-spec delete_during_open_test_base(test_config:config()) ->
+    {file_id:file_guid(), storage:id(), helpers:file_id()} | no_return().
 delete_during_open_test_base(Config) ->
     Node = file_lifecycle_test_utils:get_node(),
     SessId = file_lifecycle_test_utils:get_session_id(),
@@ -205,6 +219,22 @@ delete_during_open_test_base(Config) ->
     % the provider opens files on storage only when the session does not use
     % direct IO; the space is discarded after the case, so there is nothing to restore
     ?assertEqual(ok, rpc:call(Node, session, set_direct_io, [SessId, SpaceId, false])),
+
+    {FileGuid, FilePath} = file_lifecycle_test_utils:create_file(Node, SessId, SpaceId),
+    {StorageId, StorageFileId} = file_lifecycle_test_utils:locate_on_storage(
+        Node, SpaceId, FileGuid
+    ),
+
+    % NOTE: the file is given content before anything else, so that it has a
+    % storage file at all. A POSIX storage gets one as soon as the file is opened,
+    % but an object storage has no empty objects - it only gets one once something
+    % is written (which is why file_lfm_s3_test_SUITE skips the case asserting
+    % that opening a file creates it on the storage).
+    {ok, WriteHandle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), write)),
+    ?assertMatch({ok, _}, lfm_proxy:write(Node, WriteHandle, 0, ?FILE_CONTENT)),
+    ?assertEqual(ok, lfm_proxy:close(Node, WriteHandle)),
+    ?assertMatch({ok, _},
+        storage_file_tree_test_utils:stat(?PROVIDER_SELECTOR, StorageId, StorageFileId)),
 
     file_lifecycle_test_utils:mock(Node, file_req, open_on_storage,
         fun(UserCtx, FileCtx, SessionId, Flag, HandleId) ->
@@ -217,7 +247,6 @@ delete_during_open_test_base(Config) ->
         end
     ),
 
-    {FileGuid, FilePath} = file_lifecycle_test_utils:create_file(Node, SessId, SpaceId),
     [OpenResult] = file_lifecycle_test_utils:open_asynchronously(Node, SessId, FileGuid, 1),
 
     SuspendedProc = file_lifecycle_test_utils:await_suspension(),
@@ -225,7 +254,7 @@ delete_during_open_test_base(Config) ->
     file_lifecycle_test_utils:resume(SuspendedProc),
 
     ?assertMatch({ok, _}, OpenResult()),
-    ok.
+    {FileGuid, StorageId, StorageFileId}.
 
 
 %% @private
