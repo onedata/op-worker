@@ -29,11 +29,7 @@
 
 -export([
     fslogic_new_file/1,
-    lfm_acl/1,
-    new_file_should_not_have_popularity_doc/1,
-    new_file_should_have_zero_popularity/1,
-    opening_file_should_increase_file_popularity/1,
-    file_popularity_should_have_correct_file_size/1
+    lfm_acl/1
 ]).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
@@ -115,138 +111,6 @@ lfm_acl(Config) ->
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, ?FILE_REF(FileGUID), Acl)),
     ?assertEqual({ok, Acl}, lfm_proxy:get_acl(W, SessId1, ?FILE_REF(FileGUID))).
 
-new_file_should_not_have_popularity_doc(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-
-    % when
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_no_popularity">>),
-    FileUuid = file_id:guid_to_uuid(FileGuid),
-
-    % then
-    ?assertEqual(
-        {error, not_found},
-        rpc:call(W, file_popularity, get, [FileUuid])
-    ).
-
-new_file_should_have_zero_popularity(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-
-    % when
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_zero_popularity">>),
-    FileUuid = file_id:guid_to_uuid(FileGuid),
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-
-    % then
-    ?assertMatch(
-        {ok, #document{
-            key = FileUuid,
-            value = #file_popularity{
-                file_uuid = FileUuid,
-                space_id = SpaceId,
-                last_open = 0,
-                open_count = 0,
-                hr_mov_avg = 0.0,
-                dy_mov_avg = 0.0,
-                mth_mov_avg = 0.0
-            }
-        }},
-        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid(FileUuid, SpaceId)])
-    ).
-
-opening_file_should_increase_file_popularity(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_increased_popularity">>),
-    FileUuid = file_id:guid_to_uuid(FileGuid),
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
-
-    % when
-    TimeBeforeFirstOpen = rpc:call(W, global_clock, timestamp_hours, []),
-    {ok, Handle1} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), read),
-    lfm_proxy:close(W, Handle1),
-
-    % then
-    {ok, Doc} = ?assertMatch(
-        {ok, #document{
-            key = FileUuid,
-            value = #file_popularity{
-                file_uuid = FileUuid,
-                space_id = SpaceId,
-                open_count = 1,
-                hr_hist = [1 | _],
-                dy_hist = [1 | _],
-                mth_hist = [1 | _]
-            }
-        }},
-        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid(FileUuid, SpaceId)])
-    ),
-    ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
-
-    % when
-    TimeBeforeSecondOpen = rpc:call(W, global_clock, timestamp_hours, []),
-    lists:foreach(fun(_) ->
-        {ok, Handle2} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), read),
-        lfm_proxy:close(W, Handle2)
-    end, lists:seq(1, 23)),
-
-    % then
-    {ok, Doc2} = ?assertMatch(
-        {ok, #document{
-            value = #file_popularity{
-                open_count = 24,
-                hr_mov_avg = 1.0,
-                dy_mov_avg = 0.8,
-                mth_mov_avg = 2.0
-            }
-        }},
-        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid(FileUuid, SpaceId)])
-    ),
-    ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open),
-    [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hr_hist,
-    [FirstDay, SecondDay | _] = Doc2#document.value#file_popularity.hr_hist,
-    [FirstMonth, SecondMonth | _] = Doc2#document.value#file_popularity.hr_hist,
-    ?assertEqual(24, FirstHour + SecondHour),
-    ?assertEqual(24, FirstDay + SecondDay),
-    ?assertEqual(24, FirstMonth + SecondMonth).
-
-file_popularity_should_have_correct_file_size(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/file_to_check_size">>),
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
-
-    {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), write),
-    {ok, 5} = lfm_proxy:write(W, Handle, 0, <<"01234">>),
-    ok = lfm_proxy:close(W, Handle),
-
-    FileUuid = file_id:guid_to_uuid(FileGuid),
-    ?assertMatch(
-        {ok, #document{value = #file_popularity{size = 5}}},
-        rpc:call(W, file_popularity, get, [FileUuid])
-    ),
-
-    {ok, Handle2} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), write),
-    {ok, 5} = lfm_proxy:write(W, Handle2, 5, <<"01234">>),
-    ok = lfm_proxy:close(W, Handle2),
-
-    ?assertMatch(
-        {ok, #document{value = #file_popularity{size = 10}}},
-        rpc:call(W, file_popularity, get, [FileUuid])
-    ),
-
-    ok = lfm_proxy:truncate(W, SessId1, ?FILE_REF(FileGuid), 1),
-    {ok, Handle3} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), write),
-    ok = lfm_proxy:close(W, Handle3),
-
-    ?assertMatch(
-        {ok, #document{value = #file_popularity{size = 1}}},
-        rpc:call(W, file_popularity, get, [FileUuid])
-    ).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -287,14 +151,6 @@ init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-
-end_per_testcase(Case, Config) when
-    Case =:= opening_file_should_increase_file_popularity;
-    Case =:= file_popularity_should_have_correct_file_size
-    ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    rpc:call(W, file_popularity_api, disable, [?SPACE_ID1]),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

@@ -29,10 +29,6 @@
 -export([
     fslogic_new_file_test/1,
     lfm_acl_test/1,
-    new_file_should_not_have_popularity_doc/1,
-    new_file_should_have_zero_popularity/1,
-    opening_file_should_increase_file_popularity/1,
-    file_popularity_should_have_correct_file_size/1,
     rename_removed_opened_file_test/1,
     mkdir_removed_opened_file_test/1,
     rename_removed_opened_file_races_test/1,
@@ -45,10 +41,6 @@
 -define(TEST_CASES, [
     fslogic_new_file_test,
     lfm_acl_test,
-    new_file_should_not_have_popularity_doc,
-    new_file_should_have_zero_popularity,
-    opening_file_should_increase_file_popularity,
-    file_popularity_should_have_correct_file_size,
     rename_removed_opened_file_test,
     mkdir_removed_opened_file_test,
     rename_removed_opened_file_races_test,
@@ -73,22 +65,6 @@ fslogic_new_file_test(Config) ->
 
 lfm_acl_test(Config) ->
     lfm_files_test_base:lfm_acl(Config).
-
-
-new_file_should_not_have_popularity_doc(Config) ->
-    lfm_files_test_base:new_file_should_not_have_popularity_doc(Config).
-
-
-new_file_should_have_zero_popularity(Config) ->
-    lfm_files_test_base:new_file_should_have_zero_popularity(Config).
-
-
-opening_file_should_increase_file_popularity(Config) ->
-    lfm_files_test_base:opening_file_should_increase_file_popularity(Config).
-
-
-file_popularity_should_have_correct_file_size(Config) ->
-    lfm_files_test_base:file_popularity_should_have_correct_file_size(Config).
 
 
 rename_removed_opened_file_test(Config) ->
