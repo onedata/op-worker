@@ -167,8 +167,6 @@ stages:
         - harvesting_stream
         - idp_access_token
         - lfm_attrs
-        - lfm_files_posix
-        - lfm_files_s3
         - luma
         - massive_multi_provider_file_ops
         - massive_multi_provider_file_ops2
@@ -1312,20 +1310,6 @@ lfm_attrs:
     - <<: *ct_logs
       name: ct_logs_lfm_attrs.tar.gz
 
-lfm_files_posix:
-  <<: *ct-job
-  key: LFMFIL
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_lfm_files_posix.tar.gz
-
-lfm_files_s3:
-  <<: *ct-job
-  key: LFMFS3
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_lfm_files_s3.tar.gz
-
 luma:
   <<: *ct-job
   key: LUMA
@@ -2064,8 +2048,6 @@ Coverage report:
     - artifact: ct_logs_harvesting_stream.tar.gz
     - artifact: ct_logs_idp_access_token.tar.gz
     - artifact: ct_logs_lfm_attrs.tar.gz
-    - artifact: ct_logs_lfm_files_posix.tar.gz
-    - artifact: ct_logs_lfm_files_s3.tar.gz
     - artifact: ct_logs_luma.tar.gz
     - artifact: ct_logs_massive_multi_provider_file_ops.tar.gz
     - artifact: ct_logs_massive_multi_provider_file_ops2.tar.gz
