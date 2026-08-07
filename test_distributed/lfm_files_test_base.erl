@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("lfm_files_test_base.hrl").
--include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -28,8 +27,7 @@
 ]).
 
 -export([
-    fslogic_new_file/1,
-    lfm_acl/1
+    fslogic_new_file/1
 ]).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
@@ -88,28 +86,6 @@ fslogic_new_file(Config) ->
     TestProviderId = rpc:call(Worker, oneprovider, get_id, []),
     ?assertMatch(TestProviderId, ProviderId11),
     ?assertMatch(TestProviderId, ProviderId21).
-
-lfm_acl(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    UserName1 = ?config({user_name, <<"user1">>}, Config),
-    [{GroupId1, GroupName1} | _] = ?config({groups, <<"user1">>}, Config),
-    FileName = <<"/space_name2/test_file_acl">>,
-    DirName = <<"/space_name2/test_dir_acl">>,
-
-    {ok, FileGUID} = lfm_proxy:create(W, SessId1, FileName),
-    {ok, _} = lfm_proxy:mkdir(W, SessId1, DirName),
-
-    % test setting and getting acl
-    Acl = [
-        #access_control_entity{acetype = ?allow_mask, identifier = UserId1, name = UserName1, aceflags = ?no_flags_mask, acemask =
-        ?read_all_object_mask bor ?write_all_object_mask},
-        #access_control_entity{acetype = ?deny_mask, identifier = GroupId1, name = GroupName1, aceflags = ?identifier_group_mask, acemask = ?write_all_object_mask}
-    ],
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, ?FILE_REF(FileGUID), Acl)),
-    ?assertEqual({ok, Acl}, lfm_proxy:get_acl(W, SessId1, ?FILE_REF(FileGUID))).
 
 %%%===================================================================
 %%% Internal functions

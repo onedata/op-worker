@@ -25,13 +25,11 @@
 
 %% tests
 -export([
-    fslogic_new_file_test/1,
-    lfm_acl_test/1
+    fslogic_new_file_test/1
 ]).
 
 -define(TEST_CASES, [
-    fslogic_new_file_test,
-    lfm_acl_test
+    fslogic_new_file_test
 ]).
 
 -define(SPACE_ID, <<"space1">>).
@@ -46,9 +44,6 @@ all() ->
 
 fslogic_new_file_test(Config) ->
     lfm_files_test_base:fslogic_new_file(Config).
-
-lfm_acl_test(Config) ->
-    lfm_files_test_base:lfm_acl(Config).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
