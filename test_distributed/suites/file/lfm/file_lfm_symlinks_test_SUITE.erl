@@ -6,12 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests of lfm symlink resolution API.
+%%% This file contains tests of lfm symlink API - creating and reading symlinks
+%%% as well as resolving them against the file tree.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_lfm_symlinks_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("file/file_tree_test.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -27,6 +29,9 @@
 ]).
 
 -export([
+    create_and_read_symlink_test/1,
+    create_hardlink_to_symlink_test/1,
+
     rubbish_path_test/1,
     non_existent_path_test/1,
     path_with_file_in_the_middle_test/1,
@@ -41,8 +46,14 @@
     symlink_in_share_test/1
 ]).
 
+% NOTE: the crud tests are run sequentially, as freezing the cluster clock
+% (needed to observe timestamp changes) affects all the nodes at once.
 groups() -> [
-    {all_tests, [parallel], [
+    {crud_tests, [], [
+        create_and_read_symlink_test,
+        create_hardlink_to_symlink_test
+    ]},
+    {resolution_tests, [parallel], [
         rubbish_path_test,
         non_existent_path_test,
         path_with_file_in_the_middle_test,
@@ -59,12 +70,88 @@ groups() -> [
 ].
 
 all() -> [
-    {group, all_tests}
+    {group, crud_tests},
+    {group, resolution_tests}
 ].
 
 
 %%%====================================================================
-%%% Test function
+%%% Crud test functions
+%%%====================================================================
+
+
+create_and_read_symlink_test(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+    SessId = oct_background:get_user_session_id(user1, krakow),
+
+    #object{guid = DirGuid} = file_tree_test_utils:create_and_sync_file_tree(
+        user1, space_krk, #dir_spec{}
+    ),
+    SymlinkValue = <<"test_link">>,
+    SymlinkValueSize = byte_size(SymlinkValue),
+    ListingOpts = #{offset => 0, limit => 10, tune_for_large_continuous_listing => false},
+
+    {ok, SymlinkAttrs} = ?assertMatch({ok, #file_attr{
+        type = ?SYMLINK_TYPE,
+        size = SymlinkValueSize,
+        is_fully_replicated = undefined,
+        parent_guid = DirGuid
+    }}, lfm_proxy:make_symlink(
+        Node, SessId, ?FILE_REF(DirGuid), str_utils:rand_hex(10), SymlinkValue
+    )),
+    ?assert(SymlinkAttrs#file_attr.atime > 0),
+    ?assert(SymlinkAttrs#file_attr.mtime > 0),
+    ?assert(SymlinkAttrs#file_attr.ctime > 0),
+    ?assert(fslogic_file_id:is_symlink_uuid(file_id:guid_to_uuid(SymlinkAttrs#file_attr.guid))),
+
+    SymlinkRef = ?FILE_REF(SymlinkAttrs#file_attr.guid),
+
+    time_test_utils:simulate_seconds_passing(2),  % ensure the access time changes
+    ?assertEqual({ok, SymlinkValue}, lfm_proxy:read_symlink(Node, SessId, SymlinkRef)),
+
+    {ok, SymlinkAttrs2} = ?assertMatch({ok, #file_attr{
+        type = ?SYMLINK_TYPE,
+        size = SymlinkValueSize,
+        is_fully_replicated = undefined,
+        parent_guid = DirGuid
+    }}, lfm_proxy:stat(Node, SessId, SymlinkRef)),
+    ?assert(SymlinkAttrs2#file_attr.atime > SymlinkAttrs#file_attr.atime),
+    ?assertMatch({ok, [SymlinkAttrs2], _}, lfm_proxy:get_children_attrs(
+        Node, SessId, ?FILE_REF(DirGuid), ListingOpts
+    )),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Node, SessId, SymlinkRef)),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:read_symlink(Node, SessId, SymlinkRef)),
+    ?assertMatch({ok, [], _}, lfm_proxy:get_children_attrs(
+        Node, SessId, ?FILE_REF(DirGuid), ListingOpts
+    )).
+
+
+create_hardlink_to_symlink_test(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+    SessId = oct_background:get_user_session_id(user1, krakow),
+
+    #object{guid = DirGuid} = file_tree_test_utils:create_and_sync_file_tree(
+        user1, space_krk, #dir_spec{}
+    ),
+    SymlinkValue = <<"test_link">>,
+
+    {ok, #file_attr{guid = SymlinkGuid}} = ?assertMatch({ok, #file_attr{type = ?SYMLINK_TYPE}},
+        lfm_proxy:make_symlink(Node, SessId, ?FILE_REF(DirGuid), str_utils:rand_hex(10), SymlinkValue)),
+
+    % a hardlink to a symlink is a symlink itself and points to the very same target
+    {ok, #file_attr{guid = HardlinkGuid}} = ?assertMatch(
+        {ok, #file_attr{type = ?SYMLINK_TYPE}},
+        lfm_proxy:make_link(Node, SessId, ?FILE_REF(SymlinkGuid), ?FILE_REF(DirGuid), str_utils:rand_hex(10))
+    ),
+
+    ?assertNotEqual(SymlinkGuid, HardlinkGuid),
+    ?assertEqual({ok, SymlinkValue}, lfm_proxy:read_symlink(Node, SessId, ?FILE_REF(SymlinkGuid))),
+    ?assertEqual({ok, SymlinkValue}, lfm_proxy:read_symlink(Node, SessId, ?FILE_REF(HardlinkGuid))).
+
+
+%%%====================================================================
+%%% Resolution test functions
 %%%====================================================================
 
 
@@ -346,10 +433,17 @@ end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config).
 
 
+init_per_testcase(create_and_read_symlink_test = Case, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     Config.
 
+
+end_per_testcase(create_and_read_symlink_test, Config) ->
+    time_test_utils:unfreeze_time(Config);
 
 end_per_testcase(_Case, _Config) ->
     ok.
