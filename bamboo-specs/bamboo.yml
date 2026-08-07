@@ -137,7 +137,7 @@ stages:
         - file_deletion
         - file_lfm_posix
         - file_lfm_s3
-        - file_lfm_symlinks_resolution
+        - file_lfm_symlinks
         - file_lifecycle
         - file_links_reconciliation_traverse
         - file_popularity
@@ -1098,12 +1098,12 @@ file_lfm_s3:
     - <<: *ct_logs
       name: ct_logs_file_lfm_s3.tar.gz
 
-file_lfm_symlinks_resolution:
+file_lfm_symlinks:
   <<: *ct-onenv-job
   key: LFMSYMLINKRESOLUTION
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_file_lfm_symlinks_resolution.tar.gz
+      name: ct_logs_file_lfm_symlinks.tar.gz
 
 file_lifecycle:
   <<: *ct-job
@@ -2034,7 +2034,7 @@ Coverage report:
     - artifact: ct_logs_file_deletion.tar.gz
     - artifact: ct_logs_file_lfm_posix.tar.gz
     - artifact: ct_logs_file_lfm_s3.tar.gz
-    - artifact: ct_logs_file_lfm_symlinks_resolution.tar.gz
+    - artifact: ct_logs_file_lfm_symlinks.tar.gz
     - artifact: ct_logs_file_lifecycle.tar.gz
     - artifact: ct_logs_file_links_reconciliation_traverse.tar.gz
     - artifact: ct_logs_file_popularity.tar.gz

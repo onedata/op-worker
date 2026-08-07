@@ -9,7 +9,7 @@
 %%% This file contains tests of lfm symlink resolution API.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_lfm_symlinks_resolution_test_SUITE).
+-module(file_lfm_symlinks_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("modules/logical_file_manager/lfm.hrl").
