@@ -10,7 +10,7 @@
 %%% as well as resolving them against the file tree.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_lfm_symlinks_test_SUITE).
+-module(file_symlinks_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("modules/fslogic/file_attr.hrl").
