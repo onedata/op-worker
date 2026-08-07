@@ -1272,26 +1272,16 @@ create_storage(s3, ProviderSelector, true) ->
     space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
         storage_path_type = <<"canonical">>,
         imported_storage = true,
-        hostname = build_s3_hostname(ProviderSelector),
+        hostname = space_setup_utils:build_s3_hostname(ProviderSelector),
         bucket_name = ?RAND_STR(15),
         block_size = 0
     });
 create_storage(s3, ProviderSelector, false) ->
     space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
         storage_path_type = <<"flat">>,
-        hostname = build_s3_hostname(ProviderSelector),
+        hostname = space_setup_utils:build_s3_hostname(ProviderSelector),
         bucket_name = ?RAND_STR(15)
     }).
-
-
-%% @private
--spec build_s3_hostname(oct_background:entity_selector()) -> binary().
-build_s3_hostname(ProviderSelector) ->
-    <<
-        "volume-s3.dev-volume-s3-",
-        (atom_to_binary(oct_background:to_entity_placeholder(ProviderSelector)))/binary,
-        ".default:9000"
-    >>.
 
 
 %% @private
