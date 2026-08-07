@@ -85,6 +85,10 @@ all() -> [
 
 -define(TIMEOUT, timer:seconds(30)).
 
+% marks the process dictionary of a mocked call that has already been suspended,
+% so that a retry of the very same operation is let through
+-define(SUSPENDED_ONCE, suspended_once).
+
 % Used inside the mocks to suspend the operation being tested until the test
 % process lets it through. Every mock must first make sure the call concerns the
 % file under test - the deployment is shared, so suspending calls indiscriminately
@@ -461,23 +465,31 @@ release_during_deletion_of_opened_file_test_base(Config, When) ->
     {FileGuid, _FilePath} = create_and_open_file(Node, SessId, SpaceId),
     TargetFileId = filename:join([?DELETED_OPENED_FILES_DIR, FileGuid]),
 
+    % NOTE: the storage of every test case starts out without the hidden directory,
+    % so the first move fails with ENOENT and the provider retries it after creating
+    % the directory (see fslogic_delete:maybe_rename_storage_file/1). Exactly one of
+    % the two attempts may be suspended - the first one when the release is to come
+    % before the move, and the one that actually succeeded when it is to come after.
     mock(Node, storage_driver, mv, case When of
         before_move ->
             fun(Handle, FileId) ->
-                case FileId of
-                    TargetFileId -> ?SUSPEND_UNTIL_RESUMED(Master);
-                    _ -> ok
+                case FileId =:= TargetFileId andalso get(?SUSPENDED_ONCE) =:= undefined of
+                    true ->
+                        put(?SUSPENDED_ONCE, true),
+                        ?SUSPEND_UNTIL_RESUMED(Master);
+                    false ->
+                        ok
                 end,
                 meck:passthrough([Handle, FileId])
             end;
         after_move ->
             fun(Handle, FileId) ->
-                Ans = meck:passthrough([Handle, FileId]),
-                case FileId of
-                    TargetFileId -> ?SUSPEND_UNTIL_RESUMED(Master);
+                Result = meck:passthrough([Handle, FileId]),
+                case {Result, FileId} of
+                    {ok, TargetFileId} -> ?SUSPEND_UNTIL_RESUMED(Master);
                     _ -> ok
                 end,
-                Ans
+                Result
             end
     end),
 
