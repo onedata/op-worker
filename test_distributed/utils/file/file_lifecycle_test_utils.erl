@@ -36,12 +36,15 @@
     open_asynchronously/4, open_concurrently/4
 ]).
 -export([await_suspension/0, resume/1]).
--export([build_space_path/3, build_file_path/3, create_file/3, create_and_open_file/3]).
+-export([
+    build_space_path/3, build_file_path/3,
+    create_file/3, create_and_open_file/3,
+    create_file_with_storage_file/3, create_file_with_content/4
+]).
 -export([get_handle_storage_file_id/2, locate_on_storage/3]).
 -export([
     list_space_files_on_storage/2, count_space_files_on_storage/2,
-    list_deleted_open_files_on_storage/2, count_deleted_open_files_on_storage/2,
-    has_deleted_open_files_dir/2
+    list_deleted_open_files_on_storage/2, has_deleted_open_files_dir/2
 ]).
 
 
@@ -208,6 +211,43 @@ create_and_open_file(Node, SessId, SpaceId) ->
     {FileGuid, FilePath}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a file that already has a storage file behind it. Creating a file
+%% does not create one - the provider defers that until the file is first opened
+%% - so the file is opened and released right away.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_file_with_storage_file(node(), session:id(), od_space:id()) ->
+    {file_id:file_guid(), file_meta:path()}.
+create_file_with_storage_file(Node, SessId, SpaceId) ->
+    FilePath = build_file_path(Node, SessId, SpaceId),
+    {ok, {FileGuid, Handle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Node, SessId, FilePath
+    )),
+    ?assertEqual(ok, lfm_proxy:close(Node, Handle)),
+    {FileGuid, FilePath}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Counterpart of the above for the cases that must be able to tell a storage
+%% file that went away from one that was never there. Opening a file is enough
+%% to create it on a POSIX storage, but an object storage has no empty objects -
+%% one appears only once something is written (which is why file_lfm_s3_test_SUITE
+%% skips the case asserting that opening a file creates it on the storage).
+%% @end
+%%--------------------------------------------------------------------
+-spec create_file_with_content(node(), session:id(), od_space:id(), binary()) ->
+    {file_id:file_guid(), file_meta:path()}.
+create_file_with_content(Node, SessId, SpaceId, Content) ->
+    {FileGuid, FilePath} = create_file(Node, SessId, SpaceId),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), write)),
+    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, Content)),
+    ?assertEqual(ok, lfm_proxy:close(Node, Handle)),
+    {FileGuid, FilePath}.
+
+
 %%%===================================================================
 %%% Files on the storage
 %%%===================================================================
@@ -273,11 +313,6 @@ count_space_files_on_storage(Node, SpaceId) ->
 -spec list_deleted_open_files_on_storage(node(), od_space:id()) -> [binary()].
 list_deleted_open_files_on_storage(Node, SpaceId) ->
     list_storage_dir(Node, deleted_open_files_path(Node, SpaceId)).
-
-
--spec count_deleted_open_files_on_storage(node(), od_space:id()) -> non_neg_integer().
-count_deleted_open_files_on_storage(Node, SpaceId) ->
-    length(list_deleted_open_files_on_storage(Node, SpaceId)).
 
 
 -spec has_deleted_open_files_dir(node(), od_space:id()) -> boolean().

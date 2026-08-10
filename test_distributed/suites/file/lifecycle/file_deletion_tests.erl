@@ -28,7 +28,9 @@
 -include("file/file_lifecycle_test.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
@@ -41,9 +43,27 @@
     name_of_deleted_opened_file_can_be_reused_test/1,
     release_before_deleted_file_is_moved_on_storage_test/1,
     release_after_deleted_file_is_moved_on_storage_test/1,
+    content_of_deleted_opened_file_survives_name_takeover_test/1,
+    content_of_deleted_opened_file_survives_name_takeover_on_object_storage_test/1,
+    delete_of_newer_generation_first_leaves_older_on_storage_test/1,
+    delete_of_older_generation_first_leaves_newer_on_storage_test/1,
+
+    delete_via_fuse_removes_object_from_storage_test/1,
+
+    node_restart_deletes_open_files_marked_for_removal_test/1,
+    node_restart_deletes_open_files_with_no_storage_file_test/1,
+    release_of_deleted_file_removes_it_from_storage_test/1,
+    release_of_deleted_file_with_no_storage_file_test/1,
+    delete_of_not_opened_file_removes_it_from_storage_test/1,
+    delete_of_not_opened_file_with_no_storage_file_test/1,
 
     rename_to_opened_file_test/1
 ]).
+
+% Whether the file a test case works on already has a storage file behind it.
+% A freshly created file does not - the provider defers creating it until the
+% file is first opened - and deleting it must cope with either.
+-type storage_file_policy() :: with_storage_file | without_storage_file.
 
 % marks the process dictionary of a mocked call that has already been suspended,
 % so that a retry of the very same operation is let through
@@ -52,6 +72,9 @@
 -define(ATTEMPTS, 30).
 
 -define(FILE_CONTENT, <<"file_content">>).
+
+% Id correlating a request sent over the fuse protocol with its response
+-define(FUSE_MSG_ID, <<"1">>).
 
 
 %%%====================================================================
@@ -166,6 +189,94 @@ release_after_deleted_file_is_moved_on_storage_test(Config) ->
     release_during_deletion_of_opened_file_test_base(Config, after_move).
 
 
+content_of_deleted_opened_file_survives_name_takeover_test(Config) ->
+    content_survives_name_takeover_test_base(Config).
+
+
+%% NOTE: runs on an object storage, which keeps the storage file of the deleted
+%% file right where it was, under a deletion marker, rather than renaming it away
+%% - the handle held to it must keep working all the same.
+content_of_deleted_opened_file_survives_name_takeover_on_object_storage_test(Config) ->
+    content_survives_name_takeover_test_base(Config).
+
+
+delete_of_newer_generation_first_leaves_older_on_storage_test(Config) ->
+    deletion_order_of_two_generations_test_base(Config, newer_first).
+
+
+delete_of_older_generation_first_leaves_newer_on_storage_test(Config) ->
+    deletion_order_of_two_generations_test_base(Config, older_first).
+
+
+%%%====================================================================
+%%% Test functions concerning deletion requested over the fuse protocol
+%%%====================================================================
+
+
+%% NOTE: runs on an object storage - what a POSIX one is left with after a
+%% deletion is covered by the cases above, whichever way the deletion was asked for.
+delete_via_fuse_removes_object_from_storage_test(Config) ->
+    Node = file_lifecycle_test_utils:get_node(),
+    SessId = file_lifecycle_test_utils:get_session_id(),
+    SpaceId = ?SPACE_ID(Config),
+
+    % NOTE: the file is given content, as an object storage holds no object for
+    % an empty file - without it the ENOENT expected in the end would be
+    % indistinguishable from there never having been an object
+    {FileGuid, _FilePath} = file_lifecycle_test_utils:create_file_with_content(
+        Node, SessId, SpaceId, ?FILE_CONTENT
+    ),
+    {StorageId, StorageFileId} = file_lifecycle_test_utils:locate_on_storage(
+        Node, SpaceId, FileGuid
+    ),
+    ?assertMatch({ok, _},
+        storage_file_tree_test_utils:stat(?PROVIDER_SELECTOR, StorageId, StorageFileId)),
+
+    {ok, {Sock, _}} = ?assertMatch({ok, _}, fuse_test_utils:connect_via_token(
+        Node, [{active, true}], ?RAND_STR(),
+        oct_background:get_user_access_token(?USER_SELECTOR)
+    )),
+    ok = ssl:send(Sock, fuse_test_utils:generate_delete_file_message(FileGuid, ?FUSE_MSG_ID)),
+    ?assertMatch(#'ServerMessage'{
+        message_id = ?FUSE_MSG_ID,
+        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}}
+    }, fuse_test_utils:receive_server_message()),
+    ok = ssl:close(Sock),
+
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid))),
+    ?assertEqual({error, ?ENOENT},
+        storage_file_tree_test_utils:stat(?PROVIDER_SELECTOR, StorageId, StorageFileId), ?ATTEMPTS).
+
+
+%%%====================================================================
+%%% Test functions driving the steps of the deletion procedure directly
+%%%====================================================================
+
+
+node_restart_deletes_open_files_marked_for_removal_test(Config) ->
+    node_restart_test_base(Config, with_storage_file).
+
+
+node_restart_deletes_open_files_with_no_storage_file_test(Config) ->
+    node_restart_test_base(Config, without_storage_file).
+
+
+release_of_deleted_file_removes_it_from_storage_test(Config) ->
+    release_of_deleted_file_test_base(Config, with_storage_file).
+
+
+release_of_deleted_file_with_no_storage_file_test(Config) ->
+    release_of_deleted_file_test_base(Config, without_storage_file).
+
+
+delete_of_not_opened_file_removes_it_from_storage_test(Config) ->
+    delete_of_not_opened_file_test_base(Config, with_storage_file).
+
+
+delete_of_not_opened_file_with_no_storage_file_test(Config) ->
+    delete_of_not_opened_file_test_base(Config, without_storage_file).
+
+
 %%%====================================================================
 %%% Test functions awaiting the product to catch up
 %%%====================================================================
@@ -220,19 +331,14 @@ delete_during_open_test_base(Config) ->
     % direct IO; the space is discarded after the case, so there is nothing to restore
     ?assertEqual(ok, rpc:call(Node, session, set_direct_io, [SessId, SpaceId, false])),
 
-    {FileGuid, FilePath} = file_lifecycle_test_utils:create_file(Node, SessId, SpaceId),
+    % NOTE: the file is given content before anything else, so that it has a
+    % storage file at all no matter the storage type
+    {FileGuid, FilePath} = file_lifecycle_test_utils:create_file_with_content(
+        Node, SessId, SpaceId, ?FILE_CONTENT
+    ),
     {StorageId, StorageFileId} = file_lifecycle_test_utils:locate_on_storage(
         Node, SpaceId, FileGuid
     ),
-
-    % NOTE: the file is given content before anything else, so that it has a
-    % storage file at all. A POSIX storage gets one as soon as the file is opened,
-    % but an object storage has no empty objects - it only gets one once something
-    % is written (which is why file_lfm_s3_test_SUITE skips the case asserting
-    % that opening a file creates it on the storage).
-    {ok, WriteHandle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), write)),
-    ?assertMatch({ok, _}, lfm_proxy:write(Node, WriteHandle, 0, ?FILE_CONTENT)),
-    ?assertEqual(ok, lfm_proxy:close(Node, WriteHandle)),
     ?assertMatch({ok, _},
         storage_file_tree_test_utils:stat(?PROVIDER_SELECTOR, StorageId, StorageFileId)),
 
@@ -322,3 +428,307 @@ release_during_deletion_of_opened_file_test_base(Config, When) ->
     ?assertEqual([], file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
     ?assertEqual([], file_lifecycle_test_utils:list_deleted_open_files_on_storage(Node, SpaceId)),
     ok.
+
+
+%% @private
+%% @doc
+%% Deletes a file that is open and puts a new one in its place, under the very
+%% same name. The two are different files that merely shared a name, and the
+%% handles held to them stay that way - each reads and writes its own content,
+%% with neither disturbed by what became of the other.
+%% @end
+-spec content_survives_name_takeover_test_base(test_config:config()) -> ok | no_return().
+content_survives_name_takeover_test_base(Config) ->
+    Node = file_lifecycle_test_utils:get_node(),
+    SessId = file_lifecycle_test_utils:get_session_id(),
+    SpaceId = ?SPACE_ID(Config),
+
+    Size = 100,
+    OldContent = crypto:strong_rand_bytes(Size),
+    NewContent = crypto:strong_rand_bytes(Size),
+
+    FilePath = file_lifecycle_test_utils:build_file_path(Node, SessId, SpaceId),
+    {ok, {OldFileGuid, OldHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Node, SessId, FilePath
+    )),
+    ?assertEqual({ok, Size}, lfm_proxy:write(Node, OldHandle, 0, OldContent)),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Node, SessId, {path, FilePath})),
+
+    {ok, {NewFileGuid, NewHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Node, SessId, FilePath
+    )),
+    ?assertEqual({ok, Size}, lfm_proxy:write(Node, NewHandle, 0, NewContent)),
+    ?assertEqual({ok, NewContent}, lfm_proxy:read(Node, NewHandle, 0, Size)),
+
+    % the deleted file is gone from the file tree for good, so it can be neither
+    % looked up nor opened anew...
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, ?FILE_REF(OldFileGuid))),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:open(Node, SessId, ?FILE_REF(OldFileGuid), read)),
+
+    % ...yet the handle opened before it was deleted keeps reading and writing it
+    ?assertEqual({ok, OldContent}, lfm_proxy:read(Node, OldHandle, 0, Size)),
+    ?assertEqual({ok, Size}, lfm_proxy:write(Node, OldHandle, Size, OldContent)),
+    ?assertEqual({ok, <<OldContent/binary, OldContent/binary>>},
+        lfm_proxy:read(Node, OldHandle, 0, 2 * Size)),
+
+    % and none of that reached the file that took over the name, nor does
+    % releasing the handles change what it holds
+    ?assertEqual({ok, NewContent}, lfm_proxy:read(Node, NewHandle, 0, Size)),
+    ?assertEqual(ok, lfm_proxy:close_all(Node)),
+
+    {ok, ReopenedHandle} = ?assertMatch({ok, _}, lfm_proxy:open(
+        Node, SessId, ?FILE_REF(NewFileGuid), read
+    )),
+    ?assertEqual({ok, NewContent}, lfm_proxy:read(Node, ReopenedHandle, 0, Size)),
+    ok.
+
+
+%% @private
+%% @doc
+%% Disposes of two files that shared a name - one deleted while open and hence
+%% living on in the hidden directory for deleted open files, the other holding
+%% the name now - in either order. Whichever goes first, only its own storage
+%% file may go away with it.
+%% @end
+-spec deletion_order_of_two_generations_test_base(
+    test_config:config(), newer_first | older_first
+) ->
+    ok | no_return().
+deletion_order_of_two_generations_test_base(Config, Order) ->
+    Node = file_lifecycle_test_utils:get_node(),
+    SessId = file_lifecycle_test_utils:get_session_id(),
+    SpaceId = ?SPACE_ID(Config),
+
+    FilePath = file_lifecycle_test_utils:build_file_path(Node, SessId, SpaceId),
+    FileName = filename:basename(FilePath),
+
+    {ok, {OldFileGuid, OldHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Node, SessId, FilePath
+    )),
+    ?assertEqual(ok, lfm_proxy:unlink(Node, SessId, ?FILE_REF(OldFileGuid))),
+    ?assertEqual([], file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
+    ?assertEqual([OldFileGuid],
+        file_lifecycle_test_utils:list_deleted_open_files_on_storage(Node, SpaceId)),
+
+    {ok, {NewFileGuid, NewHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Node, SessId, FilePath
+    )),
+    ?assertEqual([FileName], file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
+
+    case Order of
+        newer_first ->
+            % the newer file is deleted while open too, so it joins the older one
+            % in the hidden directory and leaves it once its handle is released
+            ?assertEqual(ok, lfm_proxy:unlink(Node, SessId, ?FILE_REF(NewFileGuid))),
+            ?assertEqual(ok, lfm_proxy:close(Node, NewHandle)),
+            ?assertEqual([OldFileGuid],
+                file_lifecycle_test_utils:list_deleted_open_files_on_storage(Node, SpaceId), ?ATTEMPTS),
+            ?assertEqual([], file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
+            ?assertEqual(ok, lfm_proxy:close(Node, OldHandle));
+
+        older_first ->
+            ?assertEqual(ok, lfm_proxy:close(Node, OldHandle)),
+            ?assertEqual([],
+                file_lifecycle_test_utils:list_deleted_open_files_on_storage(Node, SpaceId), ?ATTEMPTS),
+            ?assertEqual([FileName],
+                file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
+            ?assertEqual(ok, lfm_proxy:unlink(Node, SessId, ?FILE_REF(NewFileGuid))),
+            ?assertEqual(ok, lfm_proxy:close(Node, NewHandle))
+    end,
+
+    ?assertEqual([], file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId), ?ATTEMPTS),
+    ?assertEqual([],
+        file_lifecycle_test_utils:list_deleted_open_files_on_storage(Node, SpaceId), ?ATTEMPTS),
+    ok.
+
+
+%% @private
+%% @doc
+%% Whatever descriptors a provider had open went away with it when it went down,
+%% so on start it clears them all - and a file that was deleted while open, and
+%% was therefore only waiting for its last descriptor to go, is deleted for good
+%% right here (see node_manager_plugin:on_init/1 -> fslogic_delete:cleanup_opened_files/0).
+%% @end
+-spec node_restart_test_base(test_config:config(), storage_file_policy()) -> ok | no_return().
+node_restart_test_base(Config, StorageFilePolicy) ->
+    Node = file_lifecycle_test_utils:get_node(),
+    SessId = file_lifecycle_test_utils:get_session_id(),
+    SpaceId = ?SPACE_ID(Config),
+
+    {DeletedFileGuid, DeletedFilePath} = create_file(Node, SessId, SpaceId, StorageFilePolicy),
+    {KeptFileGuid1, KeptFilePath1} = create_file(Node, SessId, SpaceId, StorageFilePolicy),
+    {KeptFileGuid2, KeptFilePath2} = create_file(Node, SessId, SpaceId, StorageFilePolicy),
+
+    AllFileGuids = [DeletedFileGuid, KeptFileGuid1, KeptFileGuid2],
+    KeptFileNames = lists:sort([filename:basename(KeptFilePath1), filename:basename(KeptFilePath2)]),
+    AllFileNames = lists:sort([filename:basename(DeletedFilePath) | KeptFileNames]),
+
+    ?assertEqual(expected_storage_files(AllFileNames, StorageFilePolicy),
+        file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
+
+    % all three files are open when the provider goes down, and one of them was
+    % deleted in the meantime, so it is only waiting for its descriptors to go
+    lists:foreach(fun(FileGuid) ->
+        ?assertEqual(ok, register_open(Node, SessId, FileGuid))
+    end, AllFileGuids),
+    ?assertEqual([true, true, true], are_files_opened(Node, AllFileGuids)),
+    ?assertEqual(ok, mark_to_remove(Node, DeletedFileGuid)),
+
+    % NOTE: the hook clears the descriptors of every file the node knows of, not
+    % only of the ones opened here - which also rules the suite out of running
+    % its cases in parallel
+    ?assertEqual(ok, rpc:call(Node, fslogic_delete, cleanup_opened_files, [])),
+    ?assertEqual([false, false, false], are_files_opened(Node, AllFileGuids)),
+
+    % the file that was waiting to be deleted is gone, the other two are intact
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, ?FILE_REF(DeletedFileGuid))),
+    ?assertNot(has_file_meta(Node, DeletedFileGuid)),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, ?FILE_REF(KeptFileGuid1))),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, ?FILE_REF(KeptFileGuid2))),
+    ?assertEqual(expected_storage_files(KeptFileNames, StorageFilePolicy),
+        file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId), ?ATTEMPTS),
+    ok.
+
+
+%% @private
+%% @doc
+%% Runs the two steps of deleting an opened file one after the other: the first
+%% takes the file out of the file tree, the second - which the provider runs once
+%% the last descriptor is released - disposes of everything the first left behind.
+%% @end
+-spec release_of_deleted_file_test_base(test_config:config(), storage_file_policy()) ->
+    ok | no_return().
+release_of_deleted_file_test_base(Config, StorageFilePolicy) ->
+    Node = file_lifecycle_test_utils:get_node(),
+    SessId = file_lifecycle_test_utils:get_session_id(),
+    SpaceId = ?SPACE_ID(Config),
+
+    {FileGuid, FilePath} = create_file(Node, SessId, SpaceId, StorageFilePolicy),
+    ?assertEqual(expected_storage_files([filename:basename(FilePath)], StorageFilePolicy),
+        file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
+
+    % the first step takes the file out of the file tree - the name it occupied is
+    % free from now on, while the file itself is still all there
+    UserCtx = rpc:call(Node, user_ctx, new, [SessId]),
+    DetachedFileCtx = rpc:call(Node, fslogic_delete, delete_parent_link, [
+        file_ctx:new_by_guid(FileGuid), UserCtx
+    ]),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, {path, FilePath})),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid))),
+    ?assert(has_file_meta(Node, FileGuid)),
+
+    % and the second disposes of everything the first left behind
+    ?assertEqual(ok, rpc:call(Node, fslogic_delete, handle_release_of_deleted_file, [
+        DetachedFileCtx, ?LOCAL_REMOVE
+    ])),
+
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid))),
+    ?assertNot(has_file_meta(Node, FileGuid)),
+    ?assertEqual([], file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
+    ok.
+
+
+%% @private
+%% @doc
+%% Deletes a file that no one holds a descriptor to, which the provider does in
+%% one step - this is the path a deletion performed by another provider takes
+%% once it reaches this one, hence the file marked as deleted in its own document
+%% beforehand.
+%% @end
+-spec delete_of_not_opened_file_test_base(test_config:config(), storage_file_policy()) ->
+    ok | no_return().
+delete_of_not_opened_file_test_base(Config, StorageFilePolicy) ->
+    Node = file_lifecycle_test_utils:get_node(),
+    SessId = file_lifecycle_test_utils:get_session_id(),
+    SpaceId = ?SPACE_ID(Config),
+
+    {FileGuid, FilePath} = create_file(Node, SessId, SpaceId, StorageFilePolicy),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    ?assertEqual(expected_storage_files([filename:basename(FilePath)], StorageFilePolicy),
+        file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
+
+    % marking the file as deleted does not delete its document - that is what the
+    % procedure below is for
+    ?assertMatch({ok, _}, rpc:call(Node, file_meta, update, [FileUuid, fun(FileMeta) ->
+        {ok, FileMeta#file_meta{deleted = true}}
+    end])),
+    ?assert(has_file_meta(Node, FileGuid)),
+    ?assertEqual(false, rpc:call(Node, file_handles, is_file_opened, [FileUuid])),
+
+    UserCtx = rpc:call(Node, user_ctx, new, [SessId]),
+    ?assertEqual(ok, rpc:call(Node, fslogic_delete, delete_file_locally, [
+        UserCtx, file_ctx:new_by_guid(FileGuid),
+        oct_background:get_provider_id(?PROVIDER_SELECTOR), false, update_dir_stats
+    ])),
+
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid))),
+    ?assertNot(has_file_meta(Node, FileGuid)),
+    ?assertEqual([], file_lifecycle_test_utils:list_space_files_on_storage(Node, SpaceId)),
+    ok.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec create_file(node(), session:id(), od_space:id(), storage_file_policy()) ->
+    {file_id:file_guid(), file_meta:path()}.
+create_file(Node, SessId, SpaceId, with_storage_file) ->
+    file_lifecycle_test_utils:create_file_with_storage_file(Node, SessId, SpaceId);
+create_file(Node, SessId, SpaceId, without_storage_file) ->
+    file_lifecycle_test_utils:create_file(Node, SessId, SpaceId).
+
+
+%% @private
+-spec expected_storage_files([binary()], storage_file_policy()) -> [binary()].
+expected_storage_files(FileNames, with_storage_file) -> lists:sort(FileNames);
+expected_storage_files(_FileNames, without_storage_file) -> [].
+
+
+%% @private
+%% @doc
+%% Registers a descriptor on a file without actually opening it, which is how the
+%% cases above put the provider in the state it would be in with the file open.
+%% @end
+-spec register_open(node(), session:id(), file_id:file_guid()) -> ok | {error, term()}.
+register_open(Node, SessId, FileGuid) ->
+    rpc:call(Node, file_handles, register_open, [
+        file_ctx:new_by_guid(FileGuid), SessId, 1, undefined
+    ]).
+
+
+%% @private
+-spec mark_to_remove(node(), file_id:file_guid()) -> ok | {error, term()}.
+mark_to_remove(Node, FileGuid) ->
+    rpc:call(Node, file_handles, mark_to_remove, [
+        file_ctx:new_by_guid(FileGuid), ?LOCAL_REMOVE
+    ]).
+
+
+%% @private
+%% @doc
+%% Whether the provider still has a document for the file. This is what tells a
+%% file that was disposed of from one that was merely marked as deleted, and
+%% unlike the storage contents it says so for a file that never had a storage
+%% file behind it. NOTE: deleting a document of a synchronized model leaves a
+%% tombstone in its place, so that the deletion reaches the other providers -
+%% the document is therefore fetched including deleted ones and told apart by
+%% the flag the datastore raises on it, exactly as file_meta:get/1 does it.
+%% @end
+-spec has_file_meta(node(), file_id:file_guid()) -> boolean().
+has_file_meta(Node, FileGuid) ->
+    case rpc:call(Node, file_meta, get_including_deleted, [file_id:guid_to_uuid(FileGuid)]) of
+        {ok, #document{deleted = IsDeleted}} -> not IsDeleted;
+        {error, not_found} -> false
+    end.
+
+
+%% @private
+-spec are_files_opened(node(), [file_id:file_guid()]) -> [boolean()].
+are_files_opened(Node, FileGuids) ->
+    lists:map(fun(FileGuid) ->
+        rpc:call(Node, file_handles, is_file_opened, [file_id:guid_to_uuid(FileGuid)])
+    end, FileGuids).

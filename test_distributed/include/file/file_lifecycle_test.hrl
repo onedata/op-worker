@@ -53,6 +53,7 @@ end).
 ).
 
 -define(RUN_CREATION_TEST(__CONFIG), ?RUN_TEST(file_creation_tests, __CONFIG)).
+-define(RUN_HANDLES_TEST(__CONFIG), ?RUN_TEST(file_handles_tests, __CONFIG)).
 -define(RUN_DELETION_TEST(__CONFIG), ?RUN_TEST(file_deletion_tests, __CONFIG)).
 
 -endif.

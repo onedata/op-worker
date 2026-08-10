@@ -43,12 +43,26 @@
     cancelled_create_leaves_no_storage_file_test/1,
     create_file_existing_on_disk_test/1,
 
+    counting_file_open_and_release_test/1,
+    session_deletion_releases_its_open_files_test/1,
+
     delete_during_open_with_deletion_marker_test/1,
     delete_during_open_with_storage_rename_test/1,
     delete_of_opened_file_moves_it_on_storage_test/1,
     name_of_deleted_opened_file_can_be_reused_test/1,
     release_before_deleted_file_is_moved_on_storage_test/1,
     release_after_deleted_file_is_moved_on_storage_test/1,
+    content_of_deleted_opened_file_survives_name_takeover_test/1,
+    content_of_deleted_opened_file_survives_name_takeover_on_object_storage_test/1,
+    delete_of_newer_generation_first_leaves_older_on_storage_test/1,
+    delete_of_older_generation_first_leaves_newer_on_storage_test/1,
+    delete_via_fuse_removes_object_from_storage_test/1,
+    node_restart_deletes_open_files_marked_for_removal_test/1,
+    node_restart_deletes_open_files_with_no_storage_file_test/1,
+    release_of_deleted_file_removes_it_from_storage_test/1,
+    release_of_deleted_file_with_no_storage_file_test/1,
+    delete_of_not_opened_file_removes_it_from_storage_test/1,
+    delete_of_not_opened_file_with_no_storage_file_test/1,
     rename_to_opened_file_test/1
 ]).
 
@@ -63,19 +77,38 @@ groups() -> [
         %%    create_file_existing_on_disk_test % TODO VFS-5271
     ]},
 
+    {handles_tests, [], [
+        counting_file_open_and_release_test,
+        session_deletion_releases_its_open_files_test
+    ]},
+
     {deletion_tests, [], [
         delete_during_open_with_deletion_marker_test,
         delete_during_open_with_storage_rename_test,
         delete_of_opened_file_moves_it_on_storage_test,
         name_of_deleted_opened_file_can_be_reused_test,
         release_before_deleted_file_is_moved_on_storage_test,
-        release_after_deleted_file_is_moved_on_storage_test
+        release_after_deleted_file_is_moved_on_storage_test,
+        content_of_deleted_opened_file_survives_name_takeover_test,
+        content_of_deleted_opened_file_survives_name_takeover_on_object_storage_test,
+        delete_of_newer_generation_first_leaves_older_on_storage_test,
+        delete_of_older_generation_first_leaves_newer_on_storage_test,
+
+        delete_via_fuse_removes_object_from_storage_test,
+
+        node_restart_deletes_open_files_marked_for_removal_test,
+        node_restart_deletes_open_files_with_no_storage_file_test,
+        release_of_deleted_file_removes_it_from_storage_test,
+        release_of_deleted_file_with_no_storage_file_test,
+        delete_of_not_opened_file_removes_it_from_storage_test,
+        delete_of_not_opened_file_with_no_storage_file_test
         %%    rename_to_opened_file_test % TODO VFS-5290
     ]}
 ].
 
 all() -> [
     {group, creation_tests},
+    {group, handles_tests},
     {group, deletion_tests}
 ].
 
@@ -90,7 +123,17 @@ all() -> [
 % cannot rename a file; every other case gets a POSIX storage, which is what the
 % assertions on the storage contents by file name require.
 -define(OBJECT_STORAGE_CASES, [
-    delete_during_open_with_deletion_marker_test
+    delete_during_open_with_deletion_marker_test,
+    content_of_deleted_opened_file_survives_name_takeover_on_object_storage_test,
+    delete_via_fuse_removes_object_from_storage_test
+]).
+
+% Test cases working on the file_handles model directly, on a file that exists
+% nowhere else (see file_handles_tests) - they need neither a space nor a storage,
+% only fuse sessions of their own, which they clean up after instead.
+-define(CASES_WITHOUT_A_SPACE, [
+    counting_file_open_and_release_test,
+    session_deletion_releases_its_open_files_test
 ]).
 
 
@@ -128,6 +171,19 @@ create_file_existing_on_disk_test(Config) ->
 
 
 %%%====================================================================
+%%% Handles tests
+%%%====================================================================
+
+
+counting_file_open_and_release_test(Config) ->
+    ?RUN_HANDLES_TEST(Config).
+
+
+session_deletion_releases_its_open_files_test(Config) ->
+    ?RUN_HANDLES_TEST(Config).
+
+
+%%%====================================================================
 %%% Deletion tests
 %%%====================================================================
 
@@ -156,6 +212,50 @@ release_after_deleted_file_is_moved_on_storage_test(Config) ->
     ?RUN_DELETION_TEST(Config).
 
 
+content_of_deleted_opened_file_survives_name_takeover_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
+content_of_deleted_opened_file_survives_name_takeover_on_object_storage_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
+delete_of_newer_generation_first_leaves_older_on_storage_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
+delete_of_older_generation_first_leaves_newer_on_storage_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
+delete_via_fuse_removes_object_from_storage_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
+node_restart_deletes_open_files_marked_for_removal_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
+node_restart_deletes_open_files_with_no_storage_file_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
+release_of_deleted_file_removes_it_from_storage_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
+release_of_deleted_file_with_no_storage_file_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
+delete_of_not_opened_file_removes_it_from_storage_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
+delete_of_not_opened_file_with_no_storage_file_test(Config) ->
+    ?RUN_DELETION_TEST(Config).
+
+
 rename_to_opened_file_test(Config) ->
     ?RUN_DELETION_TEST(Config).
 
@@ -168,8 +268,12 @@ rename_to_opened_file_test(Config) ->
 init_per_suite(Config) ->
     % NOTE: every module whose code runs on the provider node must be listed - the
     % test modules because their mocks ship functions there, and
-    % storage_file_tree_test_utils because it dispatches to itself over rpc
-    LoadModules = [file_creation_tests, file_deletion_tests, storage_file_tree_test_utils],
+    % storage_file_tree_test_utils and fuse_test_utils because they dispatch to
+    % themselves over rpc
+    LoadModules = [
+        file_creation_tests, file_handles_tests, file_deletion_tests,
+        storage_file_tree_test_utils, fuse_test_utils
+    ],
 
     opt:init_per_suite([{?LOAD_MODULES, LoadModules} | Config], #onenv_test_config{
         % NOTE: the scenario is needed for the s3 volume it deploys, not for the
@@ -193,24 +297,36 @@ end_per_suite(_Config) ->
 
 init_per_testcase(Case, Config) ->
     ct:timetrap({minutes, 5}),
-    SpaceId = space_setup_utils:set_up_space(#space_spec{
-        name = Case,
-        owner = ?USER_SELECTOR,
-        supports = [#support_spec{
-            provider = ?PROVIDER_SELECTOR,
-            storage_spec = create_storage_for(Case),
-            size = 1073741824
-        }]
-    }),
-    lfm_proxy:init([{space_id, SpaceId} | Config]).
+
+    case lists:member(Case, ?CASES_WITHOUT_A_SPACE) of
+        true ->
+            Config;
+        false ->
+            SpaceId = space_setup_utils:set_up_space(#space_spec{
+                name = Case,
+                owner = ?USER_SELECTOR,
+                supports = [#support_spec{
+                    provider = ?PROVIDER_SELECTOR,
+                    storage_spec = create_storage_for(Case),
+                    size = 1073741824
+                }]
+            }),
+            lfm_proxy:init([{space_id, SpaceId} | Config])
+    end.
 
 
-end_per_testcase(_Case, Config) ->
+end_per_testcase(Case, Config) ->
     Node = file_lifecycle_test_utils:get_node(),
-    % release the handles while the mocks are still in place - the release path
-    % goes through some of the mocked modules
-    ?assertEqual(ok, lfm_proxy:close_all(Node)),
+
+    % whatever is undone here must be undone while the mocks are still in place -
+    % both the release of a handle and the deletion of a session go through them
+    case lists:member(Case, ?CASES_WITHOUT_A_SPACE) of
+        true -> file_handles_tests:clean_up(Node);
+        false -> ?assertEqual(ok, lfm_proxy:close_all(Node))
+    end,
     ok = test_utils:mock_unload(Node, ?MOCKED_MODULES),
+
+    % NOTE: safe to call even for the cases that never started the proxy
     lfm_proxy:teardown(Config).
 
 
