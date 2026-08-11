@@ -16,8 +16,12 @@
 %%% and told apart on the providers supporting the space - is covered by
 %%% view_multi_provider_test_SUITE.
 %%%
-%%% All the cases share one space; they collide with nothing because every view
-%%% they create is named after the case that creates it.
+%%% All the cases share one space and none of them cleans up after itself. The
+%%% ones asserting the exact set of documents of a given type therefore need a
+%%% space no earlier run has left a file or an xattr in - the suite is written
+%%% for the fresh deployment CI gives it and will not survive a rerun against a
+%%% reused one. The views themselves never collide, as each is named after the
+%%% case that creates it.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(view_single_provider_test_SUITE).
@@ -329,7 +333,7 @@ map_function_receives_times_documents_test(_Config) ->
 map_function_receives_no_custom_metadata_without_xattrs_test(_Config) ->
     ViewName = ?view_name,
     SimpleMapFunction = <<"
-        function(id, file_meta, times, custom_metadata, file_popularity, ctx) {
+        function(id, type, meta, ctx) {
             if(type == 'custom_metadata')
                 return [id, meta];
         }
