@@ -12,6 +12,11 @@
 -module(multi_provider_file_ops_test_base).
 -author("Jakub Kudzia").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("global_definitions.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").

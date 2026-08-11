@@ -31,6 +31,11 @@
 -module(storage_import_race_test_base).
 -author("Bartosz Walkowicz").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("storage/storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").

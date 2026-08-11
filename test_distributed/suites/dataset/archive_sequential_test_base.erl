@@ -13,6 +13,11 @@
 -author("Jakub Kudzia").
 
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("file/file_tree_test.hrl").
 -include("test_rpc.hrl").
 -include("modules/logical_file_manager/lfm.hrl").

@@ -24,6 +24,11 @@
 -module(file_handles_tests).
 -author("Michal Wrona").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("file/file_lifecycle_test.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

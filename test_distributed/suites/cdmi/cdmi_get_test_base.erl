@@ -12,6 +12,11 @@
 -module(cdmi_get_test_base).
 -author("Katarzyna Such").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("cdmi/cdmi_test.hrl").
 -include("http/cdmi.hrl").
 -include("modules/logical_file_manager/lfm.hrl").

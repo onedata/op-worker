@@ -13,6 +13,11 @@
 -module(atm_workflow_execution_iteration_tests).
 -author("Bartosz Walkowicz").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("atm/atm_workflow_execution_test.hrl").
 
 -export([
