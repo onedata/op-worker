@@ -17,7 +17,7 @@
 %%% open in exactly there, and then checks both what the callers got back and
 %%% what was left on the storage.
 %%%
-%%% The bodies are dispatched to from file_lifecycle_test_SUITE, which gives every
+%%% The bodies are dispatched to from file_lifecycle_races_test_SUITE, which gives every
 %%% case a space of its own backed by a freshly created storage - hence the
 %%% storage contents can be asserted in absolute terms.
 %%% @end

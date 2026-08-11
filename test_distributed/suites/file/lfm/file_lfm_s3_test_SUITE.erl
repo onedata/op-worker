@@ -6,10 +6,18 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of the lfm API on an s3 storage. This module holds only the wiring -
-%%% every test body lives in the per-topic file_lfm_*_tests module the group
-%%% belongs to, and is shared with file_lfm_posix_test_SUITE, whose coverage is
-%%% a superset of this one.
+%%% Tests of the lfm API on an s3 storage - the breadth of its surface, one
+%%% operation at a time. This module holds only the wiring - every test body
+%%% lives in the per-topic file_lfm_*_tests module the group belongs to, and is
+%%% shared with file_lfm_posix_test_SUITE, whose coverage is a superset of this
+%%% one.
+%%%
+%%% What the provider leaves on the storage when two file operations overlap in
+%%% time, or a node restarts with files still open, belongs to
+%%% file_lifecycle_races_test_SUITE, not here.
+%%%
+%%% All the cases share the space the scenario sets up; it is emptied after every
+%%% one of them.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_lfm_s3_test_SUITE).

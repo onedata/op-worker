@@ -17,7 +17,7 @@
 %%% one that does not has it left in place under a deletion marker (see
 %%% fslogic_delete:get_open_file_handling_method/1).
 %%%
-%%% The bodies are dispatched to from file_lifecycle_test_SUITE, which gives every
+%%% The bodies are dispatched to from file_lifecycle_races_test_SUITE, which gives every
 %%% case a space of its own backed by a freshly created storage - hence the
 %%% storage contents can be asserted in absolute terms.
 %%% @end

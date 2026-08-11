@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Definitions shared by file_lifecycle_test_SUITE, which holds only the wiring,
+%%% Definitions shared by file_lifecycle_races_test_SUITE, which holds only the wiring,
 %%% and the per-aspect file_*_tests modules holding the test bodies, which the
 %%% ?RUN_*_TEST macros below dispatch to.
 %%% @end

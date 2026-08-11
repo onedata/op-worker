@@ -6,10 +6,19 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of the lifecycle of a file - its creation, the handles held to it and
-%%% its deletion - seen from the inside of the provider, down to what each step
-%%% leaves on the storage. This module holds only the wiring; every test body
-%%% lives in the file_*_tests module for the aspect its group covers.
+%%% Tests of what the creation and the deletion of a file leave on the storage
+%%% when something else happens at the same time - a second open, a delete of a
+%%% file still held open, a handle released mid-deletion, a node restarted with
+%%% files open. This module holds only the wiring; every test body lives in the
+%%% file_*_tests module for the aspect its group covers.
+%%%
+%%% Not every case here is a race. The deletion_procedure_tests group drives the
+%%% steps of the deletion procedure directly, with nothing running against them,
+%%% to pin down what each step answers for on its own.
+%%%
+%%% The lfm API surface itself - what each operation returns, across the breadth
+%%% of the API and on either storage backend - belongs to
+%%% file_lfm_posix_test_SUITE and file_lfm_s3_test_SUITE, not here.
 %%%
 %%% Every case runs in a space of its own, backed by a freshly created storage,
 %%% which lets the storage contents be asserted in absolute terms. The space is
@@ -17,7 +26,7 @@
 %%% inspection - the next run of the suite cleans it up.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_lifecycle_test_SUITE).
+-module(file_lifecycle_races_test_SUITE).
 -author("Michal Wrzeszcz").
 
 -include("env/space_setup_utils.hrl").
@@ -77,12 +86,15 @@ groups() -> [
         %%    create_file_existing_on_disk_test % TODO VFS-5271
     ]},
 
-    {handles_tests, [], [
+    % NOTE: named after the file_handles model rather than after the lfm handle -
+    % these cases work on the provider's registry of open files, not on what an
+    % lfm open hands back (that is file_lfm_{posix,s3}_test_SUITE's handles_tests)
+    {open_file_registry_tests, [], [
         counting_file_open_and_release_test,
         session_deletion_releases_its_open_files_test
     ]},
 
-    {deletion_tests, [], [
+    {deletion_of_open_file_tests, [], [
         delete_during_open_with_deletion_marker_test,
         delete_during_open_with_storage_rename_test,
         delete_of_opened_file_moves_it_on_storage_test,
@@ -92,24 +104,29 @@ groups() -> [
         content_of_deleted_opened_file_survives_name_takeover_test,
         content_of_deleted_opened_file_survives_name_takeover_on_object_storage_test,
         delete_of_newer_generation_first_leaves_older_on_storage_test,
-        delete_of_older_generation_first_leaves_newer_on_storage_test,
+        delete_of_older_generation_first_leaves_newer_on_storage_test
+        %%    rename_to_opened_file_test % TODO VFS-5290
+    ]},
 
+    % NOTE: unlike the group above, nothing races the deletion here - these cases
+    % ask for it over the fuse protocol or drive the steps of the deletion
+    % procedure directly, and check what each of them leaves on the storage
+    {deletion_procedure_tests, [], [
         delete_via_fuse_removes_object_from_storage_test,
-
         node_restart_deletes_open_files_marked_for_removal_test,
         node_restart_deletes_open_files_with_no_storage_file_test,
         release_of_deleted_file_removes_it_from_storage_test,
         release_of_deleted_file_with_no_storage_file_test,
         delete_of_not_opened_file_removes_it_from_storage_test,
         delete_of_not_opened_file_with_no_storage_file_test
-        %%    rename_to_opened_file_test % TODO VFS-5290
     ]}
 ].
 
 all() -> [
     {group, creation_tests},
-    {group, handles_tests},
-    {group, deletion_tests}
+    {group, open_file_registry_tests},
+    {group, deletion_of_open_file_tests},
+    {group, deletion_procedure_tests}
 ].
 
 % modules mocked by the test cases; unloaded after every one of them regardless

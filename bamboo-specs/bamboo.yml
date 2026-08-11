@@ -136,7 +136,7 @@ stages:
         - events_reliability_2op
         - file_lfm_posix
         - file_lfm_s3
-        - file_lifecycle
+        - file_lifecycle_races
         - file_links_reconciliation_traverse
         - file_popularity
         - file_registration_http
@@ -1088,12 +1088,12 @@ file_lfm_s3:
     - <<: *ct_logs
       name: ct_logs_file_lfm_s3.tar.gz
 
-file_lifecycle:
+file_lifecycle_races:
   <<: *ct-onenv-job
   key: FIL
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_file_lifecycle.tar.gz
+      name: ct_logs_file_lifecycle_races.tar.gz
 
 file_links_reconciliation_traverse:
   <<: *ct-onenv-job
@@ -2009,7 +2009,7 @@ Coverage report:
     - artifact: ct_logs_events_reliability_2op.tar.gz
     - artifact: ct_logs_file_lfm_posix.tar.gz
     - artifact: ct_logs_file_lfm_s3.tar.gz
-    - artifact: ct_logs_file_lifecycle.tar.gz
+    - artifact: ct_logs_file_lifecycle_races.tar.gz
     - artifact: ct_logs_file_links_reconciliation_traverse.tar.gz
     - artifact: ct_logs_file_popularity.tar.gz
     - artifact: ct_logs_file_registration_http.tar.gz

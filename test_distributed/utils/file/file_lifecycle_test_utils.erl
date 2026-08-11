@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helpers shared by the file_*_tests modules wired into file_lifecycle_test_SUITE.
+%%% Helpers shared by the file_*_tests modules wired into file_lifecycle_races_test_SUITE.
 %%% They come in three kinds:
 %%%
 %%% - resolving the node and the session the whole family works against, and
