@@ -240,8 +240,8 @@ stages:
         - tree_deletion_traverse
         - tree_traverse_listing
         - user_auth
-        - view
-        - view_rest
+        - view_multi_provider
+        - view_single_provider
         - webdav_helper
         - webdav_token
         - workflow_scheduling
@@ -1834,19 +1834,19 @@ user_auth:
     - <<: *ct_logs
       name: ct_logs_user_auth.tar.gz
 
-view:
-  <<: *ct-onenv-job
-  key: INDEX
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_view.tar.gz
-
-view_rest:
+view_multi_provider:
   <<: *ct-onenv-job
   key: MULIDX
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_view_rest.tar.gz
+      name: ct_logs_view_multi_provider.tar.gz
+
+view_single_provider:
+  <<: *ct-onenv-job
+  key: INDEX
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_view_single_provider.tar.gz
 
 webdav_helper:
   <<: *ct-job
@@ -2113,8 +2113,8 @@ Coverage report:
     - artifact: ct_logs_tree_deletion_traverse.tar.gz
     - artifact: ct_logs_tree_traverse_listing.tar.gz
     - artifact: ct_logs_user_auth.tar.gz
-    - artifact: ct_logs_view.tar.gz
-    - artifact: ct_logs_view_rest.tar.gz
+    - artifact: ct_logs_view_multi_provider.tar.gz
+    - artifact: ct_logs_view_single_provider.tar.gz
     - artifact: ct_logs_webdav_helper.tar.gz
     - artifact: ct_logs_webdav_token.tar.gz
     - artifact: ct_logs_workflow_scheduling.tar.gz

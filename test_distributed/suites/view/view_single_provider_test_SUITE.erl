@@ -5,10 +5,22 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Basic tests of couchbase views.
+%%% Tests of how a view is evaluated - what a map function is handed for each
+%%% document type flowing through the space, and how a function that throws or
+%%% emits a malformed key is treated. None of that depends on more than one
+%%% provider holding the definition, so the suite runs on a single one and
+%%% drives the internal view API directly, bypassing REST.
+%%%
+%%% The API through which views are actually managed - its parameter
+%%% sanitization and privilege checks, and the way a definition is propagated to
+%%% and told apart on the providers supporting the space - is covered by
+%%% view_multi_provider_test_SUITE.
+%%%
+%%% All the cases share one space; they collide with nothing because every view
+%%% they create is named after the case that creates it.
 %%% @end
 %%%-------------------------------------------------------------------
--module(view_test_SUITE).
+-module(view_single_provider_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("modules/dataset/archivisation_tree.hrl").

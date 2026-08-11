@@ -13,17 +13,23 @@
 %%%
 %%% A view is defined per space; its definition is dbsync-synced to every
 %%% supporting provider, but evaluated (and hence queryable) only on the
-%%% providers listed in the definition. All the test cases therefore
-%%% exercise the API on more than one provider - the suite runs on three,
-%%% which is the minimum for the view name to be ambiguous on a provider
-%%% holding none of the conflicting definitions itself.
+%%% providers listed in the definition. Almost every case therefore exercises
+%%% the API on more than one provider - the suite runs on three, which is the
+%%% minimum for the view name to be ambiguous on a provider holding none of the
+%%% conflicting definitions itself. The few cases that would do with one
+%%% provider ride along rather than pay a second deployment.
 %%%
 %%% The view evaluation semantics (what a map/reduce function emits for
-%%% which document type) are covered by view_test_SUITE, which drives the
-%%% internal API directly.
+%%% which document type) are covered by view_single_provider_test_SUITE, which
+%%% drives the internal API directly.
+%%%
+%%% All the cases share one space supported by all three providers, plus one
+%%% supported by a single provider for the case checking how the other two
+%%% react to a space they do not support. Each case starts from a space wiped
+%%% of files and views, with the client's space privileges restored.
 %%% @end
 %%%-------------------------------------------------------------------
--module(view_rest_test_SUITE).
+-module(view_multi_provider_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("view/view_test.hrl").
