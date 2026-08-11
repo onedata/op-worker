@@ -10,7 +10,7 @@
 %%% when something else happens at the same time - a second open, a delete of a
 %%% file still held open, a handle released mid-deletion, a node restarted with
 %%% files open. This module holds only the wiring; every test body lives in the
-%%% file_*_tests module for the aspect its group covers.
+%%% file_lifecycle_*_tests module for the aspect its group covers.
 %%%
 %%% Not every case here is a race. The deletion_procedure_tests group drives the
 %%% steps of the deletion procedure directly, with nothing running against them,
@@ -146,8 +146,8 @@ all() -> [
 ]).
 
 % Test cases working on the file_handles model directly, on a file that exists
-% nowhere else (see file_handles_tests) - they need neither a space nor a storage,
-% only fuse sessions of their own, which they clean up after instead.
+% nowhere else (see file_lifecycle_handles_tests) - they need neither a space nor
+% a storage, only fuse sessions of their own, which they clean up after instead.
 -define(CASES_WITHOUT_A_SPACE, [
     counting_file_open_and_release_test,
     session_deletion_releases_its_open_files_test
@@ -288,7 +288,7 @@ init_per_suite(Config) ->
     % storage_file_tree_test_utils and fuse_test_utils because they dispatch to
     % themselves over rpc
     LoadModules = [
-        file_creation_tests, file_handles_tests, file_deletion_tests,
+        file_lifecycle_creation_tests, file_lifecycle_handles_tests, file_lifecycle_deletion_tests,
         storage_file_tree_test_utils, fuse_test_utils
     ],
 
@@ -338,7 +338,7 @@ end_per_testcase(Case, Config) ->
     % whatever is undone here must be undone while the mocks are still in place -
     % both the release of a handle and the deletion of a session go through them
     case lists:member(Case, ?CASES_WITHOUT_A_SPACE) of
-        true -> file_handles_tests:clean_up(Node);
+        true -> file_lifecycle_handles_tests:clean_up(Node);
         false -> ?assertEqual(ok, lfm_proxy:close_all(Node))
     end,
     ok = test_utils:mock_unload(Node, ?MOCKED_MODULES),

@@ -21,7 +21,7 @@
 %%% deletion cases depend on, one level below where those observe it.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_handles_tests).
+-module(file_lifecycle_handles_tests).
 -author("Michal Wrona").
 
 % This module indirectly includes eunit.hrl, whose parse transform would

@@ -22,7 +22,7 @@
 %%% storage contents can be asserted in absolute terms.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_creation_tests).
+-module(file_lifecycle_creation_tests).
 -author("Michal Wrzeszcz").
 
 % This module indirectly includes eunit.hrl, whose parse transform would

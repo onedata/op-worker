@@ -6,9 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Definitions shared by file_lifecycle_races_test_SUITE, which holds only the wiring,
-%%% and the per-aspect file_*_tests modules holding the test bodies, which the
-%%% ?RUN_*_TEST macros below dispatch to.
+%%% Definitions shared by file_lifecycle_races_test_SUITE, which holds only the
+%%% wiring, and the per-aspect file_lifecycle_*_tests modules holding the test
+%%% bodies, which the ?RUN_*_TEST macros below dispatch to.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -52,8 +52,8 @@ end).
     end
 ).
 
--define(RUN_CREATION_TEST(__CONFIG), ?RUN_TEST(file_creation_tests, __CONFIG)).
--define(RUN_HANDLES_TEST(__CONFIG), ?RUN_TEST(file_handles_tests, __CONFIG)).
--define(RUN_DELETION_TEST(__CONFIG), ?RUN_TEST(file_deletion_tests, __CONFIG)).
+-define(RUN_CREATION_TEST(__CONFIG), ?RUN_TEST(file_lifecycle_creation_tests, __CONFIG)).
+-define(RUN_HANDLES_TEST(__CONFIG), ?RUN_TEST(file_lifecycle_handles_tests, __CONFIG)).
+-define(RUN_DELETION_TEST(__CONFIG), ?RUN_TEST(file_lifecycle_deletion_tests, __CONFIG)).
 
 -endif.
