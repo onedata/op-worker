@@ -136,7 +136,16 @@
 %%%    their own) into the same second as the storage mutation - flipping the
 %%%    root's verdict from "modified" back to "unmodified".
 %%% On flat (object) storages neither race exists as long as the suite installs
-%%% mock_space_dir_statbuf_on_flat_storage/1 (see the previous section).
+%%% mock_space_dir_statbuf_on_flat_storage/1 (see the previous section) - but
+%%% that immunity covers the ROOT only. Every other entry keeps its real storage
+%%% mtime on a flat storage too, so a same-size content change - whose only
+%%% trace is the mtime, both in the file's own verdict and in the
+%%% children-attrs batch hash that decides whether the file is examined at all
+%%% - remains subject to the very same 1-second granularity. Hence
+%%% ensure_mtime_progression/1 sleeps it out on flat storages just as it does
+%%% on POSIX; skipping that sleep makes the next scan miss the change outright
+%%% (it classifies everything "unmodified"), and on a file replicated to the
+%%% other provider the stale replica is then never invalidated.
 %%%
 %%% Policy: tests whose SUBJECT is the classification itself assert the root
 %%% verdict exactly (accepting the residual per-mille flake); tests where the
@@ -639,15 +648,18 @@ advance_mocked_space_dir_mtime(ImportingProviderSelector, SpaceId, Seconds) ->
 %% @doc
 %% Guarantees that storage changes made after this call are perceived by the
 %% next scan in a strictly later storage-mtime tick than anything recorded by
-%% the previous scan. Both the dir-modified classification and the
-%% deletion-detection gate compare mtimes recorded with 1-second granularity,
-%% so without this call a mutation landing in the same second as the previous
-%% scan's stat may go unnoticed (see the "mtime granularity and root-verdict
-%% races" section of the module doc).
-%%  * on posix (block) storages mtimes are real - sleep out the granularity;
-%%  * on flat (object) storages the space root statbuf is mocked to a constant
-%%    (see mock_space_dir_statbuf_on_flat_storage/1) and real time plays no
-%%    role - the mocked mtime is advanced explicitly instead.
+%% the previous scan. The dir-modified classification, the deletion-detection
+%% gate and a regular file's own modified verdict all compare mtimes recorded
+%% with 1-second granularity, so without this call a mutation landing in the
+%% same second as the previous scan's stat may go unnoticed (see the "mtime
+%% granularity and root-verdict races" section of the module doc).
+%%
+%% Storage mtimes are real on BOTH storage types - the flat-storage statbuf
+%% mock (see mock_space_dir_statbuf_on_flat_storage/1) covers the space root
+%% only - so the real granularity must be slept out either way. On a flat
+%% storage the root's mocked mtime is, additionally, advanced explicitly; the
+%% sleep alone would never move it.
+%%
 %% Call it in every test that mutates the imported storage between scans, right
 %% before the mutation.
 %% @end
@@ -662,7 +674,8 @@ ensure_mtime_progression(#storage_import_test_case_ctx{
     space_id = SpaceId,
     importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
 }) ->
-    advance_mocked_space_dir_mtime(ImportingProviderSelector, SpaceId, 1).
+    advance_mocked_space_dir_mtime(ImportingProviderSelector, SpaceId, 1),
+    timer:sleep(timer:seconds(1)).
 
 
 %%--------------------------------------------------------------------
