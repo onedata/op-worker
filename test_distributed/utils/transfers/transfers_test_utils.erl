@@ -23,7 +23,7 @@
 
 %% API
 -export([
-    get_transfer/2, provider_id/1, ensure_transfers_removed/1,
+    provider_id/1, ensure_transfers_removed/1,
     list_ended_transfers/2, list_waiting_transfers/2, list_ongoing_transfers/2,
     get_ongoing_transfers_for_file/2, get_ended_transfers_for_file/2,
     remove_transfers/1, unmock_replication_worker/1,

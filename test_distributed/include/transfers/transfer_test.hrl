@@ -36,5 +36,14 @@
 -define(RAND_CONTENT(), ?RAND_CONTENT(rand:uniform(?RAND_CONTENT_MAX_SIZE))).
 -define(RAND_CONTENT(__SIZE), crypto:strong_rand_bytes(__SIZE)).
 
+% Number of files in the test cases transferring a large file tree - it must
+% exceed the default transfer_traverse_list_batch_size only in the case that
+% lowers it, so this is simply "many files", not a boundary.
+-define(MANY_FILES_COUNT, 100).
+% Number of files in the test cases scheduling a separate transfer per file.
+% There the count is the number of concurrent transfers, which is both what
+% the case exercises and what dominates its cost - hence the lower value.
+-define(MANY_TRANSFERS_COUNT, 50).
+
 
 -endif.
