@@ -9,7 +9,7 @@
 %%% This module provides base for testing automation stores based on infinite log.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_infinite_log_based_stores_test_base).
+-module(atm_store_infinite_log_based_tests).
 -author("Bartosz Walkowicz").
 
 % This module indirectly includes eunit.hrl, whose parse transform would

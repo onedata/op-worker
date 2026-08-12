@@ -6,10 +6,28 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of automation time series store.
+%%% Tests of the automation time series store, exercised directly through
+%%% 'atm_store_api' - creation, content updates, browsing and iteration
+%%% over the matrix of item data types the store accepts.
+%%%
+%%% There is no shared base for this store - its content model (time series
+%%% with metrics) has nothing in common with the other stores, so every
+%%% case here is time-series specific.
+%%%
+%%% Deliberately NOT covered here: how the store behaves as part of a
+%%% running workflow execution - being iterated over to feed tasks, or
+%%% receiving mapped task results - which belongs to
+%%% 'atm_workflow_execution_test_SUITE'; and the validation and conversion
+%%% rules of the data types themselves, which belong to
+%%% 'atm_value_test_SUITE'.
+%%%
+%%% Every case builds its own stores on a synthetic workflow execution
+%%% auth, so cases share nothing but the deployment and may run in
+%%% parallel. Cases that move the frozen clock are kept in a sequential
+%%% group, because the freeze is global to the provider.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_time_series_store_test_SUITE).
+-module(atm_store_time_series_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("atm/atm_test_store.hrl").
@@ -37,7 +55,7 @@
 ]).
 
 groups() -> [
-    {all_tests, [parallel], [
+    {time_series_specific_tests, [parallel], [
         create_test,
         copy_test,
         manage_content_test,
@@ -46,7 +64,7 @@ groups() -> [
 ].
 
 all() -> [
-    {group, all_tests}
+    {group, time_series_specific_tests}
 ].
 
 

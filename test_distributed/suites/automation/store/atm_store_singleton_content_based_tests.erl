@@ -10,7 +10,7 @@
 %%% storing only single item.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_singleton_content_based_stores_test_base).
+-module(atm_store_singleton_content_based_tests).
 -author("Bartosz Walkowicz").
 
 % This module indirectly includes eunit.hrl, whose parse transform would
