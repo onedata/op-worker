@@ -97,13 +97,7 @@ stages:
         - archivestorage_helper
         - archivisation_cancellation
         - atm_openfaas_activity_feed
-        - atm_store_audit_log
-        - atm_store_exception
-        - atm_store_list
-        - atm_store_range
-        - atm_store_single_value
-        - atm_store_time_series
-        - atm_store_tree_forest
+        - atm_store
         - atm_value
         - atm_workflow_execution
         - atm_workflow_executions_collection
@@ -809,54 +803,12 @@ atm_openfaas_activity_feed:
     - <<: *ct_logs
       name: ct_logs_atm_openfaas_activity_feed.tar.gz
 
-atm_store_audit_log:
+atm_store:
   <<: *ct-onenv-job
-  key: AALS
+  key: ATMSTORE
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_atm_store_audit_log.tar.gz
-
-atm_store_exception:
-  <<: *ct-onenv-job
-  key: ATMEXCST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_store_exception.tar.gz
-
-atm_store_list:
-  <<: *ct-onenv-job
-  key: ATMLST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_store_list.tar.gz
-
-atm_store_range:
-  <<: *ct-onenv-job
-  key: ATMRST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_store_range.tar.gz
-
-atm_store_single_value:
-  <<: *ct-onenv-job
-  key: ATMSVST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_store_single_value.tar.gz
-
-atm_store_time_series:
-  <<: *ct-onenv-job
-  key: ATMTSSTEST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_store_time_series.tar.gz
-
-atm_store_tree_forest:
-  <<: *ct-onenv-job
-  key: ATMTFST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_store_tree_forest.tar.gz
+      name: ct_logs_atm_store.tar.gz
 
 atm_value:
   <<: *ct-onenv-job
@@ -1970,13 +1922,7 @@ Coverage report:
     - artifact: ct_logs_archivestorage_helper.tar.gz
     - artifact: ct_logs_archivisation_cancellation.tar.gz
     - artifact: ct_logs_atm_openfaas_activity_feed.tar.gz
-    - artifact: ct_logs_atm_store_audit_log.tar.gz
-    - artifact: ct_logs_atm_store_exception.tar.gz
-    - artifact: ct_logs_atm_store_list.tar.gz
-    - artifact: ct_logs_atm_store_range.tar.gz
-    - artifact: ct_logs_atm_store_single_value.tar.gz
-    - artifact: ct_logs_atm_store_time_series.tar.gz
-    - artifact: ct_logs_atm_store_tree_forest.tar.gz
+    - artifact: ct_logs_atm_store.tar.gz
     - artifact: ct_logs_atm_value.tar.gz
     - artifact: ct_logs_atm_workflow_execution.tar.gz
     - artifact: ct_logs_atm_workflow_executions_collection.tar.gz

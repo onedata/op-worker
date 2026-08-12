@@ -26,11 +26,6 @@
 
 %% API
 -export([
-    modules_to_load/0,
-    init_per_group/1,
-    end_per_group/1
-]).
--export([
     create_test_base/2,
     update_content_test_base/4,
     browse_content_test_base/5
@@ -45,19 +40,6 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-
-modules_to_load() ->
-    [?MODULE, atm_store_test_utils].
-
-
-init_per_group(Config) ->
-    time_test_utils:freeze_time(Config),
-    Config.
-
-
-end_per_group(Config) ->
-    time_test_utils:unfreeze_time(Config).
 
 
 -spec create_test_base(

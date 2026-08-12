@@ -6,31 +6,23 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of the automation range store, exercised directly through
-%%% 'atm_store_api' - creation, content updates, browsing and iteration
-%%% over the matrix of item data types the store accepts.
+%%% Bodies of the automation range store test cases, run by
+%%% 'atm_store_test_SUITE'.
 %%%
-%%% Behaviour shared with the other singleton-content stores lives in
-%%% 'atm_store_singleton_content_based_tests'; this suite only supplies the
-%%% per-store parametrisation. The range specific group covers iteration in
-%%% chunks over ranges with assorted start/end/step combinations, and
-%%% iterator reuse.
-%%%
-%%% Deliberately NOT covered here: how the store behaves as part of a
-%%% running workflow execution - being iterated over to feed tasks, or
-%%% receiving mapped task results - which belongs to
-%%% 'atm_workflow_execution_test_SUITE'; and the validation and conversion
-%%% rules of the data types themselves, which belong to
-%%% 'atm_value_test_SUITE'.
-%%%
-%%% Every case builds its own stores on a synthetic workflow execution
-%%% auth, so cases share nothing but the deployment and may run in
-%%% parallel. Cases that move the frozen clock are kept in a sequential
-%%% group, because the freeze is global to the provider.
+%%% Supplies this store's parametrisation of the contract shared with the
+%%% other singleton-content stores, which is asserted in
+%%% 'atm_store_singleton_content_based_tests', and holds the range specific
+%%% cases: iteration in chunks over ranges with assorted start/end/step
+%%% combinations, and iterator reuse.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_store_range_test_SUITE).
+-module(atm_store_range_tests).
 -author("Bartosz Walkowicz").
+
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
@@ -42,49 +34,20 @@
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 
-%% exported for CT
+%% test cases
 -export([
-    groups/0, all/0,
-    init_per_suite/1, end_per_suite/1,
-    init_per_group/2, end_per_group/2,
-    init_per_testcase/2, end_per_testcase/2
+    create_test/0,
+    update_content_test/0,
+
+    iterate_in_chunks_5_with_start_10_end_50_step_2_test/0,
+    iterate_in_chunks_10_with_start_1_end_2_step_10_test/0,
+    iterate_in_chunks_10_with_start_minus_50_end_50_step_4_test/0,
+    iterate_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test/0,
+    iterate_in_chunks_3_with_start_10_end_10_step_2_test/0,
+
+    reuse_iterator_test/0,
+    browse_content_test/0
 ]).
-
-%% tests
--export([
-    create_test/1,
-    update_content_test/1,
-
-    iterate_in_chunks_5_with_start_10_end_50_step_2_test/1,
-    iterate_in_chunks_10_with_start_1_end_2_step_10_test/1,
-    iterate_in_chunks_10_with_start_minus_50_end_50_step_4_test/1,
-    iterate_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test/1,
-    iterate_in_chunks_3_with_start_10_end_10_step_2_test/1,
-
-    reuse_iterator_test/1,
-    browse_content_test/1
-]).
-
-groups() -> [
-    {singleton_content_based_tests, [parallel], [
-        create_test,
-        update_content_test,
-        browse_content_test
-    ]},
-    {range_specific_tests, [parallel], [
-        iterate_in_chunks_5_with_start_10_end_50_step_2_test,
-        iterate_in_chunks_10_with_start_1_end_2_step_10_test,
-        iterate_in_chunks_10_with_start_minus_50_end_50_step_4_test,
-        iterate_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test,
-        iterate_in_chunks_3_with_start_10_end_10_step_2_test,
-        reuse_iterator_test
-    ]}
-].
-
-all() -> [
-    {group, singleton_content_based_tests},
-    {group, range_specific_tests}
-].
 
 
 -define(ATM_STORE_CONFIG, #atm_range_store_config{}).
@@ -99,14 +62,14 @@ all() -> [
 %%%===================================================================
 
 
-create_test(_Config) ->
+create_test() ->
     atm_store_singleton_content_based_tests:create_test_base(
         [?ATM_STORE_CONFIG],
         fun get_item_data_spec/1
     ).
 
 
-update_content_test(_Config) ->
+update_content_test() ->
     atm_store_singleton_content_based_tests:update_content_test_base(
         [?ATM_STORE_CONFIG],
         fun get_item_data_spec/1,
@@ -115,7 +78,7 @@ update_content_test(_Config) ->
     ).
 
 
-browse_content_test(_Config) ->
+browse_content_test() ->
     atm_store_singleton_content_based_tests:browse_content_test_base(
         [?ATM_STORE_CONFIG],
         fun get_item_data_spec/1,
@@ -125,23 +88,23 @@ browse_content_test(_Config) ->
     ).
 
 
-iterate_in_chunks_5_with_start_10_end_50_step_2_test(_Config) ->
+iterate_in_chunks_5_with_start_10_end_50_step_2_test() ->
     iterate_test_base(5, #{<<"start">> => 10, <<"end">> => 50, <<"step">> => 2}).
 
 
-iterate_in_chunks_10_with_start_1_end_2_step_10_test(_Config) ->
+iterate_in_chunks_10_with_start_1_end_2_step_10_test() ->
     iterate_test_base(10, #{<<"start">> => 1, <<"end">> => 2, <<"step">> => 10}).
 
 
-iterate_in_chunks_10_with_start_minus_50_end_50_step_4_test(_Config) ->
+iterate_in_chunks_10_with_start_minus_50_end_50_step_4_test() ->
     iterate_test_base(10, #{<<"start">> => -50, <<"end">> => 50, <<"step">> => 4}).
 
 
-iterate_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test(_Config) ->
+iterate_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test() ->
     iterate_test_base(7, #{<<"start">> => 50, <<"end">> => -50, <<"step">> => -3}).
 
 
-iterate_in_chunks_3_with_start_10_end_10_step_2_test(_Config) ->
+iterate_in_chunks_3_with_start_10_end_10_step_2_test() ->
     iterate_test_base(3, #{<<"start">> => 10, <<"end">> => 10, <<"step">> => 2}).
 
 
@@ -178,7 +141,7 @@ iterate_test_base(ChunkSize, AtmRangeStoreInitialValue) ->
     assert_all_items_listed(AtmWorkflowExecutionEnv, Iterator, ExpBatches).
 
 
-reuse_iterator_test(_Config) ->
+reuse_iterator_test() ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
     AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG),
     AtmStoreSchemaId = AtmStoreSchema#atm_store_schema.id,
@@ -294,42 +257,3 @@ assert_all_items_listed(AtmWorkflowExecutionEnv, Iterator0, [ExpBatch | RestBatc
 %% @private
 iterator_get_next(AtmWorkflowExecutionEnv, Iterator) ->
     atm_store_test_utils:iterator_get_next(?PROVIDER_SELECTOR, AtmWorkflowExecutionEnv, Iterator).
-
-
-
-%===================================================================
-% SetUp and TearDown functions
-%===================================================================
-
-
-init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE | atm_store_singleton_content_based_tests:modules_to_load()],
-    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
-        onenv_scenario = "1op",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
-    }).
-
-
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
-
-
-init_per_group(singleton_content_based_tests, Config) ->
-    atm_store_singleton_content_based_tests:init_per_group(Config);
-init_per_group(range_specific_tests, Config) ->
-    Config.
-
-
-end_per_group(singleton_content_based_tests, Config) ->
-    atm_store_singleton_content_based_tests:end_per_group(Config);
-end_per_group(range_specific_tests, _Config) ->
-    ok.
-
-
-init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
-    Config.
-
-
-end_per_testcase(_Case, _Config) ->
-    ok.

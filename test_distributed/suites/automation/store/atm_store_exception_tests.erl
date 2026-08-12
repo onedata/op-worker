@@ -6,30 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of the automation exception store, exercised directly through
-%%% 'atm_store_api' - creation, content updates, browsing and iteration
-%%% over the matrix of item data types the store accepts.
+%%% Bodies of the automation exception store test cases, run by
+%%% 'atm_store_test_SUITE'.
 %%%
-%%% Behaviour shared with the other infinite-log backed stores lives in
-%%% 'atm_store_infinite_log_based_tests'; this suite only supplies the
-%%% per-store parametrisation. The exception specific group covers looking
-%%% up entry indices by item trace id.
-%%%
-%%% Deliberately NOT covered here: how the store behaves as part of a
-%%% running workflow execution - being iterated over to feed tasks, or
-%%% receiving mapped task results - which belongs to
-%%% 'atm_workflow_execution_test_SUITE'; and the validation and conversion
-%%% rules of the data types themselves, which belong to
-%%% 'atm_value_test_SUITE'.
-%%%
-%%% Every case builds its own stores on a synthetic workflow execution
-%%% auth, so cases share nothing but the deployment and may run in
-%%% parallel. Cases that move the frozen clock are kept in a sequential
-%%% group, because the freeze is global to the provider.
+%%% Supplies this store's parametrisation of the contract shared with the
+%%% other infinite-log backed stores, which is asserted in
+%%% 'atm_store_infinite_log_based_tests', and holds the exception specific
+%%% case: looking up entry indices by item trace id.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_store_exception_test_SUITE).
+-module(atm_store_exception_tests).
 -author("Bartosz Walkowicz").
+
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -38,42 +30,16 @@
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 
-%% exported for CT
+%% test cases
 -export([
-    groups/0, all/0,
-    init_per_suite/1, end_per_suite/1,
-    init_per_group/2, end_per_group/2,
-    init_per_testcase/2, end_per_testcase/2
+    create_test/0,
+    update_content_test/0,
+    iterator_test/0,
+    browse_content_by_index_test/0,
+    browse_content_by_offset_test/0,
+
+    find_indices_by_trace_ids_test/0
 ]).
-
-%% tests
--export([
-    create_test/1,
-    update_content_test/1,
-    iterator_test/1,
-    browse_content_by_index_test/1,
-    browse_content_by_offset_test/1,
-
-    find_indices_by_trace_ids_test/1
-]).
-
-groups() -> [
-    {infinite_log_based_tests, [parallel], [
-        create_test,
-        update_content_test,
-        iterator_test,
-        browse_content_by_index_test,
-        browse_content_by_offset_test
-    ]},
-    {exception_specific_tests, [sequential], [
-        find_indices_by_trace_ids_test
-    ]}
-].
-
-all() -> [
-    {group, infinite_log_based_tests},
-    {group, exception_specific_tests}
-].
 
 
 -define(STORE_SCHEMA(__CONFIG), #atm_system_store_schema{
@@ -92,7 +58,7 @@ all() -> [
 %%%===================================================================
 
 
-create_test(_Config) ->
+create_test() ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     lists:foreach(fun(AtmStoreConfig) ->
@@ -116,7 +82,7 @@ create_test(_Config) ->
     end, example_configs()).
 
 
-update_content_test(_Config) ->
+update_content_test() ->
     atm_store_infinite_log_based_tests:update_content_test_base(#{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
@@ -144,7 +110,7 @@ update_content_test(_Config) ->
     ))).
 
 
-iterator_test(_Config) ->
+iterator_test() ->
     atm_store_infinite_log_based_tests:iterator_test_base(#{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
@@ -157,7 +123,7 @@ iterator_test(_Config) ->
     }).
 
 
-browse_content_by_index_test(_Config) ->
+browse_content_by_index_test() ->
     atm_store_infinite_log_based_tests:browse_content_test_base(index, #{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
@@ -169,7 +135,7 @@ browse_content_by_index_test(_Config) ->
     }).
 
 
-browse_content_by_offset_test(_Config) ->
+browse_content_by_offset_test() ->
     atm_store_infinite_log_based_tests:browse_content_test_base(offset, #{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
@@ -181,7 +147,7 @@ browse_content_by_offset_test(_Config) ->
     }).
 
 
-find_indices_by_trace_ids_test(_Config) ->
+find_indices_by_trace_ids_test() ->
     AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
         ?PROVIDER_SELECTOR, user1, space_krk
     ),
@@ -381,42 +347,3 @@ build_content_browse_options(OptsJson) ->
     atm_exception_store_content_browse_result:record().
 build_content_browse_result(Entries, IsLast) ->
     #atm_exception_store_content_browse_result{items = Entries, is_last = IsLast}.
-
-
-%===================================================================
-% SetUp and TearDown functions
-%===================================================================
-
-
-init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE | atm_store_infinite_log_based_tests:modules_to_load()],
-    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
-        onenv_scenario = "1op",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
-    }).
-
-
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
-
-
-init_per_group(infinite_log_based_tests, Config) ->
-    atm_store_infinite_log_based_tests:init_per_group(Config);
-init_per_group(exception_specific_tests, Config) ->
-    time_test_utils:freeze_time(Config),
-    Config.
-
-
-end_per_group(infinite_log_based_tests, Config) ->
-    atm_store_infinite_log_based_tests:end_per_group(Config);
-end_per_group(exception_specific_tests, Config) ->
-    time_test_utils:unfreeze_time(Config).
-
-
-init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
-    Config.
-
-
-end_per_testcase(_Case, _Config) ->
-    ok.

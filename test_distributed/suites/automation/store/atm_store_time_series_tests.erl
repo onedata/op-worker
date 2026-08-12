@@ -6,29 +6,21 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of the automation time series store, exercised directly through
-%%% 'atm_store_api' - creation, content updates, browsing and iteration
-%%% over the matrix of item data types the store accepts.
+%%% Bodies of the automation time series store test cases, run by
+%%% 'atm_store_test_SUITE'.
 %%%
-%%% There is no shared base for this store - its content model (time series
-%%% with metrics) has nothing in common with the other stores, so every
-%%% case here is time-series specific.
-%%%
-%%% Deliberately NOT covered here: how the store behaves as part of a
-%%% running workflow execution - being iterated over to feed tasks, or
-%%% receiving mapped task results - which belongs to
-%%% 'atm_workflow_execution_test_SUITE'; and the validation and conversion
-%%% rules of the data types themselves, which belong to
-%%% 'atm_value_test_SUITE'.
-%%%
-%%% Every case builds its own stores on a synthetic workflow execution
-%%% auth, so cases share nothing but the deployment and may run in
-%%% parallel. Cases that move the frozen clock are kept in a sequential
-%%% group, because the freeze is global to the provider.
+%%% This store shares no contract with the others - its content model (time
+%%% series with metrics) has nothing in common with them - so every case here
+%%% is time-series specific.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_store_time_series_test_SUITE).
+-module(atm_store_time_series_tests).
 -author("Bartosz Walkowicz").
+
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
 
 -include("atm/atm_test_store.hrl").
 -include("modules/automation/atm_execution.hrl").
@@ -38,34 +30,13 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
-%% exported for CT
+%% test cases
 -export([
-    groups/0, all/0,
-    init_per_suite/1, end_per_suite/1,
-    init_per_group/2, end_per_group/2,
-    init_per_testcase/2, end_per_testcase/2
+    create_test/0,
+    copy_test/0,
+    manage_content_test/0,
+    not_supported_iteration_test/0
 ]).
-
-%% tests
--export([
-    create_test/1,
-    copy_test/1,
-    manage_content_test/1,
-    not_supported_iteration_test/1
-]).
-
-groups() -> [
-    {time_series_specific_tests, [parallel], [
-        create_test,
-        copy_test,
-        manage_content_test,
-        not_supported_iteration_test
-    ]}
-].
-
-all() -> [
-    {group, time_series_specific_tests}
-].
 
 
 -define(COUNTER_OF_ALL_COUNTS_TS_NAME, <<"counter_of_all_counts">>).
@@ -149,7 +120,7 @@ all() -> [
 %%%===================================================================
 
 
-create_test(_Config) ->
+create_test() ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
     AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
 
@@ -184,7 +155,7 @@ create_test(_Config) ->
     ).
 
 
-copy_test(_Config) ->
+copy_test() ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
     AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
 
@@ -245,7 +216,7 @@ copy_test(_Config) ->
     ?assertEqual(BuildExpWindows(35), get_slice(AtmWorkflowExecutionAuth, NewAtmStoreId, ExpLayout)).
 
 
-manage_content_test(_Config) ->
+manage_content_test() ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
     AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
     SortedCountTSMetricNames = lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]),
@@ -453,7 +424,7 @@ manage_content_test(_Config) ->
     ).
 
 
-not_supported_iteration_test(_Config) ->
+not_supported_iteration_test() ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
@@ -581,37 +552,3 @@ get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, WindowLi
     )),
     #{<<"slice">> := Slice} = atm_time_series_store_content_browse_result:to_json(BrowseResult),
     Slice.
-
-
-%===================================================================
-% SetUp and TearDown functions
-%===================================================================
-
-
-init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, atm_store_test_utils],
-    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
-        onenv_scenario = "1op",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
-    }).
-
-
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
-
-
-init_per_group(_, Config) ->
-    Config.
-
-
-end_per_group(_, _Config) ->
-    ok.
-
-
-init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
-    Config.
-
-
-end_per_testcase(_Case, _Config) ->
-    ok.
