@@ -44,6 +44,19 @@ exec(?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, #{
     timer:sleep(timer:seconds(12)),
     #{<<"resultsBatch">> => ArgsBatch};
 
+exec(?ECHO_WITH_HEARTBEATS_DOCKER_IMAGE_ID, #{
+    <<"ctx">> := #{<<"heartbeatUrl">> := HeartbeatUrl},
+    <<"argsBatch">> := ArgsBatch
+}) ->
+    Opts = [{ssl_options, [{cacerts, https_listener:get_cert_chain_ders()}]}],
+
+    lists:foreach(fun(_) ->
+        timer:sleep(timer:seconds(1)),
+        http_client:post(HeartbeatUrl, #{}, <<>>, Opts)
+    end, lists:seq(1, ?ECHO_WITH_HEARTBEATS_DURATION_SEC)),
+
+    #{<<"resultsBatch">> => ArgsBatch};
+
 exec(?ECHO_WITH_PAUSE_DOCKER_IMAGE_ID, #{
     <<"ctx">> := #{<<"atmWorkflowExecutionId">> := AtmWorkflowExecutionId},
     <<"argsBatch">> := ArgsBatch

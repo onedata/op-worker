@@ -55,7 +55,10 @@
     supplementary_lambdas = #{
         ?ECHO_LAMBDA_ID => #{?ECHO_LAMBDA_REVISION_NUM => #atm_lambda_revision_draft{
             operation_spec = #atm_openfaas_operation_spec_draft{
-                docker_image = ?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID
+                % NOTE: the lambda must keep reporting heartbeats - the suite sets
+                % 'atm_workflow_job_timeout_sec' to 1 second, so a silent one would
+                % be timed out long before this test manages to stop op_worker
+                docker_image = ?ECHO_WITH_HEARTBEATS_DOCKER_IMAGE_ID
             },
             argument_specs = [#atm_parameter_spec{
                 name = ?ECHO_ARG_NAME,
@@ -73,6 +76,11 @@
 
 -define(TASK1_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>, <<"task1">>}).
 
+% every state transition awaited by this test is asynchronous (graceful stop of
+% executions, node restart, the restart procedure delayed by
+% 'atm_workflow_executions_restart_retry_delay') - hence assertions must retry
+-define(ATTEMPTS, 60).
+
 
 %%%===================================================================
 %%% Tests
@@ -86,7 +94,6 @@ pause_workflow_execution(AtmWorkflowExecutionId) ->
 
 restart_op_worker_after_graceful_stop(Config) ->
     mock_atm_supervision_worker(),
-    %% TODO VFS-10266 SET LAMBDA SLEEP TO 6 SEC ??
 
     ReturnValueAtmWorkflowSchemaId = create_workflow_schema(return_value),
     ReturnValueAtmWorkflowSchemaRevision = get_workflow_schema_revision(ReturnValueAtmWorkflowSchemaId),
@@ -147,7 +154,6 @@ restart_op_worker_after_graceful_stop(Config) ->
 
     timer:sleep(timer:seconds(1)),
 
-    ct:pal("~tp", [?LINE]),
     SystemPausedAtmWorkflowExecutionExpState1 = expect_workflow_execution_stopping(
         SystemPausedAtmWorkflowExecutionExpState0
     ),
@@ -161,12 +167,11 @@ restart_op_worker_after_graceful_stop(Config) ->
         UserPausedAtmWorkflowExecutionExpState1, SystemPausedAtmWorkflowExecutionExpState1,
         InterruptedAtmWorkflowExecutionExpState1, FailedAtmWorkflowExecutionExpState1
     ]),
-    ct:pal("~tp", [?LINE]),
 
     %% TODO VFS-10266 cleanup ended
-    ct:pal("~tp", [?LINE]),
-    AfterCleanupRef = receive {Ref, after_cleanup} -> Ref end,
-    ct:pal("~tp", [?LINE]),
+    % NOTE: each call from the mocked callback carries its own reference, hence
+    % a fresh variable rather than the one bound by the 'before_cleanup' receive
+    AfterCleanupRef = receive {AfterCleanupReplyTo, after_cleanup} -> AfterCleanupReplyTo end,
 
     UserPausedAtmWorkflowExecutionExpState2 = expect_workflow_execution_paused(
         UserPausedAtmWorkflowExecutionExpState1
@@ -178,19 +183,15 @@ restart_op_worker_after_graceful_stop(Config) ->
         UserPausedAtmWorkflowExecutionExpState2, SystemPausedAtmWorkflowExecutionExpState2,
         InterruptedAtmWorkflowExecutionExpState1, FailedAtmWorkflowExecutionExpState1
     ]),
-    ct:pal("~tp", [?LINE]),
 
     reply(AfterCleanupRef, proceed),
-    ct:pal("~tp", [?LINE]),
     finalize_op_worker_stop(OpWorkerStopRequestId),
-    ct:pal("~tp", [?LINE]),
     restart_op_worker(Config),
     %% TODO VFS-10266 op_worker restart
 
     % Wait until automation restart procedure finishes
     timer:sleep(timer:seconds(1)),
 
-    ct:pal("~tp", [?LINE]),
     % Workflow paused due to op_worker stopping should be resumed after op_worker restart
     SystemPausedAtmWorkflowExecutionExpState2 = atm_workflow_execution_exp_state_builder:expect(
         SystemPausedAtmWorkflowExecutionExpState2, [
@@ -224,7 +225,6 @@ restart_op_worker_after_graceful_stop(Config) ->
             workflow_failed
         ]
     ),
-    ct:pal("~tp", [?LINE]),
     assert_all_match_with_backend([
         UserPausedAtmWorkflowExecutionExpState2, SystemPausedAtmWorkflowExecutionExpState2,
         InterruptedAtmWorkflowExecutionExpState2, FailedAtmWorkflowExecutionExpState2
@@ -275,12 +275,6 @@ reply({Pid, MRef}, Reply) ->
 
 
 %% @private
--spec set_env(atom(), term()) -> ok.
-set_env(EnvVar, EnvValue) ->
-    ?rpc(?ATM_PROVIDER_SELECTOR, op_worker:set_env(EnvVar, EnvValue)).
-
-
-%% @private
 -spec init_op_worker_stop() -> erpc:request_id().
 init_op_worker_stop() ->
     Node = oct_background:get_random_provider_node(?ATM_PROVIDER_SELECTOR),
@@ -294,11 +288,16 @@ finalize_op_worker_stop(OpWorkerStopRequestId) ->
 
 
 %% @private
+-spec restart_op_worker(test_config:config()) -> ok.
 restart_op_worker(Config) ->
     Node = oct_background:get_random_provider_node(?ATM_PROVIDER_SELECTOR),
     failure_test_utils:kill_nodes(Config, Node),
     failure_test_utils:restart_nodes(Config, Node),
-    ok.
+
+    % mocks, alongside the modules defining them, died with the node while the
+    % workflow executions restarted by the provider still need them to run tasks
+    test_node_starter:load_modules([Node], ?ATM_WORKFLOW_EXECUTION_TEST_UTILS),
+    atm_workflow_execution_test_runner:init(?ATM_PROVIDER_SELECTOR).
 
 
 %% @private
@@ -374,6 +373,6 @@ expect_workflow_execution_paused(ExpState) ->
 assert_all_match_with_backend(ExpAtmWorkflowExecutionStates) ->
     lists:foreach(fun(ExpAtmWorkflowExecutionState) ->
         ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(
-            ExpAtmWorkflowExecutionState
+            ExpAtmWorkflowExecutionState, ?ATTEMPTS
         ))
     end, ExpAtmWorkflowExecutionStates).

@@ -440,7 +440,11 @@ all() -> [
     {group, force_continue_tests},
     {group, gc_tests}
 
-    % TODO VFS-10266 Uncomment after implementing onedata/internal task executor
+    % TODO VFS-10266 the testcase needs its synchronization redesigned before it can
+    % be enabled - it breakpoints on 'atm_supervision_worker:cleanup/0', which runs
+    % only after the graceful stop procedure (triggered from the earlier
+    % 'node_manager_plugin:after_listeners_stop/0' callback) has already finished,
+    % so the intermediate states it asserts are long gone by then
 %%    {group, restarts_tests}
 ].
 
@@ -1040,6 +1044,15 @@ init_per_suite(Config) ->
                     ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
                     | privileges:space_member()
                 ]),
+                % mocks are set up once for the entire suite - they are inert for
+                % workflow executions not scheduled by the test runner, so even the
+                % testcases that do not use it can be run with them in place
+                atm_workflow_execution_test_runner:init(?ATM_PROVIDER_SELECTOR),
+                % executions left by the previous run (kept back then for inspection)
+                % are removed only now, when their examination time is definitely over
+                atm_workflow_execution_test_runner:clean_up_leftover_workflow_executions(
+                    ?ATM_PROVIDER_SELECTOR, stop_and_discard
+                ),
                 NewConfig
             end
         }
@@ -1047,34 +1060,9 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
+    atm_workflow_execution_test_runner:teardown(?ATM_PROVIDER_SELECTOR),
     oct_background:end_per_suite().
 
-
-init_per_group(scheduling_non_executable_workflow_schema_tests, Config) ->
-    Config;
-
-init_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Config) ->
-    atm_openfaas_task_executor_mock:init(?ATM_PROVIDER_SELECTOR, atm_openfaas_docker_mock),
-    Config;
-
-init_per_group(TestGroup, Config) when
-    TestGroup =:= preparation_tests;
-    TestGroup =:= failure_tests;
-    TestGroup =:= cancel_tests;
-    TestGroup =:= pause_tests;
-    TestGroup =:= interrupt_tests;
-    TestGroup =:= crash_tests;
-    TestGroup =:= stopping_tests;
-    TestGroup =:= finish_tests;
-    TestGroup =:= iteration_tests;
-    TestGroup =:= mapping_tests;
-    TestGroup =:= repeat_tests;
-    TestGroup =:= resume_tests;
-    TestGroup =:= force_continue_tests;
-    TestGroup =:= restarts_tests
-->
-    atm_workflow_execution_test_runner:init(?ATM_PROVIDER_SELECTOR),
-    Config;
 
 init_per_group(gc_tests, Config0) ->
     Config1 = lists:foldl(fun(EnvVar, ConfigAcc) ->
@@ -1082,35 +1070,11 @@ init_per_group(gc_tests, Config0) ->
     end, Config0, ?GC_RELATED_ENV_VARS),
 
     time_test_utils:freeze_time(Config1),
-    atm_workflow_execution_test_runner:init(?ATM_PROVIDER_SELECTOR),
-    Config1.
+    Config1;
 
+init_per_group(_TestGroup, Config) ->
+    Config.
 
-end_per_group(scheduling_non_executable_workflow_schema_tests, Config) ->
-    Config;
-
-end_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Config) ->
-    atm_openfaas_task_executor_mock:teardown(?ATM_PROVIDER_SELECTOR),
-    Config;
-
-end_per_group(TestGroup, Config) when
-    TestGroup =:= preparation_tests;
-    TestGroup =:= failure_tests;
-    TestGroup =:= cancel_tests;
-    TestGroup =:= pause_tests;
-    TestGroup =:= interrupt_tests;
-    TestGroup =:= crash_tests;
-    TestGroup =:= stopping_tests;
-    TestGroup =:= finish_tests;
-    TestGroup =:= iteration_tests;
-    TestGroup =:= mapping_tests;
-    TestGroup =:= repeat_tests;
-    TestGroup =:= resume_tests;
-    TestGroup =:= force_continue_tests;
-    TestGroup =:= restarts_tests
-->
-    atm_workflow_execution_test_runner:teardown(?ATM_PROVIDER_SELECTOR),
-    Config;
 
 end_per_group(gc_tests, Config) ->
     % Reset atm gc env as it may have been tampered by gc tests
@@ -1118,14 +1082,33 @@ end_per_group(gc_tests, Config) ->
         ?rpc(?ATM_PROVIDER_SELECTOR, op_worker:set_env(EnvVar, ?config(EnvVar, Config)))
     end, ?GC_RELATED_ENV_VARS),
 
-    atm_workflow_execution_test_runner:teardown(?ATM_PROVIDER_SELECTOR),
     time_test_utils:unfreeze_time(Config),
+    Config;
+
+end_per_group(_TestGroup, Config) ->
     Config.
 
+
+init_per_testcase(Case = schedule_atm_workflow_with_openfaas_not_configured, Config) ->
+    % the very point of this testcase is OpenFaaS service being unavailable
+    atm_openfaas_task_executor_mock:unmock_openfaas_health_check(?ATM_PROVIDER_SELECTOR),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
+    % NOTE: this is merely a backstop against a hung testcase blocking the entire
+    % job - not a time budget (testcases in this suite were never measured)
+    ct:timetrap({minutes, 30}),
     Config.
 
 
+end_per_testcase(Case = schedule_atm_workflow_with_openfaas_not_configured, Config) ->
+    atm_openfaas_task_executor_mock:mock_openfaas_health_check(?ATM_PROVIDER_SELECTOR),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
 end_per_testcase(_Case, _Config) ->
-    ok.
+    % NOTE: leftovers are merely stopped, never discarded - discarding would go
+    % through the entire phase trees and as such destroy also what a testcase
+    % that failed earlier during this very run left behind for inspection
+    atm_workflow_execution_test_runner:clean_up_leftover_workflow_executions(
+        ?ATM_PROVIDER_SELECTOR, stop
+    ).

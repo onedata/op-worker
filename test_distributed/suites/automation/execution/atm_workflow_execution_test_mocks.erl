@@ -15,6 +15,13 @@
 %%% (e.g. simple passthrough or passthrough with delay, etc.) to be carry out. Finally,
 %%% after step ends execution process makes synchronous call to test process informing
 %%% it that step execution ended.
+%%%
+%%% Should the test process die (e.g. testcase failed or was killed by timetrap) the
+%%% workflow execution is detached from it and left to run unperturbed. Otherwise, all
+%%% its steps would keep dying alongside the test process and the execution would never
+%%% reach any stopped status - such execution can not be discarded and blocks provider
+%%% shutdown (see atm_supervision_worker:try_to_gracefully_stop_atm_workflow_executions/0),
+%%% effectively poisoning the deployment for any subsequent test run.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_test_mocks).
@@ -27,6 +34,7 @@
 -export([init/1, teardown/1]).
 -export([schedule_workflow_execution_as_test_process/8]).
 -export([reply_to_execution_process/2]).
+-export([detach_from_test_process/1]).
 
 
 -opaque reply_to() :: {pid(), reference()}.
@@ -36,6 +44,9 @@
 -define(TEST_PROC_PID_KEY(__ATM_WORKFLOW_EXECUTION_ID),
     {atm_test_runner_process, __ATM_WORKFLOW_EXECUTION_ID}
 ).
+
+% reply substitute returned when the test process died before answering
+-define(TEST_PROCESS_DOWN, test_process_down).
 
 
 %%%===================================================================
@@ -66,7 +77,7 @@ teardown(ProviderSelectors) ->
     unmock_workflow_execution_handler_steps(Workers),
     unmock_workflow_execution_factory(Workers),
 
-    atm_openfaas_task_executor_mock:teardown(?ATM_PROVIDER_SELECTOR).
+    atm_openfaas_task_executor_mock:teardown(ProviderSelectors).
 
 
 -spec schedule_workflow_execution_as_test_process(
@@ -106,6 +117,19 @@ schedule_workflow_execution_as_test_process(
     (reply_to(), ok) -> ok.
 reply_to_execution_process({ExecutionProcPid, MRef}, Reply) ->
     ExecutionProcPid ! {MRef, Reply}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Makes the mocks stop reporting steps of specified workflow execution to the
+%% test process (from then on it runs unperturbed).
+%%
+%% NOTE: must be called on the provider node.
+%% @end
+%%--------------------------------------------------------------------
+-spec detach_from_test_process(atm_workflow_execution:id()) -> ok.
+detach_from_test_process(AtmWorkflowExecutionId) ->
+    node_cache:clear(?TEST_PROC_PID_KEY(AtmWorkflowExecutionId)).
 
 
 %%%===================================================================
@@ -300,10 +324,7 @@ mock_task_execution_status_steps(Workers) ->
 %% @private
 -spec get_workflow_execution_id(atm_task_execution:id()) -> atm_workflow_execution:id().
 get_workflow_execution_id(AtmTaskExecutionId) ->
-    % atm_task_execution model is mocked in 'atm_openfaas_task_executor_mock' to be memory only.
-    % This makes other mocks to use the same ctx when getting atm_task_execution docs.
-    Ctx = #{model => atm_task_execution, disc_driver => undefined},
-    {ok, #document{value = AtmTaskExecution}} = datastore_model:get(Ctx, AtmTaskExecutionId),
+    {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
     AtmTaskExecution#atm_task_execution.workflow_execution_id.
 
 
@@ -329,15 +350,19 @@ exec_mock(AtmWorkflowExecutionId, Step, Args) ->
             MockExecution = call_test_process(TestProcPid, MockCallReport),
 
             case MockExecution of
+                ?TEST_PROCESS_DOWN ->
+                    detach_from_test_process(AtmWorkflowExecutionId),
+                    meck:passthrough(Args);
+
                 passthrough ->
-                    exec_original_function(Args, TestProcPid, MockCallReport);
+                    exec_original_function(AtmWorkflowExecutionId, Args, TestProcPid, MockCallReport);
 
                 {passthrough_with_delay, DelayMilliseconds} ->
                     timer:sleep(DelayMilliseconds),
-                    exec_original_function(Args, TestProcPid, MockCallReport);
+                    exec_original_function(AtmWorkflowExecutionId, Args, TestProcPid, MockCallReport);
 
                 {passthrough_with_result_override, ResultOverride} ->
-                    exec_original_function(Args, TestProcPid, MockCallReport),
+                    exec_original_function(AtmWorkflowExecutionId, Args, TestProcPid, MockCallReport),
                     apply_result_override(ResultOverride);
 
                 {yield, ResultOverride} ->
@@ -347,14 +372,24 @@ exec_mock(AtmWorkflowExecutionId, Step, Args) ->
 
 
 %% @private
--spec exec_original_function([term()], pid(), atm_workflow_execution_test_runner:mock_call_report()) ->
+-spec exec_original_function(
+    atm_workflow_execution:id(),
+    [term()],
+    pid(),
+    atm_workflow_execution_test_runner:mock_call_report()
+) ->
     term().
-exec_original_function(Args, TestProcPid, MockCallReport) ->
+exec_original_function(AtmWorkflowExecutionId, Args, TestProcPid, MockCallReport) ->
     Result = meck:passthrough(Args),
-    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
+
+    case call_test_process(TestProcPid, MockCallReport#mock_call_report{
         timing = after_step,
         result = Result
-    }),
+    }) of
+        ok -> ok;
+        ?TEST_PROCESS_DOWN -> detach_from_test_process(AtmWorkflowExecutionId)
+    end,
+
     Result.
 
 
@@ -368,7 +403,7 @@ apply_result_override({error, Error}) -> error(Error).
 
 
 %% @private
--spec call_test_process(pid(), term()) -> term() | no_return().
+-spec call_test_process(pid(), term()) -> term().
 call_test_process(TestProcPid, Msg) ->
     MRef = erlang:monitor(process, TestProcPid),
     TestProcPid ! {{self(), MRef}, Msg},
@@ -376,6 +411,6 @@ call_test_process(TestProcPid, Msg) ->
         {MRef, Reply} ->
             erlang:demonitor(MRef, [flush]),
             Reply;
-        {'DOWN', MRef, _, _, Reason} ->
-            exit(Reason)
+        {'DOWN', MRef, _, _, _Reason} ->
+            ?TEST_PROCESS_DOWN
     end.

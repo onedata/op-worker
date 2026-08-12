@@ -228,8 +228,11 @@ expect(ExpStateCtx0, {task, AtmTaskExecutionIdOrSelector, items_scheduled, ItemC
         fun expect_task_transitioned_to_active_status_if_was_in_pending_status/2,
         fun expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status/2
     ]),
+    % NOTE: 'stopping' task also counts - the backend registers every batch that
+    % was dispatched before the task's own status changed, and such batch is
+    % reported to the test only after it has already been registered
     case get_task_status(AtmTaskExecutionId, ExpStateCtx1) of
-        <<"active">> ->
+        Status when Status =:= <<"active">>; Status =:= <<"stopping">> ->
             ExpAtmTaskExecutionStateDiff = fun(AtmTaskExecution = #{<<"itemsInProcessing">> := IIP}) ->
                 AtmTaskExecution#{<<"itemsInProcessing">> => IIP + ItemCount}
             end,

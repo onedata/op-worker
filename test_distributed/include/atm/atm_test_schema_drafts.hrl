@@ -35,7 +35,13 @@
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4, <<"test/failing_echo_measurements_4">>).
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG, <<"signal: illegal instruction (core dumped)\n">>).
 
+% Sleeps, reporting a heartbeat only at the very beginning - as such it stops
+% responding and is bound to be timed out under a short 'atm_workflow_job_timeout_sec'
 -define(ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, <<"test/echo_with_sleep">>).
+% Sleeps just as long, but keeps reporting heartbeats - a job that merely runs
+% long rather than one that hangs, and so is never timed out
+-define(ECHO_WITH_HEARTBEATS_DOCKER_IMAGE_ID, <<"test/echo_with_heartbeats">>).
+-define(ECHO_WITH_HEARTBEATS_DURATION_SEC, 13).
 -define(ECHO_WITH_PAUSE_DOCKER_IMAGE_ID, <<"test/echo_with_pause">>).
 
 -define(ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, <<"test/echo_with_exception_on_even_numbers">>).
