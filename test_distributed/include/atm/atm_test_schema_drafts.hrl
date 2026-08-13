@@ -38,6 +38,7 @@
 % Sleeps, reporting a heartbeat only at the very beginning - as such it stops
 % responding and is bound to be timed out under a short 'atm_workflow_job_timeout_sec'
 -define(ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, <<"test/echo_with_sleep">>).
+-define(ECHO_WITH_SLEEP_SILENCE_SEC, 12).
 % Sleeps just as long, but keeps reporting heartbeats - a job that merely runs
 % long rather than one that hangs, and so is never timed out
 -define(ECHO_WITH_HEARTBEATS_DOCKER_IMAGE_ID, <<"test/echo_with_heartbeats">>).

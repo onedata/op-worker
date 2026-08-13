@@ -34,14 +34,16 @@ exec(?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, #{
     <<"ctx">> := #{<<"heartbeatUrl">> := HeartbeatUrl},
     <<"argsBatch">> := ArgsBatch
 }) ->
-    %% TODO VFS-10550 rm after fixing race when first heartbeat comes before job is registered
-    timer:sleep(timer:seconds(1)),
-    % Send heartbeat to inform op about job processing start
-
     Opts = [{ssl_options, [{cacerts, https_listener:get_cert_chain_ders()}]}],
+
+    % Report that job processing has started and then go silent, so that the job is
+    % timed out. The heartbeat is dropped if it outruns the job's registration in the
+    % workflow engine (TODO VFS-10550) - it is the finite enqueuing timeout set up by
+    % atm_workflow_execution_test_mocks that makes the job time out either way.
+    timer:sleep(timer:seconds(1)),
     http_client:post(HeartbeatUrl, #{}, <<>>, Opts),
 
-    timer:sleep(timer:seconds(12)),
+    timer:sleep(timer:seconds(?ECHO_WITH_SLEEP_SILENCE_SEC)),
     #{<<"resultsBatch">> => ArgsBatch};
 
 exec(?ECHO_WITH_HEARTBEATS_DOCKER_IMAGE_ID, #{

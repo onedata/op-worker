@@ -29,6 +29,7 @@
 
 -include("atm/atm_workflow_execution_test.hrl").
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
 
 %% API
 -export([init/1, teardown/1]).
@@ -48,6 +49,10 @@
 % reply substitute returned when the test process died before answering
 -define(TEST_PROCESS_DOWN, test_process_down).
 
+% Mirrors the private ?ATM_WORKFLOW_EXECUTION_ENGINE of atm_workflow_execution_handler
+-define(ATM_WORKFLOW_EXECUTION_ENGINE_ID, <<"atm_workflow_execution_engine">>).
+-define(JOB_ENQUEUING_TIMEOUT_SEC, 10).
+
 
 %%%===================================================================
 %%% API
@@ -60,6 +65,7 @@ init(ProviderSelectors) ->
     atm_openfaas_task_executor_mock:init(ProviderSelectors, atm_openfaas_docker_mock),
 
     Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
+    set_job_enqueuing_timeout(Workers, ?JOB_ENQUEUING_TIMEOUT_SEC),
     mock_workflow_execution_factory(Workers),
     mock_workflow_execution_handler_steps(Workers),
     mock_lane_execution_stop_handler_steps(Workers),
@@ -76,8 +82,36 @@ teardown(ProviderSelectors) ->
     unmock_lane_execution_handler_steps(Workers),
     unmock_workflow_execution_handler_steps(Workers),
     unmock_workflow_execution_factory(Workers),
+    set_job_enqueuing_timeout(Workers, infinity),
 
     atm_openfaas_task_executor_mock:teardown(ProviderSelectors).
+
+
+%% @private
+%% @doc
+%% Bounds how long a job may stay registered without reporting a heartbeat.
+%%
+%% The atm engine sets no such bound ('enqueuing_timeout => infinity'), which leaves
+%% a freshly registered job with no keepalive timer at all - the timer is armed only
+%% by the first heartbeat that finds the job already registered, and any heartbeat
+%% reaching op earlier is silently dropped (TODO VFS-10550). Registration happens
+%% only after the mocked 'run_task_for_item' step returns, and the test runner holds
+%% that step back for as long as it needs, so a lambda that heartbeats once and goes
+%% silent can end up immune to timeouts altogether.
+%% @end
+-spec set_job_enqueuing_timeout([node()], time:seconds() | infinity) -> ok.
+set_job_enqueuing_timeout(Workers, Timeout) ->
+    lists:foreach(fun(Worker) ->
+        % Sanity check on the engine id, which is private to the product - any other
+        % id (or an engine that was never initiated on this node) would yield the
+        % 'undefined' default rather than a setting of its own
+        ?assertNotEqual(undefined, rpc:call(
+            Worker, workflow_engine, get_enqueuing_timeout, [?ATM_WORKFLOW_EXECUTION_ENGINE_ID]
+        )),
+        ok = rpc:call(Worker, workflow_engine, set_enqueuing_timeout, [
+            ?ATM_WORKFLOW_EXECUTION_ENGINE_ID, Timeout
+        ])
+    end, Workers).
 
 
 -spec schedule_workflow_execution_as_test_process(
