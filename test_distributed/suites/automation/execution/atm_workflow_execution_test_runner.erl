@@ -29,10 +29,13 @@
 %%%    b) applying exp state diff and storing eventual changes to expectations
 %%%       (they are not checked immediately).
 %%% 5. save step handling as pending and go to 2.
-%%% 6. when all execution processes progressed to next step phase and are
-%%%    blocked awaiting response:
+%%% 6. when no execution process has reported for a while (which is taken as a
+%%%    sign that they all progressed to the next step phase and are blocked
+%%%    awaiting response):
 %%%    a) assert accumulated changes to workflow execution state expectations
-%%%       matches data stored in backend.
+%%%       matches data stored in backend (awaiting the two to converge, as a
+%%%       step still in flight may have already changed the backend without
+%%%       having reported back yet - see address_pending_expectations/1).
 %%%    b) end execution of pending steps (this allows execution processes to
 %%%       continue).
 %%%    c) execute deferred step phases (in the manner described in 4.) if step
@@ -91,6 +94,11 @@
     step_phase_timing(),
     atm_lane_execution:lane_run_selector() | atm_workflow_execution:incarnation()
 }.
+-type defer_after_spec() ::
+    undefined |
+    step_phase_selector() |
+    fun((mock_call_ctx()) -> undefined | step_phase_selector()).
+
 -record(step_phase, {
     selector :: step_phase_selector(),
     mock_call_report :: mock_call_report(),
@@ -128,8 +136,8 @@
 -export_type([
     mock_call_ctx/0, mock_call_report/0, hook/0, exp_state_diff_fun/0, exp_state_diff/0,
     result_override/0, mock_strategy/0, mock_strategy_spec/0, step_phase_selector/0,
-    step_mock_spec/0, lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0,
-    leftover_disposal/0
+    defer_after_spec/0, step_mock_spec/0, lane_run_test_spec/0, incarnation_test_spec/0,
+    test_spec/0, leftover_disposal/0
 ]).
 
 -type mock_call_report() :: #mock_call_report{}.
@@ -160,7 +168,8 @@
 -define(AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL, 150).
 -define(TEST_HUNG_MAX_PROBES_NUM, 20).
 
--define(ASSERT_RETRIES, 45).
+-define(AWAIT_EXP_STATE_MATCH_ATTEMPTS, 45).
+-define(AWAIT_EXP_STATE_MATCH_INTERVAL, timer:seconds(1)).
 
 -define(AWAIT_LEFTOVER_WORKFLOW_EXECUTIONS_STOPPED_ATTEMPTS, 60).
 -define(AWAIT_LEFTOVER_WORKFLOW_EXECUTIONS_STOPPED_INTERVAL, timer:seconds(1)).
@@ -390,27 +399,7 @@ describe_workflow_executions(ProviderSelector, AtmWorkflowExecutionIds) ->
 -spec monitor_workflow_execution(test_ctx()) -> ok | no_return().
 monitor_workflow_execution(TestCtx0) ->
     receive {ReplyTo, StepMockCallReport} ->
-        TestCtx1 = TestCtx0#test_ctx{test_hung_probes_left = ?TEST_HUNG_MAX_PROBES_NUM},
-        {StepPhaseSelector, StepMockSpec} = get_step_mock_spec(StepMockCallReport, TestCtx0),
-
-        StepPhase = #step_phase{
-            selector = StepPhaseSelector,
-            mock_call_report = StepMockCallReport,
-            mock_spec = StepMockSpec,
-            reply_to = ReplyTo
-        },
-
-        case should_defer_step_execution(StepMockSpec, TestCtx1) of
-            true ->
-                monitor_workflow_execution(TestCtx1#test_ctx{deferred_step_phases = maps:update_with(
-                    StepMockSpec#atm_step_mock_spec.defer_after,
-                    fun(RestDeferredStepPhases) -> [StepPhase | RestDeferredStepPhases] end,
-                    [StepPhase],
-                    TestCtx1#test_ctx.deferred_step_phases
-                )});
-            false ->
-                monitor_workflow_execution(begin_step_phase_execution(StepPhase, TestCtx1))
-        end
+        monitor_workflow_execution(handle_step_phase_report(ReplyTo, StepMockCallReport, TestCtx0))
     after ?AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL ->
         case TestCtx0#test_ctx.test_hung_probes_left of
             0 ->
@@ -418,18 +407,55 @@ monitor_workflow_execution(TestCtx0) ->
                 fail_test(TestCtx0);
             Num ->
                 TestCtx1 = TestCtx0#test_ctx{test_hung_probes_left = Num - 1},
-                TestCtx2 = address_pending_expectations(TestCtx1),
-                TestCtx3 = end_pending_step_phase_executions(TestCtx2),
 
-                case has_workflow_stopped(TestCtx3) of
-                    true ->
-                        test_garbage_collector(TestCtx3),
-                        TestCtx3#test_ctx.workflow_execution_exp_state;
-                    false ->
-                        TestCtx4 = begin_deferred_step_phase_executions_if_possible(TestCtx3),
-                        monitor_workflow_execution(TestCtx4)
+                case address_pending_expectations(TestCtx1) of
+                    {step_phase_reported, TestCtx2} ->
+                        monitor_workflow_execution(TestCtx2);
+
+                    {expectations_met, TestCtx2} ->
+                        TestCtx3 = end_pending_step_phase_executions(TestCtx2),
+
+                        case has_workflow_stopped(TestCtx3) of
+                            true ->
+                                test_garbage_collector(TestCtx3),
+                                TestCtx3#test_ctx.workflow_execution_exp_state;
+                            false ->
+                                TestCtx4 = begin_deferred_step_phase_executions_if_possible(TestCtx3),
+                                monitor_workflow_execution(TestCtx4)
+                        end
                 end
         end
+    end.
+
+
+%% @private
+-spec handle_step_phase_report(
+    atm_workflow_execution_test_mocks:reply_to(),
+    mock_call_report(),
+    test_ctx()
+) ->
+    test_ctx().
+handle_step_phase_report(ReplyTo, StepMockCallReport, TestCtx0) ->
+    TestCtx1 = TestCtx0#test_ctx{test_hung_probes_left = ?TEST_HUNG_MAX_PROBES_NUM},
+    {StepPhaseSelector, StepMockSpec} = get_step_mock_spec(StepMockCallReport, TestCtx0),
+
+    StepPhase = #step_phase{
+        selector = StepPhaseSelector,
+        mock_call_report = StepMockCallReport,
+        mock_spec = StepMockSpec,
+        reply_to = ReplyTo
+    },
+
+    case should_defer_step_execution(StepMockCallReport, StepMockSpec, TestCtx1) of
+        {true, AwaitedStepPhaseSelector} ->
+            TestCtx1#test_ctx{deferred_step_phases = maps:update_with(
+                AwaitedStepPhaseSelector,
+                fun(RestDeferredStepPhases) -> [StepPhase | RestDeferredStepPhases] end,
+                [StepPhase],
+                TestCtx1#test_ctx.deferred_step_phases
+            )};
+        false ->
+            begin_step_phase_execution(StepPhase, TestCtx1)
     end.
 
 
@@ -449,23 +475,74 @@ test_garbage_collector(#test_ctx{
 
 
 %% @private
--spec address_pending_expectations(test_ctx()) -> test_ctx().
-address_pending_expectations(TestCtx = #test_ctx{workflow_execution_exp_state_changed = true}) ->
-    assert_exp_workflow_execution_state(TestCtx),
-    TestCtx#test_ctx{workflow_execution_exp_state_changed = false};
-
+%% @doc
+%% Checks the accumulated changes to workflow execution state expectations
+%% against the data stored in op.
+%%
+%% A mismatch is not deemed a failure right away, as it is also the normal
+%% picture while either side is still catching up with the other:
+%% - the backend may not have registered a change the model already predicted,
+%% - the model may not have applied a change the backend already registered -
+%%   a step phase is reported only after the original function has returned, so
+%%   between unblocking a step and receiving its report the backend legitimately
+%%   runs ahead of the model. Silence on the test process means only that no
+%%   step has reported lately - not that none is in flight.
+%% Therefore, the wait for the two to converge is interrupted by any step phase
+%% report, which is handled as usual, with the expectations addressed anew
+%% during the next quiet period.
+%% @end
+-spec address_pending_expectations(test_ctx()) ->
+    {expectations_met | step_phase_reported, test_ctx()} | no_return().
 address_pending_expectations(TestCtx = #test_ctx{workflow_execution_exp_state_changed = false}) ->
-    TestCtx.
+    {expectations_met, TestCtx};
+
+address_pending_expectations(TestCtx) ->
+    await_exp_workflow_execution_state_match(TestCtx, ?AWAIT_EXP_STATE_MATCH_ATTEMPTS).
 
 
 %% @private
--spec should_defer_step_execution(step_mock_spec(), test_ctx()) -> boolean().
-should_defer_step_execution(#atm_step_mock_spec{defer_after = undefined}, _TestCtx) ->
-    false;
-should_defer_step_execution(#atm_step_mock_spec{defer_after = StepSelector}, #test_ctx{
-    executed_step_phases = ExecutedSteps
-}) ->
-    not lists:member(StepSelector, ExecutedSteps).
+-spec await_exp_workflow_execution_state_match(test_ctx(), non_neg_integer()) ->
+    {expectations_met | step_phase_reported, test_ctx()} | no_return().
+await_exp_workflow_execution_state_match(
+    TestCtx = #test_ctx{workflow_execution_exp_state = ExpState},
+    AttemptsLeft
+) ->
+    case atm_workflow_execution_exp_state_builder:matches_with_backend(ExpState) of
+        true ->
+            {expectations_met, TestCtx#test_ctx{workflow_execution_exp_state_changed = false}};
+        false when AttemptsLeft == 1 ->
+            % rerun the check, this time reporting every mismatch found
+            atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState),
+            ct:pal("Automation workflow execution test failed due to unmet expectations"),
+            fail_test(TestCtx);
+        false ->
+            receive {ReplyTo, StepMockCallReport} ->
+                {step_phase_reported, handle_step_phase_report(ReplyTo, StepMockCallReport, TestCtx)}
+            after ?AWAIT_EXP_STATE_MATCH_INTERVAL ->
+                await_exp_workflow_execution_state_match(TestCtx, AttemptsLeft - 1)
+            end
+    end.
+
+
+%% @private
+-spec should_defer_step_execution(mock_call_report(), step_mock_spec(), test_ctx()) ->
+    {true, step_phase_selector()} | false.
+should_defer_step_execution(
+    StepMockCallReport,
+    #atm_step_mock_spec{defer_after = DeferAfterSpec},
+    TestCtx = #test_ctx{executed_step_phases = ExecutedSteps}
+) ->
+    AwaitedStepPhaseSelector = case is_function(DeferAfterSpec, 1) of
+        true -> DeferAfterSpec(build_mock_call_ctx(StepMockCallReport, TestCtx));
+        false -> DeferAfterSpec
+    end,
+
+    case AwaitedStepPhaseSelector =/= undefined andalso
+        not lists:member(AwaitedStepPhaseSelector, ExecutedSteps)
+    of
+        true -> {true, AwaitedStepPhaseSelector};
+        false -> false
+    end.
 
 
 %% @private
@@ -887,18 +964,6 @@ get_exp_state_diff(
 
 get_exp_state_diff(_, _) ->
     ?NO_DIFF.
-
-
-%% @private
--spec assert_exp_workflow_execution_state(test_ctx()) -> ok | no_return().
-assert_exp_workflow_execution_state(TestCtx = #test_ctx{workflow_execution_exp_state = ExpState}) ->
-    case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState, ?ASSERT_RETRIES) of
-        true ->
-            ok;
-        false ->
-            ct:pal("Automation workflow execution test failed due to unmet expectations"),
-            fail_test(TestCtx)
-    end.
 
 
 %% @private

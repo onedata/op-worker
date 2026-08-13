@@ -29,6 +29,7 @@
 -export([
     init/5,
     expect/2,
+    matches_with_backend/1,
     assert_matches_with_backend/1, assert_matches_with_backend/2,
     assert_deleted/1
 ]).
@@ -452,6 +453,18 @@ expect(ExpStateCtx, Expectations) when is_list(Expectations) ->
     end, ExpStateCtx, Expectations).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Tells whether the expectations match the data stored in op without reporting
+%% any mismatch found - suitable for callers that treat a mismatch as a state
+%% that may still resolve itself rather than an immediate failure.
+%% @end
+%%--------------------------------------------------------------------
+-spec matches_with_backend(ctx()) -> boolean().
+matches_with_backend(ExpStateCtx) ->
+    assert_matches_with_backend_internal(ExpStateCtx, fun(_, _) -> ok end).
+
+
 -spec assert_matches_with_backend(ctx()) -> boolean().
 assert_matches_with_backend(ExpStateCtx) ->
     assert_matches_with_backend(ExpStateCtx, 0).
@@ -462,7 +475,7 @@ assert_matches_with_backend(ExpStateCtx, 0) ->
     assert_matches_with_backend_internal(ExpStateCtx, fun ct:pal/2);
 
 assert_matches_with_backend(ExpStateCtx, Retries) ->
-    case assert_matches_with_backend_internal(ExpStateCtx, fun(_, _) -> ok end) of
+    case matches_with_backend(ExpStateCtx) of
         true ->
             true;
         false ->
