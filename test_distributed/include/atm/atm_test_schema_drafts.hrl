@@ -36,9 +36,17 @@
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG, <<"signal: illegal instruction (core dumped)\n">>).
 
 % Sleeps, reporting a heartbeat only at the very beginning - as such it stops
-% responding and is bound to be timed out under a short 'atm_workflow_job_timeout_sec'
+% responding and is bound to be timed out under a short 'atm_workflow_job_timeout_sec'.
+% NOTE: the silence must dwarf the timeout rather than merely outlast it. A result
+% reaching op before its job was registered in the workflow engine is taken as a
+% raced one and processed as any other - the job never gets a keepalive timer and
+% can not be timed out at all. Registration happens only after the mocked
+% 'run_task_for_item' step returns, and the test runner may hold that step back for
+% seconds on end, so the answer has to stay far out of reach for that whole time.
+% Being generous costs nothing - the job is killed by the timeout long before the
+% sleep ends, and the lambda is left talking to itself.
 -define(ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, <<"test/echo_with_sleep">>).
--define(ECHO_WITH_SLEEP_SILENCE_SEC, 12).
+-define(ECHO_WITH_SLEEP_SILENCE_SEC, 60).
 % Sleeps just as long, but keeps reporting heartbeats - a job that merely runs
 % long rather than one that hangs, and so is never timed out
 -define(ECHO_WITH_HEARTBEATS_DOCKER_IMAGE_ID, <<"test/echo_with_heartbeats">>).
