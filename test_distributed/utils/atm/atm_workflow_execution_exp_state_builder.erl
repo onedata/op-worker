@@ -753,10 +753,22 @@ expect_current_lane_run_started_preparing(ExpStateCtx0, AtmLaneRunSelector) ->
     ExpStateCtx1 = update_exp_lane_run_state(ExpStateCtx0, AtmLaneRunSelector, #{
         <<"status">> => <<"preparing">>}
     ),
-    update_exp_workflow_execution_state(ExpStateCtx1, #{
-        <<"status">> => <<"active">>,
-        <<"startTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx1))
-    }).
+    % 'startTime' is stamped by the backend once, when the execution enters the ongoing
+    % phase (@see atm_workflow_execution_status:set_times_on_phase_transition/1), and
+    % every following lane run only finds it already set. Restamping it here would pit
+    % a validator built around the current time against a timestamp from the beginning
+    % of the execution - a mismatch as soon as the two drift apart far enough.
+    update_exp_workflow_execution_state(ExpStateCtx1, fun
+        (ExpAtmWorkflowExecutionState = #{<<"startTime">> := 0}) ->
+            ExpAtmWorkflowExecutionState#{
+                <<"status">> => <<"active">>,
+                <<"startTime">> => build_timestamp_field_validator(get_timestamp_seconds(
+                    ExpStateCtx1
+                ))
+            };
+        (ExpAtmWorkflowExecutionState) ->
+            ExpAtmWorkflowExecutionState#{<<"status">> => <<"active">>}
+    end).
 
 
 %% @private
