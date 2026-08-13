@@ -166,7 +166,11 @@
 -type test_ctx() :: #test_ctx{}.
 
 -define(AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL, 150).
--define(TEST_HUNG_MAX_PROBES_NUM, 20).
+% Silence lasting this many intervals (~15 sec) is deemed a hung test. It must
+% comfortably exceed the longest quiet period a scenario can legitimately go
+% through - e.g. a job that is to be timed out reports nothing at all between
+% its dispatch and the moment the workflow engine notices the missing heartbeats.
+-define(TEST_HUNG_MAX_PROBES_NUM, 100).
 
 -define(AWAIT_EXP_STATE_MATCH_ATTEMPTS, 45).
 -define(AWAIT_EXP_STATE_MATCH_INTERVAL, timer:seconds(1)).

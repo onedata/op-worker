@@ -1096,8 +1096,13 @@ init_per_testcase(Case = schedule_atm_workflow_with_openfaas_not_configured, Con
 
 init_per_testcase(_Case, Config) ->
     % NOTE: this is merely a backstop against a hung testcase blocking the entire
-    % job - not a time budget (testcases in this suite were never measured)
-    ct:timetrap({minutes, 30}),
+    % job - not a time budget. The slowest testcase measured takes ~40 sec, but a
+    % failing one may legitimately need much longer before it gets to report what
+    % went wrong (@see atm_workflow_execution_test_runner - awaiting the exp state
+    % and the backend to converge alone is given 45 sec). Hence the wide margin -
+    % cutting the timetrap any closer would trade diagnostics for a bare
+    % 'timetrap_timeout'.
+    ct:timetrap({minutes, 3}),
     Config.
 
 
