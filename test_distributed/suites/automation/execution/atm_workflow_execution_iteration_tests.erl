@@ -479,7 +479,13 @@ create_initial_files() ->
 build_file_data_spec() ->
     #atm_file_data_spec{
         file_type = 'ANY',
-        attributes = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
+        % NOTE: ?attr_type is required on top of the randomly drawn ones, as it is
+        % what makes resolving an iterated item actually look the file up. Attributes
+        % are resolved in stages, each skipped unless some attribute it provides was
+        % requested (@see file_attr:resolve/3), and the guid alone is taken straight
+        % from the file reference - a removed file would resolve just fine, and the
+        % testcases iterating over inaccessible files would see nothing fail.
+        attributes = lists:usort([?attr_guid, ?attr_type | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
     }.
 
 
