@@ -12,6 +12,8 @@
 -module(atm_openfaas_docker_mock).
 -author("Bartosz Walkowicz").
 
+-include("modules/automation/atm_execution.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 -include("atm/atm_test_schema_drafts.hrl").
@@ -46,16 +48,18 @@ exec(?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, #{
     timer:sleep(timer:seconds(?ECHO_WITH_SLEEP_SILENCE_SEC)),
     #{<<"resultsBatch">> => ArgsBatch};
 
-exec(?ECHO_WITH_HEARTBEATS_DOCKER_IMAGE_ID, #{
-    <<"ctx">> := #{<<"heartbeatUrl">> := HeartbeatUrl},
+exec(?ECHO_UNTIL_STOPPING_DOCKER_IMAGE_ID, #{
+    <<"ctx">> := #{
+        <<"heartbeatUrl">> := HeartbeatUrl,
+        <<"atmWorkflowExecutionId">> := AtmWorkflowExecutionId
+    },
     <<"argsBatch">> := ArgsBatch
 }) ->
-    Opts = [{ssl_options, [{cacerts, https_listener:get_cert_chain_ders()}]}],
-
-    lists:foreach(fun(_) ->
-        timer:sleep(timer:seconds(1)),
-        http_client:post(HeartbeatUrl, #{}, <<>>, Opts)
-    end, lists:seq(1, ?ECHO_WITH_HEARTBEATS_DURATION_SEC)),
+    % NOTE: once op_worker has begun stopping there is no way for this answer to be
+    % delivered - the https listener serving both the heartbeats and the job answers
+    % is brought down before atm executions are asked to stop (see
+    % node_manager_plugin:after_listeners_stop/0). Such a job is left to be timed out.
+    heartbeat_until_workflow_execution_is_stopping(AtmWorkflowExecutionId, HeartbeatUrl),
 
     #{<<"resultsBatch">> => ArgsBatch};
 
@@ -110,3 +114,36 @@ exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3, #{<<"argsBatch">> := ArgsBatc
 
 exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4, _) ->
     ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec heartbeat_until_workflow_execution_is_stopping(atm_workflow_execution:id(), binary()) ->
+    ok.
+heartbeat_until_workflow_execution_is_stopping(AtmWorkflowExecutionId, HeartbeatUrl) ->
+    timer:sleep(?ECHO_HEARTBEAT_INTERVAL_MILLIS),
+
+    http_client:post(HeartbeatUrl, #{}, <<>>, [
+        {ssl_options, [{cacerts, https_listener:get_cert_chain_ders()}]}
+    ]),
+
+    case is_workflow_execution_stopping(AtmWorkflowExecutionId) of
+        true -> ok;
+        false -> heartbeat_until_workflow_execution_is_stopping(AtmWorkflowExecutionId, HeartbeatUrl)
+    end.
+
+
+%% @private
+-spec is_workflow_execution_stopping(atm_workflow_execution:id()) -> boolean().
+is_workflow_execution_stopping(AtmWorkflowExecutionId) ->
+    case atm_workflow_execution:get(AtmWorkflowExecutionId) of
+        {ok, #document{value = #atm_workflow_execution{status = Status}}} ->
+            Status =:= ?STOPPING_STATUS;
+        {error, _} ->
+            % the execution is gone - there is nothing left to answer to
+            true
+    end.

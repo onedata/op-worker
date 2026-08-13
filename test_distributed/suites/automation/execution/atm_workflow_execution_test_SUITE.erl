@@ -438,14 +438,10 @@ all() -> [
     {group, repeat_tests},
     {group, resume_tests},
     {group, force_continue_tests},
-    {group, gc_tests}
+    {group, gc_tests},
 
-    % TODO VFS-10266 the testcase needs its synchronization redesigned before it can
-    % be enabled - it breakpoints on 'atm_supervision_worker:cleanup/0', which runs
-    % only after the graceful stop procedure (triggered from the earlier
-    % 'node_manager_plugin:after_listeners_stop/0' callback) has already finished,
-    % so the intermediate states it asserts are long gone by then
-%%    {group, restarts_tests}
+    % NOTE: must be run last - this group restarts op_worker
+    {group, restarts_tests}
 ].
 
 
@@ -1034,7 +1030,11 @@ init_per_suite(Config) ->
                 {atm_workflow_job_timeout_check_period_sec, 1},
                 {atm_suspended_workflow_executions_expiration_sec, 0},
                 {atm_ended_workflow_executions_expiration_sec, 0},
-                {atm_workflow_executions_graceful_stop_timeout_sec, 3}
+                {atm_workflow_executions_graceful_stop_timeout_sec, 3},
+                % 'restarts_tests' must get the openfaas mocks back onto the node
+                % it restarted before the restart procedure starts running tasks
+                % there, and the countdown begins already at op_worker boot
+                {atm_workflow_executions_restart_retry_delay, 60000}
             ]}],
             posthook = fun(NewConfig) ->
                 atm_test_inventory:set_up(?ATM_PROVIDER_SELECTOR, user1),
@@ -1089,6 +1089,15 @@ end_per_group(_TestGroup, Config) ->
     Config.
 
 
+init_per_testcase(restart_op_worker_after_graceful_stop, Config) ->
+    % This testcase awaits the graceful stop procedure (bounded by its backoff
+    % rather than by 'atm_workflow_executions_graceful_stop_timeout_sec'), then a
+    % full op_worker restart, and finally the restart procedure delayed by
+    % 'atm_workflow_executions_restart_retry_delay' - none of which fits the
+    % backstop given to the remaining testcases
+    ct:timetrap({minutes, 15}),
+    Config;
+
 init_per_testcase(Case = schedule_atm_workflow_with_openfaas_not_configured, Config) ->
     % the very point of this testcase is OpenFaaS service being unavailable
     atm_openfaas_task_executor_mock:unmock_openfaas_health_check(?ATM_PROVIDER_SELECTOR),
@@ -1105,6 +1114,12 @@ init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 3}),
     Config.
 
+
+end_per_testcase(Case = restart_op_worker_after_graceful_stop, Config) ->
+    % must run before the leftovers are dealt with - they can not be stopped while
+    % op_worker is down, nor while their jobs are exempted from timeouts
+    atm_workflow_execution_restart_tests:clean_up(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case = schedule_atm_workflow_with_openfaas_not_configured, Config) ->
     atm_openfaas_task_executor_mock:mock_openfaas_health_check(?ATM_PROVIDER_SELECTOR),

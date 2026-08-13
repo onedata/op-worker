@@ -47,10 +47,15 @@
 % sleep ends, and the lambda is left talking to itself.
 -define(ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, <<"test/echo_with_sleep">>).
 -define(ECHO_WITH_SLEEP_SILENCE_SEC, 60).
-% Sleeps just as long, but keeps reporting heartbeats - a job that merely runs
-% long rather than one that hangs, and so is never timed out
--define(ECHO_WITH_HEARTBEATS_DOCKER_IMAGE_ID, <<"test/echo_with_heartbeats">>).
--define(ECHO_WITH_HEARTBEATS_DURATION_SEC, 13).
+% Keeps reporting heartbeats and answers only once its workflow execution has been
+% asked to stop - a job that runs for as long as there is any point in running it,
+% rather than one that hangs. Its execution lasts exactly as long as the test needs
+% it to, with no sleep long enough to cover the slowest run to guess at.
+-define(ECHO_UNTIL_STOPPING_DOCKER_IMAGE_ID, <<"test/echo_until_stopping">>).
+% Must stay well below the 'atm_workflow_job_timeout_sec' of any suite using the
+% above image - that is the keepalive timeout the heartbeats are there to reset
+-define(ECHO_HEARTBEAT_INTERVAL_MILLIS, 200).
+
 -define(ECHO_WITH_PAUSE_DOCKER_IMAGE_ID, <<"test/echo_with_pause">>).
 
 -define(ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, <<"test/echo_with_exception_on_even_numbers">>).
