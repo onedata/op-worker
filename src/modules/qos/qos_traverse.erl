@@ -312,6 +312,11 @@ synchronize_file_for_entries_insecure(TaskId, #tree_traverse_slave{file_ctx = Fi
         {{error, cancelled}, _} ->
             % QoS entry was deleted, so there is no need to report to audit log
             ?debug("QoS file synchronization failed due to cancellation");
+        {{error, not_found}, _} ->
+            % File was deleted during the traverse - its QoS status is cleaned up by the
+            % deletion procedure (see file_qos:cleanup_reference_related_documents/1), so
+            % there is nothing to report to the audit log.
+            ?debug("QoS file synchronization skipped - file no longer exists");
         {{error, _} = Error, FileCtx2} ->
             NormalizedError = normalize_error(Error),
             ?error("Error during QoS file synchronization: ~tp", [NormalizedError]),

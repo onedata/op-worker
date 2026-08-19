@@ -36,7 +36,11 @@
     qos_status_after_failed_transfers/1,
     qos_status_after_failed_transfers_deleted_file/1,
     qos_status_after_failed_transfers_deleted_entry/1,
-    
+    qos_transfer_of_empty_file_with_deleted_local_location/1,
+    qos_transfer_of_non_empty_file_with_deleted_local_location/1,
+    qos_status_after_synchronization_not_found_empty_file/1,
+    qos_status_after_synchronization_not_found_non_empty_file/1,
+
     qos_status_during_reconciliation_test/1,
     qos_status_during_reconciliation_prefix_file_test/1,
     qos_status_during_reconciliation_with_file_deletion_test/1,
@@ -58,6 +62,10 @@ all() -> [
     qos_status_after_failed_transfers,
     qos_status_after_failed_transfers_deleted_file,
     qos_status_after_failed_transfers_deleted_entry,
+    qos_transfer_of_empty_file_with_deleted_local_location,
+    qos_transfer_of_non_empty_file_with_deleted_local_location,
+    qos_status_after_synchronization_not_found_empty_file,
+    qos_status_after_synchronization_not_found_non_empty_file,
     qos_status_during_reconciliation_test,
     qos_status_during_reconciliation_prefix_file_test,
     qos_status_during_reconciliation_with_file_deletion_test,
@@ -110,6 +118,22 @@ qos_status_after_failed_transfers_deleted_file(_Config) ->
 qos_status_after_failed_transfers_deleted_entry(_Config) ->
     [_Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     qos_test_base:qos_status_after_failed_transfer_deleted_entry(Provider2).
+
+qos_transfer_of_empty_file_with_deleted_local_location(_Config) ->
+    [_Provider1, Provider2 | _] = oct_background:get_provider_ids(),
+    qos_test_base:qos_transfer_of_file_with_deleted_local_location_test_base(Provider2, <<>>).
+
+qos_transfer_of_non_empty_file_with_deleted_local_location(_Config) ->
+    [_Provider1, Provider2 | _] = oct_background:get_provider_ids(),
+    qos_test_base:qos_transfer_of_file_with_deleted_local_location_test_base(Provider2, ?TEST_DATA).
+
+qos_status_after_synchronization_not_found_empty_file(_Config) ->
+    [_Provider1, Provider2 | _] = oct_background:get_provider_ids(),
+    qos_test_base:qos_status_after_synchronization_not_found_test_base(Provider2, <<>>).
+
+qos_status_after_synchronization_not_found_non_empty_file(_Config) ->
+    [_Provider1, Provider2 | _] = oct_background:get_provider_ids(),
+    qos_test_base:qos_status_after_synchronization_not_found_test_base(Provider2, ?TEST_DATA).
 
 qos_status_during_reconciliation_test(_Config) ->
     [Provider1 | _] = oct_background:get_provider_ids(),
