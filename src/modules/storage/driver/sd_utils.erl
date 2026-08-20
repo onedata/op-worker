@@ -456,28 +456,77 @@ create_missing_parent_dirs_by_location(UserCtx, FileCtx) ->
     ReferencedUuidBasedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
     {StorageFileId, ReferencedUuidBasedFileCtx2} = file_ctx:get_storage_file_id(ReferencedUuidBasedFileCtx),
     {StorageId, ReferencedUuidBasedFileCtx3} = file_ctx:get_storage_id(ReferencedUuidBasedFileCtx2),
-    [<<"/">>, SpaceId | PathTokens] = filepath_utils:split(filepath_utils:parent_dir(StorageFileId)),
-    % Use uuid of given file as we do not know uuid of parent - this function is called if there is some inconsistency
-    % in metadata and file_location is pointing to another path than it is resolved based on file meta, this can happen
-    % when ancestor directory was moved on other provider and local file location was created without file being created on storage.
-    % This uuid is only used to check if this is the space dir, which it is not, so we can safely do it.
-    DummyUuid = datastore_key:new(),
+    SpaceId = file_ctx:get_space_id_const(ReferencedUuidBasedFileCtx3),
+    SpaceDirStorageFileId = storage_file_id:space_dir_id(SpaceId, StorageId),
+    [<<"/">> | AncestorTokens] = filepath_utils:split(filepath_utils:parent_dir(StorageFileId)),
     lists:foldl(fun(PathToken, ParentPath) ->
         Path = filepath_utils:join([ParentPath, PathToken]),
-        SDHandle = storage_driver:new_handle(user_ctx:get_session_id(UserCtx), SpaceId, DummyUuid, StorageId, Path),
-        case storage_driver:mkdir(SDHandle, ?DEFAULT_DIR_MODE) of
-            ok -> ok;
-            {error, already_exists} -> ok;
-            Error ->
-                ?error("Error when recreating missing storage directory ~tp: ~tp", [Path, Error])
+        case Path =:= SpaceDirStorageFileId of
+            true -> recreate_missing_space_dir(SpaceId, StorageId, Path);
+            false -> recreate_missing_ancestor_dir(UserCtx, SpaceId, StorageId, Path)
         end,
         Path
-    end, filepath_utils:join([<<"/">>, SpaceId]), PathTokens),
+    end, <<"/">>, AncestorTokens),
     case file_ctx:equals(FileCtx, ReferencedUuidBasedFileCtx) of
         true -> % regular file - use provided ctx
             ReferencedUuidBasedFileCtx3;
         false -> % hardlink - use effective ctx and do not return changes on ctx
             FileCtx
+    end.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Recreates ancestor directory missing on storage. Uuid of such directory is not known, as this
+%% function is called when file_location points to another path than the one resolved based on
+%% file_meta (it can happen when ancestor directory was moved on other provider and local
+%% file_location was created without file being created on storage). Dummy uuid is enough, as it is
+%% only used to check whether the directory is the space dir (see
+%% storage_driver:run_with_helper_handle/4), which it is not.
+%% @end
+%%-------------------------------------------------------------------
+-spec recreate_missing_ancestor_dir(user_ctx:ctx(), od_space:id(), storage:id(), helpers:file_id()) -> ok.
+recreate_missing_ancestor_dir(UserCtx, SpaceId, StorageId, StorageFileId) ->
+    DummyUuid = datastore_key:new(),
+    SDHandle = storage_driver:new_handle(
+        user_ctx:get_session_id(UserCtx), SpaceId, DummyUuid, StorageId, StorageFileId),
+    % error (if any) is logged in mkdir_missing_dir/1
+    _ = mkdir_missing_dir(SDHandle),
+    ok.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Recreates space dir missing on storage. It is owned by the virtual space owner, so - as in
+%% mkdir_and_maybe_chown/3 - it is created with root credentials and chowned afterwards.
+%% @end
+%%-------------------------------------------------------------------
+-spec recreate_missing_space_dir(od_space:id(), storage:id(), helpers:file_id()) -> ok.
+recreate_missing_space_dir(SpaceId, StorageId, StorageFileId) ->
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    SDHandle = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, SpaceDirUuid, StorageId, StorageFileId),
+    case mkdir_missing_dir(SDHandle) of
+        ok ->
+            files_to_chown:chown_or_defer(file_ctx:new_by_uuid(SpaceDirUuid, SpaceId)),
+            ok;
+        {error, _} ->
+            ok
+    end.
+
+
+%% @private
+-spec mkdir_missing_dir(storage_driver:handle()) -> ok | {error, term()}.
+mkdir_missing_dir(#sd_handle{file = StorageFileId} = SDHandle) ->
+    case storage_driver:mkdir(SDHandle, ?DEFAULT_DIR_MODE) of
+        ok ->
+            ok;
+        {error, ?EEXIST} ->
+            ok;
+        {error, _} = Error ->
+            ?error("Error when recreating missing storage directory ~tp: ~tp", [StorageFileId, Error]),
+            Error
     end.
 
 %%-------------------------------------------------------------------
