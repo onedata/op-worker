@@ -75,12 +75,13 @@ all() -> [
 ].
 
 
-% Client conventions (see client_spec/0): user3 owns the transferred files
-% but is stripped of (some of) the privileges required for the tested
-% operation - forbidden despite being the owner; user4 holds them - correct
-% client; user2 (space owner) is the setup client, exempt from privilege
-% checks (schedules the transfers the cancel/rerun tests operate on, so that
-% the forbidden client hits the non-creator authorization path).
+% Client conventions (see client_spec/0):
+% - user3 owns the transferred files but is stripped of (some of) the privileges
+%   required for the tested operation - forbidden despite being the owner;
+% - user4 holds them - correct client;
+% - user2 (space owner) is the setup client, exempt from privilege checks
+%   (schedules the transfers the cancel/rerun tests operate on, so that
+%   the forbidden client hits the non-creator authorization path).
 -define(SPACE_SELECTOR, space_krk_par).
 -define(FILES_OWNER_FORBIDDEN_CLIENT, user3).
 -define(CORRECT_CLIENT, user4).
@@ -1370,7 +1371,7 @@ build_create_file_transfer_setup_fun(TestSuiteCtx, MemRef, CaseName) ->
     onenv_api_test_runner:setup_fun().
 build_create_view_transfer_setup_fun(TestSuiteCtx, MemRef, CaseName) ->
     fun() ->
-        RootDirObject = create_and_replicate_file_tree(TestSuiteCtx, CaseName, rand:uniform(5)),
+        RootDirObject = setup_file_tree_replicas(TestSuiteCtx, CaseName, rand:uniform(5)),
         FileObjects = RootDirObject#object.children,
         BystanderFileObject = create_bystander_file(TestSuiteCtx, CaseName),
         ViewName = create_view_matching_files(TestSuiteCtx, CaseName, FileObjects),
@@ -1510,7 +1511,7 @@ do_start_file_transfer(TestSuiteCtx, MemRef, CaseName, RootFileType) ->
 ) ->
     ok.
 start_view_transfer(TestSuiteCtx, MemRef, CaseName) ->
-    RootDirObject = create_and_replicate_file_tree(TestSuiteCtx, CaseName, rand:uniform(5)),
+    RootDirObject = setup_file_tree_replicas(TestSuiteCtx, CaseName, rand:uniform(5)),
     FileObjects = RootDirObject#object.children,
     ViewName = create_view_matching_files(TestSuiteCtx, CaseName, FileObjects),
 
@@ -1833,9 +1834,9 @@ collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
 
 
 %% @private
--spec create_and_replicate_file_tree(#transfer_test_suite_ctx{}, atom(), pos_integer()) ->
+-spec setup_file_tree_replicas(#transfer_test_suite_ctx{}, atom(), pos_integer()) ->
     onenv_file_test_utils:object().
-create_and_replicate_file_tree(TestSuiteCtx, CaseName, FilesCount) ->
+setup_file_tree_replicas(TestSuiteCtx, CaseName, FilesCount) ->
     RootDirObject = transfer_test_utils:create_file_tree(
         TestSuiteCtx, CaseName, #dir_spec{children = [
             #file_spec{content = ?RAND_CONTENT()} || _ <- lists:seq(1, FilesCount)
@@ -1851,10 +1852,10 @@ create_and_replicate_file_tree(TestSuiteCtx, CaseName, FilesCount) ->
 -spec create_transfer_target_object(#transfer_test_suite_ctx{}, atom(), binary()) ->
     onenv_file_test_utils:object().
 create_transfer_target_object(TestSuiteCtx, CaseName, <<"file">>) ->
-    RootDirObject = create_and_replicate_file_tree(TestSuiteCtx, CaseName, 1),
+    RootDirObject = setup_file_tree_replicas(TestSuiteCtx, CaseName, 1),
     hd(RootDirObject#object.children);
 create_transfer_target_object(TestSuiteCtx, CaseName, <<"dir">>) ->
-    create_and_replicate_file_tree(TestSuiteCtx, CaseName, 5).
+    setup_file_tree_replicas(TestSuiteCtx, CaseName, 5).
 
 
 %% @private
@@ -1863,7 +1864,7 @@ create_transfer_target_object(TestSuiteCtx, CaseName, <<"dir">>) ->
 -spec create_bystander_file(#transfer_test_suite_ctx{}, atom()) ->
     onenv_file_test_utils:object().
 create_bystander_file(TestSuiteCtx, CaseName) ->
-    RootDirObject = create_and_replicate_file_tree(TestSuiteCtx, CaseName, 1),
+    RootDirObject = setup_file_tree_replicas(TestSuiteCtx, CaseName, 1),
     hd(RootDirObject#object.children).
 
 
