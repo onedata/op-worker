@@ -94,7 +94,9 @@ stop_pool() ->
 -spec start(archive:doc(), dataset:doc(), user_ctx:ctx()) -> ok | {error, term()}.
 start(ArchiveDoc, DatasetDoc, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-    case tree_traverse_session:setup_for_task(UserCtx, ArchiveId) of
+    LogCtx = archivisation_logger:report_started(
+        "starting archivisation traverse", ?autoformat(ArchiveId)),
+    Result = case tree_traverse_session:setup_for_task(UserCtx, ArchiveId) of
         ok ->
             try
                 UserId = user_ctx:get_user_id(UserCtx),
@@ -108,7 +110,9 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
             end;
         {error, _} = Error ->
             Error
-    end.
+    end,
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 
 %%%===================================================================
@@ -117,11 +121,13 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
 
 -spec task_started(id(), tree_traverse:pool()) -> ok.
 task_started(TaskId, _Pool) ->
-    ?debug("Archivisation job ~tp started", [TaskId]).
+    archivisation_logger:report_event("archivisation traverse task started", ?autoformat(TaskId)).
 
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
 task_finished(TaskId, _Pool) ->
+    LogCtx = archivisation_logger:report_started(
+        "archivisation traverse task finished", ?autoformat(TaskId)),
     tree_traverse_session:close_for_task(TaskId),
     {ok, TaskDoc} = traverse_task:get(?POOL_NAME, TaskId),
     {ok, AdditionalData} = traverse_task:get_additional_data(TaskDoc),
@@ -133,7 +139,7 @@ task_finished(TaskId, _Pool) ->
 
     SlaveJobsFailed = maps:get(slave_jobs_failed, Description, 0),
     MasterJobsFailed = maps:get(master_jobs_failed, Description, 0),
-    case SlaveJobsFailed + MasterJobsFailed =:= 0 of
+    Result = case SlaveJobsFailed + MasterJobsFailed =:= 0 of
         true ->
             archivisation_callback:notify_preserved(ArchiveId, DatasetId, CallbackUrlOrUndefined);
         false ->
@@ -142,7 +148,10 @@ task_finished(TaskId, _Pool) ->
             archivisation_callback:notify_preservation_failed(
                 ArchiveId, DatasetId, CallbackUrlOrUndefined,
                 ErrorDescription)
-    end.
+    end,
+    archivisation_logger:report_finished(
+        LogCtx, ?autoformat(TaskId, ArchiveId, SlaveJobsFailed, MasterJobsFailed)),
+    Result.
 
 
 -spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.
@@ -165,42 +174,55 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
+do_master_job(InitialJob = #tree_traverse{file_ctx = FileCtx, relative_path = RelativePath},
+    MasterJobArgs = #{task_id := TaskId}
+) ->
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    LogCtx = archivisation_logger:report_started(
+        "archivisation master job", ?autoformat(TaskId, FileGuid, RelativePath)),
     archivisation_traverse_logic:mark_building_if_first_job(InitialJob),
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
         report_error(TaskId, #tree_traverse{user_id = UserId} = Job, Reason, Stacktrace),
         {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
         do_aborted_master_job(Job, MasterJobArgs, UserCtx, {failed, Reason})
     end,
-    case archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler) of
-        {ok, _} = Result ->
-            Result;
+    Result = case archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler) of
+        {ok, _} = MasterJobMap ->
+            MasterJobMap;
         {error, interrupted_call, _} ->
             ?warning("Dataset content changed on remote provider during archivisation - some files might be missing in final archive."),
             {ok, #{}};
         {error, Reason, Stacktrace} ->
             ErrorHandler(InitialJob, {error, Reason}, Stacktrace)
-    end.
+    end,
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(InitialJob, TaskId) ->
+do_slave_job(InitialJob = #tree_traverse_slave{file_ctx = FileCtx, relative_path = RelativePath}, TaskId) ->
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    LogCtx = archivisation_logger:report_started(
+        "archivisation slave job", ?autoformat(TaskId, FileGuid, RelativePath)),
     StartTimestamp = global_clock:timestamp_millis(),
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
         #tree_traverse_slave{
-            file_ctx = FileCtx, 
-            user_id = UserId, 
-            traverse_info = TraverseInfo, 
+            file_ctx = JobFileCtx,
+            user_id = UserId,
+            traverse_info = TraverseInfo,
             master_job_uuid = MasterJobUuid,
-            relative_path = RelativePath
+            relative_path = JobRelativePath
         } = Job,
         report_error(TaskId, Job, Reason, Stacktrace),
         {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
         archivisation_traverse_logic:mark_finished_and_propagate_up(
-            FileCtx, UserCtx, TraverseInfo, TaskId, MasterJobUuid, StartTimestamp, RelativePath, {failed, Reason})
+            JobFileCtx, UserCtx, TraverseInfo, TaskId, MasterJobUuid, StartTimestamp, JobRelativePath,
+            {failed, Reason})
     end,
-    archive_traverses_common:execute_unsafe_job(
-        ?MODULE, do_slave_job_unsafe, [TaskId, StartTimestamp], InitialJob, ErrorHandler).
+    Result = archive_traverses_common:execute_unsafe_job(
+        ?MODULE, do_slave_job_unsafe, [TaskId, StartTimestamp], InitialJob, ErrorHandler),
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 %%%===================================================================
 %%% Internal traverse functions
@@ -264,6 +286,8 @@ do_aborted_master_job(
     UserCtx,
     Status
 ) ->
+    archivisation_logger:report_event(
+        "processing aborted master job", ?autoformat(TaskId, RelativePath, Status)),
     case tree_traverse:do_aborted_master_job(Job, MasterJobArgs) of
         {ok, MasterJobMap, undefined, _} ->
             {ok, MasterJobMap};
@@ -280,9 +304,12 @@ build_new_jobs_preprocessor_fun(TaskId, FileCtx, TraverseInfo, UserCtx, Relative
     fun(SlaveJobs, MasterJobs, ListingToken, SubtreeProcessingStatus) ->
         DirUuid = file_ctx:get_logical_uuid_const(FileCtx),
         ChildrenCount = length(SlaveJobs) + length(MasterJobs),
+        IsListingFinished = file_listing:is_finished(ListingToken),
+        archivisation_logger:report_event("listed a batch of directory children", ?autoformat(
+            TaskId, RelativePath, DirUuid, ChildrenCount, IsListingFinished, SubtreeProcessingStatus)),
         ok = archive_traverses_common:update_children_count(
             ?POOL_NAME, TaskId, DirUuid, ChildrenCount),
-        case file_listing:is_finished(ListingToken) of
+        case IsListingFinished of
             false -> ok;
             true -> save_dir_checksum(TaskId, DirUuid, UserCtx, TraverseInfo)
         end,
@@ -433,6 +460,8 @@ init_archive(ArchiveId, UserCtx) when is_binary(ArchiveId) ->
     init_archive(ArchiveDoc, UserCtx);
 init_archive(ArchiveDoc, UserCtx) ->
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+    LogCtx = archivisation_logger:report_started("initializing archive", ?autoformat(DatasetId)),
     {ok, ArchiveDoc2} = archivisation_traverse_logic:initialize_archive_dir(
         ArchiveDoc, DatasetId, UserCtx),
+    archivisation_logger:report_finished(LogCtx),
     archivisation_traverse_ctx:init_for_new_traverse(ArchiveDoc2).

@@ -70,7 +70,9 @@ start(ArchiveDoc) ->
     {ok, TaskId} = archive:get_id(ArchiveDoc),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ok, DataFileGuid} = archive:get_data_dir_guid(ArchiveDoc),
-    case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
+    LogCtx = archivisation_logger:report_started(
+        "starting archive verification traverse", ?autoformat(TaskId)),
+    Result = case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
         ok ->
             UserId = user_ctx:get_user_id(UserCtx),
             Options = #{
@@ -83,7 +85,9 @@ start(ArchiveDoc) ->
             ok;
         {error, _} = Error ->
             Error
-    end.
+    end,
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 -spec cancel(id()) -> ok | {error, term()}.
 cancel(TaskId) ->
@@ -93,13 +97,21 @@ cancel(TaskId) ->
 -spec block_archive_modification(archive:doc()) -> ok.
 block_archive_modification(#document{value = #archive{root_dir_guid = RootDirGuid}}) -> 
     FlagsToSet = ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION),
+    LogCtx = archivisation_logger:report_started(
+        "blocking archive modification", ?autoformat(RootDirGuid)),
     % as protection flags work only with datasets, create a dummy dataset on archive root dir
-    ?extract_ok(dataset_api:establish(file_ctx:new_by_guid(RootDirGuid), FlagsToSet, internal)).
+    Result = ?extract_ok(dataset_api:establish(file_ctx:new_by_guid(RootDirGuid), FlagsToSet, internal)),
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 
 -spec unblock_archive_modification(archive:doc()) -> ok.
 unblock_archive_modification(#document{value = #archive{root_dir_guid = RootDirGuid}}) -> 
-    ?extract_ok(dataset_api:remove(file_id:guid_to_uuid(RootDirGuid), internal)).
+    LogCtx = archivisation_logger:report_started(
+        "unblocking archive modification", ?autoformat(RootDirGuid)),
+    Result = ?extract_ok(dataset_api:remove(file_id:guid_to_uuid(RootDirGuid), internal)),
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 
 %%%===================================================================
@@ -108,29 +120,33 @@ unblock_archive_modification(#document{value = #archive{root_dir_guid = RootDirG
 
 -spec task_started(id(), tree_traverse:pool()) -> ok.
 task_started(TaskId, _Pool) ->
-    ?debug("Archive verification job ~tp started", [TaskId]).
+    archivisation_logger:report_event("archive verification task started", ?autoformat(TaskId)).
 
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
 task_finished(TaskId, Pool) ->
+    LogCtx = archivisation_logger:report_started(
+        "archive verification task finished", ?autoformat(TaskId)),
     case archive_traverses_common:is_cancelling(TaskId) of
         true -> 
             task_canceled(TaskId, Pool);
         false ->
             tree_traverse_session:close_for_task(TaskId),
-            archive:mark_preserved(TaskId),
-            ?debug("Archive verification job ~tp finished", [TaskId])
-    end.
+            archive:mark_preserved(TaskId)
+    end,
+    archivisation_logger:report_finished(LogCtx).
 
 
 -spec task_canceled(id(), tree_traverse:pool()) -> ok.
 task_canceled(TaskId, _Pool) ->
+    LogCtx = archivisation_logger:report_started(
+        "archive verification task cancelled", ?autoformat(TaskId)),
     tree_traverse_session:close_for_task(TaskId),
     case archive:mark_cancelled(TaskId) of
         ok -> ok;
         {error, marked_to_delete}  -> ok = archive_api:delete_single_archive(TaskId)
-    end, 
-    ?debug("Archive verification job ~tp cancelled", [TaskId]).
+    end,
+    archivisation_logger:report_finished(LogCtx).
 
 
 -spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.
@@ -154,35 +170,44 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
+    {FileCtx, FilePath} = job_to_error_info(InitialJob),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    LogCtx = archivisation_logger:report_started(
+        "archive verification master job", ?autoformat(TaskId, FileGuid, FilePath)),
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
         handle_verification_error(TaskId, Job),
         ?error_exception(
             ?autoformat_with_msg("Unexpected error during verification of archive", TaskId), error, Reason, Stacktrace),
         {ok, #{}} % unexpected error - no jobs can be created
     end,
-    case archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler) of
-        {ok, _} = Result ->
-            Result;
+    Result = case archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler) of
+        {ok, _} = MasterJobMap ->
+            MasterJobMap;
         {error, Reason, Stacktrace} ->
             handle_verification_error(TaskId, InitialJob),
-            {FileCtx, FilePath} = job_to_error_info(InitialJob),
-            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
             ?error_exception(?autoformat_with_msg(
                 "Unexpected error in archive verification traverse during listing of directory ",
                 [TaskId, FileGuid, FilePath]), error, Reason, Stacktrace),
             {ok, #{}}
-    end.
+    end,
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(InitialJob, TaskId) ->
+do_slave_job(InitialJob = #tree_traverse_slave{file_ctx = FileCtx, relative_path = RelativePath}, TaskId) ->
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    LogCtx = archivisation_logger:report_started(
+        "archive verification slave job", ?autoformat(TaskId, FileGuid, RelativePath)),
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
         handle_verification_error(TaskId, Job),
         ?error_exception("Unexpected error during verification of archive ~tp",
             [TaskId], error, Reason, Stacktrace)
     end,
-    archive_traverses_common:execute_unsafe_job(
-        ?MODULE, do_slave_job_unsafe, [TaskId], InitialJob, ErrorHandler).
+    Result = archive_traverses_common:execute_unsafe_job(
+        ?MODULE, do_slave_job_unsafe, [TaskId], InitialJob, ErrorHandler),
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 
 %%%===================================================================
@@ -260,10 +285,14 @@ handle_verification_error(TaskId, Job) ->
         [_] -> <<>>;
         [_ | PathTokens] -> filename:join(PathTokens)
     end,
+    LogCtx = archivisation_logger:report_started(
+        "handling archive verification error", ?autoformat(TaskId, RelativePath)),
     {FileType, _FileCtx2} = file_ctx:get_effective_type(FileCtx),
     archivisation_audit_log:report_file_verification_failed(TaskId, RelativePath, FileType),
     archive:mark_verification_failed(TaskId),
-    cancel(TaskId).
+    Result = cancel(TaskId),
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 
 -spec job_to_error_info(tree_traverse:job()) -> {file_ctx:ctx(), file_meta:path()}.

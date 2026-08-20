@@ -74,10 +74,15 @@ mark_building_if_first_job(Job = #tree_traverse{traverse_info = #{
 mark_finished_and_propagate_up(
     CurrentFileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid, StartTimestamp, FilePath, Status
 ) ->
+    LogCtx = archivisation_logger:report_started(
+        "marking file finished and propagating up", ?autoformat(TaskId, FilePath, Status)),
     report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status, UserCtx),
     NextTraverseInfo = mark_finished_if_current_archive_is_rooted_in_current_file(
         CurrentFileCtx, UserCtx, TraverseInfo),
-    propagate_finished_up(CurrentFileCtx, UserCtx, NextTraverseInfo, TaskId, SourceMasterUuid, FilePath).
+    Result = propagate_finished_up(
+        CurrentFileCtx, UserCtx, NextTraverseInfo, TaskId, SourceMasterUuid, FilePath),
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 
 -spec handle_file(file_ctx:ctx(), file_meta:path(), user_ctx:ctx(),
@@ -88,6 +93,7 @@ handle_file(FileCtx, ResolvedFilePath, UserCtx, TraverseInfo = #{
     base_archive_doc := BaseArchiveDoc,
     initial_archive_docs := InitialArchiveDocs
 }) ->
+    LogCtx = archivisation_logger:report_started("handling file", ?autoformat(ResolvedFilePath)),
     AipArchiveDoc = archivisation_traverse_ctx:get_archive_doc(AipArchiveCtx),
     {ok, Config} = archive:get_config(AipArchiveDoc),
     % check if there is dataset attached to current directory
@@ -107,11 +113,13 @@ handle_file(FileCtx, ResolvedFilePath, UserCtx, TraverseInfo = #{
     
     ShouldCreateNestedArchive andalso symlink_nested_archive(AipArchiveCtx, FinalAipArchiveCtx, UserCtx),
     ShouldCreateNestedArchive andalso symlink_nested_archive(DipArchiveCtx, FinalDipArchiveCtx, UserCtx),
-    TraverseInfo#{
+    FinalTraverseInfo = TraverseInfo#{
         aip_ctx => FinalAipArchiveCtx,
         dip_ctx => FinalDipArchiveCtx,
         base_archive_doc => FinalBaseArchiveDoc
-    }.
+    },
+    archivisation_logger:report_finished(LogCtx),
+    FinalTraverseInfo.
 
 
 -spec initialize_archive_dir(archive:doc() | archive:id(), dataset:id(), user_ctx:ctx()) ->
@@ -152,7 +160,10 @@ create_archive_root_dir(ArchiveDoc, DatasetId, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
     UserId = user_ctx:get_user_id(UserCtx),
+    LogCtx = archivisation_logger:report_started(
+        "creating archive root dir", ?autoformat(ArchiveId, DatasetId)),
     ok = archive_dir:ensure_exists(ArchiveId, DatasetId, SpaceId, UserId),
+    archivisation_logger:report_finished(LogCtx),
     archive:set_root_dir_guid(ArchiveId, archive_dir:guid(SpaceId, ArchiveId)).
 
 
@@ -160,6 +171,8 @@ create_archive_root_dir(ArchiveDoc, DatasetId, UserCtx) ->
 create_archive_data_dir(ArchiveDoc, UserCtx) ->
     {ok, ArchiveRootDirGuid} = archive:get_root_dir_guid(ArchiveDoc),
     ArchiveRootDirCtx = file_ctx:new_by_guid(ArchiveRootDirGuid),
+    LogCtx = archivisation_logger:report_started(
+        "creating archive data dir", ?autoformat(ArchiveRootDirGuid)),
     DataDirGuid = case is_bagit(ArchiveDoc) of
         true ->
             {ok, DataDirCtx} = bagit_archive:prepare(ArchiveRootDirCtx, UserCtx),
@@ -170,6 +183,7 @@ create_archive_data_dir(ArchiveDoc, UserCtx) ->
             save_dir_checksum_metadata(ArchiveRootDirGuid, UserCtx, 1),
             ArchiveRootDirGuid
     end,
+    archivisation_logger:report_finished(LogCtx),
     archive:set_data_dir_guid(ArchiveDoc, DataDirGuid).
 
 
@@ -191,6 +205,8 @@ initialize_nested_archive(NestedDatasetId, UserCtx, #{
     dip_ctx := DipArchiveCtx,
     base_archive_doc := ParentBaseArchiveDoc
 }) ->
+    LogCtx = archivisation_logger:report_started(
+        "initializing nested archive", ?autoformat(NestedDatasetId)),
     AipNestedArchiveCtx = create_and_prepare_nested_archive_dir(
         NestedDatasetId, AipArchiveCtx, UserCtx, aip),
     DipNestedArchiveCtx = create_and_prepare_nested_archive_dir(
@@ -216,6 +232,7 @@ initialize_nested_archive(NestedDatasetId, UserCtx, #{
     
     {FinalAipArchiveCtx, FinalDipArchiveCtx} = set_aip_dip_relation(
         AipNestedArchiveCtx2, DipNestedArchiveCtx2),
+    archivisation_logger:report_finished(LogCtx),
     {FinalAipArchiveCtx, FinalDipArchiveCtx, NestedBaseArchiveDoc}.
 
 
@@ -237,6 +254,8 @@ create_and_prepare_nested_archive_dir(DatasetId, ParentArchiveCtx, UserCtx, Type
         ParentArchiveDoc ->
             {ok, SpaceId} = archive:get_space_id(ParentArchiveDoc),
             {ok, ParentArchiveId} = archive:get_id(ParentArchiveDoc),
+            LogCtx = archivisation_logger:report_started(
+                "creating nested archive dir", ?autoformat(DatasetId, ParentArchiveId, Type)),
             {ok, NestedArchiveDoc} = archive:create_nested(DatasetId, ParentArchiveDoc),
             {ok, ArchiveId} = archive:get_id(NestedArchiveDoc),
             {ok, Timestamp} = archive:get_creation_time(NestedArchiveDoc),
@@ -247,7 +266,10 @@ create_and_prepare_nested_archive_dir(DatasetId, ParentArchiveCtx, UserCtx, Type
             archives_forest:add(ParentArchiveId, SpaceId, ArchiveId),
             {ok, NestedArchiveDoc2} = initialize_archive_dir(NestedArchiveDoc, DatasetId, UserCtx),
             {ok, NestedArchiveDataDirGuid} = archive:get_data_dir_guid(NestedArchiveDoc2),
-            archivisation_traverse_ctx:init_for_nested_archive(NestedArchiveDoc2, NestedArchiveDataDirGuid)
+            NestedArchiveCtx = archivisation_traverse_ctx:init_for_nested_archive(
+                NestedArchiveDoc2, NestedArchiveDataDirGuid),
+            archivisation_logger:report_finished(LogCtx),
+            NestedArchiveCtx
     end.
 
 
@@ -282,6 +304,8 @@ propagate_finished_up(FileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid, 
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             ParentStatus = tree_traverse:report_child_processed(TaskId, SourceMasterUuid),
+            archivisation_logger:report_event("reported child processed to parent dir",
+                ?autoformat(TaskId, FilePath, SourceMasterUuid, ParentStatus)),
             case ParentStatus of
                 ?SUBTREE_PROCESSED(NextSubtreeRoot, StartTimestamp) ->
                     SourceMasterFileCtx = file_ctx:new_by_uuid(SourceMasterUuid, SpaceId),
@@ -316,9 +340,13 @@ finalize_archive(ArchiveCtx, UserCtx) ->
         undefined -> 
             ArchiveCtx;
         CurrentDoc ->
+            {ok, ArchiveId} = archive:get_id(CurrentDoc),
             NestedArchiveStats = archive_api:get_nested_archives_stats(CurrentDoc),
+            LogCtx = archivisation_logger:report_started(
+                "finalizing archive", ?autoformat(ArchiveId)),
             mark_finished(CurrentDoc, UserCtx, NestedArchiveStats),
             {ok, ParentDocOrUndefined} = archive:get_parent_doc(CurrentDoc),
+            archivisation_logger:report_finished(LogCtx),
             archivisation_traverse_ctx:set_archive_doc(ArchiveCtx, ParentDocOrUndefined)
     end.
 
@@ -380,9 +408,12 @@ archive_dir(ArchiveCtx, FileCtx, ResolvedFilePath, UserCtx) ->
             DirName = filename:basename(ResolvedFilePath),
             DirGuid = file_ctx:get_logical_guid_const(FileCtx),
             TargetParentGuid = archivisation_traverse_ctx:get_target_parent(ArchiveCtx),
+            LogCtx = archivisation_logger:report_started(
+                "copying directory to archive", ?autoformat(DirGuid, DirName, TargetParentGuid)),
             % only directory is copied therefore recursive=false is passed to copy function
             {ok, CopyGuid, _} = file_copy:copy(user_ctx:get_session_id(UserCtx), DirGuid, TargetParentGuid,
                 DirName, #{recursive => false}),
+            archivisation_logger:report_finished(LogCtx),
             case is_bagit(ArchiveDoc) of
                 false -> ok;
                 true -> bagit_archive:archive_dir(
@@ -441,12 +472,15 @@ dip_archive_reg_file(OriginalFileCtx, ArchivedFileCtx, DipArchiveCtx, InitialDip
                 OriginalFileCtx, file_ctx:new_by_guid(DipTargetParentGuid), InitialDipDoc, UserCtx);
         {DipTargetParentGuid, false} ->
             {FileName, _} = file_ctx:get_aliased_name(ArchivedFileCtx, UserCtx),
+            LogCtx = archivisation_logger:report_started(
+                "creating dip archive hardlink", ?autoformat(FileName, DipTargetParentGuid)),
             {ok, #file_attr{guid = LinkGuid}} = lfm:make_link(
                 user_ctx:get_session_id(UserCtx),
                 #file_ref{guid = file_ctx:get_logical_guid_const(ArchivedFileCtx)},
                 #file_ref{guid = DipTargetParentGuid},
                 FileName
             ),
+            archivisation_logger:report_finished(LogCtx),
             {ok, LinkGuid}
     end.
 
@@ -460,8 +494,11 @@ make_symlink(TargetGuid, ParentGuid, UserCtx) ->
     {TargetCanonicalPath, _} = file_ctx:get_canonical_path(TargetCtx2),
     [_Sep, _SpaceId | Rest] = filename:split(TargetCanonicalPath),
     SymlinkValue = filename:join([SpaceIdPrefix | Rest]),
+    LogCtx = archivisation_logger:report_started(
+        "creating symlink to nested archive", ?autoformat(TargetGuid, ParentGuid)),
     {ok, _} = lfm:make_symlink(user_ctx:get_session_id(UserCtx), ?FILE_REF(ParentGuid),
         FileName, SymlinkValue),
+    archivisation_logger:report_finished(LogCtx),
     ok.
 
 
@@ -521,5 +558,8 @@ report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Stat
         {ok, DatasetRootParentPath} = archive:get_dataset_root_parent_path(ArchiveDoc, UserCtx),
         RelativeFilePath = filepath_utils:relative(DatasetRootParentPath, FilePath),
         {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-        erlang:apply(ReportFun, [ArchiveId, RelativeFilePath, FileType, StartTimestamp | AdditionalArgs])
+        LogCtx = archivisation_logger:report_started(
+            "appending entry to archivisation audit log", ?autoformat(ArchiveId, RelativeFilePath)),
+        erlang:apply(ReportFun, [ArchiveId, RelativeFilePath, FileType, StartTimestamp | AdditionalArgs]),
+        archivisation_logger:report_finished(LogCtx)
     end, info_to_archive_docs(TraverseInfo)).

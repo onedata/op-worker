@@ -143,12 +143,14 @@
 
 -spec prepare(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 prepare(ArchiveDirCtx, UserCtx) ->
+    LogCtx = archivisation_logger:report_started("preparing bagit archive layout"),
     DataDirCtx = create_data_dir(ArchiveDirCtx, UserCtx),
     create_bag_declaration(ArchiveDirCtx, UserCtx),
     % TODO VFS-7819 allow to pass this algorithms in archivisation request as param
     ChecksumAlgorithms = ?SUPPORTED_CHECKSUM_ALGORITHMS,
     bagit_checksums:create_manifests(ArchiveDirCtx, UserCtx, ChecksumAlgorithms),
     bagit_metadata:init(ArchiveDirCtx, UserCtx),
+    archivisation_logger:report_finished(LogCtx),
     {ok, DataDirCtx}.
 
 
@@ -176,9 +178,13 @@ archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFileP
 
 -spec archive_dir(archive:doc(), file_meta:path(), file_ctx:ctx(), user_ctx:ctx()) -> ok.
 archive_dir(ArchiveDoc, SourceLogicalPath, ArchivedFileCtx, UserCtx) -> 
+    LogCtx = archivisation_logger:report_started(
+        "archiving dir metadata in bagit layout", ?autoformat(SourceLogicalPath)),
     {ok, ArchiveDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
     RelativeFilePath = calculate_relative_path(ArchiveDoc, SourceLogicalPath, UserCtx),
-    archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx).
+    Result = archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx),
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 
 %%%===================================================================
@@ -199,6 +205,8 @@ create_data_dir(ArchiveDirCtx, UserCtx) ->
 create_bag_declaration(ParentCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
+    LogCtx = archivisation_logger:report_started(
+        "creating bagit bag declaration", ?autoformat(ParentGuid)),
     {ok, {_Guid, Handle}} = lfm:create_and_open(
         SessionId, ParentGuid, ?BAG_DECLARATION_FILE_NAME, ?DEFAULT_FILE_MODE, write),
 
@@ -208,7 +216,8 @@ create_bag_declaration(ParentCtx, UserCtx) ->
     ),
     {ok, _, _} = lfm:write(Handle, 0, Content),
     ok = lfm:fsync(Handle),
-    ok = lfm:release(Handle).
+    ok = lfm:release(Handle),
+    archivisation_logger:report_finished(LogCtx).
 
 
 %% @private
@@ -217,7 +226,10 @@ create_bag_declaration(ParentCtx, UserCtx) ->
 save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedFileCtx, SourceLogicalPath) ->
     % TODO VFS-7819 allow to pass this algorithms in archivisation request as param
     ChecksumAlgorithms = ?SUPPORTED_CHECKSUM_ALGORITHMS,
+    LogCtx = archivisation_logger:report_started("calculating bagit checksums of archived file",
+        ?autoformat(SourceLogicalPath, ChecksumAlgorithms)),
     CalculatedChecksums = file_checksum:calculate(ArchivedFileCtx, UserCtx, ChecksumAlgorithms),
+    archivisation_logger:report_finished(LogCtx),
 
     {ok, AncestorArchives} = archive:get_all_ancestors(CurrentArchiveDoc),
     lists:foreach(fun(ArchiveDoc) ->
@@ -234,11 +246,14 @@ save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedF
 archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     ArchiveFileGuid = file_ctx:get_logical_guid_const(ArchivedFileCtx),
+    LogCtx = archivisation_logger:report_started(
+        "reading custom metadata of archived file", ?autoformat(ArchiveFileGuid)),
     JsonMetadata = try
         mi_file_metadata:get_custom_metadata(SessionId, ?FILE_REF(ArchiveFileGuid), json, [], false)
     catch throw:?ERR_POSIX(?ENODATA) ->
         undefined
     end,
+    archivisation_logger:report_finished(LogCtx),
     bagit_metadata:add_entry(ArchiveDirCtx, UserCtx, RelativeFilePath, JsonMetadata).
 
 
@@ -259,6 +274,8 @@ create_tag_manifests(ArchiveDirCtx, UserCtx) ->
     ArchiveDirGuid = file_ctx:get_logical_guid_const(ArchiveDirCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
 
+    LogCtx = archivisation_logger:report_started(
+        "creating bagit tag manifests", ?autoformat(ArchiveDirGuid)),
     AllTagFilesNamesAndChecksums = lists:map(fun(TagFileName) ->
         {TagFileCtx, _} = file_tree:get_child(ArchiveDirCtx, TagFileName, UserCtx),
         {TagFileName, file_checksum:calculate(TagFileCtx, UserCtx, ChecksumAlgorithms)}
@@ -277,4 +294,5 @@ create_tag_manifests(ArchiveDirCtx, UserCtx) ->
 
         ok = lfm:fsync(FinalHandle),
         ok = lfm:release(FinalHandle)
-    end, ChecksumAlgorithms).
+    end, ChecksumAlgorithms),
+    archivisation_logger:report_finished(LogCtx).

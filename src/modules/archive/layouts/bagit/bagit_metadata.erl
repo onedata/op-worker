@@ -16,6 +16,7 @@
 -include("modules/dataset/bagit.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
@@ -33,9 +34,12 @@
 init(ArchiveDirCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     ParentGuid = file_ctx:get_logical_guid_const(ArchiveDirCtx),
+    LogCtx = archivisation_logger:report_started(
+        "initializing bagit metadata file", ?autoformat(ParentGuid)),
     {ok, {_Guid, Handle}} = lfm:create_and_open(SessionId, ParentGuid, ?METADATA_FILE_NAME, ?DEFAULT_FILE_MODE, write),
     {ok, NewHandle} = dump(Handle, #{}),
-    ok = lfm:release(NewHandle).
+    ok = lfm:release(NewHandle),
+    archivisation_logger:report_finished(LogCtx).
 
 
 -spec add_entry(file_ctx:ctx(), user_ctx:ctx(), file_meta:path(), json_utils:json_term()) -> ok.
@@ -43,8 +47,13 @@ add_entry(ArchiveDirCtx, UserCtx, FilePath, MetadataJson) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     {MetadataFileCtx, _} = file_tree:get_child(ArchiveDirCtx, ?METADATA_FILE_NAME, UserCtx),
     MetadataFileGuid = file_ctx:get_logical_guid_const(MetadataFileCtx),
+    LockLogCtx = archivisation_logger:report_started(
+        "acquiring bagit metadata lock", ?autoformat(MetadataFileGuid, FilePath)),
     ?CRITICAL_SECTION(MetadataFileGuid, fun() ->
-        case lfm:open(SessionId, ?FILE_REF(MetadataFileGuid), rdwr) of
+        archivisation_logger:report_finished(LockLogCtx),
+        WriteLogCtx = archivisation_logger:report_started(
+            "adding entry to bagit metadata file", ?autoformat(MetadataFileGuid, FilePath)),
+        Result = case lfm:open(SessionId, ?FILE_REF(MetadataFileGuid), rdwr) of
             {ok, Handle} ->
                 {ok, NewHandle, CurrentJson} = load(Handle),
                 UpdatedJson = CurrentJson#{FilePath => MetadataJson},
@@ -52,7 +61,9 @@ add_entry(ArchiveDirCtx, UserCtx, FilePath, MetadataJson) ->
                 lfm:release(NewHandle2);
             Error ->
                 Error
-        end
+        end,
+        archivisation_logger:report_finished(WriteLogCtx),
+        Result
     end).
 
 %%%===================================================================
