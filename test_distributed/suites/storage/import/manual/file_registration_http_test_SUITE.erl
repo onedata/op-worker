@@ -50,7 +50,8 @@
     read_registered_file_after_source_removed_from_storage_test/1,
     read_registered_file_after_source_modified_on_storage_test/1,
     read_registered_file_when_storage_returns_error_test/1,
-    large_registered_file_should_be_correctly_replicated_to_other_provider_test/1
+    large_registered_file_should_be_correctly_replicated_to_other_provider_test/1,
+    register_shared_file_via_public_url_test/1
 ]).
 
 all() -> [
@@ -75,7 +76,8 @@ all() -> [
     read_registered_file_after_source_removed_from_storage_test,
     read_registered_file_after_source_modified_on_storage_test,
     read_registered_file_when_storage_returns_error_test,
-    large_registered_file_should_be_correctly_replicated_to_other_provider_test
+    large_registered_file_should_be_correctly_replicated_to_other_provider_test,
+    register_shared_file_via_public_url_test
 ].
 
 -define(SUITE_CTX, #file_registration_test_suite_ctx{
@@ -114,6 +116,7 @@ read_registered_file_after_source_removed_from_storage_test(_Config) -> ?run_tes
 read_registered_file_after_source_modified_on_storage_test(_Config) -> ?run_test().
 read_registered_file_when_storage_returns_error_test(_Config) -> ?run_test().
 large_registered_file_should_be_correctly_replicated_to_other_provider_test(_Config) -> ?run_test().
+register_shared_file_via_public_url_test(_Config) -> ?run_test().
 
 
 %===================================================================
@@ -121,7 +124,7 @@ large_registered_file_should_be_correctly_replicated_to_other_provider_test(_Con
 %===================================================================
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, file_registration_test_base, http_storage_test_server],
+    ModulesToLoad = [?MODULE, file_registration_test_base, http_storage_test_server, storage_import_test_utils],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [{op_worker, op_worker, [

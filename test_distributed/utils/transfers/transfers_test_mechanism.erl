@@ -37,52 +37,27 @@
     replicate_root_directory/2,
     replicate_despite_protection_flags/2,
     replicate_each_file_separately/2,
-    error_on_replicating_files/2,
-    change_storage_params/2,
-    cancel_replication_on_target_nodes_by_scheduling_user/2,
-    cancel_replication_on_target_nodes_by_other_user/2,
-    rerun_replication/2,
-    rerun_view_replication/2,
-    replicate_files_from_view/2,
-    fail_to_replicate_files_from_view/2,
-    remove_file_during_replication/2,
 
     % replica eviction scenarios
     evict_root_directory/2,
     evict_despite_protection_flags/2,
     evict_each_file_replica_separately/2,
-    schedule_replica_eviction_without_permissions/2,
-    cancel_replica_eviction_on_target_nodes_by_scheduling_user/2,
-    cancel_replica_eviction_on_target_nodes_by_other_user/2,
-    rerun_evictions/2,
-    rerun_view_evictions/2,
-    evict_replicas_from_view/2,
-    fail_to_evict_replicas_from_view/2,
-    remove_file_during_eviction/2,
 
     % migration scenarios
     migrate_root_directory/2,
     migrate_despite_protection_flags/2,
-    migrate_each_file_replica_separately/2,
-    schedule_replica_migration_without_permissions/2,
-    cancel_migration_on_target_nodes_by_scheduling_user/2,
-    cancel_migration_on_target_nodes_by_other_user/2,
-    rerun_migrations/2,
-    rerun_view_migrations/2,
-    migrate_replicas_from_view/2,
-    fail_to_migrate_replicas_from_view/2
+    migrate_each_file_replica_separately/2
 ]).
 
 -export([
     move_transfer_ids_to_old_key/1,
-    get_transfer_ids/1,
-    await_replication_starts/2
+    get_transfer_ids/1
 ]).
 
 % functions exported to be called by rpc
 -export([create_files_structure/11, create_file/7,
     assert_file_visible/5, assert_file_distribution/6, prereplicate_file/6,
-    cast_files_prereplication/5, update_config/4, schedule_replication_by_view/8]).
+    cast_files_prereplication/5, update_config/4]).
 
 
 -define(UPDATE_TRANSFERS_KEY(__NodesTransferIdsAndFiles, __Config),
@@ -194,172 +169,6 @@ replicate_each_file_separately(Config, #scenario{
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
-error_on_replicating_files(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    lists:foreach(fun(TargetNode) ->
-        lists:foreach(fun({Guid, Path}) ->
-            TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-            FileKey = file_key(Guid, Path, FileKeyType),
-            ?assertMatch({error, _},
-                schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type))
-        end, FilesGuidsAndPaths)
-    end, ReplicatingNodes),
-    Config.
-
-%% modify storage during a running transfer
-%% to verify that transfer completes successfully despite
-%% helper reload (rtransfer restart).
-change_storage_params(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    SpaceId = ?config(?SPACE_ID_KEY, Config),
-
-    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
-    FileKey = file_key(Guid, Path, FileKeyType),
-    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId,
-            User, FileKey, Config, Type),
-        await_replication_starts(TargetNode, Tid),
-        {TargetNode, Tid, Guid, Path}
-    end, ReplicatingNodes),
-
-    lists:foreach(fun(Node) ->
-        StorageId = initializer:get_supporting_storage_id(Node, SpaceId),
-        modify_storage_timeout(Node, StorageId, <<"100000">>)
-    end, ReplicatingNodes),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-cancel_replication_on_target_nodes_by_scheduling_user(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
-    FileKey = file_key(Guid, Path, FileKeyType),
-    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
-        {TargetNode, Tid, Guid, Path}
-    end, ReplicatingNodes),
-
-    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
-        await_replication_starts(TargetNode, Tid),
-        cancel_transfer(TargetNode, User, User, replication, Tid, Config, Type)
-    end, NodesTransferIdsAndFiles),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-cancel_replication_on_target_nodes_by_other_user(Config, #scenario{
-    user = User1,
-    cancelling_user = User2,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
-    FileKey = file_key(Guid, Path, FileKeyType),
-    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User1, FileKey, Config, Type),
-        {TargetNode, Tid, Guid, Path}
-    end, ReplicatingNodes),
-
-    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
-        await_replication_starts(TargetNode, Tid),
-        cancel_transfer(TargetNode, User1, User2, replication, Tid, Config, Type)
-    end, NodesTransferIdsAndFiles),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-rerun_replication(Config, #scenario{user = User}) ->
-    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
-        {ok, NewTid} = rerun_transfer(TargetNode, User, replication, false, OldTid, Config),
-        {TargetNode, NewTid, Guid, Path}
-    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-rerun_view_replication(Config, #scenario{user = User}) ->
-    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
-        {ok, NewTid} = rerun_transfer(TargetNode, User, replication, true, OldTid, Config),
-        {TargetNode, NewTid, Guid, Path}
-    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-replicate_files_from_view(Config, #scenario{
-    user = User,
-    type = Type,
-    space_id = SpaceId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        {ok, Tid} = schedule_replication_by_view(ScheduleNode,
-            TargetProviderId, User, SpaceId, ViewName, QueryViewParams, Config, Type),
-        {TargetNode, Tid, undefined, undefined}
-    end, ReplicatingNodes),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-fail_to_replicate_files_from_view(Config, #scenario{
-    user = User,
-    type = Type,
-    space_id = SpaceId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    lists:foreach(fun(TargetNode) ->
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        ?assertMatch({error, _}, schedule_replication_by_view(ScheduleNode,
-            TargetProviderId, User, SpaceId, ViewName, QueryViewParams, Config, Type))
-    end, ReplicatingNodes),
-    Config.
-
-
-remove_file_during_replication(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    NodesTransferIdsAndFiles = lists:flatmap(fun(TargetNode) ->
-        lists:map(fun({Guid, Path}) ->
-            FileKey = file_key(Guid, Path, FileKeyType),
-            TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-            {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
-            {TargetNode, Tid, Guid, Path}
-        end, FilesGuidsAndPaths)
-    end, ReplicatingNodes),
-
-    lists_utils:pforeach(fun({TargetNode, Tid, Guid, Path}) ->
-        FileKey = file_key(Guid, Path, FileKeyType),
-        await_replication_starts(TargetNode, Tid),
-        ok = remove_file(TargetNode, User, FileKey, Config)
-    end, NodesTransferIdsAndFiles),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
 %%%===================================================================
 %%% Eviction scenarios
 %%%===================================================================
@@ -418,146 +227,6 @@ evict_each_file_replica_separately(Config, #scenario{
             {EvictingNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-schedule_replica_eviction_without_permissions(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    evicting_nodes = EvictingNodes
-}) ->
-    {RootGuid, RootPath} = ?config(?ROOT_DIR_KEY, Config),
-    RootFileKey = file_key(RootGuid, RootPath, FileKeyType),
-
-    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
-        lists:foreach(fun({DirGuid, Path}) ->
-            DirKey = file_key(DirGuid, Path, FileKeyType),
-            ok = lfm_proxy:set_perms(EvictingNode, ?DEFAULT_SESSION(EvictingNode, Config), DirKey, 8#000)
-        end, ?config(?DIRS_KEY, Config)),
-
-        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, RootFileKey, Config, Type),
-        {EvictingNode, Tid, RootGuid, RootPath}
-    end, EvictingNodes),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    evicting_nodes = EvictingNodes
-}) ->
-    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
-    FileKey = file_key(Guid, Path, FileKeyType),
-    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
-        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
-        {EvictingNode, Tid, Guid, Path}
-    end, EvictingNodes),
-
-    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
-        await_replica_eviction_starts(TargetNode, Tid),
-        cancel_transfer(TargetNode, User, User, eviction, Tid, Config, Type)
-    end, NodesTransferIdsAndFiles),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-cancel_replica_eviction_on_target_nodes_by_other_user(Config, #scenario{
-    user = User1,
-    cancelling_user = User2,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    evicting_nodes = EvictingNodes
-}) ->
-    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
-    FileKey = file_key(Guid, Path, FileKeyType),
-    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
-        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User1, FileKey, Config, Type),
-        {EvictingNode, Tid, Guid, Path}
-    end, EvictingNodes),
-
-    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
-        await_replica_eviction_starts(TargetNode, Tid),
-        cancel_transfer(TargetNode, User1, User2, eviction, Tid, Config, Type)
-    end, NodesTransferIdsAndFiles),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-rerun_evictions(Config, #scenario{user = User}) ->
-    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
-        {ok, NewTid} = rerun_transfer(TargetNode, User, eviction, false, OldTid, Config),
-        {TargetNode, NewTid, Guid, Path}
-    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-rerun_view_evictions(Config, #scenario{user = User}) ->
-    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
-        {ok, NewTid} = rerun_transfer(TargetNode, User, eviction, true, OldTid, Config),
-        {TargetNode, NewTid, Guid, Path}
-    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-evict_replicas_from_view(Config, #scenario{
-    user = User,
-    type = Type,
-    space_id = SpaceId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams,
-    schedule_node = ScheduleNode,
-    evicting_nodes = EvictingNodes
-}) ->
-    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
-        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-        {ok, Tid} = schedule_replica_eviction_by_view(ScheduleNode,
-            EvictingProviderId, User, SpaceId, ViewName, QueryViewParams, Config, Type),
-        {EvictingNode, Tid, undefined, undefined}
-    end, EvictingNodes),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-fail_to_evict_replicas_from_view(Config, #scenario{
-    user = User,
-    type = Type,
-    space_id = SpaceId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams,
-    schedule_node = ScheduleNode,
-    evicting_nodes = EvictingNodes
-}) ->
-    lists:foreach(fun(EvictingNode) ->
-        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-        ?assertMatch({error, _}, schedule_replica_eviction_by_view(ScheduleNode,
-            EvictingProviderId, User, SpaceId, ViewName, QueryViewParams, Config, Type))
-    end, EvictingNodes),
-    Config.
-
-remove_file_during_eviction(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    evicting_nodes  = EvictingNodes
-}) ->
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    NodesTransferIdsAndFiles = lists:flatmap(fun(EvictingNode) ->
-        lists:map(fun({Guid, Path}) ->
-            FileKey = file_key(Guid, Path, FileKeyType),
-            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
-            {EvictingNode, Tid, Guid, Path}
-        end, FilesGuidsAndPaths)
-    end, EvictingNodes),
-
-    lists_utils:pforeach(fun({EvictingNode, Tid, Guid, Path}) ->
-        FileKey = file_key(Guid, Path, FileKeyType),
-        await_transfer_starts(EvictingNode, Tid, 1000, 10),
-        ok = remove_file(EvictingNode, User, FileKey, Config)
-    end, NodesTransferIdsAndFiles),
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
@@ -636,144 +305,6 @@ migrate_each_file_replica_separately(Config, #scenario{
     end, ReplicatingNodes),
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-schedule_replica_migration_without_permissions(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes,
-    evicting_nodes  = EvictingNodes
-}) ->
-
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    lists:foreach(fun(ReplicatingNode) ->
-        lists:foreach(fun(EvictingNode) ->
-            lists:foreach(fun({Guid, Path}) ->
-                FileKey = file_key(Guid, Path, FileKeyType),
-                ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
-                EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-                ?assertMatch({error, _},
-                    ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, ?DEFAULT_FILE_PERMS),
-                    schedule_replica_migration(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type, ReplicatingProviderId))
-            end, FilesGuidsAndPaths)
-        end, ReplicatingNodes)
-    end, EvictingNodes),
-    Config.
-
-cancel_migration_on_target_nodes_by_scheduling_user(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes,
-    evicting_nodes = EvictingNodes
-}) ->
-    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
-    FileKey = file_key(Guid, Path, FileKeyType),
-    NodesTransferIdsAndFiles = lists:flatmap(fun(ReplicatingNode) ->
-        lists:map(fun(EvictingNode) ->
-            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
-            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            {ok, Tid} = schedule_replica_migration(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type, ReplicatingProviderId),
-            {ReplicatingNode, Tid, Guid, Path}
-        end, EvictingNodes)
-    end, ReplicatingNodes),
-
-    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
-        await_replication_starts(TargetNode, Tid),
-        cancel_transfer(TargetNode, User, User, migration, Tid, Config, Type)
-    end, NodesTransferIdsAndFiles),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-cancel_migration_on_target_nodes_by_other_user(Config, #scenario{
-    user = User1,
-    cancelling_user = User2,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes,
-    evicting_nodes = EvictingNodes
-}) ->
-    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
-    FileKey = file_key(Guid, Path, FileKeyType),
-    NodesTransferIdsAndFiles = lists:flatmap(fun(ReplicatingNode) ->
-        lists:map(fun(EvictingNode) ->
-            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
-            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            {ok, Tid} = schedule_replica_migration(ScheduleNode, EvictingProviderId, User1, FileKey, Config, Type, ReplicatingProviderId),
-            {ReplicatingNode, Tid, Guid, Path}
-        end, EvictingNodes)
-    end, ReplicatingNodes),
-
-    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
-        await_replication_starts(TargetNode, Tid),
-        cancel_transfer(TargetNode, User1, User2, migration, Tid, Config, Type)
-    end, NodesTransferIdsAndFiles),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-rerun_migrations(Config, #scenario{user = User}) ->
-    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
-        {ok, NewTid} = rerun_transfer(TargetNode, User, migration, false, OldTid, Config),
-        {TargetNode, NewTid, Guid, Path}
-    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-rerun_view_migrations(Config, #scenario{user = User}) ->
-    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
-        {ok, NewTid} = rerun_transfer(TargetNode, User, migration, true, OldTid, Config),
-        {TargetNode, NewTid, Guid, Path}
-    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-migrate_replicas_from_view(Config, #scenario{
-    user = User,
-    type = Type,
-    space_id = SpaceId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes,
-    evicting_nodes = EvictingNodes
-}) ->
-    NodesTransferIdsAndFiles = lists:flatmap(fun(ReplicatingNode) ->
-        lists:map(fun(EvictingNode) ->
-                ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
-                EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-
-                {ok, Tid} = schedule_replica_migration_by_view(ScheduleNode,
-                    EvictingProviderId, User, SpaceId, ViewName,
-                    QueryViewParams, Config, Type, ReplicatingProviderId
-                ),
-                {EvictingNode, Tid, undefined, undefined}
-        end, EvictingNodes)
-    end, ReplicatingNodes),
-
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-fail_to_migrate_replicas_from_view(Config, #scenario{
-    user = User,
-    type = Type,
-    space_id = SpaceId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes,
-    evicting_nodes = EvictingNodes
-}) ->
-    lists:foreach(fun(ReplicatingNode) ->
-        lists:foreach(fun(EvictingNode) ->
-            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
-            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            ?assertMatch({error, _}, schedule_replica_migration_by_view(ScheduleNode,
-                EvictingProviderId, User, SpaceId, ViewName,
-                QueryViewParams, Config, Type, ReplicatingProviderId
-            ))
-        end, EvictingNodes)
-    end, ReplicatingNodes),
-    Config.
 
 %%%===================================================================
 %%% Internal functions
@@ -1180,10 +711,6 @@ subfile_path(ParentPath, FilePrefix, N) ->
 subdir_path(ParentPath, DirPrefix, N) ->
     filename:join([ParentPath, <<DirPrefix/binary, (integer_to_binary(N))/binary>>]).
 
-remove_file(Node, User, FileKey, Config) ->
-    SessionId = ?USER_SESSION(Node, User, Config),
-    lfm_proxy:unlink(Node, SessionId, FileKey).
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -1253,33 +780,6 @@ schedule_file_replication_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid),
         Config
     ).
 
-schedule_replication_by_view(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, lfm) ->
-    schedule_replication_by_view_via_lfm(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config);
-schedule_replication_by_view(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, rest) ->
-    schedule_replication_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config).
-
-schedule_replication_by_view_via_rest(Worker, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config) ->
-    schedule_transfer_by_rest(
-        Worker,
-        SpaceId,
-        User,
-        [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS],
-        <<"transfers">>,
-        post,
-        json_utils:encode(#{
-            <<"type">> => <<"replication">>,
-            <<"replicatingProviderId">> => ProviderId,
-            <<"dataSourceType">> => <<"view">>,
-            <<"spaceId">> => SpaceId,
-            <<"viewName">> => ViewName,
-            <<"queryViewParams">> => query_view_params_to_map(QueryViewParams)
-        }),
-        Config
-    ).
-
-schedule_replication_by_view_via_lfm(_ScheduleNode, _ProviderId, _User, _SpaceId, _ViewName, _QueryViewParams, _Config) ->
-    erlang:error(not_implemented).
-
 schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
     schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
 schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, rest) ->
@@ -1328,33 +828,6 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid),
             )
     end.
 
-schedule_replica_eviction_by_view(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, lfm) ->
-    schedule_replica_eviction_by_view_via_lfm(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config);
-schedule_replica_eviction_by_view(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, rest) ->
-    schedule_replica_eviction_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config).
-
-schedule_replica_eviction_by_view_via_lfm(_ScheduleNode, _ProviderId, _User, _SpaceId, _ViewName, _QueryViewParams, _Config) ->
-    erlang:error(not_implemented).
-
-schedule_replica_eviction_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config) ->
-    schedule_transfer_by_rest(
-        ScheduleNode,
-        SpaceId,
-        User,
-        [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
-        <<"transfers">>,
-        post,
-        json_utils:encode(#{
-            <<"type">> => <<"eviction">>,
-            <<"evictingProviderId">> => ProviderId,
-            <<"dataSourceType">> => <<"view">>,
-            <<"spaceId">> => SpaceId,
-            <<"viewName">> => ViewName,
-            <<"queryViewParams">> => query_view_params_to_map(QueryViewParams)
-        }),
-        Config
-    ).
-
 schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, lfm, MigrationProviderId) ->
     schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId);
 schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, rest, MigrationProviderId) ->
@@ -1362,110 +835,6 @@ schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, rest
 
 schedule_replica_migration_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config, _MigrationProviderId) ->
     erlang:error(not_implemented).
-
-schedule_replica_migration_by_view(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, lfm, MigrationProviderId) ->
-    schedule_replica_migration_by_view_via_lfm(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, MigrationProviderId);
-schedule_replica_migration_by_view(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, rest, MigrationProviderId) ->
-    schedule_replica_migration_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, MigrationProviderId).
-
-schedule_replica_migration_by_view_via_lfm(_ScheduleNode, _ProviderId, _User, _SpaceId, _ViewName, _QueryViewParams, _Config, _MigrationProviderId) ->
-    erlang:error(not_implemented).
-
-schedule_replica_migration_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, MigrationProviderId) ->
-    schedule_transfer_by_rest(
-        ScheduleNode,
-        SpaceId,
-        User,
-        [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
-        <<"transfers">>,
-        post,
-        json_utils:encode(#{
-            <<"type">> => <<"migration">>,
-            <<"replicatingProviderId">> => MigrationProviderId,
-            <<"evictingProviderId">> => ProviderId,
-            <<"dataSourceType">> => <<"view">>,
-            <<"spaceId">> => SpaceId,
-            <<"viewName">> => ViewName,
-            <<"queryViewParams">> => query_view_params_to_map(QueryViewParams)
-        }),
-        Config
-    ).
-
-
-cancel_transfer(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config, lfm) ->
-    cancel_transfer_by_lfm(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config);
-cancel_transfer(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config, rest) ->
-    cancel_transfer_by_rest(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config).
-
-cancel_transfer_by_lfm(_Worker, _SchedulingUser, _CancellingUser, _TransferType, _Tid, _Config) ->
-    erlang:error(not_implemented).
-
-cancel_transfer_by_rest(Worker, SchedulingUser, CancellingUser, TransferType, Tid, Config) ->
-    HTTPPath = <<"transfers/", Tid/binary>>,
-    Headers = [?USER_TOKEN_HEADER(Config, CancellingUser)],
-    SpaceId = ?config(?SPACE_ID_KEY, Config),
-    
-    UserSpacePrivs = get_privileges(Config, Worker, SpaceId, CancellingUser),
-    try
-        case SchedulingUser =:= CancellingUser of
-            true ->
-                % User should always be able to cancel his transfers
-                set_privileges(Config, SpaceId, CancellingUser, []),
-                ?assertMatch(
-                    {ok, 204, _ , _},
-                    rest_test_utils:request(Worker, HTTPPath, delete, Headers, [])
-                );
-            false ->
-                AllSpacePrivs = privileges:space_privileges(),
-                RequiredPrivs = case TransferType of
-                    replication -> [?SPACE_CANCEL_REPLICATION];
-                    eviction -> [?SPACE_CANCEL_EVICTION];
-                    migration -> lists:sort([?SPACE_CANCEL_REPLICATION, ?SPACE_CANCEL_EVICTION])
-                end,
-                SpacePrivs = AllSpacePrivs -- RequiredPrivs,
-                ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
-
-                lists:foreach(fun
-                    (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
-                        % success will be checked later
-                        ok;
-                    (PrivsToAdd) ->
-                        set_privileges(Config, SpaceId, CancellingUser, SpacePrivs ++ PrivsToAdd),
-                        {ok, Code, _, Resp} = rest_test_utils:request(Worker, HTTPPath, delete, Headers, []),
-                        ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
-                end, combinations(RequiredPrivs)),
-
-                set_privileges(Config, SpaceId, CancellingUser, SpacePrivs ++ RequiredPrivs),
-                ?assertMatch(
-                    {ok, 204, _ , _},
-                    rest_test_utils:request(Worker, HTTPPath, delete, Headers, [])
-                )
-        end
-    after
-        set_privileges(Config, SpaceId, CancellingUser, UserSpacePrivs)
-    end.
-
-rerun_transfer(Worker, User, TransferType, ViewTransfer, OldTid, Config) ->
-    TransferPrivs = case TransferType of
-        replication -> [?SPACE_SCHEDULE_REPLICATION];
-        eviction -> [?SPACE_SCHEDULE_EVICTION];
-        migration -> [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
-    end,
-    ViewPrivs = case ViewTransfer of
-        true -> [?SPACE_QUERY_VIEWS];
-        false -> []
-    end,
-
-    schedule_transfer_by_rest(
-        Worker,
-        ?config(?SPACE_ID_KEY, Config),
-        User,
-        TransferPrivs ++ ViewPrivs,
-        <<"transfers/", OldTid/binary, "/rerun">>,
-        post,
-        <<>>,
-        Config
-    ).
 
 schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, Body, Config) ->
     Headers = [?USER_TOKEN_HEADER(Config, UserId), {?HDR_CONTENT_TYPE, <<"application/json">>}],
@@ -1526,77 +895,10 @@ set_privileges(Config, SpaceId, UserId, SpacePrivs) ->
             ozt_spaces:set_privileges(SpaceId, UserId, SpacePrivs)
     end.
 
-%% Modifies storage timeout twice in order to
-%% trigger helper reload and restore previous value.
--spec modify_storage_timeout(node(), storage:id(), NewValue :: binary()) -> ok.
-modify_storage_timeout(Node, StorageId, NewValue) ->
-    Helper = rpc:call(Node, storage, get_helper, [StorageId]),
-    OldValue = maps:get(<<"timeout">>, helper:get_args(Helper),
-        integer_to_binary(?DEFAULT_HELPER_TIMEOUT)),
-
-    ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
-        [StorageId, #{<<"timeout">> => NewValue}])),
-    ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
-        [StorageId, #{<<"timeout">> => OldValue}])),
-    ok.
-
-
 file_key(Guid, _Path, guid) ->
     ?FILE_REF(Guid);
 file_key(_Guid, Path, path) ->
     {path, Path}.
-
-await_replication_starts(Node, TransferId) ->
-    ?assertEqual(true, begin
-        try
-            #transfer{
-                bytes_replicated = BytesReplicated,
-                files_replicated = FilesReplicated
-            } = transfers_test_utils:get_transfer(Node, TransferId),
-            (BytesReplicated > 0) or (FilesReplicated > 0)
-        catch
-            throw:transfer_not_found ->
-                false
-        end
-    end, 60).
-
-await_replica_eviction_starts(Node, TransferId) ->
-    ?assertEqual(true, begin
-        try
-            #transfer{
-                eviction_status = active,
-                files_evicted = FilesEvicted
-            } = transfers_test_utils:get_transfer(Node, TransferId),
-            FilesEvicted > 0
-        catch
-            throw:transfer_not_found ->
-                false
-        end
-    end, 60).
-
-
-await_transfer_starts(Node, TransferId, Attempts, Interval) ->
-    ?assertEqual(true, begin
-        try
-            #transfer{
-                start_time = StartTime,
-                files_to_process = FTP
-            } = transfers_test_utils:get_transfer(Node, TransferId),
-
-            StartTime > 0 andalso FTP > 0
-        catch
-            throw:transfer_not_found ->
-               false
-        end
-    end, Attempts, Interval).
-
-
-query_view_params_to_map(QueryViewParams) ->
-    lists:foldl(fun
-        ({Key, Value}, Acc) -> Acc#{Key => Value};
-        (Key, Acc) -> Acc#{Key => true}
-    end, #{}, QueryViewParams).
-
 
 combinations([]) ->
     [[]];

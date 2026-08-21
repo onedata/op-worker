@@ -10,9 +10,19 @@
 %%% thin SUITE modules that differ only in the storage backing the registering
 %%% provider (e.g. imported S3 vs imported read-only HTTP).
 %%%
-%%% The space is supported by the registering provider's imported storage and by
-%%% a regular POSIX storage on the other provider, so cross-provider propagation
-%%% is also verified. A fresh space with dedicated storages is set up per testcase.
+%%% A fresh space with dedicated storages is set up per test case (see
+%%% init_testcase/2): it is named after the test case and supported by the
+%%% registering provider's imported storage and by a regular POSIX storage on the
+%%% other provider, so cross-provider propagation is also verified.
+%%%
+%%% == Auxiliary "source" space (per-test-case naming convention) ==
+%%% A test case may need a second space with a topology different from the default
+%%% one - e.g. register_shared_file_via_public_url_test hosts the shared source file
+%%% in a space supported by only one provider. Such a space is named after the test
+%%% case with the ?SOURCE_SPACE_NAME_SUFFIX suffix; use source_space_name/1 to derive
+%%% the name rather than concatenating the suffix by hand. clean_up_after_previous_run/2
+%%% knows this convention and removes leftover source spaces from a previous run as
+%%% well, so any new case that needs a similar auxiliary space should follow it.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_registration_test_base).
@@ -53,10 +63,16 @@
     read_registered_file_after_source_removed_from_storage_test/1,
     read_registered_file_after_source_modified_on_storage_test/1,
     read_registered_file_when_storage_returns_error_test/1,
-    large_registered_file_should_be_correctly_replicated_to_other_provider_test/1
+    large_registered_file_should_be_correctly_replicated_to_other_provider_test/1,
+    register_shared_file_via_public_url_test/1  %% TODO VFS-13718
 ]).
 
 -define(SUPPORT_SIZE, 1000000000).
+
+%% Suffix appended to a test case's (primary) space name to derive the name of an
+%% auxiliary, single-provider "source" space it may set up - see source_space_name/1
+%% and the module doc.
+-define(SOURCE_SPACE_NAME_SUFFIX, "_source").
 
 %% Size of the file used to verify replication across the rtransfer block boundary.
 %% It must exceed rtransfer_link's transfer block size (passed to the native link as
@@ -1079,6 +1095,98 @@ large_registered_file_should_be_correctly_replicated_to_other_provider_test(
     end, ?ATTEMPTS).
 
 
+register_shared_file_via_public_url_test(#file_registration_test_suite_ctx{
+    registering_provider_selector = RegProvider,
+    other_provider_selector = OtherProvider,
+    test_user_selector = User
+}) ->
+    % This case deliberately uses two SEPARATE single-provider spaces instead of the shared
+    % two-provider space of init_testcase/2:
+    %
+    %   * a "<case>_source" space supported ONLY by the other provider's writable POSIX
+    %     storage - the shared file physically lives here;
+    %   * a "<case>" space supported ONLY by the registering provider's read-only imported
+    %     HTTP storage - the file is registered here by its public share URL.
+    %
+    % The registering provider is intentionally kept out of the source space: backed only by
+    % a read-only storage, it could never materialise a replica of the shared file (that
+    % requires a writable storage), so it must not be a candidate for serving the shared
+    % content. This also makes the Onezone public-share redirector deterministic - it can
+    % only ever point at the owning (other) provider. Both spaces are named after the test
+    % case (the source one with a "_source" suffix) so clean_up_after_previous_run/2 picks
+    % them up (it now tolerates a space supported by just one of the two providers).
+    #provider_ctx{node = RegNode, session_id = RegSessId} = build_provider_ctx(User, RegProvider),
+    #provider_ctx{node = OtherNode, session_id = OtherSessId} = build_provider_ctx(User, OtherProvider),
+
+    SpaceName = str_utils:to_binary(?FUNCTION_NAME),
+
+    % Source space + shared file on the owning (other) provider.
+    SourceSpaceName = source_space_name(SpaceName),
+    SourceStorageId = create_posix_storage(OtherProvider),
+    space_setup_utils:set_up_space(#space_spec{
+        name = SourceSpaceName,
+        owner = User,
+        users = [],
+        supports = [#support_spec{
+            provider = OtherProvider, storage_spec = SourceStorageId, size = ?SUPPORT_SIZE
+        }]
+    }),
+    SourceFilePath = filepath_utils:join([<<"/", SourceSpaceName/binary>>, ?FILE_NAME]),
+    {ok, {SourceGuid, Handle}} = lfm_proxy:create_and_open(OtherNode, OtherSessId, SourceFilePath),
+    {ok, _} = lfm_proxy:write(OtherNode, Handle, 0, ?TEST_DATA),
+    ok = lfm_proxy:close(OtherNode, Handle),
+    {ok, ShareId} = ?assertMatch({ok, _},
+        opt_shares:create(OtherNode, OtherSessId, ?FILE_REF(SourceGuid), <<"share">>)),
+    {ok, ShareObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(SourceGuid, ShareId)),
+
+    % Registration space on the registering provider's read-only imported HTTP storage.
+    {HttpStorageId, _} = create_registering_storage(http, RegProvider),
+    RegSpaceId = space_setup_utils:set_up_space(#space_spec{
+        name = SpaceName,
+        owner = User,
+        users = [],
+        supports = [#support_spec{
+            provider = RegProvider,
+            storage_spec = HttpStorageId,
+            size = ?SUPPORT_SIZE,
+            % support directly in manual import mode - required for HTTP storage, which
+            % rejects switching the import mode after support
+            storage_import = #{mode => <<"manual">>}
+        }]
+    }),
+
+    % The shared file's public content URL. A full URL in the storage file id makes the HTTP
+    % helper target it directly, ignoring the storage endpoint.
+    %
+    % The Onezone public-share redirector root is intentionally NOT exercised yet:
+    % registration relies on the helper's getattr (HTTP HEAD) which - unlike its read - did
+    % not re-point the request path to the redirect target, so following the Onezone 302
+    % queried the wrong path. This is fixed in the helpers repo (HTTPHelper::getattr); once
+    % that fix is pulled in as a dependency, switch to the commented line below - the source
+    % space is supported only by the owning provider, so the redirector always points there.
+    RestApiRoot = onenv_api_test_runner:get_rest_api_root(OtherNode),
+    ct:pal("RestApiRoot: ~tp~n", [RestApiRoot]),
+
+    PublicUrl = <<RestApiRoot/binary, "data/", ShareObjectId/binary, "/content">>,
+
+    % Register the shared file (size intentionally omitted, so it must be detected via
+    % HTTP HEAD) and verify it is readable through the public URL. Retries cover the
+    % short delay before the freshly created share becomes publicly resolvable.
+    RegFileName = ?FILE_NAME,
+    RegFilePath = filepath_utils:join([<<"/", SpaceName/binary>>, RegFileName]),
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => RegSpaceId,
+        <<"destinationPath">> => RegFileName,
+        <<"storageFileId">> => PublicUrl,
+        <<"storageId">> => HttpStorageId
+    }), ?ATTEMPTS),
+
+    ExpectedSize = byte_size(?TEST_DATA),
+    ?assertMatch({ok, #file_attr{size = ExpectedSize}},
+        lfm_proxy:stat(RegNode, RegSessId, {path, RegFilePath}), ?ATTEMPTS),
+    ?assertRead(RegNode, RegSessId, RegFilePath, 0, ?TEST_DATA, ?ATTEMPTS).
+
+
 %%%===================================================================
 %%% SetUp and TearDown helpers (called by thin SUITE modules)
 %%%===================================================================
@@ -1098,7 +1206,7 @@ end_per_testcase(_Case, SuiteCtx = #file_registration_test_suite_ctx{
     Nodes = oct_background:get_provider_nodes(RegProvider),
     test_utils:mock_unload(Nodes, storage_driver),
     test_utils:mock_unload(Nodes, file_meta),
-%%    maybe_stop_http_servers(SuiteCtx),
+    maybe_stop_http_servers(SuiteCtx),
     lfm_proxy:teardown(Config).
 
 
@@ -1313,4 +1421,27 @@ clean_up_after_previous_run(AllTestCases, #file_registration_test_suite_ctx{
     registering_provider_selector = RegProvider,
     other_provider_selector = OtherProvider
 }) ->
-    storage_import_test_utils:clean_up_after_previous_run(AllTestCases, RegProvider, OtherProvider).
+    % Besides each test case's primary (test-case-named) space, also clean up the auxiliary
+    % single-provider "source" spaces that some cases set up (see source_space_name/1 and the
+    % module doc). Deriving the name for every case is a harmless no-op for those that do not
+    % create such a space (no matching space is found).
+    SourceSpaceNames = [
+        binary_to_atom(source_space_name(atom_to_binary(Case))) || Case <- AllTestCases
+    ],
+    storage_import_test_utils:clean_up_after_previous_run(
+        AllTestCases ++ SourceSpaceNames, RegProvider, OtherProvider
+    ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Derives the name of the auxiliary, single-provider "source" space associated
+%% with the given primary (test-case) space name, by appending
+%% ?SOURCE_SPACE_NAME_SUFFIX. A test case that needs a space with a topology other
+%% than the default two-provider one (see the module doc) should name it with this
+%% function so that clean_up_after_previous_run/2 picks it up.
+%% @end
+%%--------------------------------------------------------------------
+-spec source_space_name(SpaceName :: binary()) -> binary().
+source_space_name(SpaceName) ->
+    <<SpaceName/binary, ?SOURCE_SPACE_NAME_SUFFIX>>.

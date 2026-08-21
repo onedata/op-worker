@@ -9,7 +9,7 @@
 %%% This file contains test of transfers in case of node restart without HA.
 %%% @end
 %%%-------------------------------------------------------------------
--module(transfers_restart_test_SUITE).
+-module(transfer_restarts_test_SUITE).
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
@@ -162,7 +162,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
             TransferIds
     end,
     lists:foreach(fun(TransferId) ->
-        multi_provider_file_ops_test_base:await_replication_end(WorkerP2, TransferId, Attempts, get_effective)
+        transfer_test_utils:await_effective_replication_completed(WorkerP2, TransferId, Attempts)
     end, TransferIdsToVerify),
 
     % Verify if data has been replicated
