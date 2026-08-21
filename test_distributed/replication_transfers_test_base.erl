@@ -27,10 +27,17 @@
 %% API
 -export([
     file_replication_failures_should_fail_whole_transfer/3,
-    rtransfer_works_between_providers_with_different_ports/2
+    rtransfer_works_between_providers_with_different_ports/2,
+    regular_file_deleted_locally_during_replication/3,
+    regular_file_deleted_remotely_during_replication/3,
+    file_deleted_during_directory_replication/3
 ]).
 
+%% helpers invoked on worker nodes via rpc:call
+-export([local_location_deleted/1]).
+
 -define(SPACE_ID, <<"space1">>).
+-define(SYNC_BLOCK_REACHED, sync_block_reached).
 
 %%%===================================================================
 %%% API
@@ -138,6 +145,168 @@ rtransfer_works_between_providers_with_different_ports(Config, Type) ->
     transfers_test_mechanism:run_test(Config2, TransferTestSpec2).
 
 
+regular_file_deleted_locally_during_replication(Config, _Type, _FileKeyType) ->
+    deleted_during_replication_test_base(Config, local).
+
+regular_file_deleted_remotely_during_replication(Config, _Type, _FileKeyType) ->
+    deleted_during_replication_test_base(Config, remote).
+
+%% @private
+deleted_during_replication_test_base(Config, DeleteMode) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessP1 = ?DEFAULT_SESSION(WorkerP1, Config),
+    SessP2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    ProviderId2 = transfers_test_utils:provider_id(WorkerP2),
+
+    DeleteModeBin = atom_to_binary(DeleteMode, utf8),
+    FilePath = <<"/", (?SPACE_ID)/binary, "/deleted_during_replication_", DeleteModeBin/binary>>,
+    Guid = create_file_with_content(WorkerP1, SessP1, FilePath),
+
+    % file (and its remote location) visible on P2
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP2, SessP2, ?FILE_REF(Guid)), ?ATTEMPTS),
+    % give P2 a local file_location so the later delete leaves a *soft-deleted* one (doc is saved with deleted=true)
+    ensure_local_location_created(WorkerP2, SessP2, Guid),
+
+    Master = self(),
+    Uuid = file_id:guid_to_uuid(Guid),
+    install_synchronize_block_blocker(WorkerP2, Uuid, Master),
+
+    {ok, Tid} = ?assertMatch({ok, _},
+        opt_transfers:schedule_file_replication(WorkerP1, SessP1, ?FILE_REF(Guid), ProviderId2)),
+
+    WorkerPid = await_synchronize_block_reached(),
+
+    % delete while synchronize_block is blocked
+    case DeleteMode of
+        local -> ?assertEqual(ok, lfm_proxy:unlink(WorkerP2, SessP2, ?FILE_REF(Guid)));
+        remote -> ?assertEqual(ok, lfm_proxy:unlink(WorkerP1, SessP1, ?FILE_REF(Guid)))
+    end,
+    % gate proceed on the local location being actually soft-deleted (deterministic race)
+    await_local_location_deleted(WorkerP2, Guid),
+
+    WorkerPid ! proceed,
+
+    transfers_test_utils:assert_transfer_state(WorkerP2, Tid, #{
+        replication_status => completed,
+        scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+        files_to_process => 1,
+        files_processed => 1,
+        failed_files => 0,
+        files_replicated => 0,
+        bytes_replicated => 0
+    }, ?ATTEMPTS).
+
+file_deleted_during_directory_replication(Config, _Type, _FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessP1 = ?DEFAULT_SESSION(WorkerP1, Config),
+    SessP2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    ProviderId1 = transfers_test_utils:provider_id(WorkerP1),
+    ProviderId2 = transfers_test_utils:provider_id(WorkerP2),
+
+    DirPath = <<"/", (?SPACE_ID)/binary, "/dir_del_repl">>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP1, SessP1, DirPath)),
+    Children = [
+        create_file_with_content(WorkerP1, SessP1,
+            <<DirPath/binary, "/f", (integer_to_binary(N))/binary>>)
+        || N <- lists:seq(1, 3)
+    ],
+    [TargetGuid | _SurvivorGuids] = Children,
+
+    lists:foreach(fun(G) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP2, SessP2, ?FILE_REF(G)), ?ATTEMPTS)
+    end, Children),
+    % only the TARGET child needs a pre-existing local location (so it soft-deletes);
+    % leave the survivors un-replicated so they genuinely replicate during the transfer.
+    ensure_local_location_created(WorkerP2, SessP2, TargetGuid),
+
+    Master = self(),
+    install_synchronize_block_blocker(WorkerP2, file_id:guid_to_uuid(TargetGuid), Master),
+
+    {ok, Tid} = ?assertMatch({ok, _},
+        opt_transfers:schedule_file_replication(WorkerP1, SessP1, ?FILE_REF(DirGuid), ProviderId2)),
+
+    WorkerPid = await_synchronize_block_reached(),
+    ?assertEqual(ok, lfm_proxy:unlink(WorkerP2, SessP2, ?FILE_REF(TargetGuid))),
+    await_local_location_deleted(WorkerP2, TargetGuid),
+    WorkerPid ! proceed,
+
+    transfers_test_utils:assert_transfer_state(WorkerP2, Tid, #{
+        replication_status => completed,
+        scheduling_provider => ProviderId1,
+        files_to_process => 3,
+        files_processed => 3,
+        failed_files => 0,
+        files_replicated => 2,
+        bytes_replicated => 2 * ?DEFAULT_SIZE
+    }, ?ATTEMPTS).
+
+%%%===================================================================
+%%% Helpers for "file deleted during replication" testcases
+%%%===================================================================
+
+%% @private
+create_file_with_content(Node, SessId, FilePath) ->
+    {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath)),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(Guid), write)),
+    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, ?DEFAULT_CONTENT)),
+    ?assertEqual(ok, lfm_proxy:close(Node, Handle)),
+    Guid.
+
+%% @private
+ensure_local_location_created(Node, SessId, Guid) ->
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(Guid), read)),
+    ?assertMatch({ok, _}, lfm_proxy:read(Node, Handle, 0, ?DEFAULT_SIZE)),
+    ?assertEqual(ok, lfm_proxy:close(Node, Handle)).
+
+%% @private
+await_local_location_deleted(Node, Guid) ->
+    ?assertEqual(true, rpc:call(Node, ?MODULE, local_location_deleted, [Guid]), ?ATTEMPTS).
+
+%% @private
+install_synchronize_block_blocker(Node, TargetUuid, Master) ->
+    % reset the "already blocked" flag so (re-)runs start fresh
+    ok = rpc:call(Node, application, set_env, [op_worker, sync_block_test_blocked, false]),
+    ok = test_utils:mock_new(Node, sync_req, [passthrough]),
+    ok = test_utils:mock_expect(Node, sync_req, synchronize_block, fun
+        (UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
+            case file_ctx:get_logical_uuid_const(FileCtx) of
+                Uuid when Uuid =:= TargetUuid ->
+                    % Block only the FIRST hit. synchronize_block can throw
+                    % {error, not_found}, which the transfer framework RETRIES - re-entering
+                    % this mock. Blocking again would deadlock (no second `proceed`), so let
+                    % retries pass straight through (they re-throw not_found until retries are
+                    % exhausted and the file is counted as processed).
+                    case application:get_env(op_worker, sync_block_test_blocked, false) of
+                        false ->
+                            application:set_env(op_worker, sync_block_test_blocked, true),
+                            Master ! {?SYNC_BLOCK_REACHED, self()},
+                            receive proceed -> ok end;
+                        true ->
+                            ok
+                    end,
+                    meck:passthrough([UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority]);
+                _ ->
+                    meck:passthrough([UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority])
+            end;
+        (UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority])
+    end).
+
+%% @private
+await_synchronize_block_reached() ->
+    receive
+        {?SYNC_BLOCK_REACHED, Pid} -> Pid
+    after timer:seconds(60) ->
+        ct:fail("synchronize_block was never reached for target file")
+    end.
+
+local_location_deleted(Guid) ->
+    FileCtx = file_ctx:new_by_guid(Guid),
+    case fslogic_location_cache:get_local_location_including_deleted(FileCtx, skip_local_blocks) of
+        {ok, #document{deleted = true}} -> true;
+        _ -> false
+    end.
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -177,6 +346,16 @@ init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(60)),
     lfm_proxy:init(Config),
     [{space_id, ?SPACE_ID} | Config].
+
+
+end_per_testcase(Case, Config) when
+    Case =:= regular_file_deleted_locally_during_replication;
+    Case =:= regular_file_deleted_remotely_during_replication;
+    Case =:= file_deleted_during_directory_replication
+->
+    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    catch test_utils:mock_unload(WorkerP2, sync_req),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

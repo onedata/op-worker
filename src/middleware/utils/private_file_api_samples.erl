@@ -181,7 +181,7 @@ get_data_distribution_endpoint(FileId) ->
         description = <<"Returns information about data distribution of the file or directory.">>,
         method = 'GET',
         path = str_utils:format_bin("/data/~ts/distribution", [FileId]),
-        swagger_operation_id = <<"get_file_distribution">>  % @TODO VFS-10232 rename to get_data_distribution
+        swagger_operation_id = <<"get_data_distribution">>
     }.
 
 

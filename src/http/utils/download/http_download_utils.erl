@@ -23,7 +23,8 @@
     allow_onezone_as_frame_ancestor/1,
     set_file_download_headers/2,
 
-    send_data_chunk/4
+    send_data_chunk/4,
+    ascii_filename_fallback/1
 ]).
 
 
@@ -39,13 +40,23 @@ allow_onezone_as_frame_ancestor(Req) ->
 
 -spec set_file_download_headers(cowboy_req:req(), file_meta:name()) ->
     cowboy_req:req().
-set_file_download_headers(Req, FileName) ->
-    {Type, SubType, _Params} = cow_mimetypes:all(FileName),
+set_file_download_headers(Req0, FileName) ->
+    % honour preexisting CT header if set beforehand
+    Req1 = case cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req0, undefined) of
+        undefined ->
+            {Type, Subtype, _Params} = cow_mimetypes:all(FileName),
+            cowboy_req:set_resp_header(?HDR_CONTENT_TYPE, [Type, "/", Subtype], Req0);
+        _ ->
+            Req0
+    end,
+
     RFC5987Encoded = rfc5987:encode_filename(FileName),
-    cowboy_req:set_resp_headers(#{
-        ?HDR_CONTENT_TYPE => <<Type/binary, "/", SubType/binary>>,
-        ?HDR_CONTENT_DISPOSITION => <<"attachment; filename*=UTF-8''", RFC5987Encoded/binary>>
-    }, Req).
+    AsciiFallback = ascii_filename_fallback(FileName),
+    cowboy_req:set_resp_header(
+        ?HDR_CONTENT_DISPOSITION,
+        [<<"attachment; filename=\"">>, AsciiFallback, <<"\"; filename*=UTF-8''">>, RFC5987Encoded],
+        Req1
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -81,3 +92,20 @@ send_data_chunk(Data, #{pid := ConnPid} = Req, MaxSentBlocksCount, RetryDelay) -
                 min(2 * RetryDelay, ?MAX_HTTP_SEND_RETRY_DELAY)
             )
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Produces a safe ASCII fallback for the legacy filename= parameter.
+%% Replaces non-ASCII and quoted-string special chars with '_'.
+%% @end
+%%--------------------------------------------------------------------
+-spec ascii_filename_fallback(binary()) -> binary().
+ascii_filename_fallback(FileName) ->
+    << <<(ascii_fallback_byte(B))>> || <<B>> <= FileName >>.
+
+
+%% @private
+-spec ascii_fallback_byte(byte()) -> byte().
+ascii_fallback_byte(B) when B >= 32, B < 127, B =/= $", B =/= $\\ -> B;
+ascii_fallback_byte(_) -> $_.

@@ -65,7 +65,7 @@
 
 %% API - single directory
 -export([get_stats/3,
-    update_stats_of_dir/3, update_stats_of_dir_without_state_check/3,
+    update_stats_of_dir/3, update_stats_of_dir_without_state_check/3, report_dir_initialization_error/3,
     update_stats_of_parent/3, update_stats_of_parent/4, update_stats_of_nearest_dir/3,
     flush_stats/2, delete_stats/2,
     initialize_collections/1,
@@ -148,9 +148,11 @@
 }).
 
 
--type update_type() :: internal | external. % internal update is update sent when collector is flushing
-                                            % stat_updates_acc_for_parent; external update is update sent
-                                            % by other processes than collectors
+% * `internal` update is update sent when collector is flushing stat_updates_acc_for_parent; 
+% * `external` update is update sent by other processes than collectors; 
+% * `initialization_error` is an additive error update reported during initialization that must be preserved through 
+%   the race-prevention re-reads (it cannot be re-derived by re-listing children) - see update_stats_of_dir/3.
+-type update_type() :: internal | external | initialization_error.
 -type state() :: #state{}.
 
 -type cached_dir_stats_key() :: {file_id:file_guid(), dir_stats_collection:type()}.
@@ -212,6 +214,15 @@ get_stats(Guid, CollectionType, StatNames) ->
     end.
 
 
+%% NOTE: While a space's directory statistics are being (re)initialized by the
+%% initialization traverse (collecting status `initializing`), an update reported here is NOT
+%% applied as given - the payload is discarded and the directory's statistics are instead
+%% recomputed by re-listing its direct children
+%% (see dir_stats_collections_initializer:report_update/1). This is the init/update
+%% race-prevention mechanism: the source of truth is assumed to already reflect the change.
+%% Consequently, additive event counters that are NOT derivable from a re-listing (e.g.
+%% ?DIR_ERROR_COUNT) reported through this path during initialization would be lost; such
+%% updates must go through dir_stats_collector:report_dir_initialization_error/3 instead.
 -spec update_stats_of_dir(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | od_error_internal_server_error:t().
 update_stats_of_dir(Guid, CollectionType, CollectionUpdate) ->
@@ -227,6 +238,17 @@ update_stats_of_dir(Guid, CollectionType, CollectionUpdate) ->
     dir_stats_collection:collection()) -> ok | od_error_internal_server_error:t().
 update_stats_of_dir_without_state_check(Guid, CollectionType, CollectionUpdate) ->
     update_stats_of_dir(Guid, external, CollectionType, CollectionUpdate).
+
+
+-spec report_dir_initialization_error(file_id:file_guid(), dir_stats_collection:type(),
+    dir_stats_collection:collection()) -> ok | od_error_internal_server_error:t().
+report_dir_initialization_error(Guid, CollectionType, CollectionUpdate) ->
+    case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
+        true ->
+            update_stats_of_dir(Guid, initialization_error, CollectionType, CollectionUpdate);
+        false ->
+            ok
+    end.
 
 
 -spec update_stats_of_parent(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
@@ -609,6 +631,21 @@ update_collection_in_cache(CollectionType, internal = _UpdateType, CollectionUpd
     collecting_status = initializing,
     initialization_data = InitializationData
 } = CachedDirStats) ->
+    CachedDirStats#cached_dir_stats{
+        initialization_data = dir_stats_collections_initializer:update_stats_from_children_descendants(
+            InitializationData, CollectionType, CollectionUpdate)
+    };
+
+update_collection_in_cache(CollectionType, initialization_error = _UpdateType, CollectionUpdate,
+    #cached_dir_stats{
+        collecting_status = initializing,
+        initialization_data = InitializationData
+    } = CachedDirStats
+) ->
+    % Errors reported during initialization (e.g. a listing failure in the initialization
+    % traverse) are additive events with no backing state, so they cannot be recovered by
+    % re-listing children. Accumulate them like contributions from descendants so they are
+    % preserved through the race-prevention re-reads and reflected in the final stats.
     CachedDirStats#cached_dir_stats{
         initialization_data = dir_stats_collections_initializer:update_stats_from_children_descendants(
             InitializationData, CollectionType, CollectionUpdate)

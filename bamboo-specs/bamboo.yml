@@ -128,6 +128,7 @@ stages:
         - dbsync_changes_requesting
         - dbsync_changes_requesting_with_errors
         - dir_stats_collector
+        - dir_stats_initialization_retry
         - event_manager
         - event_stream
         - events
@@ -1032,6 +1033,13 @@ dir_stats_collector:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_dir_stats_collector.tar.gz
+
+dir_stats_initialization_retry:
+  <<: *ct-onenv-job
+  key: DSIR
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_dir_stats_initialization_retry.tar.gz
 
 event_manager:
   <<: *ct-job
@@ -2010,6 +2018,7 @@ Coverage report:
     - artifact: ct_logs_dbsync_changes_requesting.tar.gz
     - artifact: ct_logs_dbsync_changes_requesting_with_errors.tar.gz
     - artifact: ct_logs_dir_stats_collector.tar.gz
+    - artifact: ct_logs_dir_stats_initialization_retry.tar.gz
     - artifact: ct_logs_event_manager.tar.gz
     - artifact: ct_logs_event_stream.tar.gz
     - artifact: ct_logs_events.tar.gz
