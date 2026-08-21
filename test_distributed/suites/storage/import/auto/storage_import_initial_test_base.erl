@@ -170,7 +170,7 @@ import_many_directories_test(SuiteCtx) ->
 
 import_nested_directory_tree_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
-    %% [13, 13, 13] => 13 dirs x 13 subdirs x 13 files = 2379 nodes
+    %% [13, 13, 13] => 13 dirs x 13 subdirs x 13 files -> 2197 files and 182 dirs
     FileTreeSpec = storage_import_test_utils:gen_nested_tree_spec([13, 13, 13], ?RAND_STR()),
     import_file_tree_test_base(SuiteCtx, ?FUNCTION_NAME, FileTreeSpec, #{
         await_attempts => ?LARGE_IMPORT_SCAN_ATTEMPTS,
