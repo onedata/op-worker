@@ -18,6 +18,7 @@
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 % API
@@ -700,6 +701,7 @@ many_simultaneous_failed_transfers_test(TestSuiteCtx = #transfer_test_suite_ctx{
 file_removed_during_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
     transfer_type = TransferType,
     user_selector = UserSelector,
+    creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
 }) ->
     RootDir = #object{children = [FileObject = #object{guid = FileGuid}]} =
@@ -714,19 +716,39 @@ file_removed_during_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
     TransferId = transfer_test_utils:schedule_transfer(TestSuiteCtx, FileObject),
     transfer_test_utils:await_gated_file_processing_job(),
 
-    % remove the file (on the provider executing the parked job) and release
-    % the job - the removal must not derail the transfer: replicating a
-    % removed file fails every attempt of its job, so the transfer ends as
-    % failed; evicting it finds nothing to evict (the file is gone before
-    % its deletion request is prepared) and the transfer simply completes
+    % remove the file on the provider executing the parked job and await the
+    % removal reaching the other provider as well - the migration eviction
+    % subtask runs there and is not gated, so only an already propagated
+    % removal makes its outcome deterministic
     OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
-    SessionId = oct_background:get_user_session_id(UserSelector, OtherProviderSelector),
-    ?assertEqual(ok, lfm_proxy:unlink(OtherNode, SessionId, ?FILE_REF(FileGuid))),
+    OtherSessionId = oct_background:get_user_session_id(UserSelector, OtherProviderSelector),
+    ?assertEqual(ok, lfm_proxy:unlink(OtherNode, OtherSessionId, ?FILE_REF(FileGuid))),
+
+    CreationNode = oct_background:get_random_provider_node(CreationProviderSelector),
+    CreationSessionId = oct_background:get_user_session_id(UserSelector, CreationProviderSelector),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(
+        CreationNode, CreationSessionId, ?FILE_REF(FileGuid)
+    ), ?ATTEMPTS),
+
+    % release the job - the removal must not derail the transfer: a file job
+    % finding its file already gone is counted as processed but neither
+    % transferred nor failed, so the transfer ends as completed having
+    % transferred nothing
     transfer_test_utils:grant_file_processing_permits(TestSuiteCtx, all),
 
     Overrides = case TransferType of
+        replication -> #{files_replicated => 0, tree_bytes => 0};
         eviction -> #{files_evicted => 0};
-        _ -> build_failed_transfer_overrides(TransferType, 1)
+        migration -> #{
+            % the eviction subtask is enumerated only once the replication
+            % subtask has ended - by then the file is gone, so no eviction
+            % job is created for it and it is counted once instead of twice
+            files_to_process => 1,
+            files_processed => 1,
+            files_replicated => 0,
+            files_evicted => 0,
+            tree_bytes => 0
+        }
     end,
     transfer_test_utils:await_transfer_ended(TestSuiteCtx, TransferId, FileObject, Overrides),
 
