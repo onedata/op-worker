@@ -171,6 +171,7 @@ data_spec(#gri{aspect = register_file}, _) -> #{
         <<"uid">> => {integer, {between, 0, ?UID_MAX}},
         <<"gid">> => {integer, {between, 0, ?GID_MAX}},
         <<"autoDetectAttributes">> => {boolean, any},
+        <<"verifyExistence">> => {boolean, any},
         <<"xattrs">> => {json, any},
         <<"json">> => {json, any},
         <<"rdf">> => {binary, any}

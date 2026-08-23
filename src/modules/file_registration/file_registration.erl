@@ -50,10 +50,19 @@
 %%       <<"uid">> => non_neg_integer(),
 %%       <<"gid">> => non_neg_integer(),
 %%       <<"autoDetectAttributes">> => boolean(),
+%%       <<"verifyExistence">> => boolean(),
 %%       <<"xattrs">> => json_utils:json_map(),
 %%       <<"json">> => json_utils:json_map(),
 %%       <<"rdf">> => binary() % base64 encoded RDF
 %% }
+%%
+%% autoDetectAttributes (default true) and verifyExistence (default true) are
+%% independent. autoDetectAttributes controls whether missing attributes are read
+%% from the storage (a full stat), verifyExistence whether the file's presence on
+%% the storage is confirmed. As detecting attributes requires a stat that already
+%% verifies existence, verifyExistence is only meaningful when autoDetectAttributes
+%% is false (when both are false the caller is fully trusted and the storage is not
+%% contacted at all).
 
 -export_type([spec/0]).
 
@@ -133,7 +142,7 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
             iterator_type => storage_traverse:get_iterator(StorageId),
             is_posix_storage => storage:is_posix_compatible(StorageId),
             sync_acl => false,
-            verify_existence => maps:get(<<"autoDetectAttributes">>, Spec, true),
+            verify_existence => maps:get(<<"verifyExistence">>, Spec, true),
             manual => true,
             user_id => user_ctx:get_user_id(UserCtx)
         }),
@@ -293,14 +302,33 @@ maybe_verify_existence(StorageFileCtx, Spec) ->
     IsHttpWithoutEmulateRangeRead = HelperName =:= ?HTTP_HELPER_NAME
         andalso maps:get(<<"emulateRangeRead">>, HelperArgs, <<"false">>) =:= <<"false">>,
     AutoDetect = maps:get(<<"autoDetectAttributes">>, Spec, true),
+    VerifyExistence = maps:get(<<"verifyExistence">>, Spec, true),
     case IsHttpWithoutEmulateRangeRead orelse AutoDetect of
         true ->
-            % in case of the HTTP helper without range read emulation, we don't allow overriding
-            % file attributes because reads from servers without support for range read will fail
+            % a full stat is required - it detects the attributes and, as a side
+            % effect, verifies the file's existence (throws ENOENT if missing). For
+            % the HTTP helper without range read emulation we don't allow overriding
+            % file attributes, as reads from servers without range read support fail.
             {_, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
             StorageFileCtx2;
         false ->
+            % attributes are taken from the caller; existence on the storage is
+            % independently verified (unless explicitly disabled) via a cheap exists
+            % check rather than a full stat, throwing ENOENT if the file is missing
+            case VerifyExistence of
+                true -> assert_file_exists_on_storage(StorageFileCtx);
+                false -> ok
+            end,
             StorageFileCtx
+    end.
+
+
+-spec assert_file_exists_on_storage(storage_file_ctx:ctx()) -> ok.
+assert_file_exists_on_storage(StorageFileCtx) ->
+    SDHandle = storage_file_ctx:get_handle_const(StorageFileCtx),
+    case storage_driver:exists(SDHandle) of
+        true -> ok;
+        false -> throw(?ERR_POSIX(?err_ctx(), ?ENOENT))
     end.
 
 -spec prepare_stat(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
@@ -447,11 +475,19 @@ get_default_file_mode(#helper{name = HelperName, args = Args})
     orelse HelperName =:= ?S3_HELPER_NAME
     orelse HelperName =:= ?WEBDAV_HELPER_NAME
 ->
-    maps:get(<<"fileMode">>, Args, ?DEFAULT_FILE_MODE);
+    ensure_mode_int(maps:get(<<"fileMode">>, Args, ?DEFAULT_FILE_MODE));
 get_default_file_mode(#helper{name = ?XROOTD_HELPER_NAME, args = Args}) ->
-    maps:get(<<"fileModeMask">>, Args, ?DEFAULT_FILE_MODE);
+    ensure_mode_int(maps:get(<<"fileModeMask">>, Args, ?DEFAULT_FILE_MODE));
 get_default_file_mode(_) ->
     ?DEFAULT_FILE_MODE.
+
+
+%% @private
+-spec ensure_mode_int(integer() | binary()) -> file_meta:mode().
+ensure_mode_int(Int) when is_integer(Int) ->
+    Int;
+ensure_mode_int(Bin) when is_binary(Bin) ->
+    binary_to_integer(Bin, 8).
 
 
 -spec select_file_registration_timeout(helpers:helper()) -> timeout().

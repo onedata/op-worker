@@ -413,7 +413,8 @@ move_to_trash_should_work(_Config) ->
         <<"mtime">> => global_clock:timestamp_seconds(),
         <<"size">> => 10,
         <<"mode">> => <<"664">>,
-        <<"autoDetectAttributes">> => false
+        <<"autoDetectAttributes">> => false,
+        <<"verifyExistence">> => false
     })).
 
 move_to_trash_and_schedule_deletion_should_work(_Config) ->
@@ -453,7 +454,8 @@ move_to_trash_and_schedule_deletion_should_work(_Config) ->
         <<"mtime">> => global_clock:timestamp_seconds(),
         <<"size">> => Size,
         <<"mode">> => <<"664">>,
-        <<"autoDetectAttributes">> => false
+        <<"autoDetectAttributes">> => false,
+        <<"verifyExistence">> => false
     })).
 
 move_to_trash_should_fail_if_user_does_not_have_sufficient_perms(_Config) ->

@@ -57,7 +57,6 @@ end
 
 -record(scenario, {
     user = ?DEFAULT_USER,
-    cancelling_user = ?DEFAULT_USER,
     type = lfm :: lfm | rest,
     file_key_type = guid :: guid,
     schedule_node :: node(),
@@ -96,9 +95,6 @@ end
 -define(WORKER_POOL, worker_pool).
 -define(WORKER_POOL_SIZE, 8).
 
--define(MISSING_PROVIDER_NODE, missing_provider).
--define(MISSING_PROVIDER_ID, <<"missing_provider_id">>).
-
 -define(HIST(Value, Length), begin
     __Hist = histogram:new(Length),
     histogram:increment(__Hist, Value)
@@ -134,44 +130,3 @@ end).
 -define(OLD_TRANSFERS_KEY, old_transfer_ids).
 -define(SPACE_ID_KEY, space_id).
 
--define(assertViewVisible(Worker, SpaceId, ViewName),
-    ?assertViewVisible(Worker, SpaceId, ViewName, ?ATTEMPTS)).
-
--define(assertViewVisible(Worker, SpaceId, ViewName, Attempts),
-    ?assertMatch(true, begin
-        ListResult = rpc:call(Worker, index, list, [SpaceId]),
-        GetResult = rpc:call(Worker, index, get, [ViewName, SpaceId]),
-        case {ListResult, GetResult} of
-            {{ok, Views}, {ok, __Doc}} -> lists:member(ViewName, Views);
-            Other -> Other
-        end
-    end, Attempts)).
-
--define(assertViewQuery(ExpectedValues, Worker, SpaceId, ViewName, Options),
-    ?assertViewQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, ?ATTEMPTS)).
-
--define(assertViewQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, Attempts),
-    ?assertEqual(lists:sort(ExpectedValues), begin
-        try
-            {ok, #{<<"rows">> := Rows}} = rpc:call(Worker, index, query, [SpaceId, ViewName, Options]),
-            lists:sort(lists:flatmap(fun(Row) ->
-                Value = maps:get(<<"value">>, Row),
-                lists:flatten([Value])
-            end, Rows))
-        catch
-            _:_ ->
-                error
-        end
-    end, Attempts)
-).
-
--define(assertVersion(ExpectedVersion, Worker, FileGuid, ProviderId, Attempts),
-    ?assertEqual(ExpectedVersion, try
-        __FileUuid = file_id:guid_to_uuid(FileGuid),
-        __LocId = file_location:id(__FileUuid, ProviderId),
-        {ok, __LocDoc} = rpc:call(Worker, fslogic_location_cache, get_location, [__LocId, __FileUuid]),
-        version_vector:get_version(__LocId, ProviderId, file_location:get_version_vector(__LocDoc))
-    catch
-        _:_ -> error
-    end, Attempts)
-).

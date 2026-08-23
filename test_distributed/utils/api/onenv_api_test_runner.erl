@@ -42,6 +42,7 @@
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 -export([run_tests/1]).
+-export([get_rest_api_root/1, random_share_rest_api_root/1]).
 
 -type ct_config() :: proplists:proplist().
 
@@ -1074,7 +1075,20 @@ get_rest_endpoint(Node, ResourcePath) ->
 
 
 %%--------------------------------------------------------------------
-%% @private
+%% @doc
+%% Returns a randomly chosen REST API root suitable for accessing a publicly
+%% shared resource - either one of the given providers' own REST API, or the
+%% Onezone public-share redirector (which 302-redirects to a supporting
+%% provider). Lets tests exercise public share access without pinning it to a
+%% single concrete endpoint.
+%% @end
+%%--------------------------------------------------------------------
+-spec random_share_rest_api_root([node()]) -> URL :: binary().
+random_share_rest_api_root(ProviderNodes) ->
+    get_rest_api_root(lists_utils:random_element([?ONEZONE_TARGET_NODE | ProviderNodes])).
+
+
+%%--------------------------------------------------------------------
 %% @doc
 %% In case of rest_with_shared_guid, we also test the Onezone's endpoint that
 %% should redirect to the target endpoint in a supporting Oneprovider:

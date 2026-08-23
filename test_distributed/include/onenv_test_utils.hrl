@@ -52,7 +52,10 @@ end)).
     metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec(),
     % Custom label that can be provided in symlink/hardlink spec as target.
     % NOTE: link must be specified after this file (i.e. further on the list) in file spec.
-    custom_label = undefined :: undefined | any() 
+    custom_label = undefined :: undefined | any(),
+    %% TODO VFS-12179 handle uid/gid in creating test files utils
+    uid = undefined :: luma:uid(),
+    gid = undefined :: luma:gid()
 }).
 
 -record(dir_spec, {

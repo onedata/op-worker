@@ -16,10 +16,19 @@
 
 -type s3_storage_params() :: #s3_storage_params{}.
 -type posix_storage_params() :: #posix_storage_params{}.
+-type http_storage_params() :: #http_storage_params{}.
+-type storage_params() ::
+    http_storage_params() |
+    posix_storage_params() |
+    s3_storage_params().
+
 -type support_spec() :: #support_spec{}.
 -type space_spec() :: #space_spec{}.
 
--export_type([posix_storage_params/0, s3_storage_params/0, support_spec/0]).
+-export_type([
+    http_storage_params/0, posix_storage_params/0, s3_storage_params/0,
+    storage_params/0, support_spec/0
+]).
 
 -define(CURRENT_DATETIME(), time:seconds_to_datetime(global_clock:timestamp_seconds())).
 
@@ -33,8 +42,7 @@
 %%%===================================================================
 
 
--spec create_storage(oct_background:node_selector(), s3_storage_params() | posix_storage_params())
-        -> od_storage:id().
+-spec create_storage(oct_background:node_selector(), storage_params()) -> od_storage:id().
 create_storage(Provider, #s3_storage_params{storage_path_type = StoragePathType,
     imported_storage = Imported, hostname = Hostname, bucket_name = BucketName,
     access_key = AccessKey, secret_key = SecretKey, block_size = BlockSize
@@ -51,6 +59,7 @@ create_storage(Provider, #s3_storage_params{storage_path_type = StoragePathType,
         <<"blockSize">> => BlockSize
     }},
     panel_test_rpc:add_storage(Provider, CreateStorageData);
+
 create_storage(Provider, #posix_storage_params{mount_point = MountPoint, imported_storage = Imported}) ->
     ?assertMatch(ok, opw_test_rpc:call(Provider, filelib, ensure_path, [MountPoint])),
     panel_test_rpc:add_storage(Provider,
@@ -59,7 +68,29 @@ create_storage(Provider, #posix_storage_params{mount_point = MountPoint, importe
             <<"mountPoint">> => MountPoint,
             <<"importedStorage">> => Imported
         }}
-    ).
+    );
+
+create_storage(Provider, #http_storage_params{
+    endpoint = Endpoint,
+    readonly = Readonly,
+    imported_storage = Imported,
+    verify_server_certificate = VerifyServerCertificate,
+    emulate_range_read = EmulateRangeRead,
+    max_emulated_range_read_file_size = MaxEmulatedRangeReadFileSize
+}) ->
+    BaseArgs = #{
+        <<"type">> => <<"http">>,
+        <<"importedStorage">> => Imported,
+        <<"readonly">> => Readonly,
+        <<"endpoint">> => Endpoint,
+        <<"verifyServerCertificate">> => VerifyServerCertificate,
+        <<"emulateRangeRead">> => EmulateRangeRead
+    },
+    Args = case MaxEmulatedRangeReadFileSize of
+        undefined -> BaseArgs;
+        _ -> BaseArgs#{<<"maxEmulatedRangeReadFileSize">> => MaxEmulatedRangeReadFileSize}
+    end,
+    panel_test_rpc:add_storage(Provider, #{?RAND_STR() => Args}).
 
 
 -spec set_up_space(space_spec()) -> oct_background:entity_id().
@@ -101,13 +132,20 @@ mock_existence_of_unhealthy_storage(Nodes) ->
 %% @private
 -spec support_space([support_spec()], tokens:serialized()) -> ok.
 support_space(SupportSpecs, SupportToken) ->
-    lists:foreach(fun(#support_spec{provider = Provider, storage_spec = StorageSpec, size = Size}) ->
+    lists:foreach(fun(#support_spec{
+        provider = Provider,
+        storage_spec = StorageSpec,
+        size = Size,
+        storage_import = StorageImport
+    }) ->
         StorageId = case StorageSpec of
             any -> lists_utils:random_element(opw_test_rpc:get_storages(Provider));
             Id when is_binary(Id) -> Id;
             Spec when is_tuple(Spec) -> create_storage(Provider, Spec)
         end,
-        panel_test_rpc:support_space(Provider, StorageId, SupportToken, Size)
+        panel_test_rpc:support_space(Provider, StorageId, SupportToken, Size, #{
+            storage_import => StorageImport
+        })
     end, SupportSpecs).
 
 
