@@ -88,7 +88,7 @@
     fun(__Worker, __SessId, __FilePath, __Attempts) ->
         ?assertMatch(true, try
             __DirPath = filename:dirname(__FilePath),
-            {ok, __Children} = lfm_proxy:get_children(Worker, SessId, {path, __DirPath}, 0, 10000),
+            {ok, __Children} = lfm_proxy:get_children(__Worker, __SessId, {path, __DirPath}, 0, 10000),
             __ChildrenNames = [_N || {_G, _N} <- __Children],
             lists:member(filename:basename(__FilePath), __ChildrenNames)
         catch
@@ -98,9 +98,16 @@
     end)(Worker, SessId, FilePath, Attempts)
 ).
 
--define(assertStat(Worker, SessId, FilePath, Attempts),
-    __Name = filename:basename(FilePath),
-    ?assertMatch({ok, #file_attr{name = __Name}}, lfm_proxy:stat(Worker, SessId, {path, FilePath}), Attempts)
+-define(assertStat(Worker, SessId, FilePath, Attempts), (
+    fun(__Worker, __SessId, __FilePath, __Attempts) ->
+        ExpName__Local = filename:basename(__FilePath),
+
+        ?assertMatch(
+            {ok, #file_attr{name = ExpName__Local}},
+            lfm_proxy:stat(__Worker, __SessId, {path, __FilePath}),
+            __Attempts
+        )
+    end)(Worker, SessId, FilePath, Attempts)
 ).
 
 %% The file is (re)opened on every attempt. A handle opened on a provider before
@@ -124,10 +131,13 @@
 
 -define(assertXattrs(Worker, SessId, FilePath, Xattrs, Attempts),
     (fun(__Worker, __SessId, __FilePath, __Xattrs, __Attempts) ->
-        ?assertEqual(#{}, maps:fold(fun(__K, __V, __Acc) ->
-            ?assertMatch({ok, #xattr{name = __K, value = __V}},
-                lfm_proxy:get_xattr(__Worker, __SessId, {path, __FilePath}, __K), __Attempts),
-            maps:without([__K], __Acc)
+        ?assertEqual(#{}, maps:fold(fun(ExpName__Local, ExpValue__Local, __Acc) ->
+            ?assertMatch(
+                {ok, #xattr{name = ExpName__Local, value = ExpValue__Local}},
+                lfm_proxy:get_xattr(__Worker, __SessId, {path, __FilePath}, ExpName__Local),
+                __Attempts
+            ),
+            maps:without([ExpName__Local], __Acc)
         end, __Xattrs, __Xattrs), __Attempts)
     end)(Worker, SessId, FilePath, Xattrs, Attempts)
 ).
@@ -138,7 +148,7 @@
 
 -define(assertJsonMetadata(Worker, SessId, FilePath, JSON, Attempts),
     (fun
-        (__Worker, __SessId, __FilePath, __JSON, __Attempts) when map_size(__JSON) =:= 0 ->
+        (__Worker, __SessId, __FilePath, ExpJson__Local, __Attempts) when map_size(ExpJson__Local) =:= 0 ->
             FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
@@ -146,11 +156,11 @@
                 opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, json, [], false),
                 __Attempts
             );
-        (__Worker, __SessId, __FilePath, __JSON, __Attempts) ->
+        (__Worker, __SessId, __FilePath, ExpJson__Local, __Attempts) ->
             FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
-                {ok, __JSON},
+                {ok, ExpJson__Local},
                 opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, json, [], false),
                 __Attempts
             )
@@ -167,11 +177,11 @@
                 opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, rdf, [], false),
                 __Attempts
             );
-        (__Worker, __SessId, __FilePath, __RDF, __Attempts) ->
+        (__Worker, __SessId, __FilePath, ExpRdf__Local, __Attempts) ->
             FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
-                {ok, __RDF},
+                {ok, ExpRdf__Local},
                 opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, rdf, [], false),
                 __Attempts
             )
