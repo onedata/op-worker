@@ -1074,6 +1074,10 @@
     % it is used to evaluate if collection is outdated (see dir_stats_collection_behaviour:acquire/1)
     incarnation = 0 :: non_neg_integer(),
 
+    % number of times the initialization traverse has been automatically restarted due to errors
+    % in the current enable cycle; reset to 0 on every fresh transition to initializing
+    initialization_retry_count = 0 :: non_neg_integer(),
+
     % information about next status transition that is expected to be executed after ongoing transition is finished
     pending_status_transition :: dir_stats_service_state:pending_status_transition(),
 

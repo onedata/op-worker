@@ -31,6 +31,7 @@
 
 %% API
 -export([init_pool/0, stop_pool/0, run/2, cancel/2]).
+-export([decode_task_id/1]).
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, task_finished/2, task_canceled/2]).
 
@@ -68,7 +69,7 @@ run(SpaceId, Incarnation) ->
     catch
         _:{badmatch, {error, not_found}} ->
             % Space dir is not found - traverse is not needed
-            dir_stats_service_state:report_collections_initialization_finished(SpaceId);
+            dir_stats_service_state:report_collections_initialization_finished(SpaceId, Incarnation);
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Error starting stats initialization traverse for space ~tp (incarnation ~tp): ~tp:~tp",
                 [SpaceId, Incarnation, Error, Reason], Stacktrace),
@@ -138,7 +139,8 @@ get_job(DocOrId) ->
 
 -spec task_finished(tree_traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    dir_stats_service_state:report_collections_initialization_finished(get_space_id(TaskId)).
+    {SpaceId, Incarnation} = decode_task_id(TaskId),
+    dir_stats_service_state:report_collections_initialization_finished(SpaceId, Incarnation).
 
 
 -spec task_canceled(tree_traverse:id(), traverse:pool()) -> ok.
@@ -157,10 +159,10 @@ gen_task_id(SpaceId, Incarnation) ->
     <<(integer_to_binary(Incarnation))/binary, ?TASK_ID_SEPARATOR, SpaceId/binary>>.
 
 
--spec get_space_id(tree_traverse:id()) -> file_id:space_id().
-get_space_id(TaskId) ->
-    [_IncarnationBinary, SpaceId] = binary:split(TaskId, <<?TASK_ID_SEPARATOR>>),
-    SpaceId.
+-spec decode_task_id(tree_traverse:id()) -> {file_id:space_id(), non_neg_integer()}.
+decode_task_id(TaskId) ->
+    [IncarnationBinary, SpaceId] = binary:split(TaskId, <<?TASK_ID_SEPARATOR>>),
+    {SpaceId, binary_to_integer(IncarnationBinary)}.
 
 
 -spec do_tree_traverse_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
@@ -178,11 +180,19 @@ do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobE
             ?debug(?autoformat_with_msg("Directory deleted during stats initialization", FileUuid)),
             {ok, #{}};
         {error, Reason, Stacktrace} ->
+            #{task_id := TaskId} = MasterJobExtendedArgs,
             %% @TODO VFS-11151 - log to system audit log
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             ?error_exception(?autoformat_with_msg("Error when listing directory during stats initialization.",
                 FileUuid), error, Reason, Stacktrace),
-            ok = dir_stats_collector:update_stats_of_dir(
-                file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERROR_COUNT => 1}),
+            case dir_stats_service_state:report_initialization_error(TaskId) of
+                retries_exhausted ->
+                    % Record the error only once initialization has permanently failed for this
+                    % dir, so the count is not accumulated across retried attempts.
+                    ok = dir_stats_collector:report_dir_initialization_error(
+                        file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERROR_COUNT => 1});
+                _ ->
+                    ok
+            end,
             {ok, #{}}
     end.

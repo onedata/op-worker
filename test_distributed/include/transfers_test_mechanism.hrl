@@ -27,8 +27,7 @@ begin
         true ->
             ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config);
         false ->
-            ProviderId = rpc:call(Node, oneprovider, get_id, []),
-            oct_background:get_user_session_id(User, ProviderId)
+            oct_background:get_user_session_id(User, rpc:call(Node, oneprovider, get_id, []))
     end
 end
 ).
