@@ -78,7 +78,7 @@ get_helper_handle(#helper_spec{name = Name} = HelperSpec, StorageCredentials) ->
     {ok, Handle} = helpers_nif:get_helper_handle(Name, HelperParams),
     #helper_handle{
         handle = Handle,
-        timeout = helper_spec:get_timeout(HelperSpec)
+        timeout = helper_spec:get_effective_timeout(HelperSpec)
     }.
 
 %%--------------------------------------------------------------------

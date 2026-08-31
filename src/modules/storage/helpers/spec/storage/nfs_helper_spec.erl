@@ -68,7 +68,6 @@ build_configuration_diff(HelperSpec, UpdateSpec = #storage_update_spec{configura
         configuration = #nfs_helper_configuration_diff{}
     });
 build_configuration_diff(HelperSpec, #storage_update_spec{
-    timeout = Timeout,
     configuration = #nfs_helper_configuration_diff{
         version = Version,
         host = Host,
@@ -86,8 +85,7 @@ build_configuration_diff(HelperSpec, #storage_update_spec{
         {<<"readAhead">>, ReadAhead, fun integer_to_binary/1},
         {<<"dirCache">>, DirCache, fun atom_to_binary/1},
         {<<"autoReconnect">>, AutoReconnect, fun integer_to_binary/1},
-        {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1}
     ]).
 
 
@@ -141,12 +139,8 @@ describe(#helper_spec{
 
     #helper_spec_description{
         type = ?NFS_HELPER_NAME,
-        credentials = Credentials,
         configuration = Configuration,
-        timeout = utils:convert_defined(
-            maps:get(<<"timeout">>, ConfigurationParams, undefined),
-            fun binary_to_integer/1
-        )
+        credentials = Credentials
     }.
 
 
@@ -212,7 +206,6 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 %% @private
 -spec build_configuration(onedata_storage:create_spec()) -> helper_spec:configuration().
 build_configuration(#storage_create_spec{
-    timeout = Timeout,
     configuration = #nfs_helper_configuration{
         version = Version,
         host = Host,
@@ -234,8 +227,7 @@ build_configuration(#storage_create_spec{
         {<<"readAhead">>, ReadAhead, fun integer_to_binary/1},
         {<<"dirCache">>, DirCache, fun atom_to_binary/1},
         {<<"autoReconnect">>, AutoReconnect, fun integer_to_binary/1},
-        {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1}
     ]).
 
 

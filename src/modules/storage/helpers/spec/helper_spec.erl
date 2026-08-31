@@ -46,6 +46,7 @@
     get_configuration/1,
     get_credentials/1,
     get_timeout/1,
+    get_effective_timeout/1,
     get_block_size/1,
     get_storage_path_type/1,
     get_params/2,
@@ -77,17 +78,24 @@
 
 
 -spec build(onedata_storage:create_spec()) -> t().
-build(CreateReq = #storage_create_spec{type = Type}) ->
+build(CreateReq = #storage_create_spec{type = Type, timeout = Timeout}) ->
     Module = get_module(Type),
-    Module:build(CreateReq).
+    HelperSpec = Module:build(CreateReq),
+    HelperSpec#helper_spec{timeout = Timeout}.
 
 
 -spec build_helper_params(t(), credentials()) ->
     {ok, helper_params()} | {error, Reason :: term()}.
-build_helper_params(HelperSpec, CredentialsParams) ->
+build_helper_params(HelperSpec = #helper_spec{timeout = Timeout}, CredentialsParams) ->
     case validate_credentials(HelperSpec, CredentialsParams) of
-        ok -> {ok, maps:merge(HelperSpec#helper_spec.configuration, CredentialsParams)};
-        Error -> Error
+        ok ->
+            HelperParams = maps:merge(HelperSpec#helper_spec.configuration, CredentialsParams),
+            {ok, case Timeout of
+                undefined -> HelperParams;
+                _ -> HelperParams#{<<"timeout">> => integer_to_binary(Timeout)}
+            end};
+        Error ->
+            Error
     end.
 
 
@@ -107,15 +115,21 @@ update(
 
     ConfigurationDiff = Module:build_configuration_diff(HelperSpec, UpdateSpec),
     CredentialsDiff = Module:build_credentials_diff(HelperSpec, UpdateSpec),
+    NewTimeout = case UpdateSpec#storage_update_spec.timeout of
+        undefined -> HelperSpec#helper_spec.timeout;
+        Timeout -> Timeout
+    end,
+    HasTimeoutChanged = NewTimeout /= HelperSpec#helper_spec.timeout,
 
-    case {maps_utils:is_empty(ConfigurationDiff), maps_utils:is_empty(CredentialsDiff)} of
-        {true, true} ->
+    case {maps_utils:is_empty(ConfigurationDiff), maps_utils:is_empty(CredentialsDiff), HasTimeoutChanged} of
+        {true, true, false} ->
             {error, no_change};
-        {IsEmptyConfigurationDiff, IsEmptyCredentialsDiff} ->
+        {IsEmptyConfigurationDiff, IsEmptyCredentialsDiff, _} ->
             CurrentConfiguration = HelperSpec#helper_spec.configuration,
             CurrentCredentials = HelperSpec#helper_spec.credentials,
 
             {ok, HelperSpec#helper_spec{
+                timeout = NewTimeout,
                 configuration = case IsEmptyConfigurationDiff of
                     true -> CurrentConfiguration;
                     false -> maps:merge(CurrentConfiguration, ConfigurationDiff)
@@ -206,17 +220,23 @@ get_configuration(#helper_spec{configuration = ConfigurationParams}) -> Configur
 get_credentials(#helper_spec{credentials = CredentialsParams}) -> CredentialsParams.
 
 
--spec get_timeout(t() | undefined) -> integer().
-get_timeout(undefined) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the timeout as configured for the storage - undefined if the admin
+%% has not set one. Use get_effective_timeout/1 to get the value that actually
+%% applies.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_timeout(t()) -> undefined | onedata_storage:operation_timeout().
+get_timeout(#helper_spec{timeout = Timeout}) -> Timeout.
+
+
+-spec get_effective_timeout(t() | undefined) -> integer().
+get_effective_timeout(#helper_spec{timeout = Timeout}) when Timeout /= undefined ->
+    Timeout;
+get_effective_timeout(_) ->
     {ok, Value} = application:get_env(?APP_NAME, helpers_async_operation_timeout_milliseconds),
-    Value;
-get_timeout(#helper_spec{configuration = ConfigurationParams}) ->
-    case maps:find(<<"timeout">>, ConfigurationParams) of
-        {ok, Value} ->
-            erlang:binary_to_integer(Value);
-        error ->
-            get_timeout(undefined)
-    end.
+    Value.
 
 
 %%--------------------------------------------------------------------

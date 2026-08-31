@@ -68,14 +68,12 @@ build_configuration_diff(HelperSpec, UpdateSpec = #storage_update_spec{configura
         configuration = #posix_helper_configuration_diff{}
     });
 build_configuration_diff(HelperSpec, #storage_update_spec{
-    timeout = Timeout,
     configuration = #posix_helper_configuration_diff{
         mount_point = MountPoint
     }
 }) ->
     helper_spec_utils:build_diff_from_specs(HelperSpec#helper_spec.configuration, [
-        {<<"mountPoint">>, MountPoint},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"mountPoint">>, MountPoint}
     ]).
 
 
@@ -121,12 +119,8 @@ describe(#helper_spec{
 
     #helper_spec_description{
         type = ?POSIX_HELPER_NAME,
-        credentials = Credentials,
         configuration = BaseConfiguration,
-        timeout = utils:convert_defined(
-            maps:get(<<"timeout">>, ConfigurationParams, undefined),
-            fun binary_to_integer/1
-        )
+        credentials = Credentials
     }.
 
 
@@ -192,7 +186,6 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 %% @private
 -spec build_configuration(onedata_storage:create_spec()) -> helper_spec:configuration().
 build_configuration(#storage_create_spec{
-    timeout = Timeout,
     configuration = #posix_helper_configuration{
         mount_point = MountPoint,
         storage_path_type = StoragePathType
@@ -202,9 +195,7 @@ build_configuration(#storage_create_spec{
         <<"mountPoint">> => MountPoint,
         <<"storagePathType">> => helper_spec_utils:storage_path_type_to_binary(StoragePathType)
     },
-    helper_spec_utils:add_optional_entries_if_defined(RequiredParams, [
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
-    ]).
+    RequiredParams.
 
 
 %% @private

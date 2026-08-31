@@ -504,11 +504,14 @@
 
 
 %% Everything a storage helper needs before LUMA substitutes the per-user
-%% credentials, as the flat binary maps the C++ helper layer consumes.
+%% credentials: the timeout and the two halves of the parameter set, kept as
+%% the flat binary maps the C++ helper layer consumes.
 %% The typed, redacted view of the same content is #helper_spec_description{}
 %% in helpers.hrl.
 -record(helper_spec, {
     name :: helper_spec:name(),
+    %% Undefined means the storage helper's own default applies.
+    timeout :: undefined | onedata_storage:operation_timeout(),
     configuration = #{} :: helper_spec:configuration(),
     credentials = #{} :: helper_spec:credentials()
 }).

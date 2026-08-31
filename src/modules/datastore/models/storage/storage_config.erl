@@ -283,6 +283,7 @@ get_record_struct(4) ->
         % Replace/rename helper to helper_spec
         {helper_spec, {record, [
             {name, string},
+            {timeout, integer},
             {configuration, #{string => string}},
             {credentials, #{string => string}}
         ]}},
@@ -335,9 +336,15 @@ upgrade_record(2, {?MODULE, Helper, LumaConfig, _ImportedStorage}) ->
 
 upgrade_record(3, {?MODULE, Helper, LumaConfig}) ->
     {helper, Name, ConfigurationParams, CredentialsParams} = Helper,
+    % timeout used to be stored among the flat helper params, it is now a typed field
+    {TimeoutBin, RemainingConfigurationParams} = case maps:take(<<"timeout">>, ConfigurationParams) of
+        error -> {undefined, ConfigurationParams};
+        Result -> Result
+    end,
     HelperSpec = #helper_spec{
         name = Name,
-        configuration = ConfigurationParams,
+        timeout = utils:convert_defined(TimeoutBin, fun binary_to_integer/1),
+        configuration = RemainingConfigurationParams,
         credentials = CredentialsParams
     },
     {4, {?MODULE, HelperSpec, LumaConfig, 0}}.

@@ -69,7 +69,6 @@ build_configuration_diff(HelperSpec, UpdateSpec = #storage_update_spec{configura
         configuration = #nulldevice_helper_configuration_diff{}
     });
 build_configuration_diff(HelperSpec, #storage_update_spec{
-    timeout = Timeout,
     configuration = #nulldevice_helper_configuration_diff{
         latency_min = LatencyMin,
         latency_max = LatencyMax,
@@ -87,8 +86,7 @@ build_configuration_diff(HelperSpec, #storage_update_spec{
         {<<"filter">>, Filter},
         {<<"simulatedFilesystemParameters">>, SimulatedFilesystemParameters},
         {<<"simulatedFilesystemGrowSpeed">>, SimulatedFilesystemGrowSpeed, fun float_to_binary/1},
-        {<<"enableDataVerification">>, EnableDataVerification, fun atom_to_binary/1},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"enableDataVerification">>, EnableDataVerification, fun atom_to_binary/1}
     ]).
 
 
@@ -142,12 +140,8 @@ describe(#helper_spec{
 
     #helper_spec_description{
         type = ?NULL_DEVICE_HELPER_NAME,
-        credentials = Credentials,
         configuration = Configuration,
-        timeout = utils:convert_defined(
-            maps:get(<<"timeout">>, ConfigurationParams, undefined),
-            fun binary_to_integer/1
-        )
+        credentials = Credentials
     }.
 
 
@@ -213,7 +207,6 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 %% @private
 -spec build_configuration(onedata_storage:create_spec()) -> helper_spec:configuration().
 build_configuration(#storage_create_spec{
-    timeout = Timeout,
     configuration = #nulldevice_helper_configuration{
         latency_min = LatencyMin,
         latency_max = LatencyMax,
@@ -235,8 +228,7 @@ build_configuration(#storage_create_spec{
         {<<"filter">>, Filter},
         {<<"simulatedFilesystemParameters">>, SimulatedFilesystemParameters},
         {<<"simulatedFilesystemGrowSpeed">>, SimulatedFilesystemGrowSpeed, fun float_to_binary/1},
-        {<<"enableDataVerification">>, EnableDataVerification, fun atom_to_binary/1},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"enableDataVerification">>, EnableDataVerification, fun atom_to_binary/1}
     ]).
 
 

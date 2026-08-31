@@ -83,7 +83,6 @@ build_configuration_diff(HelperSpec, UpdateSpec = #storage_update_spec{configura
         configuration = #webdav_helper_configuration_diff{}
     });
 build_configuration_diff(HelperSpec, #storage_update_spec{
-    timeout = Timeout,
     configuration = #webdav_helper_configuration_diff{
         endpoint = Endpoint,
         verify_server_certificate = VerifyServerCertificate,
@@ -103,8 +102,7 @@ build_configuration_diff(HelperSpec, #storage_update_spec{
         {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1},
         {<<"maximumUploadSize">>, MaximumUploadSize, fun integer_to_binary/1},
         {<<"fileMode">>, FileMode},
-        {<<"dirMode">>, DirMode},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"dirMode">>, DirMode}
     ]).
 
 
@@ -165,12 +163,8 @@ describe(#helper_spec{
 
     #helper_spec_description{
         type = ?WEBDAV_HELPER_NAME,
-        credentials = Credentials,
         configuration = Configuration,
-        timeout = utils:convert_defined(
-            maps:get(<<"timeout">>, ConfigurationParams, undefined),
-            fun binary_to_integer/1
-        )
+        credentials = Credentials
     }.
 
 
@@ -242,7 +236,6 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 %% @private
 -spec build_configuration(onedata_storage:create_spec()) -> helper_spec:configuration().
 build_configuration(#storage_create_spec{
-    timeout = Timeout,
     configuration = #webdav_helper_configuration{
         endpoint = Endpoint,
         verify_server_certificate = VerifyServerCertificate,
@@ -266,8 +259,7 @@ build_configuration(#storage_create_spec{
         {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1},
         {<<"maximumUploadSize">>, MaximumUploadSize, fun integer_to_binary/1},
         {<<"fileMode">>, FileMode},
-        {<<"dirMode">>, DirMode},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"dirMode">>, DirMode}
     ]).
 
 

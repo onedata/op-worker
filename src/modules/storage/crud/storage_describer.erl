@@ -59,7 +59,7 @@ do_describe(StorageId) ->
                 id = StorageId,
                 name = storage:fetch_name_of_local_storage(StorageId),
                 type = HelperSpecDescription#helper_spec_description.type,
-                timeout = HelperSpecDescription#helper_spec_description.timeout,
+                timeout = helper_spec:get_timeout(HelperSpec),
                 readonly = storage:is_local_storage_readonly(StorageId),
                 imported = storage:is_imported(StorageId),
                 luma = #luma_spec{

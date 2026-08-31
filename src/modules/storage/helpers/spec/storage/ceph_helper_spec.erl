@@ -68,7 +68,6 @@ build_configuration_diff(HelperSpec, UpdateSpec = #storage_update_spec{configura
         configuration = #ceph_helper_configuration_diff{}
     });
 build_configuration_diff(HelperSpec, #storage_update_spec{
-    timeout = Timeout,
     configuration = #ceph_helper_configuration_diff{
         monitor_hostname = MonitorHostname,
         cluster_name = ClusterName,
@@ -78,8 +77,7 @@ build_configuration_diff(HelperSpec, #storage_update_spec{
     helper_spec_utils:build_diff_from_specs(HelperSpec#helper_spec.configuration, [
         {<<"monitorHostname">>, MonitorHostname},
         {<<"clusterName">>, ClusterName},
-        {<<"poolName">>, PoolName},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"poolName">>, PoolName}
     ]).
 
 
@@ -123,12 +121,8 @@ describe(#helper_spec{
 
     #helper_spec_description{
         type = ?CEPH_HELPER_NAME,
-        credentials = Credentials,
         configuration = Configuration,
-        timeout = utils:convert_defined(
-            maps:get(<<"timeout">>, ConfigurationParams, undefined),
-            fun binary_to_integer/1
-        )
+        credentials = Credentials
     }.
 
 
@@ -196,7 +190,6 @@ redact_confidential_credentials_diff(CredentialsDiff = #ceph_helper_credentials_
 %% @private
 -spec build_configuration(onedata_storage:create_spec()) -> helper_spec:configuration().
 build_configuration(#storage_create_spec{
-    timeout = Timeout,
     configuration = #ceph_helper_configuration{
         monitor_hostname = MonitorHostname,
         cluster_name = ClusterName,
@@ -210,9 +203,7 @@ build_configuration(#storage_create_spec{
         <<"poolName">> => PoolName,
         <<"storagePathType">> => helper_spec_utils:storage_path_type_to_binary(StoragePathType)
     },
-    helper_spec_utils:add_optional_entries_if_defined(RequiredParams, [
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
-    ]).
+    RequiredParams.
 
 
 %% @private

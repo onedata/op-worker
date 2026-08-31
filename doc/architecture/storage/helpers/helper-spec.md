@@ -28,6 +28,7 @@ consume. It is defined as:
 ```erlang
 -record(helper_spec, {
     name :: binary(),
+    timeout :: undefined | onedata_storage:operation_timeout(),
     configuration = #{} :: #{binary() => binary()},
     credentials = #{} :: #{binary() => binary()}
 }).
@@ -37,8 +38,12 @@ consume. It is defined as:
   `<<"s3">>`, `<<"posix">>`, `<<"ceph">>`. The dispatcher uses this
   to route calls to the correct per-storage module.
 
+- **`timeout`** — Operation timeout in milliseconds. Applies to every storage
+  type, so it is kept as a typed field here rather than in the per-type
+  configuration; `undefined` means the helper's own default applies.
+
 - **`configuration`** — Storage-specific settings: hostname, bucket name, mount
-  point, block size, timeout, storage path type, etc. All values are
+  point, block size, storage path type, etc. All values are
   binary strings.
 
 - **`credentials`** — Storage-level credentials set during configuration:
@@ -138,11 +143,13 @@ The **create** flow converts a typed create spec into a helper spec:
 3. The module's `build/1` callback:
    - Maps configuration record fields → `configuration` (with type conversions)
    - Maps credentials record fields → `credentials`
-   - Adds `timeout` from the create spec to `configuration` as `<<"timeout">>`
    - Omits optional fields that are `undefined` via
      `add_optional_entries_if_defined/2`
 
-4. Returns `#helper_spec{name, configuration, credentials}`.
+4. The dispatcher fills in `timeout` from the create spec and returns
+   `#helper_spec{name, timeout, configuration, credentials}`. The per-type
+   modules never see it. It is flattened into `<<"timeout">>` only in
+   `build_helper_params/2`, on the way to the C++ helper.
 
 **Type conversions:** Integers (e.g. `block_size`, `timeout`) use
 `integer_to_binary/1`. Atoms (e.g. `verify_server_certificate`) use
@@ -164,7 +171,6 @@ converted via `storage_path_type_to_binary/1` to `<<"flat">>` |
 | `s3_configuration.region`              | `<<"region">>`       | as-is (optional)           |
 | `s3_credentials.access_key`            | `<<"accessKey">>`    | as-is                      |
 | `s3_credentials.secret_key`             | `<<"secretKey">>`    | as-is                      |
-| `timeout` (from create spec)            | `<<"timeout">>`      | `integer_to_binary`        |
 
 ---
 
@@ -214,7 +220,7 @@ records from flat binary maps.
 ```
 
 `helper_spec:describe/1` returns `#helper_spec_description{}`
-with `type`, `configuration`, `credentials`, and `timeout`. Each
+with `type`, `configuration` and `credentials`. Each
 per-storage module implements `describe/1` to map `configuration` and
 `credentials` back to Erlang records (`#s3_configuration{}`,
 `#s3_credentials{}`, etc.).

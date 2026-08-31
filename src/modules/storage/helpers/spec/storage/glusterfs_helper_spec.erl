@@ -68,7 +68,6 @@ build_configuration_diff(HelperSpec, UpdateSpec = #storage_update_spec{configura
         configuration = #glusterfs_helper_configuration_diff{}
     });
 build_configuration_diff(HelperSpec, #storage_update_spec{
-    timeout = Timeout,
     configuration = #glusterfs_helper_configuration_diff{
         volume = Volume,
         hostname = Hostname,
@@ -84,8 +83,7 @@ build_configuration_diff(HelperSpec, #storage_update_spec{
         {<<"port">>, Port, fun integer_to_binary/1},
         {<<"transport">>, Transport, fun transport_to_binary/1},
         {<<"mountPoint">>, MountPoint},
-        {<<"xlatorOptions">>, XlatorOptions},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"xlatorOptions">>, XlatorOptions}
     ]).
 
 
@@ -138,12 +136,8 @@ describe(#helper_spec{
 
     #helper_spec_description{
         type = ?GLUSTERFS_HELPER_NAME,
-        credentials = Credentials,
         configuration = Configuration,
-        timeout = utils:convert_defined(
-            maps:get(<<"timeout">>, ConfigurationParams, undefined),
-            fun binary_to_integer/1
-        )
+        credentials = Credentials
     }.
 
 
@@ -199,7 +193,6 @@ get_block_size(#helper_spec{}) ->
 %% @private
 -spec build_configuration(onedata_storage:create_spec()) -> helper_spec:configuration().
 build_configuration(#storage_create_spec{
-    timeout = Timeout,
     configuration = #glusterfs_helper_configuration{
         volume = Volume,
         hostname = Hostname,
@@ -219,8 +212,7 @@ build_configuration(#storage_create_spec{
         {<<"port">>, Port, fun integer_to_binary/1},
         {<<"transport">>, Transport, fun transport_to_binary/1},
         {<<"mountPoint">>, MountPoint},
-        {<<"xlatorOptions">>, XlatorOptions},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"xlatorOptions">>, XlatorOptions}
     ]).
 
 

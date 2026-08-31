@@ -388,7 +388,7 @@ format.
 2. **Read storage data** — `storage:get(StorageId)` → `storage_config:get/1`.
 
 3. **Reverse translation** — `helper_spec:describe(HelperSpec)` produces
-   `#helper_spec_description{}` (type, configuration, credentials, timeout).
+   `#helper_spec_description{}` (type, configuration, credentials).
 
 4. **Build description** — Assemble `#storage_description{}` from:
    - `storage:fetch_name_of_local_storage/1`, `storage:is_local_storage_readonly/1`,

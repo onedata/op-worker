@@ -195,7 +195,7 @@ get_local_storage_helper_params(SessionId, UserId, SpaceId, HelperMode, StorageD
 -spec get_proxy_storage_helper_params(storage:id(), helper_spec:t() | undefined) ->
     #fuse_response{}.
 get_proxy_storage_helper_params(StorageId, HelperSpec) ->
-    Timeout = helper_spec:get_timeout(HelperSpec),
+    Timeout = helper_spec:get_effective_timeout(HelperSpec),
     HelperParams = helper_spec:get_proxy_params(Timeout, StorageId),
     #fuse_response{
         status = #status{code = ?OK},

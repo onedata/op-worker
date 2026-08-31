@@ -84,7 +84,6 @@ build_configuration_diff(HelperSpec, UpdateSpec = #storage_update_spec{configura
         configuration = #http_helper_configuration_diff{}
     });
 build_configuration_diff(HelperSpec, #storage_update_spec{
-    timeout = Timeout,
     configuration = #http_helper_configuration_diff{
         endpoint = Endpoint,
         verify_server_certificate = VerifyServerCertificate,
@@ -104,8 +103,7 @@ build_configuration_diff(HelperSpec, #storage_update_spec{
         {<<"maxRequestsPerSession">>, MaxRequestsPerSession, fun integer_to_binary/1},
         {<<"emulateRangeRead">>, EmulateRangeRead, fun atom_to_binary/1},
         {<<"maxEmulatedRangeReadFileSize">>, MaxEmulatedRangeReadFileSize, fun integer_to_binary/1},
-        {<<"fileMode">>, FileMode},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"fileMode">>, FileMode}
     ]).
 
 
@@ -166,12 +164,8 @@ describe(#helper_spec{
 
     #helper_spec_description{
         type = ?HTTP_HELPER_NAME,
-        credentials = Credentials,
         configuration = Configuration,
-        timeout = utils:convert_defined(
-            maps:get(<<"timeout">>, ConfigurationParams, undefined),
-            fun binary_to_integer/1
-        )
+        credentials = Credentials
     }.
 
 
@@ -244,7 +238,6 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 %% @private
 -spec build_configuration(onedata_storage:create_spec()) -> helper_spec:configuration().
 build_configuration(#storage_create_spec{
-    timeout = Timeout,
     configuration = #http_helper_configuration{
         endpoint = Endpoint,
         verify_server_certificate = VerifyServerCertificate,
@@ -268,8 +261,7 @@ build_configuration(#storage_create_spec{
         {<<"maxRequestsPerSession">>, MaxRequestsPerSession, fun integer_to_binary/1},
         {<<"emulateRangeRead">>, EmulateRangeRead, fun atom_to_binary/1},
         {<<"maxEmulatedRangeReadFileSize">>, MaxEmulatedRangeReadFileSize, fun integer_to_binary/1},
-        {<<"fileMode">>, FileMode},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1}
+        {<<"fileMode">>, FileMode}
     ]).
 
 
