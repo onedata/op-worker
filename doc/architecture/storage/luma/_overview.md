@@ -273,8 +273,8 @@ means no migration is required for existing storages.
   the storage configuration subsystem
 - **[Helper Operations](../helpers/helper-operations.md)** — How I/O
   operations use storage credentials via the helper handle system
-- **[Helper Configuration](../helpers/helper-config.md)** — How
-  `#helper_config{}` is built, including OAuth2-specific admin context
+- **[Helper Spec](../helpers/helper-spec.md)** — How
+  `#helper_spec{}` is built, including OAuth2-specific admin context
 - **[Onepanel LUMA DB API](https://onedata.org/#/home/api/stable/onepanel?anchor=tag/LUMA-DB)**
   — REST API for querying and clearing LUMA DB entries
 - **[Onepanel LUMA Local Feed API](https://onedata.org/#/home/api/stable/onepanel?anchor=tag/LUMA-DB-Local-Feed)**

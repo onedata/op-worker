@@ -524,15 +524,15 @@ replication_continues_on_modified_storage_test(_Config) ->
     {ok, StorageId} = opw_test_rpc:call(
         OtherProviderSelector, space_logic, get_local_supporting_storage, [SpaceId]
     ),
-    HelperConfig = opw_test_rpc:call(
-        OtherProviderSelector, storage, get_helper_config, [StorageId]
+    HelperSpec = opw_test_rpc:call(
+        OtherProviderSelector, storage, get_helper_spec, [StorageId]
     ),
-    HelperArgs = opw_test_rpc:call(OtherProviderSelector, helper_config, get_args, [HelperConfig]),
+    ConfigurationParams = opw_test_rpc:call(OtherProviderSelector, helper_spec, get_configuration, [HelperSpec]),
     OldTimeout = binary_to_integer(maps:get(
-        <<"timeout">>, HelperArgs, integer_to_binary(?DEFAULT_HELPER_TIMEOUT)
+        <<"timeout">>, ConfigurationParams, integer_to_binary(?DEFAULT_HELPER_TIMEOUT)
     )),
     UpdateSpec = #storage_update_spec{
-        type = opw_test_rpc:call(OtherProviderSelector, helper_config, get_name, [HelperConfig])
+        type = opw_test_rpc:call(OtherProviderSelector, helper_spec, get_name, [HelperSpec])
     },
     ?assertEqual(ok, opw_test_rpc:call(OtherProviderSelector, storage, update, [
         StorageId, UpdateSpec#storage_update_spec{timeout = 100000}

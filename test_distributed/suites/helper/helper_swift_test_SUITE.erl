@@ -236,7 +236,7 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     SwiftConfig = ?config(swift, ?config(swift, ?config(storages, Config))),
 
-    UserCtx = #{
+    StorageCredentials = #{
         <<"username">> => atom_to_binary(?config(user_name, SwiftConfig), utf8),
         <<"password">> => atom_to_binary(?config(password, SwiftConfig), utf8),
         <<"projectName">> => atom_to_binary(?config(project_name, SwiftConfig), utf8)
@@ -249,18 +249,18 @@ new_helper(Config) ->
             <<"containerName">> => ?SWIFT_CONTAINER_NAME,
             <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
-        UserCtx
+        StorageCredentials
     ),
 
     spawn_link(Node, fun() ->
-        helper_loop(Helper, UserCtx)
+        helper_loop(Helper, StorageCredentials)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(Helper, UserCtx) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+helper_loop(Helper, StorageCredentials) ->
+    Handle = helpers:get_helper_handle(Helper, StorageCredentials),
     helper_loop(Handle).
 
 helper_loop(Handle) ->

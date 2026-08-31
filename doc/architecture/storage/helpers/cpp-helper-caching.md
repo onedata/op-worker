@@ -14,7 +14,7 @@ instance may hold network connections or authentication state.
 > - [Helper Operations](helper-operations.md) — the Erlang-level handle
 >   hierarchy (`sd_handle` → `helper_handle` → `file_handle`) and how
 >   I/O operations flow to the NIF
-> - [Helper Configuration](helper-config.md) — how `#helper_config{}`
+> - [Helper Spec](helper-spec.md) — how `#helper_spec{}`
 >   and user context are built and merged into NIF arguments
 > - [LUMA Credential Resolution](../luma/credential-resolution.md) —
 >   how user credentials are mapped to storage-native credentials
@@ -80,7 +80,7 @@ graph TB
     end
 
     SH -- "create handle" --> HH
-    HH -- "get_helper_handle(Config, UserCtx)" --> H
+    HH -- "get_helper_handle(HelperSpec, StorageCredentials)" --> H
     H -- "NIF call" --> NIF
     NIF -- "getStorageHelper(type, args, buffered)" --> CSHC
     CSHC -- "cache miss" --> SHC
@@ -116,16 +116,16 @@ key  = format("{:016x}-{}", hash(key_string), type)
 ```
 
 The arguments passed to the NIF are a **merge** of two maps
-(`helper_config.erl`):
+(`helper_spec.erl`):
 
 ```erlang
-build_helper_nif_args(HelperConfig, UserCtx) ->
-    {ok, maps:merge(HelperConfig#helper_config.args, UserCtx)}.
+build_helper_params(HelperSpec, StorageCredentials) ->
+    {ok, maps:merge(HelperSpec#helper_spec.configuration, StorageCredentials)}.
 ```
 
-- `HelperConfig#helper_config.args` — storage-level configuration
+- `HelperSpec#helper_spec.configuration` — storage-level configuration
   (mount point, bucket name, endpoint URL, block size, timeout, etc.)
-- `UserCtx` — LUMA-resolved credentials for the specific user
+- `StorageCredentials` — LUMA-resolved credentials for the specific user
   (uid/gid for POSIX, access key for S3, OAuth2 token, etc.)
 
 **Crucially, neither session ID nor space ID appear in the NIF
@@ -219,7 +219,7 @@ sequenceDiagram
     SH->>HH: create(Sess1, UserA, SpaceX, StorageS)
     HH->>LUMA: map_to_storage_credentials(UserA)
     LUMA-->>HH: {ok, {uid => 1000, gid => 1000}}
-    HH->>H: get_helper_handle(Config, UserCtx)
+    HH->>H: get_helper_handle(HelperSpec, StorageCredentials)
     H->>NIF: get_helper_handle("posix", MergedArgs)
     NIF->>Cache: getStorageHelper("posix", args, buffered)
     Note over Cache: Key = hash(posix,gid=1000,mountPoint=/mnt,uid=1000,...)
@@ -234,7 +234,7 @@ sequenceDiagram
     SH->>HH: create(Sess2, UserB, SpaceY, StorageS)
     HH->>LUMA: map_to_storage_credentials(UserB)
     LUMA-->>HH: {ok, {uid => 1000, gid => 1000}}
-    HH->>H: get_helper_handle(Config, UserCtx)
+    HH->>H: get_helper_handle(HelperSpec, StorageCredentials)
     H->>NIF: get_helper_handle("posix", MergedArgs)
     NIF->>Cache: getStorageHelper("posix", args, buffered)
     Note over Cache: Same key → cache hit!
@@ -246,8 +246,8 @@ sequenceDiagram
     Note over U1,Factory: H1 and H2 are distinct Erlang records<br/>but both point to the same C++ PosixHelper instance
 ```
 
-**Why this happens:** The NIF args are `maps:merge(Config.args,
-UserCtx)`. Since both users resolve to the same LUMA credentials
+**Why this happens:** The helper params are `maps:merge(HelperSpec.configuration,
+StorageCredentials)`. Since both users resolve to the same LUMA credentials
 and the storage config is the same, the merged arg maps are
 identical. The cache key is therefore identical, and the C++ layer
 returns the same `shared_ptr`.
@@ -311,7 +311,7 @@ sequenceDiagram
 
     HR->>HL: refresh_handle_params(Handle, Sess, Space, Storage)
     HL->>LUMA: map_to_storage_credentials(UserA)
-    LUMA-->>HL: {ok, NewUserCtx with fresh token}
+    LUMA-->>HL: {ok, NewStorageCredentials with fresh token}
     HL->>H: refresh_params(Handle, NewArgs)
     H->>VSH: updateHelper(NewArgs)
 
@@ -463,7 +463,7 @@ When considering changes to the Erlang helper handle model:
   documentation
 - [Helper Operations](helper-operations.md) — the full Erlang-level
   I/O flow: `sd_handle` → `helper_handle` → `file_handle` → NIF
-- [Helper Configuration](helper-config.md) — how `#helper_config{}`
+- [Helper Spec](helper-spec.md) — how `#helper_spec{}`
   and user context are built and merged into NIF arguments
 - [Storage Configuration Architecture Overview](../_overview.md) —
   high-level architecture and component roles

@@ -102,7 +102,7 @@ doc set). The record is:
 
 **Create** uses full records: `credentials()` and `configuration()`.
 All required fields must be present. The system builds a complete
-helper config from scratch.
+helper spec from scratch.
 
 **Update** uses diff records: `credentials_diff()` and
 `configuration_diff()`. Every field is optional; `undefined` means "no
@@ -180,15 +180,15 @@ records. This is a mechanical translation with no business logic —
 see [Storage CRUD Operations](storage-crud-operations.md) for the
 full flow and spec builder details.
 
-### Contract to Helper Config (op-worker)
+### Contract to Helper Spec (op-worker)
 
-On the op-worker side, contracts are translated into `#helper_config{}`:
+On the op-worker side, contracts are translated into `#helper_spec{}`:
 
-- `configuration` → `args` (flat binary map)
-- `credentials` → `admin_ctx` (flat binary map)
+- `configuration` → `#helper_spec.configuration` (flat binary map)
+- `credentials` → `#helper_spec.credentials` (flat binary map)
 
-The helper config uses camelCase keys for the C++ NIF layer. See
-[Helper Configuration](helpers/helper-config.md) for details.
+The helper spec uses camelCase keys for the C++ NIF layer. See
+[Helper Spec](helpers/helper-spec.md) for details.
 
 ## Type Safety
 
@@ -214,5 +214,5 @@ at runtime.
 
 - [Storage Configuration Overview](_overview.md)
 - [Storage CRUD Operations](storage-crud-operations.md)
-- [Helper Configuration](helpers/helper-config.md)
+- [Helper Spec](helpers/helper-spec.md)
 - [Adding a New Storage Type](adding-new-storage-type.md)

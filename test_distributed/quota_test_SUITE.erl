@@ -887,9 +887,9 @@ get_space_mount_point(Worker, SpaceId) ->
     storage_mount_point(Worker, StorageId).
 
 storage_mount_point(Worker, StorageId) ->
-    Helper = rpc:call(Worker, storage, get_helper_config, [StorageId]),
-    HelperArgs = helper_config:get_args(Helper),
-    maps:get(<<"mountPoint">>, HelperArgs).
+    Helper = rpc:call(Worker, storage, get_helper_spec, [StorageId]),
+    ConfigurationParams = helper_spec:get_configuration(Helper),
+    maps:get(<<"mountPoint">>, ConfigurationParams).
 
 list_ended_transfers(Worker, SpaceId) ->
     {ok, List} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceId]),

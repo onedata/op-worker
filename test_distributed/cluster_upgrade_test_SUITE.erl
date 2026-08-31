@@ -457,36 +457,36 @@ upgrade_from_21_02_8_upgrade_swift_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     TenantName = <<"some_project">>,
-    BaseHelperArgs = #{
+    BaseConfigurationParams = #{
         <<"authUrl">> => <<"some_url">>,
         <<"containerName">> => <<"some_container">>
     },
-    BaseHelperAdminCtx = #{
+    BaseCredentialsParams = #{
         <<"username">> => <<"user">>,
         <<"password">> => <<"password">>
     },
-    Helper = #helper_config{
+    Helper = #helper_spec{
         name = ?SWIFT_HELPER_NAME,
-        args = BaseHelperArgs#{<<"tenantName">> => TenantName},
-        admin_ctx = BaseHelperAdminCtx
+        configuration = BaseConfigurationParams#{<<"tenantName">> => TenantName},
+        credentials = BaseCredentialsParams
     },
     StorageName = ?RAND_STR(),
     {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, undefined]),
 
     ?assertMatch(
-        {ok, #document{value = #storage_config{helper_config = Helper}}},
+        {ok, #document{value = #storage_config{helper_spec = Helper}}},
         rpc:call(Worker, storage_config, get, [StorageId])
     ),
 
     ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
 
-    ExpNewHelper = #helper_config{
+    ExpNewHelper = #helper_spec{
         name = ?SWIFT_HELPER_NAME,
-        args = BaseHelperArgs,
-        admin_ctx = BaseHelperAdminCtx#{<<"projectName">> => TenantName}
+        configuration = BaseConfigurationParams,
+        credentials = BaseCredentialsParams#{<<"projectName">> => TenantName}
     },
     ?assertMatch(
-        {ok, #document{value = #storage_config{helper_config = ExpNewHelper}}},
+        {ok, #document{value = #storage_config{helper_spec = ExpNewHelper}}},
         rpc:call(Worker, storage_config, get, [StorageId])
     ),
 
@@ -494,7 +494,7 @@ upgrade_from_21_02_8_upgrade_swift_storage(Config) ->
     ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
 
     ?assertMatch(
-        {ok, #document{value = #storage_config{helper_config = ExpNewHelper}}},
+        {ok, #document{value = #storage_config{helper_spec = ExpNewHelper}}},
         rpc:call(Worker, storage_config, get, [StorageId])
     ).
 
@@ -552,11 +552,11 @@ upgrade_from_25_0_trash(Config) ->
 %%%===================================================================
 
 setup_luma(Worker, Helper, UserId, Feed) ->
-    HelperName = helper_config:get_name(Helper),
+    HelperName = helper_spec:get_name(Helper),
     StorageDoc = #document{
         key = <<"storage_id_", (atom_to_binary(Feed))/binary, "_", HelperName/binary>>,
         value = #storage_config{
-            helper_config = Helper,
+            helper_spec = Helper,
             luma_config = luma_config:new(Feed),
             luma_generation = 0
         }
@@ -564,7 +564,7 @@ setup_luma(Worker, Helper, UserId, Feed) ->
     rpc:call(Worker, storage_config, create, [StorageDoc#document.key, StorageDoc#document.value]),
 
     LumaStorageUser = rpc:call(Worker, luma_storage_user, new,
-        [UserId, #{<<"storageCredentials">> => helper_config:get_admin_ctx(Helper)}, StorageDoc]),
+        [UserId, #{<<"storageCredentials">> => helper_spec:get_credentials(Helper)}, StorageDoc]),
     ok = rpc:call(Worker, luma_db, store, [StorageDoc, UserId, luma_storage_users, LumaStorageUser, Feed]),
     {LumaStorageUser, StorageDoc}.
 
@@ -653,8 +653,8 @@ init_per_testcase(Case = upgrade_from_21_02_8_luma, Config) ->
     test_utils:mock_new(Worker, provider_logic, [passthrough]),
     test_utils:mock_expect(Worker, provider_logic, get_storages, fun() ->
         {ok,
-            [<<"storage_id_auto_", (helper_config:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8] ++
-                [<<"storage_id_local_", (helper_config:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8]
+            [<<"storage_id_auto_", (helper_spec:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8] ++
+                [<<"storage_id_local_", (helper_spec:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8]
         }
     end),
     test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->

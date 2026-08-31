@@ -51,15 +51,15 @@ describe(StorageId) ->
 do_describe(StorageId) ->
     case storage:get(StorageId) of
         {ok, StorageData} ->
-            HelperConfig = storage:get_helper_config(StorageData),
-            HelperConfigDescription = helper_config:describe(HelperConfig),
+            HelperSpec = storage:get_helper_spec(StorageData),
+            HelperSpecDescription = helper_spec:describe(HelperSpec),
             LumaConfig = storage:get_luma_config(StorageData),
 
             {ok, #storage_description{
                 id = StorageId,
                 name = storage:fetch_name_of_local_storage(StorageId),
-                type = HelperConfigDescription#helper_config_description.type,
-                timeout = HelperConfigDescription#helper_config_description.timeout,
+                type = HelperSpecDescription#helper_spec_description.type,
+                timeout = HelperSpecDescription#helper_spec_description.timeout,
                 readonly = storage:is_local_storage_readonly(StorageId),
                 imported = storage:is_imported(StorageId),
                 luma = #luma_spec{
@@ -68,8 +68,8 @@ do_describe(StorageId) ->
                     api_key = luma_config:get_api_key(LumaConfig)
                 },
                 qos_parameters = storage:fetch_qos_parameters_of_local_storage(StorageId),
-                credentials = HelperConfigDescription#helper_config_description.credentials,
-                configuration = HelperConfigDescription#helper_config_description.configuration
+                credentials = HelperSpecDescription#helper_spec_description.credentials,
+                configuration = HelperSpecDescription#helper_spec_description.configuration
             }};
 
         {error, not_found} ->

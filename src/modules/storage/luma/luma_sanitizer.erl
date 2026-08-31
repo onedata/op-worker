@@ -34,7 +34,7 @@
 %%% API functions
 %%%===================================================================
 
--spec sanitize_storage_user(json_utils:json_term(), helper_config:name()) ->
+-spec sanitize_storage_user(json_utils:json_term(), helper_spec:name()) ->
     {ok, storage_user()} | {error, term()}.
 sanitize_storage_user(StorageUserMap, HelperName) when is_map(StorageUserMap) ->
     try
@@ -98,14 +98,14 @@ sanitize_onedata_group(OnedataGroupMap) ->
 %%% Internal functions
 %%%===================================================================
 
--spec storage_credentials_custom_constraint(helper_config:name()) ->
+-spec storage_credentials_custom_constraint(helper_spec:name()) ->
     fun((luma:storage_credentials()) -> {true, luma:storage_credentials()} | false).
 storage_credentials_custom_constraint(HelperName) ->
     fun(StorageCredentials) ->
         % TODO VFS-6312 delete this case after using middleware_sanitizer in
-        % helper_config:validate_user_ctx as it does not check
+        % helper_spec:validate_credentials as it does not check
         % whether uid is non negative integer
-        case helper_config:is_posix_compatible(HelperName) of
+        case helper_spec:is_posix_compatible(HelperName) of
             true ->
                 SanitizedCredentials =  sanitize_posix_storage_user_credentials(StorageCredentials),
                 % storage credentials are passed to helper so we store them as binaries
@@ -113,7 +113,7 @@ storage_credentials_custom_constraint(HelperName) ->
             false ->
                 % storage credentials are passed to helper so we store them as binaries
                 StorageCredentialsBinaries = integers_to_binary(StorageCredentials),
-                case helper_config:validate_user_ctx(HelperName, StorageCredentialsBinaries) of
+                case helper_spec:validate_credentials(HelperName, StorageCredentialsBinaries) of
                     ok -> {true, StorageCredentialsBinaries};
                     {error, _} -> false
                 end

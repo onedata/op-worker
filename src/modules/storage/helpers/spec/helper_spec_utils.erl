@@ -9,7 +9,7 @@
 %%% Utility functions for storage helper configuration modules.
 %%% @end
 %%%-------------------------------------------------------------------
--module(helper_config_utils).
+-module(helper_spec_utils).
 -author("Bartosz Walkowicz").
 
 -include("modules/storage/helpers/helpers.hrl").
@@ -18,13 +18,13 @@
 
 %% API
 -export([
-    add_optional_args_if_defined/2,
-    build_args_diff_from_specs/2,
+    add_optional_entries_if_defined/2,
+    build_diff_from_specs/2,
     set_optional_record_fields_if_defined/3,
     redact_record_fields_if_defined/2,
 
-    validate_user_ctx/2,
-    validate_user_ctx/3,
+    validate_credentials/2,
+    validate_credentials/3,
     resolve_admin_id/1,
 
     is_canonical/1,
@@ -40,9 +40,9 @@
 %%%===================================================================
 
 
--spec add_optional_args_if_defined(helper_config:args(), Specs) -> helper_config:args() when
+-spec add_optional_entries_if_defined(helper_spec:configuration(), Specs) -> helper_spec:configuration() when
     Specs :: [{binary(), undefined | binary()} | {binary(), undefined | term(), fun((term()) -> binary())}].
-add_optional_args_if_defined(RequiredArgs, Specs) ->
+add_optional_entries_if_defined(BaseParams, Specs) ->
     lists:foldl(fun
         ({Name, Value}, Acc) when Value /= undefined ->
             Acc#{Name => Value};
@@ -50,23 +50,23 @@ add_optional_args_if_defined(RequiredArgs, Specs) ->
             Acc#{Name => ConvertFun(Value)};
         (_, Acc) ->
             Acc
-    end, RequiredArgs, Specs).
+    end, BaseParams, Specs).
 
 
--spec build_args_diff_from_specs(helper_config:args(), Specs) -> helper_config:args() when
+-spec build_diff_from_specs(helper_spec:configuration(), Specs) -> helper_spec:configuration() when
     Specs :: [{binary(), undefined | binary()} | {binary(), undefined | term(), fun((term()) -> binary())}].
-build_args_diff_from_specs(CurrentArgs, Specs) ->
+build_diff_from_specs(CurrentParams, Specs) ->
     lists:foldl(fun
         ({Name, Value}, Acc) when Value /= undefined ->
-            case maps:find(Name, CurrentArgs) of
+            case maps:find(Name, CurrentParams) of
                 {ok, Value} -> Acc;  % unchanged
                 _ -> Acc#{Name => Value}  % changed or new
             end;
         ({Name, Value, ConvertFun}, Acc) when Value /= undefined ->
-            NifValue = ConvertFun(Value),
-            case maps:find(Name, CurrentArgs) of
-                {ok, NifValue} -> Acc;  % unchanged
-                _ -> Acc#{Name => NifValue}  % changed or new
+            ConvertedValue = ConvertFun(Value),
+            case maps:find(Name, CurrentParams) of
+                {ok, ConvertedValue} -> Acc;  % unchanged
+                _ -> Acc#{Name => ConvertedValue}  % changed or new
             end;
         (_, Acc) ->
             Acc
@@ -75,23 +75,23 @@ build_args_diff_from_specs(CurrentArgs, Specs) ->
 
 -spec set_optional_record_fields_if_defined(
     BaseRecord :: tuple(),
-    NifMap :: map(),
+    Params :: map(),
     FieldSpecs :: [{binary(), pos_integer()} | {binary(), pos_integer(), fun((binary()) -> term())}]
 ) ->
     tuple().
-set_optional_record_fields_if_defined(BaseRecord, NifMap, FieldSpecs) ->
+set_optional_record_fields_if_defined(BaseRecord, Params, FieldSpecs) ->
     lists:foldl(fun
-        ({NifFieldName, RecordIndex}, Acc) ->
-            case maps:find(NifFieldName, NifMap) of
-                {ok, NifValue} ->
-                    erlang:setelement(RecordIndex, Acc, NifValue);
+        ({Key, RecordIndex}, Acc) ->
+            case maps:find(Key, Params) of
+                {ok, Value} ->
+                    erlang:setelement(RecordIndex, Acc, Value);
                 error ->
                     Acc
             end;
-        ({NifFieldName, RecordIndex, ConvertFun}, Acc) ->
-            case maps:find(NifFieldName, NifMap) of
-                {ok, NifValue} ->
-                    erlang:setelement(RecordIndex, Acc, ConvertFun(NifValue));
+        ({Key, RecordIndex, ConvertFun}, Acc) ->
+            case maps:find(Key, Params) of
+                {ok, Value} ->
+                    erlang:setelement(RecordIndex, Acc, ConvertFun(Value));
                 error ->
                     Acc
             end
@@ -110,9 +110,9 @@ redact_record_fields_if_defined(Record, FieldsToRedact) ->
     end, Record, FieldsToRedact).
 
 
--spec validate_user_ctx(helper_config:user_ctx(), [binary()]) -> ok | {error, term()}.
-validate_user_ctx(UserCtx, RequiredFields) ->
-    validate_user_ctx(UserCtx, RequiredFields, []).
+-spec validate_credentials(helper_spec:credentials(), [binary()]) -> ok | {error, term()}.
+validate_credentials(CredentialsParams, RequiredFields) ->
+    validate_credentials(CredentialsParams, RequiredFields, []).
 
 
 %%--------------------------------------------------------------------
@@ -122,14 +122,14 @@ validate_user_ctx(UserCtx, RequiredFields) ->
 %% (and not <<"null">>), and no unexpected fields exist.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_user_ctx(helper_config:user_ctx(), [binary()], [binary()]) ->
+-spec validate_credentials(helper_spec:credentials(), [binary()], [binary()]) ->
     ok | {error, term()}.
-validate_user_ctx(UserCtx, RequiredFields, OptionalFields) ->
+validate_credentials(CredentialsParams, RequiredFields, OptionalFields) ->
     AllowedFields = RequiredFields ++ OptionalFields,
-    case validate_all_fields_allowed(UserCtx, AllowedFields) of
+    case validate_all_fields_allowed(CredentialsParams, AllowedFields) of
         ok ->
-            case validate_required_fields_present(UserCtx, RequiredFields) of
-                ok -> validate_all_fields_are_valid_binaries(UserCtx);
+            case validate_required_fields_present(CredentialsParams, RequiredFields) of
+                ok -> validate_all_fields_are_valid_binaries(CredentialsParams);
                 Error -> Error
             end;
         Error ->
@@ -137,7 +137,7 @@ validate_user_ctx(UserCtx, RequiredFields, OptionalFields) ->
     end.
 
 
--spec resolve_admin_id(helper_config:user_ctx()) -> helper_config:user_ctx().
+-spec resolve_admin_id(helper_spec:credentials()) -> helper_spec:credentials().
 resolve_admin_id(Credentials = #{<<"onedataAccessToken">> := OnedataAccessToken}) ->
     TokenCredentials = auth_manager:build_token_credentials(
         OnedataAccessToken, undefined, undefined,
@@ -150,14 +150,14 @@ resolve_admin_id(Credentials) ->
     Credentials.
 
 
--spec is_canonical(helper_config:t()) -> boolean().
-is_canonical(HelperConfig) ->
-    get_storage_path_type(HelperConfig) =:= ?CANONICAL_STORAGE_PATH.
+-spec is_canonical(helper_spec:t()) -> boolean().
+is_canonical(HelperSpec) ->
+    get_storage_path_type(HelperSpec) =:= ?CANONICAL_STORAGE_PATH.
 
 
--spec get_storage_path_type(helper_config:t()) -> binary().
-get_storage_path_type(#helper_config{args = Args}) ->
-    maps:get(<<"storagePathType">>, Args).
+-spec get_storage_path_type(helper_spec:t()) -> binary().
+get_storage_path_type(#helper_spec{configuration = ConfigurationParams}) ->
+    maps:get(<<"storagePathType">>, ConfigurationParams).
 
 
 -spec storage_path_type_to_binary(flat | canonical) -> binary().
@@ -177,8 +177,8 @@ storage_path_type_from_binary(<<"canonical">>) -> canonical.
 
 %% @private
 -spec validate_all_fields_allowed(map(), [binary()]) -> ok | {error, term()}.
-validate_all_fields_allowed(UserCtx, AllowedFields) ->
-    UnexpectedFields = maps:keys(UserCtx) -- AllowedFields,
+validate_all_fields_allowed(CredentialsParams, AllowedFields) ->
+    UnexpectedFields = maps:keys(CredentialsParams) -- AllowedFields,
     case UnexpectedFields of
         [] -> ok;
         [Field | _] -> {error, {unexpected_field, Field}}
@@ -187,8 +187,8 @@ validate_all_fields_allowed(UserCtx, AllowedFields) ->
 
 %% @private
 -spec validate_required_fields_present(map(), [binary()]) -> ok | {error, term()}.
-validate_required_fields_present(UserCtx, RequiredFields) ->
-    case lists:filter(fun(Field) -> not maps:is_key(Field, UserCtx) end, RequiredFields) of
+validate_required_fields_present(CredentialsParams, RequiredFields) ->
+    case lists:filter(fun(Field) -> not maps:is_key(Field, CredentialsParams) end, RequiredFields) of
         [] -> ok;
         [MissingField | _] -> {error, {missing_field, MissingField}}
     end.
@@ -196,11 +196,11 @@ validate_required_fields_present(UserCtx, RequiredFields) ->
 
 %% @private
 -spec validate_all_fields_are_valid_binaries(map()) -> ok | {error, term()}.
-validate_all_fields_are_valid_binaries(UserCtx) ->
+validate_all_fields_are_valid_binaries(CredentialsParams) ->
     InvalidFields = maps:fold(fun
         (_Key, <<Value/binary>>, Acc) when Value /= <<"null">> -> Acc;
         (Key, Value, _Acc) -> [{Key, Value}]
-    end, [], UserCtx),
+    end, [], CredentialsParams),
     case InvalidFields of
         [] -> ok;
         [{Field, Value} | _] -> {error, {invalid_field_value, Field, Value}}

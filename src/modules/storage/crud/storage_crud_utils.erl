@@ -48,19 +48,19 @@ pretty_print_spec(Spec) ->
     io_lib_pretty:print(RedactedSpec, fun get_record_def/2).
 
 
--spec verify_configuration(storage:id() | storage:name(), storage:readonly(), storage:imported(), helper_config:t()) ->
+-spec verify_configuration(storage:id() | storage:name(), storage:readonly(), storage:imported(), helper_spec:t()) ->
     ok | no_return().
-verify_configuration(IdOrName, Readonly, Imported, HelperConfig) ->
+verify_configuration(IdOrName, Readonly, Imported, HelperSpec) ->
     sanitize_readonly_option(Readonly, Imported, IdOrName),
-    check_helper_against_readonly_option(Readonly, HelperConfig),
-    check_helper_against_imported_option(Imported, HelperConfig).
+    check_helper_against_readonly_option(Readonly, HelperSpec),
+    check_helper_against_imported_option(Imported, HelperSpec).
 
 
--spec run_diagnostics(helper_config:t(), luma:feed(), boolean()) -> ok | no_return().
-run_diagnostics(HelperConfig, LumaFeed, PerformReadWriteTest) ->
+-spec run_diagnostics(helper_spec:t(), luma:feed(), boolean()) -> ok | no_return().
+run_diagnostics(HelperSpec, LumaFeed, PerformReadWriteTest) ->
     Opts = #{read_write_test => PerformReadWriteTest},
 
-    case storage_detector:run_diagnostics(all_nodes, HelperConfig, LumaFeed, Opts) of
+    case storage_detector:run_diagnostics(all_nodes, HelperSpec, LumaFeed, Opts) of
         ok ->
             ok;
         {{error, _} = Error, Details} ->
@@ -86,14 +86,14 @@ sanitize_readonly_option(true, true, _IdOrName) ->
 
 
 %% @private
--spec check_helper_against_readonly_option(storage:readonly(), helper_config:t()) ->
+-spec check_helper_against_readonly_option(storage:readonly(), helper_spec:t()) ->
     ok | no_return().
-check_helper_against_readonly_option(true, _HelperConfig) ->
+check_helper_against_readonly_option(true, _HelperSpec) ->
     ok;
-check_helper_against_readonly_option(false, HelperConfig) ->
-    case helper_config:is_storage_access_type_supported(HelperConfig, ?READWRITE) of
+check_helper_against_readonly_option(false, HelperSpec) ->
+    case helper_spec:is_storage_access_type_supported(HelperSpec, ?READWRITE) of
         false ->
-            HelperName = helper_config:get_name(HelperConfig),
+            HelperName = helper_spec:get_name(HelperSpec),
             throw(?ERR_REQUIRES_READONLY_STORAGE(?err_ctx(), HelperName));
         true ->
             ok
@@ -101,14 +101,14 @@ check_helper_against_readonly_option(false, HelperConfig) ->
 
 
 %% @private
--spec check_helper_against_imported_option(storage:imported(), helper_config:t()) ->
+-spec check_helper_against_imported_option(storage:imported(), helper_spec:t()) ->
     ok | no_return().
-check_helper_against_imported_option(false, _HelperConfig) ->
+check_helper_against_imported_option(false, _HelperSpec) ->
     ok;
-check_helper_against_imported_option(true, HelperConfig) ->
-    case helper_config:is_import_supported(HelperConfig) of
+check_helper_against_imported_option(true, HelperSpec) ->
+    case helper_spec:is_import_supported(HelperSpec) of
         false ->
-            HelperName = helper_config:get_name(HelperConfig),
+            HelperName = helper_spec:get_name(HelperSpec),
             throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(?err_ctx(), HelperName, ?OBJECT_HELPERS));
         true ->
             ok
@@ -119,12 +119,12 @@ check_helper_against_imported_option(true, HelperConfig) ->
 -spec redact_confidential_data(onedata_storage:create_spec() | onedata_storage:update_spec()) ->
     onedata_storage:create_spec() | onedata_storage:update_spec().
 redact_confidential_data(Spec = #storage_create_spec{type = Type, credentials = Credentials}) ->
-    RedactedCredentials = helper_config:redact_confidential_credentials(Type, Credentials),
+    RedactedCredentials = helper_spec:redact_confidential_credentials(Type, Credentials),
     Spec#storage_create_spec{credentials = RedactedCredentials};
 redact_confidential_data(Spec = #storage_update_spec{credentials = undefined}) ->
     Spec;
 redact_confidential_data(Spec = #storage_update_spec{type = Type, credentials = CredentialsDiff}) ->
-    RedactedCredentialsDiff = helper_config:redact_confidential_credentials_diff(Type, CredentialsDiff),
+    RedactedCredentialsDiff = helper_spec:redact_confidential_credentials_diff(Type, CredentialsDiff),
     Spec#storage_update_spec{credentials = RedactedCredentialsDiff}.
 
 

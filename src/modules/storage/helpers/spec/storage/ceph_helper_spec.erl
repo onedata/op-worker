@@ -6,24 +6,24 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Implementation of helper_config_behaviour for Ceph storage.
+%%% Implementation of helper_spec_behaviour for Ceph storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(ceph_helper_config).
+-module(ceph_helper_spec).
 -author("Bartosz Walkowicz").
 
--behaviour(helper_config_behaviour).
+-behaviour(helper_spec_behaviour).
 
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
 -include_lib("opw_panel_contracts/include/storage/ceph.hrl").
 
-%% helper_config_behaviour callbacks
+%% helper_spec_behaviour callbacks
 -export([
     build/1,
-    validate_user_ctx/1,
-    build_args_diff/2,
-    build_admin_ctx_diff/2,
+    validate_credentials/1,
+    build_configuration_diff/2,
+    build_credentials_diff/2,
     describe/1,
 
     is_posix_compatible/0,
@@ -43,30 +43,30 @@
 
 
 %%%===================================================================
-%%% helper_config_behaviour callbacks
+%%% helper_spec_behaviour callbacks
 %%%===================================================================
 
 
--spec build(onedata_storage:create_spec()) -> helper_config:t().
+-spec build(onedata_storage:create_spec()) -> helper_spec:t().
 build(CreateReq = #storage_create_spec{type = ?CEPH_HELPER_NAME, credentials = Credentials}) ->
-    #helper_config{
+    #helper_spec{
         name = ?CEPH_HELPER_NAME,
-        args = build_args(CreateReq),
-        admin_ctx = build_admin_ctx(Credentials)
+        configuration = build_configuration(CreateReq),
+        credentials = build_credentials(Credentials)
     }.
 
 
--spec validate_user_ctx(helper_config:user_ctx()) -> ok | {error, Reason :: term()}.
-validate_user_ctx(UserCtx) ->
-    helper_config_utils:validate_user_ctx(UserCtx, [<<"username">>, <<"key">>]).
+-spec validate_credentials(helper_spec:credentials()) -> ok | {error, Reason :: term()}.
+validate_credentials(Credentials) ->
+    helper_spec_utils:validate_credentials(Credentials, [<<"username">>, <<"key">>]).
 
 
--spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
-build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
-    build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
+-spec build_configuration_diff(helper_spec:t(), onedata_storage:update_spec()) -> helper_spec:configuration().
+build_configuration_diff(HelperSpec, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
+    build_configuration_diff(HelperSpec, UpdateSpec#storage_update_spec{
         configuration = #ceph_helper_configuration_diff{}
     });
-build_args_diff(HelperConfig, #storage_update_spec{
+build_configuration_diff(HelperSpec, #storage_update_spec{
     timeout = Timeout,
     configuration = #ceph_helper_configuration_diff{
         monitor_hostname = MonitorHostname,
@@ -74,7 +74,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
         pool_name = PoolName
     }
 }) ->
-    helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.args, [
+    helper_spec_utils:build_diff_from_specs(HelperSpec#helper_spec.configuration, [
         {<<"monitorHostname">>, MonitorHostname},
         {<<"clusterName">>, ClusterName},
         {<<"poolName">>, PoolName},
@@ -82,50 +82,50 @@ build_args_diff(HelperConfig, #storage_update_spec{
     ]).
 
 
--spec build_admin_ctx_diff(helper_config:t(), onedata_storage:update_spec()) ->
-    helper_config:user_ctx().
-build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
+-spec build_credentials_diff(helper_spec:t(), onedata_storage:update_spec()) ->
+    helper_spec:credentials().
+build_credentials_diff(_HelperSpec, #storage_update_spec{credentials = undefined}) ->
     #{};
-build_admin_ctx_diff(HelperConfig, #storage_update_spec{
+build_credentials_diff(HelperSpec, #storage_update_spec{
     credentials = #ceph_helper_credentials_diff{
         username = Username,
         key = Key
     }
 }) ->
-    helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.admin_ctx, [
+    helper_spec_utils:build_diff_from_specs(HelperSpec#helper_spec.credentials, [
         {<<"username">>, Username},
         {<<"key">>, Key}
     ]).
 
 
--spec describe(helper_config:t()) -> helper_config:description().
-describe(#helper_config{
+-spec describe(helper_spec:t()) -> helper_spec:description().
+describe(#helper_spec{
     name = ?CEPH_HELPER_NAME,
-    args = Args,
-    admin_ctx = AdminCtx
+    configuration = ConfigurationParams,
+    credentials = CredentialsParams
 }) ->
-    %% Reconstruct configuration record from args map
+    %% Reconstruct configuration record from flat params
     Configuration = #ceph_helper_configuration{
-        monitor_hostname = maps:get(<<"monitorHostname">>, Args),
-        cluster_name = maps:get(<<"clusterName">>, Args),
-        pool_name = maps:get(<<"poolName">>, Args),
-        storage_path_type = helper_config_utils:storage_path_type_from_binary(
-            maps:get(<<"storagePathType">>, Args)
+        monitor_hostname = maps:get(<<"monitorHostname">>, ConfigurationParams),
+        cluster_name = maps:get(<<"clusterName">>, ConfigurationParams),
+        pool_name = maps:get(<<"poolName">>, ConfigurationParams),
+        storage_path_type = helper_spec_utils:storage_path_type_from_binary(
+            maps:get(<<"storagePathType">>, ConfigurationParams)
         )
     },
 
-    %% Reconstruct credentials record from admin_ctx
+    %% Reconstruct credentials record from flat params
     Credentials = redact_confidential_credentials(#ceph_helper_credentials{
-        username = maps:get(<<"username">>, AdminCtx),
-        key = maps:get(<<"key">>, AdminCtx)
+        username = maps:get(<<"username">>, CredentialsParams),
+        key = maps:get(<<"key">>, CredentialsParams)
     }),
 
-    #helper_config_description{
+    #helper_spec_description{
         type = ?CEPH_HELPER_NAME,
         credentials = Credentials,
         configuration = Configuration,
         timeout = utils:convert_defined(
-            maps:get(<<"timeout">>, Args, undefined),
+            maps:get(<<"timeout">>, ConfigurationParams, undefined),
             fun binary_to_integer/1
         )
     }.
@@ -151,38 +151,38 @@ is_nfs4_acl_supported() -> false.
 is_oauth2_supported() -> false.
 
 
--spec is_storage_access_type_supported(helper_config:access_type()) -> boolean().
+-spec is_storage_access_type_supported(helper_spec:access_type()) -> boolean().
 is_storage_access_type_supported(_) -> true.
 
 
--spec is_auto_import_supported(#helper_config{}) -> boolean().
-is_auto_import_supported(_HelperConfig) ->
+-spec is_auto_import_supported(#helper_spec{}) -> boolean().
+is_auto_import_supported(_HelperSpec) ->
     false.
 
 
--spec is_file_registration_supported(#helper_config{}) -> boolean().
-is_file_registration_supported(_HelperConfig) ->
+-spec is_file_registration_supported(#helper_spec{}) -> boolean().
+is_file_registration_supported(_HelperSpec) ->
     false.
 
 
--spec is_getting_size_supported(#helper_config{}) -> boolean().
-is_getting_size_supported(_HelperConfig) ->
+-spec is_getting_size_supported(#helper_spec{}) -> boolean().
+is_getting_size_supported(_HelperSpec) ->
     false.
 
 
--spec get_block_size(#helper_config{}) -> non_neg_integer() | undefined.
-get_block_size(#helper_config{}) ->
+-spec get_block_size(#helper_spec{}) -> non_neg_integer() | undefined.
+get_block_size(#helper_spec{}) ->
     undefined.
 
 
 -spec redact_confidential_credentials(#ceph_helper_credentials{}) -> #ceph_helper_credentials{}.
 redact_confidential_credentials(Credentials = #ceph_helper_credentials{}) ->
-    helper_config_utils:redact_record_fields_if_defined(Credentials, [#ceph_helper_credentials.key]).
+    helper_spec_utils:redact_record_fields_if_defined(Credentials, [#ceph_helper_credentials.key]).
 
 
 -spec redact_confidential_credentials_diff(#ceph_helper_credentials_diff{}) -> #ceph_helper_credentials_diff{}.
 redact_confidential_credentials_diff(CredentialsDiff = #ceph_helper_credentials_diff{}) ->
-    helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [
+    helper_spec_utils:redact_record_fields_if_defined(CredentialsDiff, [
         #ceph_helper_credentials_diff.key
     ]).
 
@@ -193,8 +193,8 @@ redact_confidential_credentials_diff(CredentialsDiff = #ceph_helper_credentials_
 
 
 %% @private
--spec build_args(onedata_storage:create_spec()) -> helper_config:args().
-build_args(#storage_create_spec{
+-spec build_configuration(onedata_storage:create_spec()) -> helper_spec:configuration().
+build_configuration(#storage_create_spec{
     timeout = Timeout,
     configuration = #ceph_helper_configuration{
         monitor_hostname = MonitorHostname,
@@ -203,20 +203,20 @@ build_args(#storage_create_spec{
         storage_path_type = StoragePathType
     }
 }) ->
-    RequiredArgs = #{
+    RequiredParams = #{
         <<"monitorHostname">> => MonitorHostname,
         <<"clusterName">> => ClusterName,
         <<"poolName">> => PoolName,
-        <<"storagePathType">> => helper_config_utils:storage_path_type_to_binary(StoragePathType)
+        <<"storagePathType">> => helper_spec_utils:storage_path_type_to_binary(StoragePathType)
     },
-    helper_config_utils:add_optional_args_if_defined(RequiredArgs, [
+    helper_spec_utils:add_optional_entries_if_defined(RequiredParams, [
         {<<"timeout">>, Timeout, fun integer_to_binary/1}
     ]).
 
 
 %% @private
--spec build_admin_ctx(#ceph_helper_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#ceph_helper_credentials{
+-spec build_credentials(#ceph_helper_credentials{}) -> helper_spec:credentials().
+build_credentials(#ceph_helper_credentials{
     username = Username,
     key = Key
 }) ->

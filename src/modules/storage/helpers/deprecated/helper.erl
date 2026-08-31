@@ -24,25 +24,24 @@
 %%%===================================================================
 
 
--spec new_helper(helper_config:name(), helper_config:args(), helper_config:user_ctx()) -> {ok, helper_config:t()}.
-new_helper(HelperName, Args, AdminCtx) ->
-    BaseAdminCtx = default_admin_ctx(HelperName),
-    FullAdminCtx = maps:merge(BaseAdminCtx, AdminCtx),
+-spec new_helper(helper_spec:name(), helper_spec:configuration(), helper_spec:credentials()) -> {ok, helper_spec:t()}.
+new_helper(HelperName, ConfigurationParams, CredentialsParams) ->
+    DefaultCredentialsParams = default_credentials_params(HelperName),
 
-    {ok, #helper_config{
+    {ok, #helper_spec{
         name = HelperName,
-        args = Args,
-        admin_ctx = FullAdminCtx
+        configuration = ConfigurationParams,
+        credentials = maps:merge(DefaultCredentialsParams, CredentialsParams)
     }}.
 
 
 %% @private
-default_admin_ctx(HelperName) when
+default_credentials_params(HelperName) when
     HelperName == ?POSIX_HELPER_NAME;
     HelperName == ?NULL_DEVICE_HELPER_NAME;
     HelperName == ?NFS_HELPER_NAME;
     HelperName == ?GLUSTERFS_HELPER_NAME ->
     #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>};
 
-default_admin_ctx(_) ->
+default_credentials_params(_) ->
     #{}.

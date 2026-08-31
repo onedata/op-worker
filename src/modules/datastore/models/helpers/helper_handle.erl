@@ -45,10 +45,10 @@
     {ok, doc()} | {error, term()}.
 create(SessionId, UserId, SpaceId, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
-    HelperConfig = storage:get_helper_config(Storage),
+    HelperSpec = storage:get_helper_spec(Storage),
     case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
         {ok, UserCtx} ->
-            HelperHandle = helpers:get_helper_handle(HelperConfig, UserCtx),
+            HelperHandle = helpers:get_helper_handle(HelperSpec, UserCtx),
             HelperDoc = #document{value = HelperHandle},
             datastore_model:create(?CTX, HelperDoc);
         Error ->

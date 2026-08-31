@@ -253,7 +253,7 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     CephConfig = ?config(cephrados, ?config(cephrados, ?config(storages, Config))),
 
-    UserCtx = #{
+    StorageCredentials = #{
         <<"username">> => atom_to_binary(?config(username, CephConfig), utf8),
         <<"key">> => atom_to_binary(?config(key, CephConfig), utf8)
     },
@@ -265,18 +265,18 @@ new_helper(Config) ->
             <<"poolName">> => ?CEPH_POOL_NAME,
             <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
-        UserCtx
+        StorageCredentials
     ),
 
     spawn_link(Node, fun() ->
-        helper_loop(Helper, UserCtx)
+        helper_loop(Helper, StorageCredentials)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(Helper, UserCtx) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+helper_loop(Helper, StorageCredentials) ->
+    Handle = helpers:get_helper_handle(Helper, StorageCredentials),
     helper_loop(Handle).
 
 helper_loop(Handle) ->

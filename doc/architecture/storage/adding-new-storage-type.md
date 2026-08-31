@@ -3,7 +3,7 @@
 This guide walks you through adding support for a new storage backend type
 to the Onedata storage configuration system. You will define typed contracts
 in op-panel-contracts, add REST translation in onepanel, and implement
-helper config logic in op-worker. Each storage type follows a consistent
+helper spec logic in op-worker. Each storage type follows a consistent
 pattern; use POSIX or S3 as templates depending on whether your storage is
 filesystem-like or object-storage-like.
 
@@ -17,11 +17,11 @@ Before starting, ensure you have:
 
 - **Familiarity with the storage configuration architecture** — read
   [overview](_overview.md) to understand how contracts, spec builders,
-  and helper configs fit together.
+  and helper specs fit together.
 
 - **A working C++ helper implementation** — the NIF side that performs
   actual I/O is out of scope. The new storage type must already have a
-  C++ helper that accepts args and admin_ctx as flat binary maps.
+  C++ helper that accepts configuration and credentials as flat binary maps.
 
 - **Understanding of configuration and credentials** — know what fields
   and credentials the new storage needs. This determines the record
@@ -193,40 +193,40 @@ uses a discriminator (e.g. `type` or `storageType`) to select the schema.
 Ensure the new storage type is a valid value in the model definition so
 that create/update requests are accepted.
 
-## Step 3: Add Helper Config Module (op-worker)
+## Step 3: Add Helper Spec Module (op-worker)
 
-### 3.1 Create the helper config module
+### 3.1 Create the helper spec module
 
 Create
-`src/modules/storage/helpers/config/storage/newstorage_helper_config.erl`.
+`src/modules/storage/helpers/spec/storage/newstorage_helper_spec.erl`.
 
-Implement `helper_config_behaviour`:
+Implement `helper_spec_behaviour`:
 
 **Core callbacks:**
 
-- `build/1` — Translate `#newstorage_configuration{}` → args map,
-  `#newstorage_credentials{}` → admin_ctx map. Use
-  `helper_config_utils:add_optional_args_if_defined/2` for optional
+- `build/1` — Translate `#newstorage_configuration{}` → configuration map,
+  `#newstorage_credentials{}` → credentials map. Use
+  `helper_spec_utils:add_optional_entries_if_defined/2` for optional
   fields; include `storagePathType` via
-  `helper_config_utils:storage_path_type_to_binary/1`.
+  `helper_spec_utils:storage_path_type_to_binary/1`.
 
-- `validate_user_ctx/1` — Define required and optional user context keys.
-  Use `helper_config_utils:validate_user_ctx(UserCtx, Required, Optional)`.
+- `validate_credentials/1` — Define required and optional user context keys.
+  Use `helper_spec_utils:validate_credentials(CredentialsParams, Required, Optional)`.
 
-- `build_args_diff/2` — Compute args diff from
+- `build_configuration_diff/2` — Compute configuration diff from
   `#newstorage_configuration_diff{}`. Use
-  `helper_config_utils:build_args_diff_from_specs/2`. If
+  `helper_spec_utils:build_diff_from_specs/2`. If
   `configuration =:= undefined` in the update spec, substitute an empty
   diff record.
 
-- `build_admin_ctx_diff/2` — Compute admin_ctx diff from
+- `build_credentials_diff/2` — Compute credentials diff from
   `#newstorage_credentials_diff{}`. Return `#{}` when
   `credentials =:= undefined`.
 
 - `describe/1` — Reverse the translation: flat maps → typed records for
-  `#helper_config_description{}`. Use
-  `helper_config_utils:storage_path_type_from_binary/1` and
-  `helper_config_utils:set_optional_record_fields_if_defined/3` for
+  `#helper_spec_description{}`. Use
+  `helper_spec_utils:storage_path_type_from_binary/1` and
+  `helper_spec_utils:set_optional_record_fields_if_defined/3` for
   optional fields.
 
 **Capability callbacks:**
@@ -247,7 +247,7 @@ and `is_rename_supported` true. S3: `is_object_storage` true,
 
 - `redact_confidential_credentials/1` — Redact sensitive fields (e.g.
   `secret_key`) before logging. Use
-  `helper_config_utils:redact_record_fields_if_defined/2` for S3-like
+  `helper_spec_utils:redact_record_fields_if_defined/2` for S3-like
   credentials.
 
 - `redact_confidential_credentials_diff/1` — Same for diff records.
@@ -268,14 +268,14 @@ Add the helper name macro:
 Update `POSIX_COMPATIBLE_HELPERS`, `OBJECT_HELPERS`, or `AUTO_IMPORT_HELPERS`
 if the new type belongs there.
 
-### 3.3 Update helper_config.erl
+### 3.3 Update helper_spec.erl
 
-In `src/modules/storage/helpers/config/helper_config.erl`:
+In `src/modules/storage/helpers/spec/helper_spec.erl`:
 
 Add a clause to `get_module/1`:
 
 ```erlang
-get_module(?NEWSTORAGE_HELPER_NAME) -> newstorage_helper_config:module_info(module).
+get_module(?NEWSTORAGE_HELPER_NAME) -> newstorage_helper_spec:module_info(module).
 ```
 
 ### 3.4 Update storage_crud_utils.erl
@@ -358,11 +358,11 @@ onepanel:
 [ ] src/http/ (update generated REST model files)
 
 op-worker:
-[ ] src/modules/storage/helpers/config/storage/
-    newstorage_helper_config.erl (create)
+[ ] src/modules/storage/helpers/spec/storage/
+    newstorage_helper_spec.erl (create)
 [ ] include/modules/storage/helpers/helpers.hrl
     (add helper name macro)
-[ ] src/modules/storage/helpers/config/helper_config.erl
+[ ] src/modules/storage/helpers/spec/helper_spec.erl
     (add get_module clause)
 [ ] src/modules/storage/crud/storage_crud_utils.erl
     (add include, get_record_def clauses for pretty-print)
@@ -377,5 +377,5 @@ tests:
 - [Storage Configuration Overview](_overview.md)
 - [Storage Data Contracts](storage-contracts.md)
 - [Storage CRUD Operations](storage-crud-operations.md)
-- [Helper Configuration](helpers/helper-config.md)
+- [Helper Spec](helpers/helper-spec.md)
 - [Helper Operations](helpers/helper-operations.md)

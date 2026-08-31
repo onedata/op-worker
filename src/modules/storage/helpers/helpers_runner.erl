@@ -114,8 +114,8 @@ handle_ekeyexpired(FileOrHelperHandle, #sd_handle{
     storage_id = StorageId
 }) ->
     {ok, Storage} = storage:get(StorageId),
-    HelperConfig = storage:get_helper_config(Storage),
-    case helper_config:is_oauth2_supported(HelperConfig) of
+    HelperSpec = storage:get_helper_spec(Storage),
+    case helper_spec:is_oauth2_supported(HelperSpec) of
         true ->
             % called by module for CT tests
             helpers_reload:refresh_handle_params(FileOrHelperHandle, SessionId, SpaceId, Storage),

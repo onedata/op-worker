@@ -238,11 +238,11 @@ validate(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     storage_import:assert_imported_storage(StorageId),
 
     AutoDetectAttributes = maps:get(<<"autoDetectAttributes">>, Data, true),
-    HelperConfig = storage:get_helper_config(StorageId),
-    StorageType= helper_config:get_name(HelperConfig),
-    HelperArgs = HelperConfig#helper_config.args,
+    HelperSpec = storage:get_helper_spec(StorageId),
+    StorageType= helper_spec:get_name(HelperSpec),
+    ConfigurationParams = HelperSpec#helper_spec.configuration,
     IsHttpWithoutEmulateRangeRead = StorageType =:= ?HTTP_HELPER_NAME
-        andalso maps:get(<<"emulateRangeRead">>, HelperArgs, <<"false">>) =:= <<"false">>,
+        andalso maps:get(<<"emulateRangeRead">>, ConfigurationParams, <<"false">>) =:= <<"false">>,
     case IsHttpWithoutEmulateRangeRead andalso AutoDetectAttributes == false of
         true ->
             % in case of the HTTP helper without range read emulation, we don't allow overriding

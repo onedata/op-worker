@@ -328,7 +328,7 @@
 }).
 
 -record(helper_params, {
-    helper_name :: helper_config:name(),
+    helper_name :: helper_spec:name(),
     helper_args :: [#helper_arg{}]
 }).
 

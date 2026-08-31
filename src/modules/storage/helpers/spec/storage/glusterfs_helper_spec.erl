@@ -6,24 +6,24 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Implementation of helper_config_behaviour for GlusterFS storage.
+%%% Implementation of helper_spec_behaviour for GlusterFS storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(glusterfs_helper_config).
+-module(glusterfs_helper_spec).
 -author("Bartosz Walkowicz").
 
--behaviour(helper_config_behaviour).
+-behaviour(helper_spec_behaviour).
 
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
 -include_lib("opw_panel_contracts/include/storage/glusterfs.hrl").
 
-%% helper_config_behaviour callbacks
+%% helper_spec_behaviour callbacks
 -export([
     build/1,
-    validate_user_ctx/1,
-    build_args_diff/2,
-    build_admin_ctx_diff/2,
+    validate_credentials/1,
+    build_configuration_diff/2,
+    build_credentials_diff/2,
     describe/1,
 
     is_posix_compatible/0,
@@ -43,30 +43,30 @@
 
 
 %%%===================================================================
-%%% helper_config_behaviour callbacks
+%%% helper_spec_behaviour callbacks
 %%%===================================================================
 
 
--spec build(onedata_storage:create_spec()) -> helper_config:t().
+-spec build(onedata_storage:create_spec()) -> helper_spec:t().
 build(CreateReq = #storage_create_spec{type = ?GLUSTERFS_HELPER_NAME, credentials = Credentials}) ->
-    #helper_config{
+    #helper_spec{
         name = ?GLUSTERFS_HELPER_NAME,
-        args = build_args(CreateReq),
-        admin_ctx = build_admin_ctx(Credentials)
+        configuration = build_configuration(CreateReq),
+        credentials = build_credentials(Credentials)
     }.
 
 
--spec validate_user_ctx(helper_config:user_ctx()) -> ok | {error, Reason :: term()}.
-validate_user_ctx(UserCtx) ->
-    helper_config_utils:validate_user_ctx(UserCtx, [<<"uid">>], [<<"gid">>]).
+-spec validate_credentials(helper_spec:credentials()) -> ok | {error, Reason :: term()}.
+validate_credentials(Credentials) ->
+    helper_spec_utils:validate_credentials(Credentials, [<<"uid">>], [<<"gid">>]).
 
 
--spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
-build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
-    build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
+-spec build_configuration_diff(helper_spec:t(), onedata_storage:update_spec()) -> helper_spec:configuration().
+build_configuration_diff(HelperSpec, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
+    build_configuration_diff(HelperSpec, UpdateSpec#storage_update_spec{
         configuration = #glusterfs_helper_configuration_diff{}
     });
-build_args_diff(HelperConfig, #storage_update_spec{
+build_configuration_diff(HelperSpec, #storage_update_spec{
     timeout = Timeout,
     configuration = #glusterfs_helper_configuration_diff{
         volume = Volume,
@@ -77,7 +77,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
         xlator_options = XlatorOptions
     }
 }) ->
-    helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.args, [
+    helper_spec_utils:build_diff_from_specs(HelperSpec#helper_spec.configuration, [
         {<<"volume">>, Volume},
         {<<"hostname">>, Hostname},
         {<<"port">>, Port, fun integer_to_binary/1},
@@ -88,59 +88,59 @@ build_args_diff(HelperConfig, #storage_update_spec{
     ]).
 
 
--spec build_admin_ctx_diff(helper_config:t(), onedata_storage:update_spec()) ->
-    helper_config:user_ctx().
-build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
+-spec build_credentials_diff(helper_spec:t(), onedata_storage:update_spec()) ->
+    helper_spec:credentials().
+build_credentials_diff(_HelperSpec, #storage_update_spec{credentials = undefined}) ->
     #{};
-build_admin_ctx_diff(HelperConfig, #storage_update_spec{
+build_credentials_diff(HelperSpec, #storage_update_spec{
     credentials = #glusterfs_helper_credentials_diff{
         uid = Uid,
         gid = Gid
     }
 }) ->
-    helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.admin_ctx, [
+    helper_spec_utils:build_diff_from_specs(HelperSpec#helper_spec.credentials, [
         {<<"uid">>, Uid, fun integer_to_binary/1},
         {<<"gid">>, Gid, fun integer_to_binary/1}
     ]).
 
 
--spec describe(helper_config:t()) -> helper_config:description().
-describe(#helper_config{
+-spec describe(helper_spec:t()) -> helper_spec:description().
+describe(#helper_spec{
     name = ?GLUSTERFS_HELPER_NAME,
-    args = Args,
-    admin_ctx = AdminCtx
+    configuration = ConfigurationParams,
+    credentials = CredentialsParams
 }) ->
-    %% Reconstruct configuration record from args map
+    %% Reconstruct configuration record from flat params
     BaseConfiguration = #glusterfs_helper_configuration{
-        volume = maps:get(<<"volume">>, Args),
-        hostname = maps:get(<<"hostname">>, Args),
-        storage_path_type = helper_config_utils:storage_path_type_from_binary(
-            maps:get(<<"storagePathType">>, Args)
+        volume = maps:get(<<"volume">>, ConfigurationParams),
+        hostname = maps:get(<<"hostname">>, ConfigurationParams),
+        storage_path_type = helper_spec_utils:storage_path_type_from_binary(
+            maps:get(<<"storagePathType">>, ConfigurationParams)
         )
     },
-    Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
+    Configuration = helper_spec_utils:set_optional_record_fields_if_defined(BaseConfiguration, ConfigurationParams, [
         {<<"port">>, #glusterfs_helper_configuration.port, fun binary_to_integer/1},
         {<<"transport">>, #glusterfs_helper_configuration.transport, fun transport_from_binary/1},
         {<<"mountPoint">>, #glusterfs_helper_configuration.mount_point},
         {<<"xlatorOptions">>, #glusterfs_helper_configuration.xlator_options}
     ]),
 
-    %% Reconstruct credentials record from admin_ctx
+    %% Reconstruct credentials record from flat params
     BaseCredentials = #glusterfs_helper_credentials{
-        uid = binary_to_integer(maps:get(<<"uid">>, AdminCtx))
+        uid = binary_to_integer(maps:get(<<"uid">>, CredentialsParams))
     },
     Credentials = redact_confidential_credentials(
-        helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
+        helper_spec_utils:set_optional_record_fields_if_defined(BaseCredentials, CredentialsParams, [
             {<<"gid">>, #glusterfs_helper_credentials.gid, fun binary_to_integer/1}
         ])
     ),
 
-    #helper_config_description{
+    #helper_spec_description{
         type = ?GLUSTERFS_HELPER_NAME,
         credentials = Credentials,
         configuration = Configuration,
         timeout = utils:convert_defined(
-            maps:get(<<"timeout">>, Args, undefined),
+            maps:get(<<"timeout">>, ConfigurationParams, undefined),
             fun binary_to_integer/1
         )
     }.
@@ -166,27 +166,27 @@ is_nfs4_acl_supported() -> true.
 is_oauth2_supported() -> false.
 
 
--spec is_storage_access_type_supported(helper_config:access_type()) -> boolean().
+-spec is_storage_access_type_supported(helper_spec:access_type()) -> boolean().
 is_storage_access_type_supported(_) -> true.
 
 
--spec is_auto_import_supported(#helper_config{}) -> boolean().
-is_auto_import_supported(HelperConfig) ->
-    helper_config_utils:is_canonical(HelperConfig).
+-spec is_auto_import_supported(#helper_spec{}) -> boolean().
+is_auto_import_supported(HelperSpec) ->
+    helper_spec_utils:is_canonical(HelperSpec).
 
 
--spec is_file_registration_supported(#helper_config{}) -> boolean().
-is_file_registration_supported(HelperConfig) ->
-    helper_config_utils:is_canonical(HelperConfig).
+-spec is_file_registration_supported(#helper_spec{}) -> boolean().
+is_file_registration_supported(HelperSpec) ->
+    helper_spec_utils:is_canonical(HelperSpec).
 
 
--spec is_getting_size_supported(#helper_config{}) -> boolean().
-is_getting_size_supported(_HelperConfig) ->
+-spec is_getting_size_supported(#helper_spec{}) -> boolean().
+is_getting_size_supported(_HelperSpec) ->
     true.
 
 
--spec get_block_size(#helper_config{}) -> non_neg_integer() | undefined.
-get_block_size(#helper_config{}) ->
+-spec get_block_size(#helper_spec{}) -> non_neg_integer() | undefined.
+get_block_size(#helper_spec{}) ->
     undefined.
 
 
@@ -196,8 +196,8 @@ get_block_size(#helper_config{}) ->
 
 
 %% @private
--spec build_args(onedata_storage:create_spec()) -> helper_config:args().
-build_args(#storage_create_spec{
+-spec build_configuration(onedata_storage:create_spec()) -> helper_spec:configuration().
+build_configuration(#storage_create_spec{
     timeout = Timeout,
     configuration = #glusterfs_helper_configuration{
         volume = Volume,
@@ -209,12 +209,12 @@ build_args(#storage_create_spec{
         storage_path_type = StoragePathType
     }
 }) ->
-    RequiredArgs = #{
+    RequiredParams = #{
         <<"volume">> => Volume,
         <<"hostname">> => Hostname,
-        <<"storagePathType">> => helper_config_utils:storage_path_type_to_binary(StoragePathType)
+        <<"storagePathType">> => helper_spec_utils:storage_path_type_to_binary(StoragePathType)
     },
-    helper_config_utils:add_optional_args_if_defined(RequiredArgs, [
+    helper_spec_utils:add_optional_entries_if_defined(RequiredParams, [
         {<<"port">>, Port, fun integer_to_binary/1},
         {<<"transport">>, Transport, fun transport_to_binary/1},
         {<<"mountPoint">>, MountPoint},
@@ -224,15 +224,15 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_admin_ctx(#glusterfs_helper_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#glusterfs_helper_credentials{
+-spec build_credentials(#glusterfs_helper_credentials{}) -> helper_spec:credentials().
+build_credentials(#glusterfs_helper_credentials{
     uid = Uid,
     gid = Gid
 }) ->
-    BaseCtx = #{
+    BaseCredentialsParams = #{
         <<"uid">> => integer_to_binary(Uid)
     },
-    helper_config_utils:add_optional_args_if_defined(BaseCtx, [
+    helper_spec_utils:add_optional_entries_if_defined(BaseCredentialsParams, [
         {<<"gid">>, Gid, fun integer_to_binary/1}
     ]).
 

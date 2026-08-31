@@ -328,13 +328,13 @@ set_atime_and_mtime_on_storage(StorageId, StorageFileId, Atime, Mtime) ->
 %% own and discard the mount point).
 -spec local_path(storage:id(), helpers:file_id()) -> file:filename_all().
 local_path(StorageId, StorageFileId) ->
-    HelperConfig = storage:get_helper_config(StorageId),
-    MountPoint = maps:get(<<"mountPoint">>, helper_config:get_args(HelperConfig)),
+    HelperSpec = storage:get_helper_spec(StorageId),
+    MountPoint = maps:get(<<"mountPoint">>, helper_spec:get_configuration(HelperSpec)),
     <<MountPoint/binary, StorageFileId/binary>>.
 
 
 %% @private
 -spec get_helper_handle(storage:id()) -> helpers:helper_handle().
 get_helper_handle(StorageId) ->
-    HelperConfig = storage:get_helper_config(StorageId),
-    helpers:get_helper_handle(HelperConfig, HelperConfig#helper_config.admin_ctx).
+    HelperSpec = storage:get_helper_spec(StorageId),
+    helpers:get_helper_handle(HelperSpec, HelperSpec#helper_spec.credentials).

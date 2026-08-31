@@ -207,8 +207,8 @@ rename_into_itself(FileGuid) ->
 rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx,
     TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
     {Storage, SourceFileCtx2} = file_ctx:get_storage(SourceFileCtx),
-    HelperConfig = storage:get_helper_config(Storage),
-    case helper_config:is_rename_supported(HelperConfig) of
+    HelperSpec = storage:get_helper_spec(Storage),
+    case helper_spec:is_rename_supported(HelperSpec) of
         true ->
             rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx2,
                 TargetParentFileCtx, TargetName, SourceFileType, TargetFileType,
@@ -365,8 +365,8 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, SourceFileType, undefined, _
 ) ->
     {Storage, SourceFileCtx1} = file_ctx:get_storage(SourceFileCtx),
-    HelperConfig = storage:get_helper_config(Storage),
-    StoragePathType = helper_config:get_storage_path_type(HelperConfig),
+    HelperSpec = storage:get_helper_spec(Storage),
+    StoragePathType = helper_spec:get_storage_path_type(HelperSpec),
 
     case StoragePathType of
         ?FLAT_STORAGE_PATH ->
@@ -383,8 +383,8 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     SessId = user_ctx:get_session_id(UserCtx),
 
     {Storage, SourceFileCtx1} = file_ctx:get_storage(SourceFileCtx),
-    HelperConfig = storage:get_helper_config(Storage),
-    StoragePathType = helper_config:get_storage_path_type(HelperConfig),
+    HelperSpec = storage:get_helper_spec(Storage),
+    StoragePathType = helper_spec:get_storage_path_type(HelperSpec),
 
     case StoragePathType of
         ?FLAT_STORAGE_PATH ->
@@ -536,8 +536,8 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     file_meta_sync_status_cache:invalidate_on_all_nodes(SpaceId),
 
     {Storage, SourceFileCtx4} = file_ctx:get_storage(SourceFileCtx3),
-    HelperConfig = storage:get_helper_config(Storage),
-    StoragePathType = helper_config:get_storage_path_type(HelperConfig),
+    HelperSpec = storage:get_helper_spec(Storage),
+    StoragePathType = helper_spec:get_storage_path_type(HelperSpec),
     StorageId = storage:get_id(Storage),
     {IsStorageFileCreated, SourceFileCtx5} = file_ctx:is_storage_file_created(SourceFileCtx4),
     {IsDir, SourceFileCtx6} = file_ctx:is_dir(SourceFileCtx5),

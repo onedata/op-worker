@@ -72,13 +72,13 @@
 %% record.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_handle(helper_config:t(), helper_config:user_ctx()) -> helper_handle().
-get_helper_handle(#helper_config{name = Name} = HelperConfig, UserCtx) ->
-    {ok, Args} = helper_config:build_helper_nif_args(HelperConfig, UserCtx),
-    {ok, Handle} = helpers_nif:get_helper_handle(Name, Args),
+-spec get_helper_handle(helper_spec:t(), helper_spec:credentials()) -> helper_handle().
+get_helper_handle(#helper_spec{name = Name} = HelperSpec, StorageCredentials) ->
+    {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, StorageCredentials),
+    {ok, Handle} = helpers_nif:get_helper_handle(Name, HelperParams),
     #helper_handle{
         handle = Handle,
-        timeout = helper_config:get_timeout(HelperConfig)
+        timeout = helper_spec:get_timeout(HelperSpec)
     }.
 
 %%--------------------------------------------------------------------
@@ -108,10 +108,10 @@ get_helper_cache_stats() ->
 %%--------------------------------------------------------------------
 -spec refresh_params(helper_handle() | file_handle(), map()) ->
     ok | {error, Reason :: term()}.
-refresh_params(#helper_handle{} = Handle, Args) ->
-    ?MODULE:apply_helper_nif(Handle, refresh_params, [Args]);
-refresh_params(#file_handle{} = Handle, Args) ->
-    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
+refresh_params(#helper_handle{} = Handle, HelperParams) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_params, [HelperParams]);
+refresh_params(#file_handle{} = Handle, HelperParams) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [HelperParams]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -350,8 +350,8 @@ open(#helper_handle{timeout = Timeout} = Handle, FileId, Flag) ->
 %%--------------------------------------------------------------------
 -spec refresh_helper_params(file_handle(), map()) ->
     ok | {error, Reason :: term()}.
-refresh_helper_params(Handle, Args) ->
-    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
+refresh_helper_params(Handle, HelperParams) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [HelperParams]).
 
 
 %%--------------------------------------------------------------------

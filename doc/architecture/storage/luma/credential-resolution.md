@@ -24,7 +24,7 @@ operations on behalf of a specific user. The entry point is
 The system first classifies the requesting user:
 
 - **Root user** (`?ROOT_USER_ID`) — Always receives the helper's
-  **admin context** directly from `helper_config`. No LUMA lookup
+  **admin context** directly from `helper_spec`. No LUMA lookup
   occurs. This is the fast path for internal system operations.
 
 - **Space owner** (`?SPACE_OWNER_ID(SpaceId)`) — A synthetic identity
@@ -154,7 +154,7 @@ depending on the configured feed and user type.
 
 The full details of this flow — including IdP selection, token
 acquisition, caching, and how the resulting credential map is
-validated by the helper config — are described in the dedicated
+validated by the helper spec — are described in the dedicated
 section below:
 [OAuth2 Credential Lifecycle](#oauth2-credential-lifecycle).
 
@@ -219,13 +219,13 @@ flowchart TB
     Start[map_to_storage_credentials<br/>UserId, SpaceId, Storage]
 
     Start --> IsRoot{UserId =<br/>ROOT?}
-    IsRoot -->|Yes| AdminCtx[Resolve helper admin_ctx]
+    IsRoot -->|Yes| AdminCredentials[Resolve helper credentials]
 
     IsRoot -->|No| IsSpaceOwner{UserId =<br/>SPACE_OWNER?}
 
     IsSpaceOwner -->|Yes| IsPosixOwner{POSIX-compatible<br/>storage?}
     IsPosixOwner -->|Yes| OwnerPosix[Get defaults from<br/>luma_spaces_posix_storage_defaults<br/>UID + GID]
-    IsPosixOwner -->|No| OwnerNonPosix[Resolve helper admin_ctx]
+    IsPosixOwner -->|No| OwnerNonPosix[Resolve helper credentials]
 
     IsSpaceOwner -->|No| NormalUser[Normal user:<br/>get_or_acquire from<br/>luma_storage_users]
 
@@ -235,7 +235,7 @@ flowchart TB
 
     IsPosixNormal -->|No| NonPosixNormal[Take storage_credentials<br/>from luma_storage_user]
 
-    AdminCtx --> IsOAuth{OAuth2<br/>in credentials?}
+    AdminCredentials --> IsOAuth{OAuth2<br/>in credentials?}
     OwnerPosix --> IsOAuth
     OwnerNonPosix --> IsOAuth
     PosixNormal --> IsOAuth
@@ -256,9 +256,9 @@ credentials reach the C++ helper.
 
 > **Prerequisite reading:** The admin context for OAuth2-supporting
 > storages is constructed differently from simple storages. See
-> [Helper Configuration — OAuth2-Supporting Storages](../helpers/helper-config.md#oauth2-supporting-storages-http-webdav)
-> for how `build_admin_ctx` works, how `resolve_admin_id` injects the
-> `<<"adminId">>` field, and what the admin_ctx map looks like for each
+> [Helper Configuration — OAuth2-Supporting Storages](../helpers/helper-spec.md#oauth2-supporting-storages-http-webdav)
+> for how `build_credentials` works, how `resolve_admin_id` injects the
+> `<<"adminId">>` field, and what the credentials map looks like for each
 > credential type.
 
 ### Overview
@@ -268,7 +268,7 @@ The OAuth2 credential lifecycle has three phases:
 1. **Build time** (storage creation/update) — The admin context is
    constructed from the contract record. If `onedataAccessToken` is
    present, `resolve_admin_id` verifies it and injects `adminId`.
-   The resulting admin_ctx is persisted with the helper config.
+   The resulting credentials map is persisted with the helper spec.
 
 2. **Credential resolution** (LUMA, at I/O time) — LUMA resolves base
    credentials (admin context for root/owner/auto, per-user record for
@@ -276,26 +276,26 @@ The OAuth2 credential lifecycle has three phases:
    contain `<<"credentialsType">> := <<"oauth2">>`, the OAuth2
    post-processing step acquires a fresh IdP access token.
 
-3. **Validation** (helper config, just before NIF call) — The
-   resulting user context map is validated by `validate_user_ctx/1`
-   from the per-storage helper config module. The fields injected
+3. **Validation** (helper spec, just before NIF call) — The
+   resulting user context map is validated by `validate_credentials/1`
+   from the per-storage helper spec module. The fields injected
    during OAuth2 post-processing (`<<"accessToken">>`,
    `<<"accessTokenTTL">>`) must pass validation.
 
 ### Phase 1: Admin Context Construction
 
 Described in detail in
-[Helper Configuration](../helpers/helper-config.md#oauth2-supporting-storages-http-webdav).
+[Helper Spec](../helpers/helper-spec.md#oauth2-supporting-storages-http-webdav).
 Key points:
 
-- `build_admin_ctx/1` converts the contract record to a flat binary
+- `build_credentials/1` converts the contract record to a flat binary
   map with `<<"credentialsType">>` and optional credential fields.
 - When `credentials_type = none`, the `<<"credentials">>` field is
   removed from the map.
-- `helper_config_utils:resolve_admin_id/1` is called on the result:
+- `helper_spec_utils:resolve_admin_id/1` is called on the result:
   if `<<"onedataAccessToken">>` is present, it verifies the token
   against Onezone and adds `<<"adminId">> => UserId` to the map.
-- The admin context is persisted as part of `#helper_config{}` in
+- The admin context is persisted as part of `#helper_spec{}` in
   `storage_config`.
 
 ### Phase 2: LUMA Credential Resolution with OAuth2
@@ -338,7 +338,7 @@ This clause handles root user, space owner (mapped to root),
 and any scenario where the admin context is used directly. It uses
 the `<<"adminId">>` and `<<"onedataAccessToken">>` that were injected
 by `resolve_admin_id` during
-[admin context construction](../helpers/helper-config.md#the-resolve_admin_id-mechanism).
+[admin context construction](../helpers/helper-spec.md#the-resolve_admin_id-mechanism).
 
 **Auto feed (any user)**
 
@@ -373,26 +373,26 @@ helper actually uses to authenticate against the storage backend.
 
 | User type | LUMA feed | Base credentials | Token acquired via |
 |-----------|-----------|------------------|--------------------|
-| Root | any | admin_ctx | admin's `onedataAccessToken` + `adminId` |
-| Space owner | any | admin_ctx (non-POSIX) / POSIX defaults | admin's `onedataAccessToken` + `adminId` |
-| Normal user | auto | admin_ctx | admin's `onedataAccessToken` + `adminId` |
+| Root | any | credentials | admin's `onedataAccessToken` + `adminId` |
+| Space owner | any | credentials (non-POSIX) / POSIX defaults | admin's `onedataAccessToken` + `adminId` |
+| Normal user | auto | credentials | admin's `onedataAccessToken` + `adminId` |
 | Normal user | local/external | per-user LUMA record | user's session |
 
 ### Phase 3: Validation Before NIF
 
 After LUMA resolves credentials (including OAuth2 post-processing),
 the resulting user context map is passed to
-`helper_config:build_helper_nif_args/2`, which calls
-`validate_user_ctx/1` from the per-storage helper config module.
+`helper_spec:build_helper_params/2`, which calls
+`validate_credentials/1` from the per-storage helper spec module.
 
 For HTTP and WebDAV, the validation accepts both the original admin
 context fields **and** the fields injected by OAuth2 post-processing.
 See
-[Helper Configuration — User Context Validation](../helpers/helper-config.md#user-context-validation)
+[Helper Configuration — User Context Validation](../helpers/helper-spec.md#user-context-validation)
 for the full field list and validation logic.
 
-After successful validation, `build_helper_nif_args/2` merges the
-helper config `args` with the user context into a single flat binary
+After successful validation, `build_helper_params/2` merges the
+helper spec `args` with the user context into a single flat binary
 map that is passed to the C++ NIF.
 
 ### Token Caching and Refresh
@@ -425,7 +425,7 @@ sequenceDiagram
     participant LUMA as luma.erl
     participant IdP as idp_access_token
     participant OZ as Onezone
-    participant HC as helper_config
+    participant HC as helper_spec
     participant NIF as C++ Helper
 
     HR->>SH: get_helper(SessionId, SpaceId, StorageId)
@@ -433,7 +433,7 @@ sequenceDiagram
 
     HH->>LUMA: map_to_storage_credentials(UserId, SessId, SpaceId, Storage)
 
-    Note over LUMA: Resolve base credentials<br/>(admin_ctx / LUMA record / POSIX defaults)
+    Note over LUMA: Resolve base credentials<br/>(credentials / LUMA record / POSIX defaults)
 
     LUMA->>LUMA: add_helper_specific_fields<br/>is_oauth2_supported? → true
 
@@ -463,10 +463,10 @@ sequenceDiagram
 
     Note over LUMA: Transform credentials:<br/>remove onedataAccessToken<br/>add accessToken + accessTokenTTL
 
-    LUMA-->>HH: {ok, UserCtx}
+    LUMA-->>HH: {ok, StorageCredentials}
 
-    HH->>HC: build_helper_nif_args(HelperConfig, UserCtx)
-    Note over HC: validate_user_ctx(UserCtx)<br/>check required/optional fields
+    HH->>HC: build_helper_params(HelperSpec, StorageCredentials)
+    Note over HC: validate_credentials(StorageCredentials)<br/>check required/optional fields
     HC-->>HH: {ok, MergedArgs}
 
     HH->>NIF: get_helper_handle(Name, MergedArgs)
@@ -480,9 +480,9 @@ sequenceDiagram
   back to Onedata users/groups
 - **[Data Model & Persistence](data-model.md)** — How mappings are
   stored, serialized, populated, and cached
-- **[Helper Configuration](../helpers/helper-config.md)** — How
-  `#helper_config{}` is built from contracts, including
-  [OAuth2-specific admin context construction](../helpers/helper-config.md#oauth2-supporting-storages-http-webdav)
+- **[Helper Spec](../helpers/helper-spec.md)** — How
+  `#helper_spec{}` is built from contracts, including
+  [OAuth2-specific admin context construction](../helpers/helper-spec.md#oauth2-supporting-storages-http-webdav)
 - **[Helper Operations](../helpers/helper-operations.md)** — How
   credentials are used by the helper handle system, including
   `EKEYEXPIRED` handling for expired OAuth2 tokens

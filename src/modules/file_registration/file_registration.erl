@@ -80,7 +80,7 @@
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 register(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
     Args = [SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec],
-    Timeout = select_file_registration_timeout(storage:get_helper_config(StorageId)),
+    Timeout = select_file_registration_timeout(storage:get_helper_spec(StorageId)),
     Result = worker_pool:call(
         ?FILE_REGISTRATION_POOL,
         {?MODULE, register_internal, Args},
@@ -189,20 +189,20 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
 
 -spec normalize_storage_file_id(storage:id(), helpers:file_id()) -> helpers:file_id().
 normalize_storage_file_id(StorageId, StorageFileId) ->
-    HelperConfig = storage:get_helper_config(StorageId),
-    case helper_config:get_name(HelperConfig) of
+    HelperSpec = storage:get_helper_spec(StorageId),
+    case helper_spec:get_name(HelperSpec) of
         ?XROOTD_HELPER_NAME ->
-            normalize_xrootd_storage_file_id(HelperConfig, StorageFileId);
+            normalize_xrootd_storage_file_id(HelperSpec, StorageFileId);
         _ ->
             StorageFileId
     end.
 
--spec normalize_xrootd_storage_file_id(helper_config:t(), helpers:file_id()) -> helpers:file_id().
-normalize_xrootd_storage_file_id(HelperConfig, StorageFileId) ->
+-spec normalize_xrootd_storage_file_id(helper_spec:t(), helpers:file_id()) -> helpers:file_id().
+normalize_xrootd_storage_file_id(HelperSpec, StorageFileId) ->
     case is_url(StorageFileId) of
         true ->
-            Args = helper_config:get_args(HelperConfig),
-            HelperUrl = maps:get(<<"url">>, Args),
+            ConfigurationParams = helper_spec:get_configuration(HelperSpec),
+            HelperUrl = maps:get(<<"url">>, ConfigurationParams),
             HelperUrlSize = byte_size(HelperUrl),
             case binary:match(StorageFileId, HelperUrl) of
                 {0, HelperUrlSize} ->
@@ -296,11 +296,11 @@ destination_path_to_canonical_path(SpaceId, DestinationPath) ->
 -spec maybe_verify_existence(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
 maybe_verify_existence(StorageFileCtx, Spec) ->
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    HelperConfig = storage:get_helper_config(StorageId),
-    HelperName = helper_config:get_name(HelperConfig),
-    HelperArgs = HelperConfig#helper_config.args,
+    HelperSpec = storage:get_helper_spec(StorageId),
+    HelperName = helper_spec:get_name(HelperSpec),
+    ConfigurationParams = HelperSpec#helper_spec.configuration,
     IsHttpWithoutEmulateRangeRead = HelperName =:= ?HTTP_HELPER_NAME
-        andalso maps:get(<<"emulateRangeRead">>, HelperArgs, <<"false">>) =:= <<"false">>,
+        andalso maps:get(<<"emulateRangeRead">>, ConfigurationParams, <<"false">>) =:= <<"false">>,
     AutoDetect = maps:get(<<"autoDetectAttributes">>, Spec, true),
     VerifyExistence = maps:get(<<"verifyExistence">>, Spec, true),
     case IsHttpWithoutEmulateRangeRead orelse AutoDetect of
@@ -462,22 +462,22 @@ get_default_file_stat(StorageFileCtx) ->
         st_mtime = CurrentTimestamp,
         st_atime = CurrentTimestamp,
         st_ctime = CurrentTimestamp,
-        st_mode = get_default_file_mode(storage:get_helper_config(Storage)),
+        st_mode = get_default_file_mode(storage:get_helper_spec(Storage)),
         st_uid = ?ROOT_UID,
         st_gid = ?ROOT_GID
     },
     {DefaultStat, storage_file_ctx:set_stat(StorageFileCtx2, DefaultStat)}.
 
 
--spec get_default_file_mode(helper_config:t()) -> file_meta:mode().
-get_default_file_mode(#helper_config{name = HelperName, args = Args})
+-spec get_default_file_mode(helper_spec:t()) -> file_meta:mode().
+get_default_file_mode(#helper_spec{name = HelperName, configuration = ConfigurationParams})
     when HelperName =:= ?HTTP_HELPER_NAME
     orelse HelperName =:= ?S3_HELPER_NAME
     orelse HelperName =:= ?WEBDAV_HELPER_NAME
 ->
-    ensure_mode_int(maps:get(<<"fileMode">>, Args, ?DEFAULT_FILE_MODE));
-get_default_file_mode(#helper_config{name = ?XROOTD_HELPER_NAME, args = Args}) ->
-    ensure_mode_int(maps:get(<<"fileModeMask">>, Args, ?DEFAULT_FILE_MODE));
+    ensure_mode_int(maps:get(<<"fileMode">>, ConfigurationParams, ?DEFAULT_FILE_MODE));
+get_default_file_mode(#helper_spec{name = ?XROOTD_HELPER_NAME, configuration = ConfigurationParams}) ->
+    ensure_mode_int(maps:get(<<"fileModeMask">>, ConfigurationParams, ?DEFAULT_FILE_MODE));
 get_default_file_mode(_) ->
     ?DEFAULT_FILE_MODE.
 
@@ -490,9 +490,9 @@ ensure_mode_int(Bin) when is_binary(Bin) ->
     binary_to_integer(Bin, 8).
 
 
--spec select_file_registration_timeout(helper_config:t()) -> timeout().
-select_file_registration_timeout(#helper_config{name = ?HTTP_HELPER_NAME, args = Args}) ->
-    case maps:get(<<"emulateRangeRead">>, Args, <<"false">>) of
+-spec select_file_registration_timeout(helper_spec:t()) -> timeout().
+select_file_registration_timeout(#helper_spec{name = ?HTTP_HELPER_NAME, configuration = ConfigurationParams}) ->
+    case maps:get(<<"emulateRangeRead">>, ConfigurationParams, <<"false">>) of
         <<"true">> ->
             ?FILE_REGISTRATION_HTTP_EMULATED_RANGE_READ_TIMEOUT;
         <<"false">> ->

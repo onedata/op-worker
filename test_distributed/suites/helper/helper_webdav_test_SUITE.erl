@@ -343,7 +343,7 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     WebDAVConfig = ?config(webdav, ?config(webdav, ?config(storages, Config))),
-    UserCtx = #{
+    StorageCredentials = #{
         <<"credentialsType">> => atom_to_binary(?config(credentials_type, WebDAVConfig), utf8),
         <<"credentials">> => atom_to_binary(?config(credentials, WebDAVConfig), utf8)
     },
@@ -354,17 +354,17 @@ new_helper(Config) ->
             <<"rangeWriteSupport">> => atom_to_binary(?config(range_write_support, WebDAVConfig), utf8),
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
-        UserCtx
+        StorageCredentials
       ),
     spawn_link(Node, fun() ->
-        helper_loop(Helper, UserCtx)
+        helper_loop(Helper, StorageCredentials)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(Helper, UserCtx) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+helper_loop(Helper, StorageCredentials) ->
+    Handle = helpers:get_helper_handle(Helper, StorageCredentials),
     helper_loop(Handle).
 
 helper_loop(Handle) ->

@@ -1,7 +1,7 @@
 # Helper Operations — Executing I/O on Storage Backends
 
 The helper operations subsystem is the runtime I/O engine of
-op-worker. While [helper configuration](helper-config.md) describes
+op-worker. While [helper configuration](helper-spec.md) describes
 how storage backends are configured, this document describes how actual
 file operations — `read`, `write`, `mkdir`, `stat`, and dozens
 more — flow from Erlang business logic through a layered handle
@@ -24,8 +24,8 @@ The result is a multi-layer handle architecture with distinct roles at each leve
 >   key concepts, component roles
 > - [Helpers Overview](_overview.md) — index of helper-related
 >   documentation
-> - [Helper Configuration](helper-config.md) — how
->   `#helper_config{}` is built from contracts and passed to
+> - [Helper Spec](helper-spec.md) — how
+>   `#helper_spec{}` is built from contracts and passed to
 >   the NIF
 
 ---
@@ -167,8 +167,8 @@ sequenceDiagram
         SH->>SH: enter critical_section
         SH->>HH: create(SessionId, UserId, SpaceId, StorageId)
         HH->>LUMA: map_to_storage_credentials(...)
-        LUMA-->>HH: {ok, UserCtx}
-        HH->>H: get_helper_handle(HelperConfig, UserCtx)
+        LUMA-->>HH: {ok, StorageCredentials}
+        HH->>H: get_helper_handle(HelperSpec, StorageCredentials)
         H->>NIF: get_helper_handle(Name, MergedArgs)
         NIF-->>H: {ok, NifHandle}
         H-->>HH: helper_handle record
@@ -401,7 +401,7 @@ The `helpers:apply_helper_nif/4` function implements this pattern:
    enqueues the operation on the C++ thread pool and returns
    `{ok, ResponseRef}`.
 2. Enters `receive_loop/2` with the configured timeout (from the
-   helper config, default 120 seconds).
+   helper spec, default 120 seconds).
 3. `heartbeat` messages reset the timeout — this prevents false
    timeouts on operations that are making progress but take a
    long time (e.g., large S3 uploads).
@@ -581,7 +581,7 @@ from creating duplicate handles for the same key.
 - [Helpers Overview](_overview.md) — index for helper-related docs
 - [Storage Configuration Architecture Overview](../_overview.md) —
   high-level architecture, component roles, supported storage types
-- [Helper Configuration](helper-config.md) — how `#helper_config{}`
+- [Helper Spec](helper-spec.md) — how `#helper_spec{}`
   is built from contracts and passed to the NIF
 - [Storage CRUD Operations](../storage-crud-operations.md) —
   create/update/describe/delete flows

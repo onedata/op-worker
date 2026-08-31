@@ -10,12 +10,12 @@ all helper-related documentation in one place.
 
 ## Documents
 
-- **[Helper Configuration](helper-config.md)** — How typed Erlang
+- **[Helper Spec](helper-spec.md)** — How typed Erlang
   contract records are translated into flat binary maps
-  (`#helper_config{}`) for the C++ NIF layer. Covers the build,
+  (`#helper_spec{}`) for the C++ NIF layer. Covers the build,
   update, and describe flows, admin context vs user context, capability
   queries, credential redaction, and the special handling required for
-  [OAuth2-supporting storages](helper-config.md#oauth2-supporting-storages-http-webdav)
+  [OAuth2-supporting storages](helper-spec.md#oauth2-supporting-storages-http-webdav)
   (HTTP, WebDAV).
 
 - **[Helper Operations](helper-operations.md)** — The runtime I/O
@@ -43,8 +43,8 @@ all helper-related documentation in one place.
                            │ builds
                            ▼
                     ┌──────────────────────┐
-                    │  Helper Config       │ ◄── contracts (op-panel-contracts)
-                    │  (helper-config.md)  │
+                    │  Helper Spec       │ ◄── contracts (op-panel-contracts)
+                    │  (helper-spec.md)  │
                     └──────┬───────────────┘
                            │ persisted in storage_config
                            │ used at runtime by
@@ -54,12 +54,12 @@ all helper-related documentation in one place.
                     │  (credential         │ ◄── resolves user-specific
                     │   resolution)        │     credentials incl. OAuth2
                     └──────┬───────────────┘
-                           │ user_ctx
+                           │ credentials
                            ▼
                     ┌─────────────────────────┐
                     │  Helper Operations      │
-                    │  (helper-operations.md) │ ◄── validates user_ctx,
-                    │  sd_handle →            │     merges with args,
+                    │  (helper-operations.md) │ ◄── validates credentials,
+                    │  sd_handle →            │     merges with configuration,
                     │  helper_handle →        │     calls C++ NIF
                     │  file_handle → NIF      │
                     └──────────┬──────────────┘
@@ -77,8 +77,8 @@ all helper-related documentation in one place.
 Helper configuration is built at storage creation/update time and
 persisted. At runtime, LUMA resolves per-user credentials (potentially
 including [OAuth2 token acquisition](../luma/credential-resolution.md#oauth2-credential-lifecycle)),
-which are then validated by the helper config module and merged with
-storage args before being passed to the C++ helper via the NIF.
+which are then validated by the helper spec module and merged with
+storage configuration before being passed to the C++ helper via the NIF.
 
 ## Related Documentation
 

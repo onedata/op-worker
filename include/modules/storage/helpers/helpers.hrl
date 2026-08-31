@@ -66,13 +66,13 @@
 -type storage_path_type() :: binary().
 -export_type([storage_path_type/0]).
 
--record(helper_config, {
-    name :: helper_config:name(),
-    args = #{} :: helper_config:args(),
-    admin_ctx = #{} :: helper_config:user_ctx()
+-record(helper_spec, {
+    name :: helper_spec:name(),
+    configuration = #{} :: helper_spec:configuration(),
+    credentials = #{} :: helper_spec:credentials()
 }).
 
--record(helper_config_description, {
+-record(helper_spec_description, {
     type :: onedata_storage:type(),
     configuration :: onedata_storage:helper_configuration(),
     credentials :: onedata_storage:helper_credentials(),

@@ -56,24 +56,24 @@ upgrade_after_swift_version_update_to_v3() ->
 %% @private
 %% @doc
 %% Updates helper to reflect changes made in feature/VFS-12688-try-to-update-swift-to-v3
-%% (tenantName is moved from helper args to admin ctx as projectName)
+%% (tenantName is moved from helper configuration to credentials as projectName)
 %% @end
 %%--------------------------------------------------------------------
 -spec upgrade_swift_helper_after_swift_version_update_to_v3(storage:id()) ->
     ok | {error, term()}.
 upgrade_swift_helper_after_swift_version_update_to_v3(StorageId) ->
-    storage_updater:update_helper_config(StorageId, fun(HelperConfig = #helper_config{
-        args = Args,
-        admin_ctx = AdminCtx
+    storage_updater:update_helper_spec(StorageId, fun(HelperSpec = #helper_spec{
+        configuration = ConfigurationParams,
+        credentials = CredentialsParams
     }) ->
-        case maps:take(<<"tenantName">>, Args) of
-            {ProjectName, NewArgs} ->
-                {ok, HelperConfig#helper_config{
-                    args = NewArgs,
-                    admin_ctx = AdminCtx#{<<"projectName">> => ProjectName}
+        case maps:take(<<"tenantName">>, ConfigurationParams) of
+            {ProjectName, NewConfigurationParams} ->
+                {ok, HelperSpec#helper_spec{
+                    configuration = NewConfigurationParams,
+                    credentials = CredentialsParams#{<<"projectName">> => ProjectName}
                 }};
             error ->
                 % ensure update is idempotent
-                {ok, HelperConfig}
+                {ok, HelperSpec}
         end
     end).

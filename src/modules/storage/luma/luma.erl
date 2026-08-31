@@ -181,7 +181,7 @@
 -type gid() :: luma_posix_credentials:gid().
 -type acl_who() :: binary().
 -type display_credentials() :: {uid(), gid()}.
--type storage_credentials() :: helper_config:user_ctx().
+-type storage_credentials() :: helper_spec:credentials().
 
 -type feed() :: luma_config:feed().
 
@@ -206,7 +206,7 @@ map_to_storage_credentials(SessId, UserId, SpaceId, Storage) ->
     case map_to_storage_credentials_internal(UserId, SpaceId, Storage) of
         {ok, StorageCredentials} ->
             LumaMode = storage:get_luma_feed(Storage),
-            add_helper_specific_fields(UserId, SessId, StorageCredentials, storage:get_helper_config(Storage), LumaMode);
+            add_helper_specific_fields(UserId, SessId, StorageCredentials, storage:get_helper_spec(Storage), LumaMode);
         Error ->
             Error
     end.
@@ -305,9 +305,9 @@ map_acl_group_to_onedata_group(AclGroup, StorageId) ->
 
 
 -spec add_helper_specific_fields(od_user:id(), session:id(), luma:storage_credentials(),
-    helper_config:t(), luma:feed()) -> any().
-add_helper_specific_fields(UserId, SessionId, StorageCredentials, HelperConfig, LumaFeed) ->
-    case helper_config:is_oauth2_supported(HelperConfig) of
+    helper_spec:t(), luma:feed()) -> any().
+add_helper_specific_fields(UserId, SessionId, StorageCredentials, HelperSpec, LumaFeed) ->
+    case helper_spec:is_oauth2_supported(HelperSpec) of
         true ->
             add_oauth2_specific_fields(UserId, SessionId, StorageCredentials, LumaFeed);
         false ->
@@ -321,8 +321,8 @@ add_helper_specific_fields(UserId, SessionId, StorageCredentials, HelperConfig, 
 -spec map_to_storage_credentials_internal(od_user:id(), od_space:id(),
     storage:id() | storage:data()) -> {ok, storage_credentials()} | {error, term()}.
 map_to_storage_credentials_internal(?ROOT_USER_ID, _SpaceId, Storage) ->
-    HelperConfig = storage:get_helper_config(Storage),
-    {ok, helper_config:get_admin_ctx(HelperConfig)};
+    HelperSpec = storage:get_helper_spec(Storage),
+    {ok, helper_spec:get_credentials(HelperSpec)};
 map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
     try
         {ok, StorageData} = storage:get(Storage),
@@ -350,7 +350,7 @@ add_oauth2_specific_fields(UserId, SessionId, StorageCredentials = #{
 }, LumaFeed) ->
     {UserId2, SessionId2} = case fslogic_file_id:is_space_owner(UserId) of
         true ->
-            % space owner uses helper_config admin_ctx
+            % space owner uses the helper spec credentials
             {?ROOT_USER_ID, ?ROOT_SESS_ID};
         false ->
             {UserId, SessionId}
@@ -395,8 +395,8 @@ fill_in_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCredentials = #{
     {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(
         AdminId, TokenCredentials, OAuth2IdP
     ),
-    AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCredentials),
-    {ok, AdminCtx2#{
+    AdminCredentials2 = maps:remove(<<"onedataAccessToken">>, AdminCredentials),
+    {ok, AdminCredentials2#{
         <<"accessToken">> => IdPAccessToken,
         <<"accessTokenTTL">> => integer_to_binary(TTL)
     }};
@@ -404,14 +404,14 @@ fill_in_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
     <<"onedataAccessToken">> := OnedataAccessToken,
     <<"adminId">> := AdminId
 }, OAuth2IdP, ?AUTO_FEED) ->
-    % use AdminCtx in case of LUMA ?AUTO_FEED
+    % use admin credentials in case of LUMA ?AUTO_FEED
     TokenCredentials = auth_manager:build_token_credentials(
         OnedataAccessToken, undefined, undefined,
         undefined, disallow_data_access_caveats
     ),
     {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(AdminId, TokenCredentials, OAuth2IdP),
-    AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCredentials),
-    {ok, AdminCtx2#{
+    AdminCredentials2 = maps:remove(<<"onedataAccessToken">>, AdminCredentials),
+    {ok, AdminCredentials2#{
         <<"accessToken">> => IdPAccessToken,
         <<"accessTokenTTL">> => integer_to_binary(TTL)
     }};
@@ -436,8 +436,8 @@ map_space_owner_to_storage_credentials(Storage, SpaceId) ->
                 <<"gid">> => integer_to_binary(DefaultGid)
             }};
         false ->
-            HelperConfig = storage:get_helper_config(Storage),
-            {ok, helper_config:get_admin_ctx(HelperConfig)}
+            HelperSpec = storage:get_helper_spec(Storage),
+            {ok, helper_spec:get_credentials(HelperSpec)}
     end.
 
 -spec map_onedata_user_to_storage_credentials(od_user:id(), storage:data(), od_space:id()) ->

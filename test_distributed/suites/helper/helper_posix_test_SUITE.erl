@@ -290,16 +290,16 @@ gen_filename() ->
         (base64:encode(crypto:strong_rand_bytes(20)))/binary>>).
 
 helper_handle_server(Config) ->
-    UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
+    StorageCredentials = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     {ok, Helper} = helper:new_helper(
         ?POSIX_HELPER_NAME,
         #{
             <<"mountPoint">> => ?path(Config, ""),
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
-        UserCtx
+        StorageCredentials
     ),
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+    Handle = helpers:get_helper_handle(Helper, StorageCredentials),
     helper_handle_server(Config, Handle).
 helper_handle_server(Config, Handle) ->
     receive

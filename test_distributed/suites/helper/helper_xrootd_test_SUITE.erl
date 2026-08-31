@@ -295,7 +295,7 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     XRootDConfig = ?config(xrootd, ?config(xrootd, ?config(storages, Config))),
-    UserCtx = #{
+    StorageCredentials = #{
         <<"credentialsType">> => atom_to_binary(?config(credentials_type, XRootDConfig), utf8),
         <<"credentials">> => atom_to_binary(?config(credentials, XRootDConfig), utf8)
     },
@@ -305,17 +305,17 @@ new_helper(Config) ->
             <<"url">> => atom_to_binary(?config(url, XRootDConfig), utf8),
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
-        UserCtx
+        StorageCredentials
       ),
     spawn_link(Node, fun() ->
-        helper_loop(Helper, UserCtx)
+        helper_loop(Helper, StorageCredentials)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(Helper, UserCtx) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+helper_loop(Helper, StorageCredentials) ->
+    Handle = helpers:get_helper_handle(Helper, StorageCredentials),
     helper_loop(Handle).
 
 helper_loop(Handle) ->

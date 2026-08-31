@@ -504,7 +504,7 @@
 
 
 -record(storage_config, {
-    helper_config :: helper_config:t(),
+    helper_spec :: helper_spec:t(),
     luma_config :: storage:luma_config(),
     luma_generation :: non_neg_integer()
 }).
@@ -798,7 +798,7 @@
     task_id :: traverse:id(),
     callback_module :: traverse:callback_module(),
     % storage traverse specific fields
-    storage_file_id :: helper_config:name(),
+    storage_file_id :: helper_spec:name(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
     iterator_module :: storage_traverse:iterator_type(),

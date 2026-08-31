@@ -68,17 +68,17 @@ do_create(StorageCreateSpec = #storage_create_spec{
     luma = LumaSpec,
     qos_parameters = QosParameters
 }) ->
-    HelperConfig = helper_config:build(StorageCreateSpec),
-    storage_crud_utils:verify_configuration(Name, Readonly, Imported, HelperConfig),
+    HelperSpec = helper_spec:build(StorageCreateSpec),
+    storage_crud_utils:verify_configuration(Name, Readonly, Imported, HelperSpec),
 
     LumaConfig = build_luma_config(LumaSpec),
-    run_diagnostics(HelperConfig, LumaConfig, StorageCreateSpec),
+    run_diagnostics(HelperSpec, LumaConfig, StorageCreateSpec),
 
     ?info("Adding storage: '~ts' (~ts)", [Name, Type]),
     maybe
         {ok, Id} ?= storage_logic:create_in_zone(Name, Imported, Readonly, QosParameters),
 
-        case storage_config:create(Id, HelperConfig, LumaConfig) of
+        case storage_config:create(Id, HelperSpec, LumaConfig) of
             {ok, Id} ->
                 storage:on_storage_created(Id),
                 {ok, Id};
@@ -98,9 +98,9 @@ build_luma_config(#luma_spec{feed = Feed}) ->
 
 
 %% @private
--spec run_diagnostics(helper_config:t(), luma_config:config(), onedata_storage:create_spec()) ->
+-spec run_diagnostics(helper_spec:t(), luma_config:config(), onedata_storage:create_spec()) ->
     ok.
-run_diagnostics(HelperConfig, LumaConfig, #storage_create_spec{
+run_diagnostics(HelperSpec, LumaConfig, #storage_create_spec{
     name = Name,
     type = Type,
     readonly = Readonly
@@ -108,7 +108,7 @@ run_diagnostics(HelperConfig, LumaConfig, #storage_create_spec{
     LumaFeed = luma_config:get_feed(LumaConfig),
 
     ?info("Verifying storage access: '~ts' (~ts)", [Name, Type]),
-    storage_crud_utils:run_diagnostics(HelperConfig, LumaFeed, not Readonly).
+    storage_crud_utils:run_diagnostics(HelperSpec, LumaFeed, not Readonly).
 
 
 %% @private

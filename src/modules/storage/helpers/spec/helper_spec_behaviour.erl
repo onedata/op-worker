@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Behaviour for storage helper configuration modules.
+%%% Behaviour for storage helper spec modules.
 %%% @end
 %%%-------------------------------------------------------------------
--module(helper_config_behaviour).
+-module(helper_spec_behaviour).
 -author("Bartosz Walkowicz").
 
 -include("modules/storage/helpers/helpers.hrl").
@@ -22,44 +22,44 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a new helper_config from storage_create request.
+%% Creates a new helper_spec from storage_create request.
 %% Converts typed records (configuration and credentials) into binary maps
 %% suitable for the C++ helper layer.
 %% @end
 %%--------------------------------------------------------------------
 -callback build(onedata_storage:create_spec()) ->
-    helper_config:t().
+    helper_spec:t().
 
 
--callback validate_user_ctx(helper_config:user_ctx()) ->
+-callback validate_credentials(helper_spec:credentials()) ->
     ok | {error, Reason :: term()}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Builds a diff map of args changes from update specification.
+%% Builds a diff map of configuration changes from update specification.
 %% @end
 %%--------------------------------------------------------------------
--callback build_args_diff(helper_config:t(), onedata_storage:update_spec()) ->
-    helper_config:args().
+-callback build_configuration_diff(helper_spec:t(), onedata_storage:update_spec()) ->
+    helper_spec:configuration().
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Builds a diff map of admin_ctx changes from update specification.
+%% Builds a diff map of credentials changes from update specification.
 %% @end
 %%--------------------------------------------------------------------
--callback build_admin_ctx_diff(helper_config:t(), onedata_storage:update_spec()) ->
-    helper_config:user_ctx().
+-callback build_credentials_diff(helper_spec:t(), onedata_storage:update_spec()) ->
+    helper_spec:credentials().
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Reconstructs typed records from helper_config binary maps.
+%% Reconstructs typed records from helper_spec binary maps.
 %% Used to provide storage description to Onepanel (GET operations).
 %% @end
 %%--------------------------------------------------------------------
--callback describe(helper_config:t()) -> helper_config:description().
+-callback describe(helper_spec:t()) -> helper_spec:description().
 
 
 -callback is_posix_compatible() -> boolean().
@@ -77,16 +77,16 @@
 -callback is_oauth2_supported() -> boolean().
 
 
--callback is_storage_access_type_supported(helper_config:access_type()) -> boolean().
+-callback is_storage_access_type_supported(helper_spec:access_type()) -> boolean().
 
 
--callback is_auto_import_supported(helper_config:t()) -> boolean().
+-callback is_auto_import_supported(helper_spec:t()) -> boolean().
 
 
--callback is_file_registration_supported(helper_config:t()) -> boolean().
+-callback is_file_registration_supported(helper_spec:t()) -> boolean().
 
 
--callback is_getting_size_supported(helper_config:t()) -> boolean().
+-callback is_getting_size_supported(helper_spec:t()) -> boolean().
 
 
 %%--------------------------------------------------------------------
@@ -95,7 +95,7 @@
 %% Returns undefined for non-object storage types.
 %% @end
 %%--------------------------------------------------------------------
--callback get_block_size(helper_config:t()) -> non_neg_integer() | undefined.
+-callback get_block_size(helper_spec:t()) -> non_neg_integer() | undefined.
 
 
 %%--------------------------------------------------------------------

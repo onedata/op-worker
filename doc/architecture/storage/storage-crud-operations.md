@@ -93,7 +93,7 @@ sequenceDiagram
     participant RpcApi as rpc_api
     participant Storage as storage.erl
     participant Creator as storage_creator
-    participant HelperConfig as helper_config
+    participant HelperSpec as helper_spec
     participant Detector as storage_detector
     participant Onezone as storage_logic
     participant Config as storage_config
@@ -110,8 +110,8 @@ sequenceDiagram
         RpcApi->>Storage: storage:create(CreateSpec)
         Storage->>Creator: storage_creator:create(CreateSpec)
 
-        Creator->>HelperConfig: helper_config:build(CreateSpec)
-        HelperConfig-->>Creator: #helper_config{}
+        Creator->>HelperSpec: helper_spec:build(CreateSpec)
+        HelperSpec-->>Creator: #helper_spec{}
 
         Creator->>Creator: verify_configuration + build_luma_config
 
@@ -121,7 +121,7 @@ sequenceDiagram
         Creator->>Onezone: create_in_zone(Name, Imported, Readonly, Qos)
         Onezone-->>Creator: {ok, Id}
 
-        Creator->>Config: storage_config:create(Id, HelperConfig, Luma)
+        Creator->>Config: storage_config:create(Id, HelperSpec, Luma)
         alt Config fails
             Creator->>Onezone: revert_creation_in_zone(Id)
         end
@@ -188,8 +188,8 @@ URL (e.g. `https://s3.amazonaws.com:443`) is parsed into `scheme` and
 
 3. **storage_creator:create/1**
 
-   a. **Build helper_config** — `helper_config:build(StorageCreateSpec)` translates
-      the contract into `#helper_config{}` with args and admin_ctx (flat binary
+   a. **Build helper_spec** — `helper_spec:build(StorageCreateSpec)` translates
+      the contract into `#helper_spec{}` with configuration and credentials (flat binary
       maps for the C++ NIF).
 
    b. **Verify configuration** — `storage_crud_utils:verify_configuration/4`:
@@ -204,14 +204,14 @@ URL (e.g. `https://s3.amazonaws.com:443`) is parsed into `scheme` and
       (feed: auto | local | external).
 
    d. **Run diagnostics** — `storage_crud_utils:run_diagnostics/3` invokes
-      `storage_detector:run_diagnostics(all_nodes, HelperConfig, LumaFeed, Opts)`.
+      `storage_detector:run_diagnostics(all_nodes, HelperSpec, LumaFeed, Opts)`.
       Diagnostics run on **all cluster nodes**; optionally performs read-write
       test (skipped for readonly). Must pass before any persistence.
 
    e. **Create storage in Onezone** — `storage_logic:create_in_zone/4` registers
       the storage in Onezone via GraphSync. Returns `{ok, Id}`.
 
-   f. **Create local storage_config** — `storage_config:create(Id, HelperConfig,
+   f. **Create local storage_config** — `storage_config:create(Id, HelperSpec,
       LumaConfig)` persists the local datastore entry.
 
    g. **Initialize rtransfer** — `storage:on_storage_created(Id)` calls
@@ -251,7 +251,7 @@ the update or restores the previous state.
 
 - **Storage type cannot change** — `storage_updater:assert_valid_type/2`
   throws `?ERR_BAD_VALUE_NOT_ALLOWED` if `UpdateSpec#storage_update_spec.type`
-  does not match the current helper config.
+  does not match the current helper spec.
 
 ### High-Level Flow
 
@@ -299,7 +299,7 @@ upfront and determines what has changed:
 
 a. **Assert type matches**
 
-b. **Compute helper config diff**
+b. **Compute helper spec diff**
 
 c. **Compute LUMA config diff**
 
@@ -312,14 +312,14 @@ d. **Increment LUMA generation** — If the LUMA config changed, the
 
 e. **Verify new configuration** —
    `storage_crud_utils:verify_configuration/4` with the new
-   readonly/imported values and helper config.
+   readonly/imported values and helper spec.
 
 f. **Run diagnostics** — `storage_crud_utils:run_diagnostics/3`
    on all nodes. Read-write test is skipped if readonly is `true`,
    or if the storage is imported and already supports a space.
 
 The preparation phase produces three values:
-- `HelperConfigChanged :: boolean()`
+- `HelperSpecChanged :: boolean()`
 - `LumaChanged :: boolean()`
 - `NewStorageConfig :: #storage_config{}` (the complete new record)
 
@@ -336,10 +336,10 @@ steps are rolled back via their compensations (in reverse order).
 | 3 | QoS parameters changed | `on_qos_change(StorageId)` — reevaluates all impossible QoS in affected spaces | No-op (best effort) |
 
 **Step 1 details (`update_in_op`):** Persists the new
-`#storage_config{}` record (which contains `helper_config`,
+`#storage_config{}` record (which contains `helper_spec`,
 `luma_config`, and `luma_generation`) in a single datastore write.
-If the helper config changed, also triggers side effects (see
-[Side Effects of Helper Config Change](#side-effects-of-helper-config-change)).
+If the helper spec changed, also triggers side effects (see
+[Side Effects of Helper Spec Change](#side-effects-of-helper-config-change)).
 
 **Step 2 rollback (`build_rollback_oz_spec`):** Constructs a
 `#storage_update_spec{}` with the **previous** Onezone values for
@@ -365,9 +365,9 @@ the update result. For the full rationale, see
 [LUMA Generation](luma/_overview.md#luma-generation) and
 [Generation-Based Isolation](luma/data-model.md#generation-based-isolation-on-config-change).
 
-### Side Effects of Helper Config Change
+### Side Effects of Helper Spec Change
 
-When `update_in_op` detects that the helper config changed, it
+When `update_in_op` detects that the helper spec changed, it
 triggers:
 
 - notifies connected clients
@@ -387,14 +387,14 @@ format.
 
 2. **Read storage data** — `storage:get(StorageId)` → `storage_config:get/1`.
 
-3. **Reverse translation** — `helper_config:describe(HelperConfig)` produces
-   `#helper_config_description{}` (type, configuration, credentials, timeout).
+3. **Reverse translation** — `helper_spec:describe(HelperSpec)` produces
+   `#helper_spec_description{}` (type, configuration, credentials, timeout).
 
 4. **Build description** — Assemble `#storage_description{}` from:
    - `storage:fetch_name_of_local_storage/1`, `storage:is_local_storage_readonly/1`,
      `storage:is_imported/1` (Onezone)
    - `storage:fetch_qos_parameters_of_local_storage/1` (Onezone)
-   - `helper_config:describe/1` (local helper config)
+   - `helper_spec:describe/1` (local helper spec)
    - `storage:get_luma_config/1` (local)
 
 5. **Onepanel conversion** — `storage_spec_builder:description_to_map/1` converts
@@ -442,7 +442,7 @@ format.
 ### run_diagnostics/3
 
 `storage_crud_utils:run_diagnostics/3` invokes
-`storage_detector:run_diagnostics(all_nodes, HelperConfig, LumaFeed, Opts)`:
+`storage_detector:run_diagnostics(all_nodes, HelperSpec, LumaFeed, Opts)`:
 
 - Runs **storage_detector** on **all cluster nodes** via `consistent_hashing:get_all_nodes()`
 - Performs access check on each node
@@ -498,7 +498,7 @@ results and returns HTTP 400 with error details when any storage fails.
 - [Storage Configuration Architecture Overview](_overview.md)
 - [Storage Data Contracts](storage-contracts.md) — Record definitions,
   create vs update patterns
-- [Helper Configuration](helpers/helper-config.md) — Translation from
+- [Helper Spec](helpers/helper-spec.md) — Translation from
   contracts to C++ NIF parameters
 - [Helper Operations](helpers/helper-operations.md) — Runtime I/O,
   handle lifecycle, async NIF pattern

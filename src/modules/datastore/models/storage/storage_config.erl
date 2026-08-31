@@ -28,9 +28,9 @@
 
 %% API
 -export([create/2, create/3, get/1, update/2, exists/1, delete/1]).
--export([get_id/1, get_helper_config/1, get_luma_feed/1, get_luma_config/1, get_luma_generation/1]).
+-export([get_id/1, get_helper_spec/1, get_luma_feed/1, get_luma_config/1, get_luma_generation/1]).
 
--export([update_helper_config/2, set_luma_config/2]).
+-export([update_helper_spec/2, set_luma_config/2]).
 
 -export([list_all/0, delete_all/0]).
 
@@ -69,11 +69,11 @@ create(StorageId, StorageConfig) ->
     })).
 
 
--spec create(storage:id(), helper_config:t(), undefined | storage:luma_config()) ->
+-spec create(storage:id(), helper_spec:t(), undefined | storage:luma_config()) ->
     {ok, storage:id()} | {error, term()}.
-create(StorageId, HelperConfig, LumaConfig) ->
+create(StorageId, HelperSpec, LumaConfig) ->
     create(StorageId, #storage_config{
-        helper_config = HelperConfig,
+        helper_spec = HelperSpec,
         luma_config = utils:ensure_defined(LumaConfig, luma_config:new(?AUTO_FEED)),
         luma_generation = 0
     }).
@@ -110,16 +110,16 @@ get_id(#document{key = StorageId, value = #storage_config{}}) ->
     StorageId.
 
 
--spec get_helper_config(doc() | record() | storage:id()) -> helper_config:t().
-get_helper_config(#document{value = StorageConfig}) ->
-    get_helper_config(StorageConfig);
+-spec get_helper_spec(doc() | record() | storage:id()) -> helper_spec:t().
+get_helper_spec(#document{value = StorageConfig}) ->
+    get_helper_spec(StorageConfig);
 
-get_helper_config(#storage_config{helper_config = HelperConfig}) ->
-    HelperConfig;
+get_helper_spec(#storage_config{helper_spec = HelperSpec}) ->
+    HelperSpec;
 
-get_helper_config(StorageId) ->
+get_helper_spec(StorageId) ->
     {ok, StorageDoc} = ?MODULE:get(StorageId),
-    get_helper_config(StorageDoc).
+    get_helper_spec(StorageDoc).
 
 
 -spec get_luma_feed(storage:id() | doc() | record()) -> storage:luma_feed().
@@ -152,21 +152,21 @@ get_luma_generation(StorageId) ->
     get_luma_generation(StorageDoc).
 
 
--spec update_helper_config(
+-spec update_helper_spec(
     storage:id(),
-    fun((helper_config:t()) -> {ok, helper_config:t()} | {error, term()})
+    fun((helper_spec:t()) -> {ok, helper_spec:t()} | {error, term()})
 ) ->
     ok | {error, term()}.
-update_helper_config(StorageId, UpdateFun) ->
+update_helper_spec(StorageId, UpdateFun) ->
     ?extract_ok(update(StorageId, fun
-        (#storage_config{helper_config = PreviousHelperConfig} = StorageConfig) ->
-            case UpdateFun(PreviousHelperConfig) of
-                {ok, PreviousHelperConfig} ->
+        (#storage_config{helper_spec = PreviousHelperSpec} = StorageConfig) ->
+            case UpdateFun(PreviousHelperSpec) of
+                {ok, PreviousHelperSpec} ->
                     % this error informs higher level module, that no changes were made
                     % and there is no need to execute `on_helper_changed` callback
                     {error, no_changes};
-                {ok, NewHelperConfig} ->
-                    {ok, StorageConfig#storage_config{helper_config = NewHelperConfig}};
+                {ok, NewHelperSpec} ->
+                    {ok, StorageConfig#storage_config{helper_spec = NewHelperSpec}};
                 {error, _} = Error ->
                     Error
             end
@@ -280,11 +280,11 @@ get_record_struct(3) ->
 
 get_record_struct(4) ->
     {record, [
-        % Replace/rename helper to helper_config
-        {helper_config, {record, [
+        % Replace/rename helper to helper_spec
+        {helper_spec, {record, [
             {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}}
+            {configuration, #{string => string}},
+            {credentials, #{string => string}}
         ]}},
         {luma_config, {record, [
             {feed, atom},
@@ -334,6 +334,10 @@ upgrade_record(2, {?MODULE, Helper, LumaConfig, _ImportedStorage}) ->
     {3, {?MODULE, Helper, LumaConfig}};
 
 upgrade_record(3, {?MODULE, Helper, LumaConfig}) ->
-    {helper, Name, Args, AdminCtx} = Helper,
-    HelperConfig = #helper_config{name = Name, args = Args, admin_ctx = AdminCtx},
-    {4, {?MODULE, HelperConfig, LumaConfig, 0}}.
+    {helper, Name, ConfigurationParams, CredentialsParams} = Helper,
+    HelperSpec = #helper_spec{
+        name = Name,
+        configuration = ConfigurationParams,
+        credentials = CredentialsParams
+    },
+    {4, {?MODULE, HelperSpec, LumaConfig, 0}}.

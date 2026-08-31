@@ -18,9 +18,9 @@ adding new storage types.
   operations on a specific storage backend via NIF calls. Each storage
   type has a corresponding helper (e.g. `s3`, `posix`, `ceph`).
 
-- **Helper config** (`#helper_config{}`) — An Erlang record storing the
-  helper's name, args (configuration), and admin_ctx (credentials), all
-  as flat binary maps for the C++ NIF. The helper_config system
+- **Helper config** (`#helper_spec{}`) — An Erlang record storing the
+  helper's name, configuration, and credentials, all
+  as flat binary maps for the C++ NIF. The helper_spec system
   translates typed contract records into this format.
 
 - **Storage configuration contracts** — Typed Erlang records
@@ -60,7 +60,7 @@ flowchart TB
             Updater[updater]
             Describer[describer]
         end
-        HelperConfig[Helper Config\ncontracts → binary maps]
+        HelperSpec[Helper Spec\ncontracts → binary maps]
         CppHelpers[C++ NIF Helpers]
         StorageConfig[storage_config\nlocal datastore]
         StorageLogic[storage_logic\nOnezone GraphSync]
@@ -77,8 +77,8 @@ flowchart TB
     Creator --> StorageLogic
     Updater --> StorageConfig
     Updater --> StorageLogic
-    StorageConfig <--> HelperConfig
-    HelperConfig --> CppHelpers
+    StorageConfig <--> HelperSpec
+    HelperSpec --> CppHelpers
 ```
 
 ## Component Roles
@@ -90,7 +90,7 @@ flowchart TB
 | op_worker_storage + RPC | onepanel           | Orchestration: build spec → single RPC     |
 | storage.erl            | op-worker          | Central facade for all storage operations  |
 | Storage CRUD           | op-worker          | Create, update, describe logic with validation and diagnostics  |
-| Helper Config          | op-worker          | Translate contracts → flat binary maps for C++ helpers    |
+| Helper Spec          | op-worker          | Translate contracts → flat binary maps for C++ helpers    |
 
 ## How It Works
 
@@ -101,10 +101,10 @@ translates the camelCase map into a typed `#storage_create_spec{}` record.
 A single RPC call sends this record to op-worker.
 
 In op-worker, `rpc_api` delegates to `storage:create/1`, which invokes
-`storage_creator:create/1`. The creator builds a `#helper_config{}` from
-the contract via `helper_config:build/1`, runs verification and
+`storage_creator:create/1`. The creator builds a `#helper_spec{}` from
+the contract via `helper_spec:build/1`, runs verification and
 diagnostics, registers the storage in Onezone via `storage_logic`, and
-persists the helper config locally via `storage_config`. If local
+persists the helper spec locally via `storage_config`. If local
 persistence fails after zone registration, the creator reverts the zone
 entry to keep the system consistent.
 
@@ -151,7 +151,7 @@ boundary simplifies debugging and evolution.
 - [Storage CRUD Operations](storage-crud-operations.md) — End-to-end
   flows for create, update, describe, delete
 - [Helpers](helpers/_overview.md) — Helper-related documentation index
-  - [Helper Configuration](helpers/helper-config.md) — Translation
+  - [Helper Spec](helpers/helper-spec.md) — Translation
     from contracts to C++ NIF parameters
   - [Helper Operations](helpers/helper-operations.md) — How I/O
     operations flow from Erlang through the handle system to C++ NIF

@@ -400,15 +400,15 @@ setup_storage([], Config) ->
 setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir ++ " -m 777"]),
-    UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
-    Args = #{
+    StorageCredentials = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
+    ConfigurationParams = #{
         <<"mountPoint">> => list_to_binary(TmpDir),
         <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
     },
     {ok, Helper} = helper:new_helper(
         ?POSIX_HELPER_NAME,
-        Args,
-        UserCtx
+        ConfigurationParams,
+        StorageCredentials
     ),
     StorageName = <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
     StorageId = case rpc:call(Worker, storage_config, create, [StorageName, Helper, undefined]) of

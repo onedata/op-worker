@@ -6,25 +6,25 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Implementation of helper_config_behaviour for WebDAV storage.
+%%% Implementation of helper_spec_behaviour for WebDAV storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(webdav_helper_config).
+-module(webdav_helper_spec).
 -author("Bartosz Walkowicz").
 
--behaviour(helper_config_behaviour).
+-behaviour(helper_spec_behaviour).
 
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
 -include_lib("opw_panel_contracts/include/storage/webdav.hrl").
 
-%% helper_config_behaviour callbacks
+%% helper_spec_behaviour callbacks
 -export([
     build/1,
-    validate_user_ctx/1,
-    build_args_diff/2,
-    build_admin_ctx_diff/2,
+    validate_credentials/1,
+    build_configuration_diff/2,
+    build_credentials_diff/2,
     describe/1,
 
     is_posix_compatible/0,
@@ -44,44 +44,44 @@
 
 
 %%%===================================================================
-%%% helper_config_behaviour callbacks
+%%% helper_spec_behaviour callbacks
 %%%===================================================================
 
 
--spec build(onedata_storage:create_spec()) -> helper_config:t().
+-spec build(onedata_storage:create_spec()) -> helper_spec:t().
 build(CreateReq = #storage_create_spec{type = ?WEBDAV_HELPER_NAME, credentials = Credentials}) ->
-    #helper_config{
+    #helper_spec{
         name = ?WEBDAV_HELPER_NAME,
-        args = build_args(CreateReq),
-        admin_ctx = build_admin_ctx(Credentials)
+        configuration = build_configuration(CreateReq),
+        credentials = build_credentials(Credentials)
     }.
 
 
--spec validate_user_ctx(helper_config:user_ctx()) -> ok | {error, Reason :: term()}.
-validate_user_ctx(UserCtx) ->
+-spec validate_credentials(helper_spec:credentials()) -> ok | {error, Reason :: term()}.
+validate_credentials(Credentials) ->
     BaseFields = [<<"credentialsType">>],
     OptionalFields = [
         <<"credentials">>, <<"adminId">>, <<"onedataAccessToken">>, <<"oauth2IdP">>,
         <<"accessToken">>, <<"accessTokenTTL">>
     ],
     
-    case UserCtx of
+    case Credentials of
         #{<<"credentialsType">> := Type} when Type /= <<"none">> ->
             %% credentials is required
             RequiredFields = [<<"credentialsType">>, <<"credentials">>],
             RemainingOptionalFields = lists:delete(<<"credentials">>, OptionalFields),
-            helper_config_utils:validate_user_ctx(UserCtx, RequiredFields, RemainingOptionalFields);
+            helper_spec_utils:validate_credentials(Credentials, RequiredFields, RemainingOptionalFields);
         _ ->
-            helper_config_utils:validate_user_ctx(UserCtx, BaseFields, OptionalFields)
+            helper_spec_utils:validate_credentials(Credentials, BaseFields, OptionalFields)
     end.
 
 
--spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
-build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
-    build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
+-spec build_configuration_diff(helper_spec:t(), onedata_storage:update_spec()) -> helper_spec:configuration().
+build_configuration_diff(HelperSpec, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
+    build_configuration_diff(HelperSpec, UpdateSpec#storage_update_spec{
         configuration = #webdav_helper_configuration_diff{}
     });
-build_args_diff(HelperConfig, #storage_update_spec{
+build_configuration_diff(HelperSpec, #storage_update_spec{
     timeout = Timeout,
     configuration = #webdav_helper_configuration_diff{
         endpoint = Endpoint,
@@ -94,7 +94,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
         dir_mode = DirMode
     }
 }) ->
-    helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.args, [
+    helper_spec_utils:build_diff_from_specs(HelperSpec#helper_spec.configuration, [
         {<<"endpoint">>, Endpoint},
         {<<"verifyServerCertificate">>, VerifyServerCertificate, fun atom_to_binary/1},
         {<<"authorizationHeader">>, AuthorizationHeader},
@@ -107,11 +107,11 @@ build_args_diff(HelperConfig, #storage_update_spec{
     ]).
 
 
--spec build_admin_ctx_diff(helper_config:t(), onedata_storage:update_spec()) ->
-    helper_config:user_ctx().
-build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
+-spec build_credentials_diff(helper_spec:t(), onedata_storage:update_spec()) ->
+    helper_spec:credentials().
+build_credentials_diff(_HelperSpec, #storage_update_spec{credentials = undefined}) ->
     #{};
-build_admin_ctx_diff(HelperConfig, #storage_update_spec{
+build_credentials_diff(HelperSpec, #storage_update_spec{
     credentials = #webdav_helper_credentials_diff{
         credentials_type = CredentialsType,
         credentials = Credentials,
@@ -119,7 +119,7 @@ build_admin_ctx_diff(HelperConfig, #storage_update_spec{
         onedata_access_token = OnedataAccessToken
     }
 }) ->
-    helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.admin_ctx, [
+    helper_spec_utils:build_diff_from_specs(HelperSpec#helper_spec.credentials, [
         {<<"credentialsType">>, CredentialsType, fun credentials_type_to_binary/1},
         {<<"credentials">>, Credentials},
         {<<"oauth2IdP">>, OAuth2IdP},
@@ -127,20 +127,20 @@ build_admin_ctx_diff(HelperConfig, #storage_update_spec{
     ]).
 
 
--spec describe(helper_config:t()) -> helper_config:description().
-describe(#helper_config{
+-spec describe(helper_spec:t()) -> helper_spec:description().
+describe(#helper_spec{
     name = ?WEBDAV_HELPER_NAME,
-    args = Args,
-    admin_ctx = AdminCtx
+    configuration = ConfigurationParams,
+    credentials = CredentialsParams
 }) ->
-    %% Reconstruct configuration record from args map
+    %% Reconstruct configuration record from flat params
     BaseConfiguration = #webdav_helper_configuration{
-        endpoint = maps:get(<<"endpoint">>, Args),
-        storage_path_type = helper_config_utils:storage_path_type_from_binary(
-            maps:get(<<"storagePathType">>, Args)
+        endpoint = maps:get(<<"endpoint">>, ConfigurationParams),
+        storage_path_type = helper_spec_utils:storage_path_type_from_binary(
+            maps:get(<<"storagePathType">>, ConfigurationParams)
         )
     },
-    Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
+    Configuration = helper_spec_utils:set_optional_record_fields_if_defined(BaseConfiguration, ConfigurationParams, [
         {<<"verifyServerCertificate">>, #webdav_helper_configuration.verify_server_certificate, fun utils:to_boolean/1},
         {<<"authorizationHeader">>, #webdav_helper_configuration.authorization_header},
         {<<"rangeWriteSupport">>, #webdav_helper_configuration.range_write_support, fun range_write_support_from_binary/1},
@@ -150,24 +150,24 @@ describe(#helper_config{
         {<<"dirMode">>, #webdav_helper_configuration.dir_mode}
     ]),
 
-    %% Reconstruct credentials record from admin_ctx (with redaction for security)
+    %% Reconstruct credentials record from credentials (with redaction for security)
     BaseCredentials = #webdav_helper_credentials{
-        credentials_type = credentials_type_from_binary(maps:get(<<"credentialsType">>, AdminCtx))
+        credentials_type = credentials_type_from_binary(maps:get(<<"credentialsType">>, CredentialsParams))
     },
     Credentials = redact_confidential_credentials(
-        helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
+        helper_spec_utils:set_optional_record_fields_if_defined(BaseCredentials, CredentialsParams, [
             {<<"credentials">>, #webdav_helper_credentials.credentials},
             {<<"oauth2IdP">>, #webdav_helper_credentials.oauth2_idp},
             {<<"onedataAccessToken">>, #webdav_helper_credentials.onedata_access_token}
         ])
     ),
 
-    #helper_config_description{
+    #helper_spec_description{
         type = ?WEBDAV_HELPER_NAME,
         credentials = Credentials,
         configuration = Configuration,
         timeout = utils:convert_defined(
-            maps:get(<<"timeout">>, Args, undefined),
+            maps:get(<<"timeout">>, ConfigurationParams, undefined),
             fun binary_to_integer/1
         )
     }.
@@ -193,33 +193,33 @@ is_nfs4_acl_supported() -> false.
 is_oauth2_supported() -> true.
 
 
--spec is_storage_access_type_supported(helper_config:access_type()) -> boolean().
+-spec is_storage_access_type_supported(helper_spec:access_type()) -> boolean().
 is_storage_access_type_supported(_) -> true.
 
 
--spec is_auto_import_supported(#helper_config{}) -> boolean().
-is_auto_import_supported(HelperConfig) ->
-    helper_config_utils:is_canonical(HelperConfig).
+-spec is_auto_import_supported(#helper_spec{}) -> boolean().
+is_auto_import_supported(HelperSpec) ->
+    helper_spec_utils:is_canonical(HelperSpec).
 
 
--spec is_file_registration_supported(#helper_config{}) -> boolean().
-is_file_registration_supported(HelperConfig) ->
-    helper_config_utils:is_canonical(HelperConfig).
+-spec is_file_registration_supported(#helper_spec{}) -> boolean().
+is_file_registration_supported(HelperSpec) ->
+    helper_spec_utils:is_canonical(HelperSpec).
 
 
--spec is_getting_size_supported(#helper_config{}) -> boolean().
-is_getting_size_supported(_HelperConfig) ->
+-spec is_getting_size_supported(#helper_spec{}) -> boolean().
+is_getting_size_supported(_HelperSpec) ->
     true.
 
 
--spec get_block_size(#helper_config{}) -> non_neg_integer() | undefined.
-get_block_size(#helper_config{}) ->
+-spec get_block_size(#helper_spec{}) -> non_neg_integer() | undefined.
+get_block_size(#helper_spec{}) ->
     undefined.
 
 
 -spec redact_confidential_credentials(#webdav_helper_credentials{}) -> #webdav_helper_credentials{}.
 redact_confidential_credentials(Credentials) ->
-    helper_config_utils:redact_record_fields_if_defined(Credentials, [
+    helper_spec_utils:redact_record_fields_if_defined(Credentials, [
         #webdav_helper_credentials.credentials,
         #webdav_helper_credentials.onedata_access_token
     ]).
@@ -227,7 +227,7 @@ redact_confidential_credentials(Credentials) ->
 
 -spec redact_confidential_credentials_diff(#webdav_helper_credentials_diff{}) -> #webdav_helper_credentials_diff{}.
 redact_confidential_credentials_diff(CredentialsDiff) ->
-    helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [
+    helper_spec_utils:redact_record_fields_if_defined(CredentialsDiff, [
         #webdav_helper_credentials_diff.credentials,
         #webdav_helper_credentials_diff.onedata_access_token
     ]).
@@ -239,8 +239,8 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 
 
 %% @private
--spec build_args(onedata_storage:create_spec()) -> helper_config:args().
-build_args(#storage_create_spec{
+-spec build_configuration(onedata_storage:create_spec()) -> helper_spec:configuration().
+build_configuration(#storage_create_spec{
     timeout = Timeout,
     configuration = #webdav_helper_configuration{
         endpoint = Endpoint,
@@ -254,11 +254,11 @@ build_args(#storage_create_spec{
         storage_path_type = StoragePathType
     }
 }) ->
-    RequiredArgs = #{
+    RequiredParams = #{
         <<"endpoint">> => Endpoint,
-        <<"storagePathType">> => helper_config_utils:storage_path_type_to_binary(StoragePathType)
+        <<"storagePathType">> => helper_spec_utils:storage_path_type_to_binary(StoragePathType)
     },
-    helper_config_utils:add_optional_args_if_defined(RequiredArgs, [
+    helper_spec_utils:add_optional_entries_if_defined(RequiredParams, [
         {<<"verifyServerCertificate">>, VerifyServerCertificate, fun atom_to_binary/1},
         {<<"authorizationHeader">>, AuthorizationHeader},
         {<<"rangeWriteSupport">>, RangeWriteSupport, fun range_write_support_to_binary/1},
@@ -271,24 +271,24 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_admin_ctx(#webdav_helper_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#webdav_helper_credentials{
+-spec build_credentials(#webdav_helper_credentials{}) -> helper_spec:credentials().
+build_credentials(#webdav_helper_credentials{
     credentials_type = CredentialsType,
     credentials = Credentials,
     oauth2_idp = OAuth2IdP,
     onedata_access_token = OnedataAccessToken
 }) ->
-    BaseCtx0 = #{
+    BaseCredentialsParams0 = #{
         <<"credentialsType">> => credentials_type_to_binary(CredentialsType)
     },
-    BaseCtx1 = helper_config_utils:add_optional_args_if_defined(BaseCtx0, [
+    BaseCredentialsParams1 = helper_spec_utils:add_optional_entries_if_defined(BaseCredentialsParams0, [
         {<<"credentials">>, Credentials},
         {<<"oauth2IdP">>, OAuth2IdP},
         {<<"onedataAccessToken">>, OnedataAccessToken}
     ]),
-    helper_config_utils:resolve_admin_id(case CredentialsType of
-        none -> maps:remove(<<"credentials">>, BaseCtx1);
-        _ -> BaseCtx1
+    helper_spec_utils:resolve_admin_id(case CredentialsType of
+        none -> maps:remove(<<"credentials">>, BaseCredentialsParams1);
+        _ -> BaseCredentialsParams1
     end).
 
 
