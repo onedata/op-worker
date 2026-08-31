@@ -67,9 +67,7 @@
 -type helper_params() :: #{binary() => binary()}.
 -type access_type() :: ?READONLY | ?READWRITE.
 
--type description() :: #helper_spec_description{}.
-
--export_type([t/0, name/0, configuration/0, credentials/0, helper_params/0, access_type/0, description/0]).
+-export_type([t/0, name/0, configuration/0, credentials/0, helper_params/0, access_type/0]).
 
 
 %%%===================================================================
@@ -142,7 +140,14 @@ update(
     end.
 
 
--spec describe(t()) -> description().
+%%--------------------------------------------------------------------
+%% @doc
+%% Reconstructs the typed contract records from the flat params, with the
+%% confidential credentials redacted.
+%% @end
+%%--------------------------------------------------------------------
+-spec describe(t()) ->
+    {onedata_storage:helper_configuration(), onedata_storage:helper_credentials()}.
 describe(HelperSpec) ->
     Module = get_module(HelperSpec),
     Module:describe(HelperSpec).

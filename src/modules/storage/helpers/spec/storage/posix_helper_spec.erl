@@ -93,7 +93,8 @@ build_credentials_diff(HelperSpec, #storage_update_spec{
     ]).
 
 
--spec describe(helper_spec:t()) -> helper_spec:description().
+-spec describe(helper_spec:t()) ->
+    {onedata_storage:helper_configuration(), onedata_storage:helper_credentials()}.
 describe(#helper_spec{
     name = ?POSIX_HELPER_NAME,
     configuration = ConfigurationParams,
@@ -117,11 +118,7 @@ describe(#helper_spec{
         ])
     ),
 
-    #helper_spec_description{
-        type = ?POSIX_HELPER_NAME,
-        configuration = BaseConfiguration,
-        credentials = Credentials
-    }.
+    {BaseConfiguration, Credentials}.
 
 
 -spec is_posix_compatible() -> boolean().

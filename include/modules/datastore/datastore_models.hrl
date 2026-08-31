@@ -505,9 +505,8 @@
 
 %% Everything a storage helper needs before LUMA substitutes the per-user
 %% credentials: the timeout and the two halves of the parameter set, kept as
-%% the flat binary maps the C++ helper layer consumes.
-%% The typed, redacted view of the same content is #helper_spec_description{}
-%% in helpers.hrl.
+%% the flat binary maps the C++ helper layer consumes. helper_spec:describe/1
+%% turns those maps back into the contract's typed records.
 -record(helper_spec, {
     name :: helper_spec:name(),
     %% Undefined means the storage helper's own default applies.

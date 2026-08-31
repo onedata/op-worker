@@ -126,7 +126,8 @@ build_credentials_diff(HelperSpec, #storage_update_spec{
     ]).
 
 
--spec describe(helper_spec:t()) -> helper_spec:description().
+-spec describe(helper_spec:t()) ->
+    {onedata_storage:helper_configuration(), onedata_storage:helper_credentials()}.
 describe(#helper_spec{
     name = ?WEBDAV_HELPER_NAME,
     configuration = ConfigurationParams,
@@ -161,11 +162,7 @@ describe(#helper_spec{
         ])
     ),
 
-    #helper_spec_description{
-        type = ?WEBDAV_HELPER_NAME,
-        configuration = Configuration,
-        credentials = Credentials
-    }.
+    {Configuration, Credentials}.
 
 
 -spec is_posix_compatible() -> boolean().

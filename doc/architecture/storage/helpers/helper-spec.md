@@ -216,14 +216,13 @@ The **describe** flow is the inverse of build: it reconstructs typed
 records from flat binary maps.
 
 ```
-#helper_spec{} → helper_spec:describe/1 → Module:describe/1 → #helper_spec_description{}
+#helper_spec{} → helper_spec:describe/1 → Module:describe/1 → {Configuration, Credentials}
 ```
 
-`helper_spec:describe/1` returns `#helper_spec_description{}`
-with `type`, `configuration` and `credentials`. Each
-per-storage module implements `describe/1` to map `configuration` and
-`credentials` back to Erlang records (`#s3_configuration{}`,
-`#s3_credentials{}`, etc.).
+`helper_spec:describe/1` returns the typed configuration and credentials
+records. Each per-storage module implements `describe/1` to map
+`configuration` and `credentials` back to Erlang records
+(`#s3_configuration{}`, `#s3_credentials{}`, etc.).
 
 **Use case:** `storage_describer` calls `helper_spec:describe/1` when
 handling a GET request. The result is embedded in

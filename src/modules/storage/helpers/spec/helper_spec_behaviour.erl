@@ -55,11 +55,13 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Reconstructs typed records from helper_spec binary maps.
+%% Reconstructs the typed configuration and credentials records from the flat
+%% binary maps, with the confidential credentials redacted.
 %% Used to provide storage description to Onepanel (GET operations).
 %% @end
 %%--------------------------------------------------------------------
--callback describe(helper_spec:t()) -> helper_spec:description().
+-callback describe(helper_spec:t()) ->
+    {onedata_storage:helper_configuration(), onedata_storage:helper_credentials()}.
 
 
 -callback is_posix_compatible() -> boolean().

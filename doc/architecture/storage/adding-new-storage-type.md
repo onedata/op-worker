@@ -223,8 +223,8 @@ Implement `helper_spec_behaviour`:
   `#newstorage_credentials_diff{}`. Return `#{}` when
   `credentials =:= undefined`.
 
-- `describe/1` — Reverse the translation: flat maps → typed records for
-  `#helper_spec_description{}`. Use
+- `describe/1` — Reverse the translation: flat maps → the typed
+  `{Configuration, Credentials}` pair. Use
   `helper_spec_utils:storage_path_type_from_binary/1` and
   `helper_spec_utils:set_optional_record_fields_if_defined/3` for
   optional fields.

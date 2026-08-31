@@ -99,7 +99,8 @@ build_credentials_diff(HelperSpec, #storage_update_spec{
     ]).
 
 
--spec describe(helper_spec:t()) -> helper_spec:description().
+-spec describe(helper_spec:t()) ->
+    {onedata_storage:helper_configuration(), onedata_storage:helper_credentials()}.
 describe(#helper_spec{
     name = ?CEPHRADOS_HELPER_NAME,
     configuration = ConfigurationParams,
@@ -124,11 +125,7 @@ describe(#helper_spec{
         key = maps:get(<<"key">>, CredentialsParams)
     }),
 
-    #helper_spec_description{
-        type = ?CEPHRADOS_HELPER_NAME,
-        configuration = Configuration,
-        credentials = Credentials
-    }.
+    {Configuration, Credentials}.
 
 
 -spec is_posix_compatible() -> boolean().

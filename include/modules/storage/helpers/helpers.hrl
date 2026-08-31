@@ -70,17 +70,6 @@
 %% as part of the storage_config model, so changing it requires bumping that
 %% model's record struct.
 
-%% The typed counterpart of #helper_spec{}: the same content with the flat
-%% binary maps turned back into the contract's records and the confidential
-%% credentials redacted. Built on demand to answer a storage GET, never
-%% persisted.
--record(helper_spec_description, {
-    type :: onedata_storage:type(),
-    configuration :: onedata_storage:helper_configuration(),
-    credentials :: onedata_storage:helper_credentials()
-}).
-
-
 -define(CONFIDENTIAL_MASK, <<"*****">>).
 
 
