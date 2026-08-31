@@ -14,19 +14,19 @@
 
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
--include_lib("op_panel_contracts/include/storage/ceph.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
--include_lib("op_panel_contracts/include/storage/cephrados.hrl").
--include_lib("op_panel_contracts/include/storage/glusterfs.hrl").
--include_lib("op_panel_contracts/include/storage/http.hrl").
--include_lib("op_panel_contracts/include/storage/nfs.hrl").
--include_lib("op_panel_contracts/include/storage/nulldevice.hrl").
--include_lib("op_panel_contracts/include/storage/posix.hrl").
--include_lib("op_panel_contracts/include/storage/s3.hrl").
--include_lib("op_panel_contracts/include/storage/swift.hrl").
--include_lib("op_panel_contracts/include/storage/webdav.hrl").
--include_lib("op_panel_contracts/include/storage/xrootd.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/ceph.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/cephrados.hrl").
+-include_lib("opw_panel_contracts/include/storage/glusterfs.hrl").
+-include_lib("opw_panel_contracts/include/storage/http.hrl").
+-include_lib("opw_panel_contracts/include/storage/nfs.hrl").
+-include_lib("opw_panel_contracts/include/storage/nulldevice.hrl").
+-include_lib("opw_panel_contracts/include/storage/posix.hrl").
+-include_lib("opw_panel_contracts/include/storage/s3.hrl").
+-include_lib("opw_panel_contracts/include/storage/swift.hrl").
+-include_lib("opw_panel_contracts/include/storage/webdav.hrl").
+-include_lib("opw_panel_contracts/include/storage/xrootd.hrl").
 
 %% API
 -export([

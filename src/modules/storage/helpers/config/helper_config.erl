@@ -22,7 +22,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("hackney/include/hackney_lib.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
 
 %% API
 -export([

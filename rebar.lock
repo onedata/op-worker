@@ -119,7 +119,7 @@
   {git,"ssh://git@git.onedata.org:7999/vfs/onenv-ct.git",
        {ref,"fdfad7d995173b38959fb521c86b29398e9561d7"}},
   0},
- {<<"op_panel_contracts">>,
+ {<<"opw_panel_contracts">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/opw-panel-contracts.git",
        {ref,"618ef1bc23dfa6d22860ad636f7153828974811f"}},
   0},

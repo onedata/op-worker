@@ -15,8 +15,8 @@
 -behaviour(helper_config_behaviour).
 
 -include("modules/storage/helpers/helpers.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
--include_lib("op_panel_contracts/include/storage/xrootd.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/xrootd.hrl").
 
 %% helper_config_behaviour callbacks
 -export([

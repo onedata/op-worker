@@ -17,8 +17,8 @@
 
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
--include_lib("op_panel_contracts/include/storage/http.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/http.hrl").
 
 %% helper_config_behaviour callbacks
 -export([

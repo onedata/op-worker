@@ -15,8 +15,8 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
--include_lib("op_panel_contracts/include/storage/s3.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/s3.hrl").
 
 %% export for ct
 -export([all/0]).

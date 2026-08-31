@@ -18,7 +18,7 @@
 -include("modules/datastore/transfer.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/storage/helpers/helpers.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 

@@ -15,7 +15,7 @@
 -author("Bartosz Walkowicz").
 
 -include_lib("ctool/include/logging.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
 
 %% API
 -export([create/1]).

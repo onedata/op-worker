@@ -31,7 +31,7 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
 
 -export([create_in_zone/4, create_in_zone/5, update_in_zone/2, delete_in_zone/1]).
 -export([get/1, get_shared_data/2]).

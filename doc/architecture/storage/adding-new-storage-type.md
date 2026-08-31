@@ -285,7 +285,7 @@ In `src/modules/storage/crud/storage_crud_utils.erl`:
 1. Add the include:
 
    ```erlang
-   -include_lib("op_panel_contracts/include/storage/newstorage.hrl").
+   -include_lib("opw_panel_contracts/include/storage/newstorage.hrl").
    ```
 
 2. Add `get_record_def/2` clauses for the four records:
