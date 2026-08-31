@@ -34,7 +34,12 @@
 % for better readability of middleware modules.
 % TODO VFS-5621
 -type req() :: #op_req{}.
--type operation() :: gs_protocol:operation().
+% 'head' is an op-worker specific extension of the graph sync operations, used
+% solely by the REST layer to handle HTTP HEAD requests (see rest_handler and
+% file_content_rest_handler). It never reaches middleware plugins - such requests
+% are routed directly to the dedicated REST handler. For authorization purposes
+% it is treated exactly like a 'get' operation.
+-type operation() :: gs_protocol:operation() | head.
 % The resource the request operates on (creates, gets, updates or deletes).
 -type entity() :: undefined | tuple().
 -type revision() :: gs_protocol:revision().

@@ -64,11 +64,11 @@ validate_user_ctx(UserCtx) ->
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
 build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
     build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
-        configuration = #ceph_configuration_diff{}
+        configuration = #ceph_helper_configuration_diff{}
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    configuration = #ceph_configuration_diff{
+    configuration = #ceph_helper_configuration_diff{
         monitor_hostname = MonitorHostname,
         cluster_name = ClusterName,
         pool_name = PoolName
@@ -87,7 +87,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
 build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
     #{};
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #ceph_credentials_diff{
+    credentials = #ceph_helper_credentials_diff{
         username = Username,
         key = Key
     }
@@ -105,7 +105,7 @@ describe(#helper_config{
     admin_ctx = AdminCtx
 }) ->
     %% Reconstruct configuration record from args map
-    Configuration = #ceph_configuration{
+    Configuration = #ceph_helper_configuration{
         monitor_hostname = maps:get(<<"monitorHostname">>, Args),
         cluster_name = maps:get(<<"clusterName">>, Args),
         pool_name = maps:get(<<"poolName">>, Args),
@@ -115,7 +115,7 @@ describe(#helper_config{
     },
 
     %% Reconstruct credentials record from admin_ctx
-    Credentials = redact_confidential_credentials(#ceph_credentials{
+    Credentials = redact_confidential_credentials(#ceph_helper_credentials{
         username = maps:get(<<"username">>, AdminCtx),
         key = maps:get(<<"key">>, AdminCtx)
     }),
@@ -175,15 +175,15 @@ get_block_size(#helper_config{}) ->
     undefined.
 
 
--spec redact_confidential_credentials(#ceph_credentials{}) -> #ceph_credentials{}.
-redact_confidential_credentials(Credentials = #ceph_credentials{}) ->
-    helper_config_utils:redact_record_fields_if_defined(Credentials, [#ceph_credentials.key]).
+-spec redact_confidential_credentials(#ceph_helper_credentials{}) -> #ceph_helper_credentials{}.
+redact_confidential_credentials(Credentials = #ceph_helper_credentials{}) ->
+    helper_config_utils:redact_record_fields_if_defined(Credentials, [#ceph_helper_credentials.key]).
 
 
--spec redact_confidential_credentials_diff(#ceph_credentials_diff{}) -> #ceph_credentials_diff{}.
-redact_confidential_credentials_diff(CredentialsDiff = #ceph_credentials_diff{}) ->
+-spec redact_confidential_credentials_diff(#ceph_helper_credentials_diff{}) -> #ceph_helper_credentials_diff{}.
+redact_confidential_credentials_diff(CredentialsDiff = #ceph_helper_credentials_diff{}) ->
     helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [
-        #ceph_credentials_diff.key
+        #ceph_helper_credentials_diff.key
     ]).
 
 
@@ -196,7 +196,7 @@ redact_confidential_credentials_diff(CredentialsDiff = #ceph_credentials_diff{})
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    configuration = #ceph_configuration{
+    configuration = #ceph_helper_configuration{
         monitor_hostname = MonitorHostname,
         cluster_name = ClusterName,
         pool_name = PoolName,
@@ -215,8 +215,8 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_admin_ctx(#ceph_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#ceph_credentials{
+-spec build_admin_ctx(#ceph_helper_credentials{}) -> helper_config:user_ctx().
+build_admin_ctx(#ceph_helper_credentials{
     username = Username,
     key = Key
 }) ->

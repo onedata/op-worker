@@ -61,6 +61,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_cha
         <<"transfer_type">> => {binary, [
             ?JOB_TRANSFERS_TYPE,
             ?ON_THE_FLY_TRANSFERS_TYPE,
+            ?QOS_TRANSFERS_TYPE,
             ?ALL_TRANSFERS_TYPE
         ]},
         <<"charts_type">> => {binary, [

@@ -74,8 +74,8 @@
 
 -record(helper_config_description, {
     type :: onedata_storage:type(),
-    configuration :: onedata_storage:configuration(),
-    credentials :: onedata_storage:credentials(),
+    configuration :: onedata_storage:helper_configuration(),
+    credentials :: onedata_storage:helper_credentials(),
     timeout :: integer()
 }).
 

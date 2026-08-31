@@ -171,6 +171,7 @@ data_spec(#gri{aspect = register_file}, _) -> #{
         <<"uid">> => {integer, {between, 0, ?UID_MAX}},
         <<"gid">> => {integer, {between, 0, ?GID_MAX}},
         <<"autoDetectAttributes">> => {boolean, any},
+        <<"verifyExistence">> => {boolean, any},
         <<"xattrs">> => {json, any},
         <<"json">> => {json, any},
         <<"rdf">> => {binary, any}
@@ -237,11 +238,15 @@ validate(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     storage_import:assert_imported_storage(StorageId),
 
     AutoDetectAttributes = maps:get(<<"autoDetectAttributes">>, Data, true),
-    StorageType = storage:get_helper_name(StorageId),
-    case StorageType == ?HTTP_HELPER_NAME andalso AutoDetectAttributes == false of
+    HelperConfig = storage:get_helper_config(StorageId),
+    StorageType= helper_config:get_name(HelperConfig),
+    HelperArgs = HelperConfig#helper_config.args,
+    IsHttpWithoutEmulateRangeRead = StorageType =:= ?HTTP_HELPER_NAME
+        andalso maps:get(<<"emulateRangeRead">>, HelperArgs, <<"false">>) =:= <<"false">>,
+    case IsHttpWithoutEmulateRangeRead andalso AutoDetectAttributes == false of
         true ->
-            % in case of the HTTP helper we don't allow overriding file attributes, as it
-            % requires the stat operation to be supported for correct range reads later on
+            % in case of the HTTP helper without range read emulation, we don't allow overriding
+            % file attributes because reads from servers without support for range read will fail
             throw(?ERR_BAD_VALUE_NOT_ALLOWED(?err_ctx(), <<"autoDetectAttributes">>, [true]));
         false ->
             ok
@@ -333,7 +338,15 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
         end
     catch
         throw:{error, _} = Error ->
-            throw(Error);
+            case errors:is_known_error(Error) of
+                true ->
+                    throw(Error);
+                false ->
+                    throw(?report_internal_server_error(?autoformat_with_msg(
+                        "Unexpected error during file registration",
+                        [Error]
+                    )))
+            end;
         throw:PosixErrno ->
             throw(?ERR_POSIX(?err_ctx(), PosixErrno))
     end;

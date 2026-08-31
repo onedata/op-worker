@@ -80,16 +80,18 @@ validate_user_ctx(UserCtx) ->
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
 build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
     build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
-        configuration = #http_configuration_diff{}
+        configuration = #http_helper_configuration_diff{}
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    configuration = #http_configuration_diff{
+    configuration = #http_helper_configuration_diff{
         endpoint = Endpoint,
         verify_server_certificate = VerifyServerCertificate,
         authorization_header = AuthorizationHeader,
         connection_pool_size = ConnectionPoolSize,
         max_requests_per_session = MaxRequestsPerSession,
+        emulate_range_read = EmulateRangeRead,
+        max_emulated_range_read_file_size = MaxEmulatedRangeReadFileSize,
         file_mode = FileMode
     }
 }) ->
@@ -99,6 +101,8 @@ build_args_diff(HelperConfig, #storage_update_spec{
         {<<"authorizationHeader">>, AuthorizationHeader},
         {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1},
         {<<"maxRequestsPerSession">>, MaxRequestsPerSession, fun integer_to_binary/1},
+        {<<"emulateRangeRead">>, EmulateRangeRead, fun atom_to_binary/1},
+        {<<"maxEmulatedRangeReadFileSize">>, MaxEmulatedRangeReadFileSize, fun integer_to_binary/1},
         {<<"fileMode">>, FileMode},
         {<<"timeout">>, Timeout, fun integer_to_binary/1}
     ]).
@@ -109,7 +113,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
 build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
     #{};
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #http_credentials_diff{
+    credentials = #http_helper_credentials_diff{
         credentials_type = CredentialsType,
         credentials = Credentials,
         oauth2_idp = OAuth2IdP,
@@ -131,29 +135,31 @@ describe(#helper_config{
     admin_ctx = AdminCtx
 }) ->
     %% Reconstruct configuration record from args map
-    BaseConfiguration = #http_configuration{
+    BaseConfiguration = #http_helper_configuration{
         endpoint = maps:get(<<"endpoint">>, Args),
         storage_path_type = helper_config_utils:storage_path_type_from_binary(
             maps:get(<<"storagePathType">>, Args)
         )
     },
     Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
-        {<<"verifyServerCertificate">>, #http_configuration.verify_server_certificate, fun utils:to_boolean/1},
-        {<<"authorizationHeader">>, #http_configuration.authorization_header},
-        {<<"connectionPoolSize">>, #http_configuration.connection_pool_size, fun binary_to_integer/1},
-        {<<"maxRequestsPerSession">>, #http_configuration.max_requests_per_session, fun binary_to_integer/1},
-        {<<"fileMode">>, #http_configuration.file_mode}
+        {<<"verifyServerCertificate">>, #http_helper_configuration.verify_server_certificate, fun utils:to_boolean/1},
+        {<<"authorizationHeader">>, #http_helper_configuration.authorization_header},
+        {<<"connectionPoolSize">>, #http_helper_configuration.connection_pool_size, fun binary_to_integer/1},
+        {<<"maxRequestsPerSession">>, #http_helper_configuration.max_requests_per_session, fun binary_to_integer/1},
+        {<<"emulateRangeRead">>, #http_helper_configuration.emulate_range_read, fun utils:to_boolean/1},
+        {<<"maxEmulatedRangeReadFileSize">>, #http_helper_configuration.max_emulated_range_read_file_size, fun binary_to_integer/1},
+        {<<"fileMode">>, #http_helper_configuration.file_mode}
     ]),
 
     %% Reconstruct credentials record from admin_ctx (with redaction for security)
-    BaseCredentials = #http_credentials{
+    BaseCredentials = #http_helper_credentials{
         credentials_type = credentials_type_from_binary(maps:get(<<"credentialsType">>, AdminCtx))
     },
     Credentials = redact_confidential_credentials(
         helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-            {<<"credentials">>, #http_credentials.credentials},
-            {<<"oauth2IdP">>, #http_credentials.oauth2_idp},
-            {<<"onedataAccessToken">>, #http_credentials.onedata_access_token}
+            {<<"credentials">>, #http_helper_credentials.credentials},
+            {<<"oauth2IdP">>, #http_helper_credentials.oauth2_idp},
+            {<<"onedataAccessToken">>, #http_helper_credentials.onedata_access_token}
         ])
     ),
 
@@ -213,19 +219,19 @@ get_block_size(#helper_config{}) ->
     undefined.
 
 
--spec redact_confidential_credentials(#http_credentials{}) -> #http_credentials{}.
+-spec redact_confidential_credentials(#http_helper_credentials{}) -> #http_helper_credentials{}.
 redact_confidential_credentials(Credentials) ->
     helper_config_utils:redact_record_fields_if_defined(Credentials, [
-        #http_credentials.credentials,
-        #http_credentials.onedata_access_token
+        #http_helper_credentials.credentials,
+        #http_helper_credentials.onedata_access_token
     ]).
 
 
--spec redact_confidential_credentials_diff(#http_credentials_diff{}) -> #http_credentials_diff{}.
+-spec redact_confidential_credentials_diff(#http_helper_credentials_diff{}) -> #http_helper_credentials_diff{}.
 redact_confidential_credentials_diff(CredentialsDiff) ->
     helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [
-        #http_credentials_diff.credentials,
-        #http_credentials_diff.onedata_access_token
+        #http_helper_credentials_diff.credentials,
+        #http_helper_credentials_diff.onedata_access_token
     ]).
 
 
@@ -238,12 +244,14 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    configuration = #http_configuration{
+    configuration = #http_helper_configuration{
         endpoint = Endpoint,
         verify_server_certificate = VerifyServerCertificate,
         authorization_header = AuthorizationHeader,
         connection_pool_size = ConnectionPoolSize,
         max_requests_per_session = MaxRequestsPerSession,
+        emulate_range_read = EmulateRangeRead,
+        max_emulated_range_read_file_size = MaxEmulatedRangeReadFileSize,
         file_mode = FileMode,
         storage_path_type = StoragePathType
     }
@@ -257,14 +265,16 @@ build_args(#storage_create_spec{
         {<<"authorizationHeader">>, AuthorizationHeader},
         {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1},
         {<<"maxRequestsPerSession">>, MaxRequestsPerSession, fun integer_to_binary/1},
+        {<<"emulateRangeRead">>, EmulateRangeRead, fun atom_to_binary/1},
+        {<<"maxEmulatedRangeReadFileSize">>, MaxEmulatedRangeReadFileSize, fun integer_to_binary/1},
         {<<"fileMode">>, FileMode},
         {<<"timeout">>, Timeout, fun integer_to_binary/1}
     ]).
 
 
 %% @private
--spec build_admin_ctx(#http_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#http_credentials{
+-spec build_admin_ctx(#http_helper_credentials{}) -> helper_config:user_ctx().
+build_admin_ctx(#http_helper_credentials{
     credentials_type = CredentialsType,
     credentials = Credentials,
     oauth2_idp = OAuth2IdP,

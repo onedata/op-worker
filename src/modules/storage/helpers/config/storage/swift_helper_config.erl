@@ -70,11 +70,11 @@ validate_user_ctx(UserCtx) ->
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
 build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
     build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
-        configuration = #swift_configuration_diff{}
+        configuration = #swift_helper_configuration_diff{}
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    configuration = #swift_configuration_diff{
+    configuration = #swift_helper_configuration_diff{
         auth_url = AuthUrl,
         container_name = ContainerName
     }
@@ -91,7 +91,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
 build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
     #{};
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #swift_credentials_diff{
+    credentials = #swift_helper_credentials_diff{
         username = Username,
         password = Password,
         project_name = ProjectName,
@@ -115,7 +115,7 @@ describe(#helper_config{
     admin_ctx = AdminCtx
 }) ->
     %% Reconstruct configuration record from args map
-    BaseConfiguration = #swift_configuration{
+    BaseConfiguration = #swift_helper_configuration{
         auth_url = maps:get(<<"authUrl">>, Args),
         container_name = maps:get(<<"containerName">>, Args),
         storage_path_type = helper_config_utils:storage_path_type_from_binary(
@@ -123,19 +123,19 @@ describe(#helper_config{
         )
     },
     Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
-        {<<"blockSize">>, #swift_configuration.block_size, fun binary_to_integer/1}
+        {<<"blockSize">>, #swift_helper_configuration.block_size, fun binary_to_integer/1}
     ]),
 
     %% Reconstruct credentials record from admin_ctx
-    BaseCredentials = #swift_credentials{
+    BaseCredentials = #swift_helper_credentials{
         username = maps:get(<<"username">>, AdminCtx),
         password = maps:get(<<"password">>, AdminCtx),
         project_name = maps:get(<<"projectName">>, AdminCtx)
     },
     Credentials = redact_confidential_credentials(
         helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-            {<<"userDomainName">>, #swift_credentials.user_domain_name},
-            {<<"projectDomainName">>, #swift_credentials.project_domain_name}
+            {<<"userDomainName">>, #swift_helper_credentials.user_domain_name},
+            {<<"projectDomainName">>, #swift_helper_credentials.project_domain_name}
         ])
     ),
 
@@ -197,14 +197,14 @@ get_block_size(#helper_config{args = Args}) ->
     end.
 
 
--spec redact_confidential_credentials(#swift_credentials{}) -> #swift_credentials{}.
+-spec redact_confidential_credentials(#swift_helper_credentials{}) -> #swift_helper_credentials{}.
 redact_confidential_credentials(Credentials) ->
-    helper_config_utils:redact_record_fields_if_defined(Credentials, [#swift_credentials.password]).
+    helper_config_utils:redact_record_fields_if_defined(Credentials, [#swift_helper_credentials.password]).
 
 
--spec redact_confidential_credentials_diff(#swift_credentials_diff{}) -> #swift_credentials_diff{}.
+-spec redact_confidential_credentials_diff(#swift_helper_credentials_diff{}) -> #swift_helper_credentials_diff{}.
 redact_confidential_credentials_diff(CredentialsDiff) ->
-    helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [#swift_credentials_diff.password]).
+    helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [#swift_helper_credentials_diff.password]).
 
 
 %%%===================================================================
@@ -216,7 +216,7 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    configuration = #swift_configuration{
+    configuration = #swift_helper_configuration{
         auth_url = AuthUrl,
         container_name = ContainerName,
         block_size = BlockSize,
@@ -235,8 +235,8 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_admin_ctx(#swift_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#swift_credentials{
+-spec build_admin_ctx(#swift_helper_credentials{}) -> helper_config:user_ctx().
+build_admin_ctx(#swift_helper_credentials{
     username = Username,
     password = Password,
     project_name = ProjectName,

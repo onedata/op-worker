@@ -103,7 +103,7 @@ sanitize_onedata_group(OnedataGroupMap) ->
 storage_credentials_custom_constraint(HelperName) ->
     fun(StorageCredentials) ->
         % TODO VFS-6312 delete this case after using middleware_sanitizer in
-        % helper_params:validate_user_ctx as it does not check
+        % helper_config:validate_user_ctx as it does not check
         % whether uid is non negative integer
         case helper_config:is_posix_compatible(HelperName) of
             true ->

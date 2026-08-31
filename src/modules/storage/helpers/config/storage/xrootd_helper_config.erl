@@ -70,11 +70,11 @@ validate_user_ctx(UserCtx) ->
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
 build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
     build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
-        configuration = #xrootd_configuration_diff{}
+        configuration = #xrootd_helper_configuration_diff{}
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    configuration = #xrootd_configuration_diff{
+    configuration = #xrootd_helper_configuration_diff{
         url = Url,
         file_mode_mask = FileModeMask,
         dir_mode_mask = DirModeMask
@@ -93,7 +93,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
 build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
     #{};
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #xrootd_credentials_diff{
+    credentials = #xrootd_helper_credentials_diff{
         credentials_type = CredentialsType,
         credentials = Credentials
     }
@@ -111,24 +111,24 @@ describe(#helper_config{
     admin_ctx = AdminCtx
 }) ->
     %% Reconstruct configuration record from args map
-    BaseConfiguration = #xrootd_configuration{
+    BaseConfiguration = #xrootd_helper_configuration{
         url = maps:get(<<"url">>, Args),
         storage_path_type = helper_config_utils:storage_path_type_from_binary(
             maps:get(<<"storagePathType">>, Args)
         )
     },
     Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
-        {<<"fileModeMask">>, #xrootd_configuration.file_mode_mask},
-        {<<"dirModeMask">>, #xrootd_configuration.dir_mode_mask}
+        {<<"fileModeMask">>, #xrootd_helper_configuration.file_mode_mask},
+        {<<"dirModeMask">>, #xrootd_helper_configuration.dir_mode_mask}
     ]),
 
     %% Reconstruct credentials record from admin_ctx (with redaction for security)
-    BaseCredentials = #xrootd_credentials{
+    BaseCredentials = #xrootd_helper_credentials{
         credentials_type = credentials_type_from_binary(maps:get(<<"credentialsType">>, AdminCtx))
     },
     Credentials = redact_confidential_credentials(
         helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-            {<<"credentials">>, #xrootd_credentials.credentials}
+            {<<"credentials">>, #xrootd_helper_credentials.credentials}
         ])
     ),
 
@@ -187,17 +187,17 @@ get_block_size(#helper_config{}) ->
     undefined.
 
 
--spec redact_confidential_credentials(#xrootd_credentials{}) -> #xrootd_credentials{}.
+-spec redact_confidential_credentials(#xrootd_helper_credentials{}) -> #xrootd_helper_credentials{}.
 redact_confidential_credentials(Credentials) ->
     helper_config_utils:redact_record_fields_if_defined(Credentials, [
-        #xrootd_credentials.credentials
+        #xrootd_helper_credentials.credentials
     ]).
 
 
--spec redact_confidential_credentials_diff(#xrootd_credentials_diff{}) -> #xrootd_credentials_diff{}.
+-spec redact_confidential_credentials_diff(#xrootd_helper_credentials_diff{}) -> #xrootd_helper_credentials_diff{}.
 redact_confidential_credentials_diff(CredentialsDiff) ->
     helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [
-        #xrootd_credentials_diff.credentials
+        #xrootd_helper_credentials_diff.credentials
     ]).
 
 
@@ -210,7 +210,7 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    configuration = #xrootd_configuration{
+    configuration = #xrootd_helper_configuration{
         url = Url,
         file_mode_mask = FileModeMask,
         dir_mode_mask = DirModeMask,
@@ -229,8 +229,8 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_admin_ctx(#xrootd_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#xrootd_credentials{
+-spec build_admin_ctx(#xrootd_helper_credentials{}) -> helper_config:user_ctx().
+build_admin_ctx(#xrootd_helper_credentials{
     credentials_type = CredentialsType,
     credentials = Credentials
 }) ->

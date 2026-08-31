@@ -147,7 +147,7 @@ stream_store_content(Req1, State) ->
 
     Req3 = cowboy_req:stream_reply(
         ?HTTP_200_OK,
-        #{?HDR_CONTENT_TYPE => <<"application/json">>},
+        #{},
         Req2
     ),
     cowboy_req:stream_body(<<"[">>, nofin, Req3),
@@ -161,7 +161,7 @@ stream_store_content(Req1, State) ->
 -spec set_response_headers(cowboy_req:req(), binary()) -> cowboy_req:req().
 set_response_headers(Req1, FileName) ->
     Req2 = http_download_utils:allow_onezone_as_frame_ancestor(Req1),
-    http_download_utils:set_content_disposition_header(Req2, FileName).
+    http_download_utils:set_file_download_headers(Req2, FileName).
 
 
 %% @private

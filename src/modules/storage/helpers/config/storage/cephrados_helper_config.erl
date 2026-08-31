@@ -66,11 +66,11 @@ validate_user_ctx(UserCtx) ->
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
 build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
     build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
-        configuration = #cephrados_configuration_diff{}
+        configuration = #cephrados_helper_configuration_diff{}
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    configuration = #cephrados_configuration_diff{
+    configuration = #cephrados_helper_configuration_diff{
         monitor_hostname = MonitorHostname,
         cluster_name = ClusterName,
         pool_name = PoolName
@@ -89,7 +89,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
 build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
     #{};
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #cephrados_credentials_diff{
+    credentials = #cephrados_helper_credentials_diff{
         username = Username,
         key = Key
     }
@@ -107,7 +107,7 @@ describe(#helper_config{
     admin_ctx = AdminCtx
 }) ->
     %% Reconstruct configuration record from args map
-    BaseConfiguration = #cephrados_configuration{
+    BaseConfiguration = #cephrados_helper_configuration{
         monitor_hostname = maps:get(<<"monitorHostname">>, Args),
         cluster_name = maps:get(<<"clusterName">>, Args),
         pool_name = maps:get(<<"poolName">>, Args),
@@ -116,11 +116,11 @@ describe(#helper_config{
         )
     },
     Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
-        {<<"blockSize">>, #cephrados_configuration.block_size, fun binary_to_integer/1}
+        {<<"blockSize">>, #cephrados_helper_configuration.block_size, fun binary_to_integer/1}
     ]),
 
     %% Reconstruct credentials record from admin_ctx
-    Credentials = redact_confidential_credentials(#cephrados_credentials{
+    Credentials = redact_confidential_credentials(#cephrados_helper_credentials{
         username = maps:get(<<"username">>, AdminCtx),
         key = maps:get(<<"key">>, AdminCtx)
     }),
@@ -192,7 +192,7 @@ get_block_size(#helper_config{args = Args}) ->
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    configuration = #cephrados_configuration{
+    configuration = #cephrados_helper_configuration{
         monitor_hostname = MonitorHostname,
         cluster_name = ClusterName,
         pool_name = PoolName,
@@ -213,8 +213,8 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_admin_ctx(#cephrados_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#cephrados_credentials{
+-spec build_admin_ctx(#cephrados_helper_credentials{}) -> helper_config:user_ctx().
+build_admin_ctx(#cephrados_helper_credentials{
     username = Username,
     key = Key
 }) ->
@@ -230,13 +230,13 @@ block_size_equals_0(HelperConfig) ->
     get_block_size(HelperConfig) =:= 0.
 
 
--spec redact_confidential_credentials(#cephrados_credentials{}) -> #cephrados_credentials{}.
-redact_confidential_credentials(Credentials = #cephrados_credentials{}) ->
-    helper_config_utils:redact_record_fields_if_defined(Credentials, [#cephrados_credentials.key]).
+-spec redact_confidential_credentials(#cephrados_helper_credentials{}) -> #cephrados_helper_credentials{}.
+redact_confidential_credentials(Credentials = #cephrados_helper_credentials{}) ->
+    helper_config_utils:redact_record_fields_if_defined(Credentials, [#cephrados_helper_credentials.key]).
 
 
--spec redact_confidential_credentials_diff(#cephrados_credentials_diff{}) -> #cephrados_credentials_diff{}.
-redact_confidential_credentials_diff(CredentialsDiff = #cephrados_credentials_diff{}) ->
+-spec redact_confidential_credentials_diff(#cephrados_helper_credentials_diff{}) -> #cephrados_helper_credentials_diff{}.
+redact_confidential_credentials_diff(CredentialsDiff = #cephrados_helper_credentials_diff{}) ->
     helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [
-        #cephrados_credentials_diff.key
+        #cephrados_helper_credentials_diff.key
     ]).

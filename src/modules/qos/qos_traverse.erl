@@ -23,6 +23,7 @@
 -include("modules/datastore/qos.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("tree_traverse.hrl").
+-include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -179,8 +180,11 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx} = Job, TaskId) ->
 -spec flush_stats(od_space:id(), transfer_id(), #{od_provider:id() => non_neg_integer()}) ->
     ok | {error, term()}.
 flush_stats(SpaceId, TransferId, BytesPerProvider) ->
+    ok = space_transfer_stats:update_with_cache(
+        ?QOS_TRANSFERS_TYPE, SpaceId, BytesPerProvider
+    ),
     case transfer_id_to_file_uuid(TransferId) of
-        {ok, FileUuid} ->       
+        {ok, FileUuid} -> 
             QosEntries = get_file_local_qos_entries(SpaceId, FileUuid),
             BytesPerStorage = maps:fold(fun(ProviderId, Value, AccMap) ->
                 {ok, StoragesMap} = space_logic:get_provider_storages(SpaceId, ProviderId),
@@ -360,8 +364,14 @@ report_file_synchronized_for_entries(QosEntries, FileCtx) ->
 -spec report_file_failed_for_entries([qos_entry:id()], file_ctx:ctx(), {error, term()}) -> ok.
 report_file_failed_for_entries(QosEntries, FileCtx, Error) ->
     ok = qos_status:report_file_transfer_failure(FileCtx, QosEntries),
+    FinalError = case errors:is_known_error(Error) of
+        true -> 
+            Error;
+        false ->
+            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), str_utils:format("~tp", [Error]))
+    end,
     report_to_audit_log(
-        QosEntries, FileCtx, [Error], fun qos_entry_audit_log:report_file_synchronization_failed/4).
+        QosEntries, FileCtx, [FinalError], fun qos_entry_audit_log:report_file_synchronization_failed/4).
 
 
 %% @private

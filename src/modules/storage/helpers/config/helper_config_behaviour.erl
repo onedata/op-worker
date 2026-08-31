@@ -104,8 +104,8 @@
 %% Used before logging or displaying credentials.
 %% @end
 %%--------------------------------------------------------------------
--callback redact_confidential_credentials(onedata_storage:credentials()) ->
-    onedata_storage:credentials().
+-callback redact_confidential_credentials(onedata_storage:helper_credentials()) ->
+    onedata_storage:helper_credentials().
 
 
 %%--------------------------------------------------------------------
@@ -114,5 +114,5 @@
 %% Used before logging or displaying credentials diff.
 %% @end
 %%--------------------------------------------------------------------
--callback redact_confidential_credentials_diff(onedata_storage:credentials_diff()) ->
-    onedata_storage:credentials_diff().
+-callback redact_confidential_credentials_diff(onedata_storage:helper_credentials_diff()) ->
+    onedata_storage:helper_credentials_diff().

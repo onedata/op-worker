@@ -1,8 +1,32 @@
-Release notes for project op-worker
-===================================
+# Release notes for project op-worker
 
-CHANGELOG
----------
+## CHANGELOG
+
+### 25.1
+
+-   **VFS-13456** Web GUI: Changed Europeana materials URLs scheme from
+    "https" to "http" to satisfy the standard.
+-   **VFS-13424** Web GUI: Added Quality of Service statistics to the
+    transfers chart.
+-   **VFS-13422** Web GUI: Selecting the filename without an extension
+    in the rename modal.
+-   **VFS-13374** Web GUI: Added option to ignore Europeana metadata
+    validation errors before submit.
+-   **VFS-13307** Implemented an improved process pool for handling
+    GraphSync requests. Now, a single client can't flood the Onezone
+    server with requests, as it can occupy only some of the pool.
+-   **VFS-13294** Web GUI: Fixed file download modal not working
+    randomly not working when using the download URL.
+-   **VFS-13176** Web GUI: Added replacing file data feature, which
+    allows to upload new content to the existing file (overriding the
+    current data), keeping the File ID and its path unchanged.
+-   **VFS-13143** Web GUI: Remembering the last visited tab and
+    directory in share's URL.
+-   **VFS-12760** Optimized the performance of shares and public data
+    records in spaces with a low number of items.
+-   **VFS-12441** Web GUI: Added more material types and collapsible
+    categories in the selector of the EDM Open Data metadata visual
+    editor.
 
 ### 25.0
 

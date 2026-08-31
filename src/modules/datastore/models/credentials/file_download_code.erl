@@ -28,6 +28,12 @@
 
 %% API
 -export([create/1, verify/1, remove/1]).
+-export([
+    mark_started/1,
+    mark_failed/2,
+    reset_streaming_status/1,
+    get_streaming_status/1
+]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -35,8 +41,22 @@
 -type code() :: binary().
 -type record() :: #file_download_code{}.
 -type doc() :: datastore_doc:doc(record()).
+-type streaming_status() ::
+    %% @doc
+    %% Status describing the state of the file download stream.
+    %%
+    %% * 'unknown' - Status after upgrade: should disappear after 24 hours post-upgrade.
+    %% * 'pending' - A newly created download_code, download has not started yet.
+    %% * 'started' - The browser has started the download (the first chunk has been sent).
+    %%       In terms of the GUI, this means polling can stop - any errors at this point
+    %%       will be shown by the browser itself.
+    %% * {failed, ErrorJson} - The download has failed (ErrorJson details the reason).
+    unknown
+    | pending
+    | started
+    | {failed, ErrorJson :: json_utils:json_map()}.
 
--export_type([code/0, record/0, doc/0]).
+-export_type([code/0, record/0, doc/0, streaming_status/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -98,6 +118,38 @@ remove(Code) ->
     ok = datastore_model:delete(?CTX, Code).
 
 
+-spec mark_started(code()) -> ok | {error, term()}.
+mark_started(Code) ->
+    update_streaming_status(Code, started).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% NOTE: Error is converted to its JSON representation at the boundary, so the model
+%% never stores an Erlang `errors:error()` tuple. The stored value is exactly
+%% what the GUI will receive.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_failed(code(), errors:error()) -> ok | {error, term()}.
+mark_failed(Code, Error) ->
+    update_streaming_status(Code, {failed, errors:to_json(Error)}).
+
+
+-spec reset_streaming_status(code()) -> ok | {error, term()}.
+reset_streaming_status(Code) ->
+    update_streaming_status(Code, pending).
+
+
+-spec get_streaming_status(code()) -> {ok, streaming_status()} | {error, term()}.
+get_streaming_status(Code) ->
+    case datastore_model:get(?CTX, Code) of
+        {ok, #document{value = #file_download_code{streaming_status = Status}}} ->
+            {ok, Status};
+        {error, _} = Error ->
+            Error
+    end.
+
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -120,7 +172,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 
 %%--------------------------------------------------------------------
@@ -153,6 +205,12 @@ get_record_struct(4) ->
     {record, [
         {expires, integer},
         {download_args, {custom, string, {persistent_record, to_string, from_string, download_args}}}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        {expires, integer},
+        {download_args, {custom, string, {persistent_record, to_string, from_string, download_args}}},
+        {streaming_status, term}  % new field
     ]}.
 
 
@@ -204,4 +262,24 @@ upgrade_record(3, Record) ->
         file_guids = FileGuids,
         follow_symlinks = FollowSymlinks
     },
-    {4, {file_download_code, Expires, DownloadArgs}}.
+    {4, {file_download_code, Expires, DownloadArgs}};
+upgrade_record(4, Record) ->
+    {file_download_code, Expires, DownloadArgs} = Record,
+
+    %% Pre-existing records date back to before streaming-status tracking, so we
+    %% mark them `unknown`. GUI treats `unknown` as a stop-polling signal,
+    %% identical to `started`. Within 24h all legacy records expire naturally.
+    {5, {file_download_code, Expires, DownloadArgs, unknown}}.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec update_streaming_status(code(), streaming_status()) -> ok | {error, term()}.
+update_streaming_status(Code, NewStatus) ->
+    ?ok_if_not_found(?extract_ok(datastore_model:update(?CTX, Code, fun(Record) ->
+        {ok, Record#file_download_code{streaming_status = NewStatus}}
+    end))).

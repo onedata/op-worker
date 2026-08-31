@@ -151,224 +151,224 @@ get_record_def(luma_spec, N) ->
         N -> record_info(fields, luma_spec);
         _ -> no
     end;
-get_record_def(ceph_credentials, N) ->
-    case record_info(size, ceph_credentials) - 1 of
-        N -> record_info(fields, ceph_credentials);
+get_record_def(ceph_helper_credentials, N) ->
+    case record_info(size, ceph_helper_credentials) - 1 of
+        N -> record_info(fields, ceph_helper_credentials);
         _ -> no
     end;
-get_record_def(ceph_credentials_diff, N) ->
-    case record_info(size, ceph_credentials_diff) - 1 of
-        N -> record_info(fields, ceph_credentials_diff);
+get_record_def(ceph_helper_credentials_diff, N) ->
+    case record_info(size, ceph_helper_credentials_diff) - 1 of
+        N -> record_info(fields, ceph_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(ceph_configuration, N) ->
-    case record_info(size, ceph_configuration) - 1 of
-        N -> record_info(fields, ceph_configuration);
+get_record_def(ceph_helper_configuration, N) ->
+    case record_info(size, ceph_helper_configuration) - 1 of
+        N -> record_info(fields, ceph_helper_configuration);
         _ -> no
     end;
-get_record_def(ceph_configuration_diff, N) ->
-    case record_info(size, ceph_configuration_diff) - 1 of
-        N -> record_info(fields, ceph_configuration_diff);
+get_record_def(ceph_helper_configuration_diff, N) ->
+    case record_info(size, ceph_helper_configuration_diff) - 1 of
+        N -> record_info(fields, ceph_helper_configuration_diff);
         _ -> no
     end;
-get_record_def(cephrados_credentials, N) ->
-    case record_info(size, cephrados_credentials) - 1 of
-        N -> record_info(fields, cephrados_credentials);
+get_record_def(cephrados_helper_credentials, N) ->
+    case record_info(size, cephrados_helper_credentials) - 1 of
+        N -> record_info(fields, cephrados_helper_credentials);
         _ -> no
     end;
-get_record_def(cephrados_credentials_diff, N) ->
-    case record_info(size, cephrados_credentials_diff) - 1 of
-        N -> record_info(fields, cephrados_credentials_diff);
+get_record_def(cephrados_helper_credentials_diff, N) ->
+    case record_info(size, cephrados_helper_credentials_diff) - 1 of
+        N -> record_info(fields, cephrados_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(cephrados_configuration, N) ->
-    case record_info(size, cephrados_configuration) - 1 of
-        N -> record_info(fields, cephrados_configuration);
+get_record_def(cephrados_helper_configuration, N) ->
+    case record_info(size, cephrados_helper_configuration) - 1 of
+        N -> record_info(fields, cephrados_helper_configuration);
         _ -> no
     end;
-get_record_def(cephrados_configuration_diff, N) ->
-    case record_info(size, cephrados_configuration_diff) - 1 of
-        N -> record_info(fields, cephrados_configuration_diff);
+get_record_def(cephrados_helper_configuration_diff, N) ->
+    case record_info(size, cephrados_helper_configuration_diff) - 1 of
+        N -> record_info(fields, cephrados_helper_configuration_diff);
         _ -> no
     end;
-get_record_def(glusterfs_credentials, N) ->
-    case record_info(size, glusterfs_credentials) - 1 of
-        N -> record_info(fields, glusterfs_credentials);
+get_record_def(glusterfs_helper_credentials, N) ->
+    case record_info(size, glusterfs_helper_credentials) - 1 of
+        N -> record_info(fields, glusterfs_helper_credentials);
         _ -> no
     end;
-get_record_def(glusterfs_credentials_diff, N) ->
-    case record_info(size, glusterfs_credentials_diff) - 1 of
-        N -> record_info(fields, glusterfs_credentials_diff);
+get_record_def(glusterfs_helper_credentials_diff, N) ->
+    case record_info(size, glusterfs_helper_credentials_diff) - 1 of
+        N -> record_info(fields, glusterfs_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(glusterfs_configuration, N) ->
-    case record_info(size, glusterfs_configuration) - 1 of
-        N -> record_info(fields, glusterfs_configuration);
+get_record_def(glusterfs_helper_configuration, N) ->
+    case record_info(size, glusterfs_helper_configuration) - 1 of
+        N -> record_info(fields, glusterfs_helper_configuration);
         _ -> no
     end;
-get_record_def(glusterfs_configuration_diff, N) ->
-    case record_info(size, glusterfs_configuration_diff) - 1 of
-        N -> record_info(fields, glusterfs_configuration_diff);
+get_record_def(glusterfs_helper_configuration_diff, N) ->
+    case record_info(size, glusterfs_helper_configuration_diff) - 1 of
+        N -> record_info(fields, glusterfs_helper_configuration_diff);
         _ -> no
     end;
-get_record_def(http_credentials, N) ->
-    case record_info(size, http_credentials) - 1 of
-        N -> record_info(fields, http_credentials);
+get_record_def(http_helper_credentials, N) ->
+    case record_info(size, http_helper_credentials) - 1 of
+        N -> record_info(fields, http_helper_credentials);
         _ -> no
     end;
-get_record_def(http_credentials_diff, N) ->
-    case record_info(size, http_credentials_diff) - 1 of
-        N -> record_info(fields, http_credentials_diff);
+get_record_def(http_helper_credentials_diff, N) ->
+    case record_info(size, http_helper_credentials_diff) - 1 of
+        N -> record_info(fields, http_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(http_configuration, N) ->
-    case record_info(size, http_configuration) - 1 of
-        N -> record_info(fields, http_configuration);
+get_record_def(http_helper_configuration, N) ->
+    case record_info(size, http_helper_configuration) - 1 of
+        N -> record_info(fields, http_helper_configuration);
         _ -> no
     end;
-get_record_def(http_configuration_diff, N) ->
-    case record_info(size, http_configuration_diff) - 1 of
-        N -> record_info(fields, http_configuration_diff);
+get_record_def(http_helper_configuration_diff, N) ->
+    case record_info(size, http_helper_configuration_diff) - 1 of
+        N -> record_info(fields, http_helper_configuration_diff);
         _ -> no
     end;
-get_record_def(nfs_credentials, N) ->
-    case record_info(size, nfs_credentials) - 1 of
-        N -> record_info(fields, nfs_credentials);
+get_record_def(nfs_helper_credentials, N) ->
+    case record_info(size, nfs_helper_credentials) - 1 of
+        N -> record_info(fields, nfs_helper_credentials);
         _ -> no
     end;
-get_record_def(nfs_credentials_diff, N) ->
-    case record_info(size, nfs_credentials_diff) - 1 of
-        N -> record_info(fields, nfs_credentials_diff);
+get_record_def(nfs_helper_credentials_diff, N) ->
+    case record_info(size, nfs_helper_credentials_diff) - 1 of
+        N -> record_info(fields, nfs_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(nfs_configuration, N) ->
-    case record_info(size, nfs_configuration) - 1 of
-        N -> record_info(fields, nfs_configuration);
+get_record_def(nfs_helper_configuration, N) ->
+    case record_info(size, nfs_helper_configuration) - 1 of
+        N -> record_info(fields, nfs_helper_configuration);
         _ -> no
     end;
-get_record_def(nfs_configuration_diff, N) ->
-    case record_info(size, nfs_configuration_diff) - 1 of
-        N -> record_info(fields, nfs_configuration_diff);
+get_record_def(nfs_helper_configuration_diff, N) ->
+    case record_info(size, nfs_helper_configuration_diff) - 1 of
+        N -> record_info(fields, nfs_helper_configuration_diff);
         _ -> no
     end;
-get_record_def(nulldevice_credentials, N) ->
-    case record_info(size, nulldevice_credentials) - 1 of
-        N -> record_info(fields, nulldevice_credentials);
+get_record_def(nulldevice_helper_credentials, N) ->
+    case record_info(size, nulldevice_helper_credentials) - 1 of
+        N -> record_info(fields, nulldevice_helper_credentials);
         _ -> no
     end;
-get_record_def(nulldevice_credentials_diff, N) ->
-    case record_info(size, nulldevice_credentials_diff) - 1 of
-        N -> record_info(fields, nulldevice_credentials_diff);
+get_record_def(nulldevice_helper_credentials_diff, N) ->
+    case record_info(size, nulldevice_helper_credentials_diff) - 1 of
+        N -> record_info(fields, nulldevice_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(nulldevice_configuration, N) ->
-    case record_info(size, nulldevice_configuration) - 1 of
-        N -> record_info(fields, nulldevice_configuration);
+get_record_def(nulldevice_helper_configuration, N) ->
+    case record_info(size, nulldevice_helper_configuration) - 1 of
+        N -> record_info(fields, nulldevice_helper_configuration);
         _ -> no
     end;
-get_record_def(nulldevice_configuration_diff, N) ->
-    case record_info(size, nulldevice_configuration_diff) - 1 of
-        N -> record_info(fields, nulldevice_configuration_diff);
+get_record_def(nulldevice_helper_configuration_diff, N) ->
+    case record_info(size, nulldevice_helper_configuration_diff) - 1 of
+        N -> record_info(fields, nulldevice_helper_configuration_diff);
         _ -> no
     end;
-get_record_def(posix_credentials, N) ->
-    case record_info(size, posix_credentials) - 1 of
-        N -> record_info(fields, posix_credentials);
+get_record_def(posix_helper_credentials, N) ->
+    case record_info(size, posix_helper_credentials) - 1 of
+        N -> record_info(fields, posix_helper_credentials);
         _ -> no
     end;
-get_record_def(posix_credentials_diff, N) ->
-    case record_info(size, posix_credentials_diff) - 1 of
-        N -> record_info(fields, posix_credentials_diff);
+get_record_def(posix_helper_credentials_diff, N) ->
+    case record_info(size, posix_helper_credentials_diff) - 1 of
+        N -> record_info(fields, posix_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(posix_configuration, N) ->
-    case record_info(size, posix_configuration) - 1 of
-        N -> record_info(fields, posix_configuration);
+get_record_def(posix_helper_configuration, N) ->
+    case record_info(size, posix_helper_configuration) - 1 of
+        N -> record_info(fields, posix_helper_configuration);
         _ -> no
     end;
-get_record_def(posix_configuration_diff, N) ->
-    case record_info(size, posix_configuration_diff) - 1 of
-        N -> record_info(fields, posix_configuration_diff);
+get_record_def(posix_helper_configuration_diff, N) ->
+    case record_info(size, posix_helper_configuration_diff) - 1 of
+        N -> record_info(fields, posix_helper_configuration_diff);
         _ -> no
     end;
-get_record_def(s3_credentials, N) ->
-    case record_info(size, s3_credentials) - 1 of
-        N -> record_info(fields, s3_credentials);
+get_record_def(s3_helper_credentials, N) ->
+    case record_info(size, s3_helper_credentials) - 1 of
+        N -> record_info(fields, s3_helper_credentials);
         _ -> no
     end;
-get_record_def(s3_credentials_diff, N) ->
-    case record_info(size, s3_credentials_diff) - 1 of
-        N -> record_info(fields, s3_credentials_diff);
+get_record_def(s3_helper_credentials_diff, N) ->
+    case record_info(size, s3_helper_credentials_diff) - 1 of
+        N -> record_info(fields, s3_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(s3_configuration, N) ->
-    case record_info(size, s3_configuration) - 1 of
-        N -> record_info(fields, s3_configuration);
+get_record_def(s3_helper_configuration, N) ->
+    case record_info(size, s3_helper_configuration) - 1 of
+        N -> record_info(fields, s3_helper_configuration);
         _ -> no
     end;
-get_record_def(s3_configuration_diff, N) ->
-    case record_info(size, s3_configuration_diff) - 1 of
-        N -> record_info(fields, s3_configuration_diff);
+get_record_def(s3_helper_configuration_diff, N) ->
+    case record_info(size, s3_helper_configuration_diff) - 1 of
+        N -> record_info(fields, s3_helper_configuration_diff);
         _ -> no
     end;
-get_record_def(swift_credentials, N) ->
-    case record_info(size, swift_credentials) - 1 of
-        N -> record_info(fields, swift_credentials);
+get_record_def(swift_helper_credentials, N) ->
+    case record_info(size, swift_helper_credentials) - 1 of
+        N -> record_info(fields, swift_helper_credentials);
         _ -> no
     end;
-get_record_def(swift_credentials_diff, N) ->
-    case record_info(size, swift_credentials_diff) - 1 of
-        N -> record_info(fields, swift_credentials_diff);
+get_record_def(swift_helper_credentials_diff, N) ->
+    case record_info(size, swift_helper_credentials_diff) - 1 of
+        N -> record_info(fields, swift_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(swift_configuration, N) ->
-    case record_info(size, swift_configuration) - 1 of
-        N -> record_info(fields, swift_configuration);
+get_record_def(swift_helper_configuration, N) ->
+    case record_info(size, swift_helper_configuration) - 1 of
+        N -> record_info(fields, swift_helper_configuration);
         _ -> no
     end;
-get_record_def(swift_configuration_diff, N) ->
-    case record_info(size, swift_configuration_diff) - 1 of
-        N -> record_info(fields, swift_configuration_diff);
+get_record_def(swift_helper_configuration_diff, N) ->
+    case record_info(size, swift_helper_configuration_diff) - 1 of
+        N -> record_info(fields, swift_helper_configuration_diff);
         _ -> no
     end;
-get_record_def(webdav_credentials, N) ->
-    case record_info(size, webdav_credentials) - 1 of
-        N -> record_info(fields, webdav_credentials);
+get_record_def(webdav_helper_credentials, N) ->
+    case record_info(size, webdav_helper_credentials) - 1 of
+        N -> record_info(fields, webdav_helper_credentials);
         _ -> no
     end;
-get_record_def(webdav_credentials_diff, N) ->
-    case record_info(size, webdav_credentials_diff) - 1 of
-        N -> record_info(fields, webdav_credentials_diff);
+get_record_def(webdav_helper_credentials_diff, N) ->
+    case record_info(size, webdav_helper_credentials_diff) - 1 of
+        N -> record_info(fields, webdav_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(webdav_configuration, N) ->
-    case record_info(size, webdav_configuration) - 1 of
-        N -> record_info(fields, webdav_configuration);
+get_record_def(webdav_helper_configuration, N) ->
+    case record_info(size, webdav_helper_configuration) - 1 of
+        N -> record_info(fields, webdav_helper_configuration);
         _ -> no
     end;
-get_record_def(webdav_configuration_diff, N) ->
-    case record_info(size, webdav_configuration_diff) - 1 of
-        N -> record_info(fields, webdav_configuration_diff);
+get_record_def(webdav_helper_configuration_diff, N) ->
+    case record_info(size, webdav_helper_configuration_diff) - 1 of
+        N -> record_info(fields, webdav_helper_configuration_diff);
         _ -> no
     end;
-get_record_def(xrootd_credentials, N) ->
-    case record_info(size, xrootd_credentials) - 1 of
-        N -> record_info(fields, xrootd_credentials);
+get_record_def(xrootd_helper_credentials, N) ->
+    case record_info(size, xrootd_helper_credentials) - 1 of
+        N -> record_info(fields, xrootd_helper_credentials);
         _ -> no
     end;
-get_record_def(xrootd_credentials_diff, N) ->
-    case record_info(size, xrootd_credentials_diff) - 1 of
-        N -> record_info(fields, xrootd_credentials_diff);
+get_record_def(xrootd_helper_credentials_diff, N) ->
+    case record_info(size, xrootd_helper_credentials_diff) - 1 of
+        N -> record_info(fields, xrootd_helper_credentials_diff);
         _ -> no
     end;
-get_record_def(xrootd_configuration, N) ->
-    case record_info(size, xrootd_configuration) - 1 of
-        N -> record_info(fields, xrootd_configuration);
+get_record_def(xrootd_helper_configuration, N) ->
+    case record_info(size, xrootd_helper_configuration) - 1 of
+        N -> record_info(fields, xrootd_helper_configuration);
         _ -> no
     end;
-get_record_def(xrootd_configuration_diff, N) ->
-    case record_info(size, xrootd_configuration_diff) - 1 of
-        N -> record_info(fields, xrootd_configuration_diff);
+get_record_def(xrootd_helper_configuration_diff, N) ->
+    case record_info(size, xrootd_helper_configuration_diff) - 1 of
+        N -> record_info(fields, xrootd_helper_configuration_diff);
         _ -> no
     end;
 get_record_def(_, _) ->

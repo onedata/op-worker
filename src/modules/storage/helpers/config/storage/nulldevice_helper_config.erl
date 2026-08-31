@@ -65,11 +65,11 @@ validate_user_ctx(UserCtx) ->
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
 build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
     build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
-        configuration = #nulldevice_configuration_diff{}
+        configuration = #nulldevice_helper_configuration_diff{}
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    configuration = #nulldevice_configuration_diff{
+    configuration = #nulldevice_helper_configuration_diff{
         latency_min = LatencyMin,
         latency_max = LatencyMax,
         timeout_probability = TimeoutProbability,
@@ -96,7 +96,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
 build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
     #{};
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #nulldevice_credentials_diff{
+    credentials = #nulldevice_helper_credentials_diff{
         uid = Uid,
         gid = Gid
     }
@@ -114,28 +114,28 @@ describe(#helper_config{
     admin_ctx = AdminCtx
 }) ->
     %% Reconstruct configuration record from args map
-    BaseConfiguration = #nulldevice_configuration{
+    BaseConfiguration = #nulldevice_helper_configuration{
         storage_path_type = helper_config_utils:storage_path_type_from_binary(
             maps:get(<<"storagePathType">>, Args)
         )
     },
     Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
-        {<<"latencyMin">>, #nulldevice_configuration.latency_min, fun binary_to_integer/1},
-        {<<"latencyMax">>, #nulldevice_configuration.latency_max, fun binary_to_integer/1},
-        {<<"timeoutProbability">>, #nulldevice_configuration.timeout_probability, fun binary_to_float/1},
-        {<<"filter">>, #nulldevice_configuration.filter},
-        {<<"simulatedFilesystemParameters">>, #nulldevice_configuration.simulated_filesystem_parameters},
-        {<<"simulatedFilesystemGrowSpeed">>, #nulldevice_configuration.simulated_filesystem_grow_speed, fun binary_to_float/1},
-        {<<"enableDataVerification">>, #nulldevice_configuration.enable_data_verification, fun utils:to_boolean/1}
+        {<<"latencyMin">>, #nulldevice_helper_configuration.latency_min, fun binary_to_integer/1},
+        {<<"latencyMax">>, #nulldevice_helper_configuration.latency_max, fun binary_to_integer/1},
+        {<<"timeoutProbability">>, #nulldevice_helper_configuration.timeout_probability, fun binary_to_float/1},
+        {<<"filter">>, #nulldevice_helper_configuration.filter},
+        {<<"simulatedFilesystemParameters">>, #nulldevice_helper_configuration.simulated_filesystem_parameters},
+        {<<"simulatedFilesystemGrowSpeed">>, #nulldevice_helper_configuration.simulated_filesystem_grow_speed, fun binary_to_float/1},
+        {<<"enableDataVerification">>, #nulldevice_helper_configuration.enable_data_verification, fun utils:to_boolean/1}
     ]),
 
     %% Reconstruct credentials record from admin_ctx
-    BaseCredentials = #nulldevice_credentials{
+    BaseCredentials = #nulldevice_helper_credentials{
         uid = binary_to_integer(maps:get(<<"uid">>, AdminCtx))
     },
     Credentials = redact_confidential_credentials(
         helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-            {<<"gid">>, #nulldevice_credentials.gid, fun binary_to_integer/1}
+            {<<"gid">>, #nulldevice_helper_credentials.gid, fun binary_to_integer/1}
         ])
     ),
 
@@ -194,12 +194,12 @@ get_block_size(#helper_config{}) ->
     undefined.
 
 
--spec redact_confidential_credentials(#nulldevice_credentials{}) -> #nulldevice_credentials{}.
+-spec redact_confidential_credentials(#nulldevice_helper_credentials{}) -> #nulldevice_helper_credentials{}.
 redact_confidential_credentials(Credentials) ->
     Credentials.
 
 
--spec redact_confidential_credentials_diff(#nulldevice_credentials_diff{}) -> #nulldevice_credentials_diff{}.
+-spec redact_confidential_credentials_diff(#nulldevice_helper_credentials_diff{}) -> #nulldevice_helper_credentials_diff{}.
 redact_confidential_credentials_diff(CredentialsDiff) ->
     CredentialsDiff.
 
@@ -213,7 +213,7 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    configuration = #nulldevice_configuration{
+    configuration = #nulldevice_helper_configuration{
         latency_min = LatencyMin,
         latency_max = LatencyMax,
         timeout_probability = TimeoutProbability,
@@ -240,8 +240,8 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_admin_ctx(#nulldevice_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#nulldevice_credentials{
+-spec build_admin_ctx(#nulldevice_helper_credentials{}) -> helper_config:user_ctx().
+build_admin_ctx(#nulldevice_helper_credentials{
     uid = Uid,
     gid = Gid
 }) ->

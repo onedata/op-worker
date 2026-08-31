@@ -54,7 +54,12 @@ update_job_progress(Id, Job, Pool, TransferId, Status) ->
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
-    tree_traverse:do_master_job(Job, MasterJobArgs).
+    case tree_traverse:do_master_job(Job, MasterJobArgs) of
+        {ok, Result} ->
+            {ok, maps:update_with(slave_jobs, fun(Jobs) -> lists_utils:shuffle(Jobs) end, Result)};
+        Error ->
+            Error
+    end.
 
 
 -spec do_slave_job(tree_traverse:slave_job(), transfer:id()) -> ok.

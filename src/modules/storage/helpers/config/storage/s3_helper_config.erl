@@ -66,11 +66,11 @@ validate_user_ctx(UserCtx) ->
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
 build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
     build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
-        configuration = #s3_configuration_diff{}
+        configuration = #s3_helper_configuration_diff{}
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    configuration = #s3_configuration_diff{
+    configuration = #s3_helper_configuration_diff{
         scheme = Scheme,
         hostname = Hostname,
         bucket_name = BucketName,
@@ -99,7 +99,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
 build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
     #{};
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #s3_credentials_diff{
+    credentials = #s3_helper_credentials_diff{
         access_key = AccessKey,
         secret_key = SecretKey
     }
@@ -117,7 +117,7 @@ describe(#helper_config{
     admin_ctx = AdminCtx
 }) ->
     %% Reconstruct configuration record from args map
-    BaseConfiguration = #s3_configuration{
+    BaseConfiguration = #s3_helper_configuration{
         scheme = maps:get(<<"scheme">>, Args),
         hostname = maps:get(<<"hostname">>, Args),
         bucket_name = maps:get(<<"bucketName">>, Args),
@@ -126,16 +126,16 @@ describe(#helper_config{
         )
     },
     Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
-        {<<"signatureVersion">>, #s3_configuration.signature_version, fun binary_to_integer/1},
-        {<<"verifyServerCertificate">>, #s3_configuration.verify_server_certificate, fun utils:to_boolean/1},
-        {<<"region">>, #s3_configuration.region},
-        {<<"blockSize">>, #s3_configuration.block_size, fun binary_to_integer/1},
-        {<<"fileMode">>, #s3_configuration.file_mode},
-        {<<"dirMode">>, #s3_configuration.dir_mode}
+        {<<"signatureVersion">>, #s3_helper_configuration.signature_version, fun binary_to_integer/1},
+        {<<"verifyServerCertificate">>, #s3_helper_configuration.verify_server_certificate, fun utils:to_boolean/1},
+        {<<"region">>, #s3_helper_configuration.region},
+        {<<"blockSize">>, #s3_helper_configuration.block_size, fun binary_to_integer/1},
+        {<<"fileMode">>, #s3_helper_configuration.file_mode},
+        {<<"dirMode">>, #s3_helper_configuration.dir_mode}
     ]),
 
     %% Reconstruct credentials record from admin_ctx
-    Credentials = redact_confidential_credentials(#s3_credentials{
+    Credentials = redact_confidential_credentials(#s3_helper_credentials{
         access_key = maps:get(<<"accessKey">>, AdminCtx),
         secret_key = maps:get(<<"secretKey">>, AdminCtx)
     }),
@@ -198,15 +198,15 @@ get_block_size(#helper_config{args = Args}) ->
     end.
 
 
--spec redact_confidential_credentials(#s3_credentials{}) -> #s3_credentials{}.
+-spec redact_confidential_credentials(#s3_helper_credentials{}) -> #s3_helper_credentials{}.
 redact_confidential_credentials(Credentials) ->
-    helper_config_utils:redact_record_fields_if_defined(Credentials, [#s3_credentials.secret_key]).
+    helper_config_utils:redact_record_fields_if_defined(Credentials, [#s3_helper_credentials.secret_key]).
 
 
--spec redact_confidential_credentials_diff(#s3_credentials_diff{}) -> #s3_credentials_diff{}.
+-spec redact_confidential_credentials_diff(#s3_helper_credentials_diff{}) -> #s3_helper_credentials_diff{}.
 redact_confidential_credentials_diff(CredentialsDiff) ->
     helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [
-        #s3_credentials_diff.secret_key
+        #s3_helper_credentials_diff.secret_key
     ]).
 
 
@@ -219,7 +219,7 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    configuration = #s3_configuration{
+    configuration = #s3_helper_configuration{
         scheme = Scheme,
         hostname = Hostname,
         bucket_name = BucketName,
@@ -250,8 +250,8 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_admin_ctx(#s3_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#s3_credentials{
+-spec build_admin_ctx(#s3_helper_credentials{}) -> helper_config:user_ctx().
+build_admin_ctx(#s3_helper_credentials{
     access_key = AccessKey,
     secret_key = SecretKey
 }) ->

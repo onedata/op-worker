@@ -92,6 +92,7 @@ find_direct_parent_and_sync_file(StorageFileCtx, Info) ->
 sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     SpaceDirGuid = space_dir:guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceDirGuid),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
@@ -109,7 +110,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                 false -> {false, undefined, FileName}
             end,
 
-            case map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, FileUuid) of
+            case map_to_existing_file_uuid(ParentUuid, StorageFileId, FileBaseName, FileUuid) of
                 {error, Reason} ->
                     % Link from Parent to FileBaseName is missing.
                     % We must check deletion marker to ensure that file may be synced.
@@ -175,9 +176,9 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     end.
 
 
--spec map_to_existing_file_uuid(file_meta:uuid(), file_meta:name(), file_meta:name(), file_meta:uuid() | undefined) ->
+-spec map_to_existing_file_uuid(file_meta:uuid(), helpers:file_id(), file_meta:name(), file_meta:uuid() | undefined) ->
     {ok, file_meta:uuid()} | {error, not_found | {conflicting_uuids, [file_meta:uuid()]}}.
-map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
+map_to_existing_file_uuid(ParentUuid, StorageFileId, FileBaseName, undefined) ->
     case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
         {ok, UuidsWithTreeIds} ->
             Filtered = lists:filter(fun({FileUuid, _}) ->
@@ -187,16 +188,16 @@ map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
                 case file_location:get_local(FileUuid) of
                     {ok, #document{value = #file_location{
                         storage_file_created = true,
-                        file_id = FileId
+                        file_id = LocalFileId
                     }}} ->
-                        binary:longest_common_suffix([FileId, FileName]) =:= size(FileName);
+                        LocalFileId =:= StorageFileId;
                     (_) ->
                         case dir_location:get(FileUuid) of
                             {ok, #document{value = #dir_location{
                                 storage_file_created = true,
-                                storage_file_id = FileId
+                                storage_file_id = LocalFileId
                             }}} ->
-                                binary:longest_common_suffix([FileId, FileName]) =:= size(FileName);
+                                LocalFileId =:= StorageFileId;
                             (_) ->
                                 false
                         end

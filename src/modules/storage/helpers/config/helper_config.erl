@@ -258,15 +258,15 @@ get_proxy_params(Timeout, StorageId) ->
     }.
 
 
--spec redact_confidential_credentials(t() | name(), onedata_storage:credentials()) ->
-    onedata_storage:credentials().
+-spec redact_confidential_credentials(t() | name(), onedata_storage:helper_credentials()) ->
+    onedata_storage:helper_credentials().
 redact_confidential_credentials(HelperConfigOrName, Credentials) ->
     Module = get_module(HelperConfigOrName),
     Module:redact_confidential_credentials(Credentials).
 
 
--spec redact_confidential_credentials_diff(t() | name(), onedata_storage:credentials_diff()) ->
-    onedata_storage:credentials_diff().
+-spec redact_confidential_credentials_diff(t() | name(), onedata_storage:helper_credentials_diff()) ->
+    onedata_storage:helper_credentials_diff().
 redact_confidential_credentials_diff(HelperConfigOrName, CredentialsDiff) ->
     Module = get_module(HelperConfigOrName),
     Module:redact_confidential_credentials_diff(CredentialsDiff).

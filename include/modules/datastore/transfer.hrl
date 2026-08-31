@@ -35,7 +35,10 @@
 
 -define(JOB_TRANSFERS_TYPE, <<"job">>).
 -define(ON_THE_FLY_TRANSFERS_TYPE, <<"onTheFly">>).
+-define(QOS_TRANSFERS_TYPE, <<"qos">>).
 -define(ALL_TRANSFERS_TYPE, <<"all">>).
+
+-define(TRANSFER_TYPES, [?JOB_TRANSFERS_TYPE, ?ON_THE_FLY_TRANSFERS_TYPE, ?QOS_TRANSFERS_TYPE]).
 
 % Time windows and lengths of histograms. They offer one extra, historical
 % value, as the leading one is not yet measured - this way there are always

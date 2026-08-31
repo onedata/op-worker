@@ -15,7 +15,11 @@
 
 -behaviour(persistent_record).
 
+-include("http/http_download.hrl").
 -include("modules/automation/atm_execution.hrl").
+
+%% API
+-export([get_session_id/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -30,6 +34,16 @@
     file_content_download_args:record().
 
 -export_type([type/0, record/0]).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec get_session_id(record()) -> session:id().
+get_session_id(#file_content_download_args{session_id = SessionId}) -> SessionId;
+get_session_id(#atm_store_dump_download_args{session_id = SessionId}) -> SessionId.
 
 
 %%%===================================================================

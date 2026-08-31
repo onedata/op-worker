@@ -81,7 +81,15 @@ guid(SpaceId) ->
 
 -spec ensure_exists(binary()) -> ok.
 ensure_exists(SpaceId) ->
-    case special_dir_docs:create(SpaceId, ?FILE_META_DOC(SpaceId), add_link) of
+    Result = special_dir_docs:create(SpaceId, ?FILE_META_DOC(SpaceId), no_link),
+    % The space dir's parent link lives in the shared global root dir forest, whose physical
+    % per-provider tree node is common to every space. It must therefore be scoped with the
+    % constant ?ROOT_DIR_VIRTUAL_SPACE_ID (exactly as user_root_dir does) rather than the real
+    % SpaceId; otherwise each space re-scopes the shared node and corrupts other spaces' dbsync
+    % change streams.
+    ok = special_dir_docs:ensure_parent_link(
+        ?GLOBAL_ROOT_DIR_UUID, ?ROOT_DIR_VIRTUAL_SPACE_ID, SpaceId, uuid(SpaceId)),
+    case Result of
         created -> ?info("Created space directory for space '~ts'", [SpaceId]);
         exists -> ok
     end.

@@ -88,17 +88,24 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
         optional => #{<<"truncateToZero">> => {boolean, any}}
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
-    TruncateTo0 = maps:get(<<"truncateToZero">>, SanitizedData, false),
+    TruncateToZero = maps:get(<<"truncateToZero">>, SanitizedData, false),
 
     FileRef = ?FILE_REF(FileGuid),
+
     case ?lfm_check(lfm:stat(SessionId, FileRef)) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             ?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"not a regular file">>);
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = Size, owner_id = UserId}} ->
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = Size}} ->
+            ?lfm_check(lfm:check_perms(SessionId, FileRef, write)),
+
             case Size == 0 of
-                true -> ok;
-                false when TruncateTo0 -> ?lfm_check(lfm:truncate(SessionId, FileRef, 0));
-                false -> throw(?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"file is not empty">>))
+                true ->
+                    ok;
+                false when TruncateToZero ->
+                    ?lfm_check(lfm:truncate(SessionId, FileRef, 0)),
+                    ?lfm_check(lfm:fsync(SessionId, FileRef, oneprovider:get_id()));
+                false ->
+                    throw(?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"file is not empty">>))
             end,
 
             SpaceId = file_id:guid_to_space_id(FileGuid),
@@ -108,11 +115,7 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
             ),
 
             ok = file_upload_manager:register_upload(UserId, FileGuid),
-            {ok, #{}};
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0}} ->
-            ?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"file is not owned by user">>);
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
-            ?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"file is not empty">>)
+            {ok, #{}}
     end.
 
 

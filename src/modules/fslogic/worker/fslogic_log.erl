@@ -103,9 +103,10 @@ append_to_audit_log(Request, UserId, FileCtx) ->
 %% @private
 append_to_audit_log(Request, UserId, Uuid, ShareId, FilePath) ->
     FormattedRequest = format_request(Request),
-    ok = lager:log(file_access_audit_lager_event, info, self(),
+    ok = logger:info(
         "request: ~ts; user: ~ts; file_uuid: ~ts; share_id: ~ts; path: ~ts",
-        [FormattedRequest, UserId, Uuid, ShareId, FilePath]
+        [FormattedRequest, UserId, Uuid, ShareId, FilePath],
+        #{domain => [onedata, opw, file_access]}
     ).
 
 

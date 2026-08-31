@@ -276,7 +276,8 @@
 
 -record(file_download_code, {
     expires :: time:seconds(),
-    download_args :: download_args:record()
+    download_args :: download_args:record(),
+    streaming_status = pending :: file_download_code:streaming_status()
 }).
 
 -record(offline_access_credentials, {
@@ -970,7 +971,7 @@
     % Mapping of providers to their data output and destinations
     stats_out = #{} :: #{od_provider:id() => histogram:histogram()},
     % Providers mapping to providers they recently sent data to
-    active_channels = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
+    active_channels = #{} :: #{od_provider:id() => [od_provider:id()]}
 }).
 
 %% Model used for communication between providers during
@@ -1073,6 +1074,10 @@
     % incarnation is incremented every time when status is changed to initializing ;
     % it is used to evaluate if collection is outdated (see dir_stats_collection_behaviour:acquire/1)
     incarnation = 0 :: non_neg_integer(),
+
+    % number of times the initialization traverse has been automatically restarted due to errors
+    % in the current enable cycle; reset to 0 on every fresh transition to initializing
+    initialization_retry_count = 0 :: non_neg_integer(),
 
     % information about next status transition that is expected to be executed after ongoing transition is finished
     pending_status_transition :: dir_stats_service_state:pending_status_transition(),

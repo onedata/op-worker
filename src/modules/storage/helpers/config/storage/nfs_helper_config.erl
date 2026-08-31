@@ -64,11 +64,11 @@ validate_user_ctx(UserCtx) ->
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
 build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
     build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
-        configuration = #nfs_configuration_diff{}
+        configuration = #nfs_helper_configuration_diff{}
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    configuration = #nfs_configuration_diff{
+    configuration = #nfs_helper_configuration_diff{
         version = Version,
         host = Host,
         volume = Volume,
@@ -95,7 +95,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
 build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
     #{};
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #nfs_credentials_diff{
+    credentials = #nfs_helper_credentials_diff{
         uid = Uid,
         gid = Gid
     }
@@ -113,7 +113,7 @@ describe(#helper_config{
     admin_ctx = AdminCtx
 }) ->
     %% Reconstruct configuration record from args map
-    BaseConfiguration = #nfs_configuration{
+    BaseConfiguration = #nfs_helper_configuration{
         version = binary_to_integer(maps:get(<<"version">>, Args)),
         host = maps:get(<<"host">>, Args),
         volume = maps:get(<<"volume">>, Args),
@@ -122,19 +122,19 @@ describe(#helper_config{
         )
     },
     Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
-        {<<"readAhead">>, #nfs_configuration.read_ahead, fun binary_to_integer/1},
-        {<<"dirCache">>, #nfs_configuration.dir_cache, fun utils:to_boolean/1},
-        {<<"autoReconnect">>, #nfs_configuration.auto_reconnect, fun binary_to_integer/1},
-        {<<"connectionPoolSize">>, #nfs_configuration.connection_pool_size, fun binary_to_integer/1}
+        {<<"readAhead">>, #nfs_helper_configuration.read_ahead, fun binary_to_integer/1},
+        {<<"dirCache">>, #nfs_helper_configuration.dir_cache, fun utils:to_boolean/1},
+        {<<"autoReconnect">>, #nfs_helper_configuration.auto_reconnect, fun binary_to_integer/1},
+        {<<"connectionPoolSize">>, #nfs_helper_configuration.connection_pool_size, fun binary_to_integer/1}
     ]),
 
     %% Reconstruct credentials record from admin_ctx
-    BaseCredentials = #nfs_credentials{
+    BaseCredentials = #nfs_helper_credentials{
         uid = binary_to_integer(maps:get(<<"uid">>, AdminCtx))
     },
     Credentials = redact_confidential_credentials(
         helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-            {<<"gid">>, #nfs_credentials.gid, fun binary_to_integer/1}
+            {<<"gid">>, #nfs_helper_credentials.gid, fun binary_to_integer/1}
         ]
     )),
 
@@ -193,12 +193,12 @@ get_block_size(#helper_config{}) ->
     undefined.
 
 
--spec redact_confidential_credentials(#nfs_credentials{}) -> #nfs_credentials{}.
+-spec redact_confidential_credentials(#nfs_helper_credentials{}) -> #nfs_helper_credentials{}.
 redact_confidential_credentials(Credentials) ->
     Credentials.
 
 
--spec redact_confidential_credentials_diff(#nfs_credentials_diff{}) -> #nfs_credentials_diff{}.
+-spec redact_confidential_credentials_diff(#nfs_helper_credentials_diff{}) -> #nfs_helper_credentials_diff{}.
 redact_confidential_credentials_diff(CredentialsDiff) ->
     CredentialsDiff.
 
@@ -212,7 +212,7 @@ redact_confidential_credentials_diff(CredentialsDiff) ->
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    configuration = #nfs_configuration{
+    configuration = #nfs_helper_configuration{
         version = Version,
         host = Host,
         volume = Volume,
@@ -239,8 +239,8 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_admin_ctx(#nfs_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#nfs_credentials{
+-spec build_admin_ctx(#nfs_helper_credentials{}) -> helper_config:user_ctx().
+build_admin_ctx(#nfs_helper_credentials{
     uid = Uid,
     gid = Gid
 }) ->

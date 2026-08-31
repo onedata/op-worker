@@ -44,7 +44,8 @@
     rest_download_dir_test/1,
     rest_download_dir_at_path_test/1,
 
-    sync_first_file_block_test/1
+    sync_first_file_block_test/1,
+    bulk_download_dir_retry_teardown_test/1
 ]).
 
 % Exported for performance tests
@@ -70,7 +71,8 @@ groups() -> [
         rest_download_dir_at_path_test
     ]},
     {sequential_tests, [], [
-        sync_first_file_block_test
+        sync_first_file_block_test,
+        bulk_download_dir_retry_teardown_test
     ]}
 ].
 
@@ -583,14 +585,23 @@ maybe_inject_guids(_MemRef, Data, _TestMode) ->
 
 
 %% @private
+-spec get_streaming_status(node(), binary()) ->
+    {ok, file_download_code:streaming_status()} | {error, term()}.
+get_streaming_status(DownloadNode, DownloadCode) ->
+    rpc:call(DownloadNode, file_download_code, get_streaming_status, [DownloadCode]).
+
+
+%% @private
 -spec build_get_download_url_validate_gs_call_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_get_download_url_validate_gs_call_fun(MemRef) ->
     fun(#api_test_ctx{node = DownloadNode, client = Client}, Result) ->
-        [#object{guid = Guid} | _] = FileTreeObject = api_test_memory:get(MemRef, file_tree_object),
+        [#object{guid = Guid, type = FileType} | _] = FileTreeObject = api_test_memory:get(MemRef, file_tree_object),
+        IsSingleRegFileDownload = length(FileTreeObject) == 1 andalso FileType == ?REGULAR_FILE_TYPE,
 
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
         [_, DownloadCode] = binary:split(FileDownloadUrl, [<<"/download/">>]),
+        ?assertEqual({ok, pending}, get_streaming_status(DownloadNode, DownloadCode)),
 
         DownloadFunction = case api_test_memory:get(MemRef, download_type, simulate_failures) of
             simulate_failures -> fun download_file_using_download_code_with_resumes/3;
@@ -603,10 +614,14 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                 case Client of
                     % user4 does not have access to files, so list of files to download passed 
                     % to file_content_download_utils is empty, hence it cannot be blocked for specific guid
-                    ?USER(User4Id) -> ok;
+                    ?USER(User4Id) ->
+                        ok;
                     _ ->
                         block_file_streaming(DownloadNode, Guid),
                         ?assertEqual(?ERR_POSIX(?EAGAIN), DownloadFunction(MemRef, DownloadNode, FileDownloadUrl)),
+                        IsSingleRegFileDownload andalso ?assertMatch(
+                            {ok, {failed, _}}, get_streaming_status(DownloadNode, DownloadCode)
+                        ),
                         unblock_file_streaming(DownloadNode, Guid),
                         ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory))
                 end,
@@ -1340,6 +1355,51 @@ sync_first_file_block_test(_Config) ->
     test_utils:mock_assert_num_calls(ParisNode, rtransfer_config, fetch, 6, FileBlocks).
 
 
+bulk_download_dir_retry_teardown_test(_Config) ->
+    DownloadNode = oct_background:get_random_provider_node(krakow),
+    SessionId = oct_background:get_user_session_id(user3, krakow),
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    Pool = rpc:call(DownloadNode, bulk_download_traverse, get_pool_name, []),
+
+    DirSpec = #dir_spec{mode = 8#705, children = [#file_spec{content = ?RAND_CONTENT()}]},
+    DirObjects = [#object{guid = DirGuid1} | _] =
+        onenv_file_test_utils:create_and_sync_file_tree(
+            user3, SpaceId, [DirSpec, DirSpec, DirSpec], krakow),
+    DirGuids = [Guid || #object{guid = Guid} <- DirObjects],
+
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, file_tree_object, DirObjects),
+    api_test_memory:set(MemRef, scope, private),
+    api_test_memory:set(MemRef, follow_symlinks, true),
+
+    {ok, {_Code1, Url1}} = ?assertMatch({ok, {_, _}}, rpc:call(DownloadNode, page_file_content_download,
+        gen_file_download_url, [SessionId, DirGuids, true])),
+    {ok, Bytes} = ?assertMatch({ok, _},
+        download_file_using_download_code(MemRef, DownloadNode, Url1)),
+    lists:foreach(fun(DirObject) -> check_tarball(MemRef, Bytes, DirObject) end, DirObjects),
+
+    % assert multiple per-attempt traverse ids were really used: one start/5 per top-level directory
+    NumTraverseStarts = rpc:call(DownloadNode, meck, num_calls,
+        [bulk_download_traverse, start, ['_', '_', '_', '_', '_']]),
+    ?assert(NumTraverseStarts >= 3),
+
+    ?assertMatch({ok, [], _},
+        rpc:call(DownloadNode, traverse_task_list, list, [Pool, ongoing]), ?ATTEMPTS),
+    ?assertMatch(
+        {ok, #document{value = #traverse_tasks_scheduler{ongoing_tasks = 0}}},
+        rpc:call(DownloadNode, datastore_model, get, [#{model => traverse_tasks_scheduler}, Pool]),
+        ?ATTEMPTS
+    ),
+
+    % follow-up download still starts and completes (limit = 1 slot is free)
+    {ok, {_Code2, Url2}} = ?assertMatch({ok, {_, _}}, rpc:call(DownloadNode, page_file_content_download,
+        gen_file_download_url, [SessionId, [DirGuid1], true])),
+    {ok, Bytes2} = ?assertMatch({ok, _},
+        download_file_using_download_code(MemRef, DownloadNode, Url2)),
+    api_test_memory:set(MemRef, file_tree_object, [hd(DirObjects)]),
+    check_tarball(MemRef, Bytes2, hd(DirObjects)).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1545,9 +1605,11 @@ check_symlink(_MemRef, CurrentPath, #object{name = Filename, symlink_value = Sym
 -spec check_content_disposition_header(api_test_memory:mem_ref(), http_client:headers()) ->
     ok.
 check_content_disposition_header(MemRef, Headers) ->
-    ExpectedDownloadedFileName = api_test_memory:get(MemRef, expected_downloaded_file_name),
     ?assert(maps:is_key(?HDR_CONTENT_DISPOSITION, Headers)),
-    ExpHeader = <<"attachment; filename=\"", ExpectedDownloadedFileName/binary, "\"">>,
+    ExpectedDownloadedFileName = api_test_memory:get(MemRef, expected_downloaded_file_name),
+    RFC5987Encoded = rfc5987:encode_filename(ExpectedDownloadedFileName),
+    AsciiFallback = http_download_utils:ascii_filename_fallback(ExpectedDownloadedFileName),
+    ExpHeader = <<"attachment; filename=\"", AsciiFallback/binary, "\"; filename*=UTF-8''", RFC5987Encoded/binary>>,
     ?assertEqual(ExpHeader, maps:get(?HDR_CONTENT_DISPOSITION, Headers)).
 
 
@@ -1646,29 +1708,33 @@ init_per_suite(Config) ->
             lists:foreach(fun(OpNode) ->
                 test_node_starter:load_modules([OpNode], [?MODULE]),
                 ok = test_utils:mock_new(OpNode, file_content_download_utils),
-                ErrorFun = fun(FileAttrs, Req) ->
+                ErrorFun = fun(FileAttrs) ->
                     ShouldBlock = lists:any(fun(#file_attr{guid = Guid}) ->
                         {Uuid, _, _} = file_id:unpack_share_guid(Guid),
                         node_cache:get({block_file, Uuid}, false)
                     end, utils:ensure_list(FileAttrs)),
                     case ShouldBlock of
-                        true -> http_req:send_error(?ERR_POSIX(?EAGAIN), Req);
+                        true -> ?ERR_POSIX(?EAGAIN);
                         false -> passthrough
                     end
                 end,
                 ok = test_utils:mock_expect(OpNode, file_content_download_utils, download_single_file,
-                    fun(SessionId, FileAttrs, Callback, Req) ->
-                        case ErrorFun(FileAttrs, Req) of
-                            passthrough -> meck:passthrough([SessionId, FileAttrs, Callback, Req]);
-                            Res -> Res
+                    fun(SessionId, FileAttrs, OnStarted, OnFinished, Req) ->
+                        case ErrorFun(FileAttrs) of
+                            passthrough ->
+                                meck:passthrough([SessionId, FileAttrs, OnStarted, OnFinished, Req]);
+                            Error ->
+                                OnFinished(Error),
+                                http_req:send_error(Error, Req)
                         end
                     end),
                 ok = test_utils:mock_expect(OpNode, file_content_download_utils, download_tarball,
                     fun(Id, SessionId, FileAttrs, TarballName, FollowSymlinks, Req) ->
-                        case ErrorFun(FileAttrs, Req) of
+                        case ErrorFun(FileAttrs) of
                             passthrough ->
                                 meck:passthrough([Id, SessionId, FileAttrs, TarballName, FollowSymlinks, Req]);
-                            Res -> Res
+                            Error ->
+                                http_req:send_error(Error, Req)
                         end
                     end)
             end, ProviderNodes),
@@ -1705,12 +1771,21 @@ init_per_testcase(sync_first_file_block_test = Case, Config) ->
         ok = test_utils:mock_new(OpNode, rtransfer_config, [passthrough])
     end, ProviderNodes),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(bulk_download_dir_retry_teardown_test = Case, Config) ->
+    ProviderNodes = oct_background:get_all_providers_nodes(),
+    lists:foreach(fun(OpNode) ->
+        ok = test_utils:mock_new(OpNode, bulk_download_traverse, [passthrough])
+    end, ProviderNodes),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 40}),
     Config.
 
 end_per_testcase(sync_first_file_block_test = Case, Config) ->
     ok = test_utils:mock_unload(oct_background:get_all_providers_nodes(), rtransfer_config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(bulk_download_dir_retry_teardown_test = Case, Config) ->
+    ok = test_utils:mock_unload(oct_background:get_all_providers_nodes(), bulk_download_traverse),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, _Config) ->
     ok.

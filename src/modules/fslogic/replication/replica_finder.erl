@@ -62,14 +62,13 @@ get_blocks_for_sync(Locations, Blocks) ->
     RemoteList = exclude_old_blocks(RemoteLocations, BlocksToSync),
     SortedRemoteList = lists:sort(RemoteList),
     AggregatedRemoteList0 = lists:foldl(fun
-        ({ProviderId, ProviderBlocks, StorageDetails},
-         [{ProviderId, BlocksAcc, StorageDetails} | Rest]) ->
+        ({ProviderId, ProviderBlocks, StorageDetails}, [{ProviderId, BlocksAcc, StorageDetails} | Rest]) ->
             AggregatedBlocks = fslogic_blocks:merge(BlocksAcc, ProviderBlocks),
             [{ProviderId, AggregatedBlocks, StorageDetails} | Rest];
         (ProviderIdWithBlocks, Acc) ->
             [ProviderIdWithBlocks | Acc]
     end, [], SortedRemoteList),
-    AggregatedRemoteList = lists:reverse(AggregatedRemoteList0),
+    AggregatedRemoteList = lists_utils:shuffle(AggregatedRemoteList0),
 
     PresentBlocks2 = lists:map(fun({ProviderId, ProviderBlocks, StorageDetails}) ->
         AbsentBlocks = fslogic_blocks:invalidate(BlocksToSync, ProviderBlocks),

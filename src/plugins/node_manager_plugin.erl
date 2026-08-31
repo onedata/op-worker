@@ -60,7 +60,9 @@
     {5, <<"21.02.3">>},
     {6, <<"21.02.5">>},
     {7, <<"21.02.8">>},
-    {8, op_worker:get_release_version()}
+    {8, <<"25.0">>},
+    {9, <<"25.1">>},
+    {10, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
@@ -154,6 +156,7 @@ renamed_models() ->
 before_init() ->
     try
         op_worker_sup:start_link(),
+        start_custom_logger_handlers(),
         ok = helpers_nif:init()
     catch
         _:Error:Stacktrace ->
@@ -324,11 +327,39 @@ upgrade_cluster(7) ->
     async_run_with_oz_connection_after_upgrade(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         lists:foreach(fun(SpaceId) ->
-            ?notice("Reinitializing stats for space `~ts` after upgrade", [SpaceId]),
+            ?notice("Reinitializing stats for space '~ts' after upgrade", [SpaceId]),
             dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
         end, SpaceIds)
     end),
-    {ok, 8}.
+    {ok, 8};
+upgrade_cluster(8) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Clearing trash of space '~ts' after upgrade", [SpaceId]),
+            trash_dir:clear_all(SpaceId, no_events)
+        end, SpaceIds)
+    end),
+    {ok, 9};
+upgrade_cluster(9) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Clearing trash of space '~ts' after upgrade", [SpaceId]),
+            trash_dir:clear_all(SpaceId, no_events)
+        end, SpaceIds),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Reinitializing stats for space '~ts' after upgrade", [SpaceId]),
+            dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
+        end, SpaceIds)
+    end),
+    {ok, 10}.
 
 
 %%--------------------------------------------------------------------
@@ -541,3 +572,22 @@ async_run_with_oz_connection_after_upgrade(Fun) ->
         ?catch_exceptions(Fun())
     end),
     ok.
+
+
+%% @private
+-spec start_custom_logger_handlers() -> ok.
+start_custom_logger_handlers() ->
+    LogDir = ctool:get_env(log_dir),
+    Config = ctool:get_env(logger_base_config),
+
+    ok = logger:add_handler(file_access_audit_log, logger_std_h, #{
+        level => debug,
+        config => Config#{file => filename:join(LogDir, op_worker:get_env(file_access_audit_log_file_name))},
+        filter_default => stop,
+        filters => [
+            {opw_file_access_domain, {fun logger_filters:domain/2, {log, equal, [onedata, opw, file_access]}}}
+        ],
+        formatter => {onedata_logger_formatter, #{
+            template =>  op_worker:get_env(file_access_audit_log_formatter_template)
+        }}
+    }).

@@ -64,11 +64,11 @@ validate_user_ctx(UserCtx) ->
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
 build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
     build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
-        configuration = #glusterfs_configuration_diff{}
+        configuration = #glusterfs_helper_configuration_diff{}
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    configuration = #glusterfs_configuration_diff{
+    configuration = #glusterfs_helper_configuration_diff{
         volume = Volume,
         hostname = Hostname,
         port = Port,
@@ -93,7 +93,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
 build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
     #{};
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #glusterfs_credentials_diff{
+    credentials = #glusterfs_helper_credentials_diff{
         uid = Uid,
         gid = Gid
     }
@@ -111,7 +111,7 @@ describe(#helper_config{
     admin_ctx = AdminCtx
 }) ->
     %% Reconstruct configuration record from args map
-    BaseConfiguration = #glusterfs_configuration{
+    BaseConfiguration = #glusterfs_helper_configuration{
         volume = maps:get(<<"volume">>, Args),
         hostname = maps:get(<<"hostname">>, Args),
         storage_path_type = helper_config_utils:storage_path_type_from_binary(
@@ -119,19 +119,19 @@ describe(#helper_config{
         )
     },
     Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
-        {<<"port">>, #glusterfs_configuration.port, fun binary_to_integer/1},
-        {<<"transport">>, #glusterfs_configuration.transport, fun transport_from_binary/1},
-        {<<"mountPoint">>, #glusterfs_configuration.mount_point},
-        {<<"xlatorOptions">>, #glusterfs_configuration.xlator_options}
+        {<<"port">>, #glusterfs_helper_configuration.port, fun binary_to_integer/1},
+        {<<"transport">>, #glusterfs_helper_configuration.transport, fun transport_from_binary/1},
+        {<<"mountPoint">>, #glusterfs_helper_configuration.mount_point},
+        {<<"xlatorOptions">>, #glusterfs_helper_configuration.xlator_options}
     ]),
 
     %% Reconstruct credentials record from admin_ctx
-    BaseCredentials = #glusterfs_credentials{
+    BaseCredentials = #glusterfs_helper_credentials{
         uid = binary_to_integer(maps:get(<<"uid">>, AdminCtx))
     },
     Credentials = redact_confidential_credentials(
         helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-            {<<"gid">>, #glusterfs_credentials.gid, fun binary_to_integer/1}
+            {<<"gid">>, #glusterfs_helper_credentials.gid, fun binary_to_integer/1}
         ])
     ),
 
@@ -199,7 +199,7 @@ get_block_size(#helper_config{}) ->
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    configuration = #glusterfs_configuration{
+    configuration = #glusterfs_helper_configuration{
         volume = Volume,
         hostname = Hostname,
         port = Port,
@@ -224,8 +224,8 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_admin_ctx(#glusterfs_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#glusterfs_credentials{
+-spec build_admin_ctx(#glusterfs_helper_credentials{}) -> helper_config:user_ctx().
+build_admin_ctx(#glusterfs_helper_credentials{
     uid = Uid,
     gid = Gid
 }) ->
@@ -251,11 +251,11 @@ transport_from_binary(<<"rdma">>) -> rdma;
 transport_from_binary(<<"socket">>) -> socket.
 
 
--spec redact_confidential_credentials(#glusterfs_credentials{}) -> #glusterfs_credentials{}.
+-spec redact_confidential_credentials(#glusterfs_helper_credentials{}) -> #glusterfs_helper_credentials{}.
 redact_confidential_credentials(Credentials) ->
     Credentials.
 
 
--spec redact_confidential_credentials_diff(#glusterfs_credentials_diff{}) -> #glusterfs_credentials_diff{}.
+-spec redact_confidential_credentials_diff(#glusterfs_helper_credentials_diff{}) -> #glusterfs_helper_credentials_diff{}.
 redact_confidential_credentials_diff(CredentialsDiff) ->
     CredentialsDiff.
