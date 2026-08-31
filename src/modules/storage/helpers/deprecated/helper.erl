@@ -16,7 +16,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([new_helper/3]).
+-export([new/3]).
 
 
 %%%===================================================================
@@ -24,15 +24,16 @@
 %%%===================================================================
 
 
--spec new_helper(helper_spec:name(), helper_spec:configuration(), helper_spec:credentials()) -> {ok, helper_spec:t()}.
-new_helper(HelperName, ConfigurationParams, CredentialsParams) ->
+-spec new(helper_spec:name(), helper_spec:configuration(), helper_spec:credentials()) ->
+    helper_spec:t().
+new(HelperName, ConfigurationParams, CredentialsParams) ->
     DefaultCredentialsParams = default_credentials_params(HelperName),
 
-    {ok, #helper_spec{
+    #helper_spec{
         name = HelperName,
         configuration = ConfigurationParams,
         credentials = maps:merge(DefaultCredentialsParams, CredentialsParams)
-    }}.
+    }.
 
 
 %% @private

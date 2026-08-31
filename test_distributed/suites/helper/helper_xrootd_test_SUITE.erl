@@ -299,7 +299,7 @@ new_helper(Config) ->
         <<"credentialsType">> => atom_to_binary(?config(credentials_type, XRootDConfig), utf8),
         <<"credentials">> => atom_to_binary(?config(credentials, XRootDConfig), utf8)
     },
-    {ok, Helper} = helper:new_helper(
+    Helper = helper:new(
         ?XROOTD_HELPER_NAME,
         #{
             <<"url">> => atom_to_binary(?config(url, XRootDConfig), utf8),

@@ -17,8 +17,6 @@
 -include("modules/storage/helpers/helpers.hrl").
 
 
--define(STRIP_OK(Result), element(2, {ok, _} = Result)).
-
 -define(TEST_BASE,
     binary_to_atom(<<(atom_to_binary(?FUNCTION_NAME, latin1))/binary, "_base">>, latin1)).
 -define(RUN(Config, StorageConfigs, TestFun),
@@ -129,14 +127,14 @@ end).
 -define(POSIX_IMPORTED_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"posixImportedStorageIdExternalFeedLuma">>).
 -define(POSIX_IMPORTED_STORAGE_ID_LOCAL_FEED_LUMA, <<"posixImportedStorageIdLocalFeedLuma">>).
 
--define(POSIX_HELPER(Credentials), ?STRIP_OK(helper:new_helper(
+-define(POSIX_HELPER(Credentials), helper:new(
         ?POSIX_HELPER_NAME,
         #{
             <<"mountPoint">> => <<"mountPoint">>,
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         Credentials
-))).
+)).
 
 -define(POSIX_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"POSIX">>, ?POSIX_HELPER(?POSIX_ADMIN_CREDENTIALS), LumaMode)).
@@ -162,7 +160,7 @@ end).
 -define(CEPH_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"cephStorageIdExternalFeedLuma">>).
 -define(CEPH_STORAGE_ID_LOCAL_FEED_LUMA, <<"cephStorageIdLocalFeedLuma">>).
 
--define(CEPH_HELPER(Credentials), ?STRIP_OK(helper:new_helper(?CEPH_HELPER_NAME,
+-define(CEPH_HELPER(Credentials), helper:new(?CEPH_HELPER_NAME,
     #{
         <<"monitorHostname">> => <<"monitorHostname">>,
         <<"clusterName">> => <<"clusterName">>,
@@ -170,7 +168,7 @@ end).
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     Credentials
-))).
+)).
 
 -define(CEPH_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"CEPH">>, ?CEPH_HELPER(?CEPH_ADMIN_CREDENTIALS), LumaMode)
@@ -195,7 +193,7 @@ end).
 -define(S3_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"s3StorageIdExternalFeedLuma">>).
 -define(S3_STORAGE_ID_LOCAL_FEED_LUMA, <<"s3StorageIdLocalFeedLuma">>).
 
--define(S3_HELPER(Credentials), ?STRIP_OK(helper:new_helper(?S3_HELPER_NAME,
+-define(S3_HELPER(Credentials), helper:new(?S3_HELPER_NAME,
     #{
         <<"scheme">> => <<"https">>,
         <<"hostname">> => <<"hostname">>,
@@ -203,7 +201,7 @@ end).
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     Credentials
-))).
+)).
 
 -define(S3_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"S3">>, ?S3_HELPER(?S3_ADMIN_CREDENTIALS), LumaMode)
@@ -228,13 +226,13 @@ end).
 -define(SWIFT_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"swiftStorageIdExternalFeedLuma">>).
 -define(SWIFT_STORAGE_ID_LOCAL_FEED_LUMA, <<"swiftStorageIdLocalFeedLuma">>).
 
--define(SWIFT_HELPER(Credentials), ?STRIP_OK(helper:new_helper(?SWIFT_HELPER_NAME,
+-define(SWIFT_HELPER(Credentials), helper:new(?SWIFT_HELPER_NAME,
     #{<<"authUrl">> => <<"authUrl">>,
         <<"containerName">> => <<"containerName">>,
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     Credentials
-))).
+)).
 
 -define(SWIFT_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"SWIFT">>, ?SWIFT_HELPER(?SWIFT_ADMIN_CREDENTIALS), LumaMode)
@@ -259,7 +257,7 @@ end).
 -define(CEPHRADOS_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"cephradosStorageIdExternalFeedLuma">>).
 -define(CEPHRADOS_STORAGE_ID_LOCAL_FEED_LUMA, <<"cephradosStorageIdLocalFeedLuma">>).
 
--define(CEPHRADOS_HELPER(Credentials), ?STRIP_OK(helper:new_helper(?CEPHRADOS_HELPER_NAME,
+-define(CEPHRADOS_HELPER(Credentials), helper:new(?CEPHRADOS_HELPER_NAME,
     #{
         <<"monitorHostname">> => <<"monitorHostname">>,
         <<"clusterName">> => <<"clusterName">>,
@@ -267,7 +265,7 @@ end).
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     Credentials
-))).
+)).
 
 -define(CEPHRADOS_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"CEPHRADOS">>, ?CEPHRADOS_HELPER(?CEPHRADOS_ADMIN_CREDENTIALS), LumaMode)
@@ -299,7 +297,7 @@ end).
 -define(IMPORTED_GLUSTERFS_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"glusterfsImportedStorageIdExternalFeedLuma">>).
 -define(IMPORTED_GLUSTERFS_STORAGE_ID_LOCAL_FEED_LUMA, <<"glusterfsImportedStorageIdLocalFeedLuma">>).
 
--define(GLUSTERFS_HELPER(Credentials), ?STRIP_OK(helper:new_helper(
+-define(GLUSTERFS_HELPER(Credentials), helper:new(
     ?GLUSTERFS_HELPER_NAME,
     #{
         <<"volume">> => <<"volume">>,
@@ -307,7 +305,7 @@ end).
         <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
     },
     Credentials
-))).
+)).
 
 -define(GLUSTERFS_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"GLUSTERFS">>, ?GLUSTERFS_HELPER(?GLUSTERFS_ADMIN_CREDENTIALS), LumaMode)
@@ -345,12 +343,12 @@ end).
 -define(IMPORTED_NULLDEVICE_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"nulldeviceImportedStorageIdExternalFeedLuma">>).
 -define(IMPORTED_NULLDEVICE_STORAGE_ID_LOCAL_FEED_LUMA, <<"nulldeviceImportedStorageIdLocalFeedLuma">>).
 
--define(NULLDEVICE_HELPER(Credentials), ?STRIP_OK(helper:new_helper(
+-define(NULLDEVICE_HELPER(Credentials), helper:new(
     ?NULL_DEVICE_HELPER_NAME, #{
         <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
     },
     Credentials
-))).
+)).
 
 -define(NULLDEVICE_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"NULLDEVICE">>, ?NULLDEVICE_HELPER(?NULLDEVICE_ADMIN_CREDENTIALS), LumaMode)
@@ -446,14 +444,14 @@ end).
 -define(WEBDAV_OAUTH2_STORAGE_ID_LOCAL_FEED_LUMA, <<"webdavOauth2StorageIdLocalFeedLuma">>).
 
 
--define(WEBDAV_HELPER(Credentials), ?STRIP_OK(helper:new_helper(
+-define(WEBDAV_HELPER(Credentials), helper:new(
     ?WEBDAV_HELPER_NAME,
     #{
         <<"endpoint">> => <<"endpoint">>,
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     Credentials
-))).
+)).
 -define(WEBDAV_BASIC_HELPER,
     ?WEBDAV_HELPER(?WEBDAV_BASIC_ADMIN_CREDENTIALS)).
 -define(WEBDAV_TOKEN_HELPER,

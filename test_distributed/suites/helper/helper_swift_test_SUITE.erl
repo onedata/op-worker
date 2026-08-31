@@ -241,7 +241,7 @@ new_helper(Config) ->
         <<"password">> => atom_to_binary(?config(password, SwiftConfig), utf8),
         <<"projectName">> => atom_to_binary(?config(project_name, SwiftConfig), utf8)
     },
-    {ok, Helper} = helper:new_helper(
+    Helper = helper:new(
         ?SWIFT_HELPER_NAME,
         #{
             <<"authUrl">> => <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,

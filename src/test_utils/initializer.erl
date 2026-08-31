@@ -405,7 +405,7 @@ setup_storage([Worker | Rest], Config) ->
         <<"mountPoint">> => list_to_binary(TmpDir),
         <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
     },
-    {ok, Helper} = helper:new_helper(
+    Helper = helper:new(
         ?POSIX_HELPER_NAME,
         ConfigurationParams,
         StorageCredentials

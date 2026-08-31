@@ -363,7 +363,7 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     NFSConfig = ?config(nfs, ?config(nfs, ?config(storages, Config))),
     StorageCredentials = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
-    {ok, Helper} = helper:new_helper(
+    Helper = helper:new(
         ?NFS_HELPER_NAME,
         #{
             <<"volume">> => ?NFS_VOLUME,

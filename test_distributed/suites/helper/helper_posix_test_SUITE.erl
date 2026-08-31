@@ -291,7 +291,7 @@ gen_filename() ->
 
 helper_handle_server(Config) ->
     StorageCredentials = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
-    {ok, Helper} = helper:new_helper(
+    Helper = helper:new(
         ?POSIX_HELPER_NAME,
         #{
             <<"mountPoint">> => ?path(Config, ""),

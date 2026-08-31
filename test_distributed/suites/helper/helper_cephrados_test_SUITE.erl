@@ -257,7 +257,7 @@ new_helper(Config) ->
         <<"username">> => atom_to_binary(?config(username, CephConfig), utf8),
         <<"key">> => atom_to_binary(?config(key, CephConfig), utf8)
     },
-    {ok, Helper} = helper:new_helper(
+    Helper = helper:new(
         ?CEPHRADOS_HELPER_NAME,
         #{
             <<"monitorHostname">> => atom_to_binary(?config(host_name, CephConfig), utf8),

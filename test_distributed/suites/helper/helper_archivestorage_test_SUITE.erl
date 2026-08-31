@@ -198,7 +198,7 @@ new_helper(Config) ->
         <<"secretKey">> => atom_to_binary(?config(secret_key, S3Config), utf8)
     },
 
-    {ok, Helper} = helper:new_helper(
+    Helper = helper:new(
         <<"s3">>,
         #{
             <<"hostname">> => atom_to_binary(?config(host_name, S3Config), utf8),
