@@ -48,7 +48,7 @@
 -export([put_into_cache/1]).
 -export([get_storage_id/1, get_supporting_storage_id/2, setup_luma_local_feed/3]).
 -export([local_ip_v4/0]).
--export([normalize_storage_name/1]).
+-export([normalize_storage_name/1, create_storage/4]).
 -export([get_different_domain_workers/1]).
 
 
@@ -405,11 +405,11 @@ setup_storage([Worker | Rest], Config) ->
         <<"mountPoint">> => list_to_binary(TmpDir),
         <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
     },
-    Helper = helper:new(
-        ?POSIX_HELPER_NAME,
-        ConfigurationParams,
-        StorageCredentials
-    ),
+    Helper = #helper_spec{
+        name = ?POSIX_HELPER_NAME,
+        configuration = ConfigurationParams,
+        credentials = StorageCredentials
+    },
     StorageName = <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
     StorageId = case rpc:call(Worker, storage_config, create, [StorageName, Helper, undefined]) of
         {ok, Id} -> Id;
@@ -745,6 +745,26 @@ get_supporting_storage_id(Worker, SpaceId) ->
 -spec normalize_storage_name(binary()) -> binary().
 normalize_storage_name(Suggestion) ->
     re:replace(Suggestion, <<"[^\\w_]">>, <<"">>, [{return, binary}, global]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a storage out of flat helper params, the way the env up mechanism
+%% needs it - the bamboos escripts run outside the release and cannot build the
+%% typed create spec that the regular CRUD path expects.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_storage(storage:name(), helper_spec:name(), helper_spec:configuration(),
+    helper_spec:credentials()) -> storage:id().
+create_storage(StorageName, HelperName, ConfigurationParams, CredentialsParams) ->
+    StorageId = normalize_storage_name(StorageName),
+    {ok, StorageId} = storage_config:create(StorageId, #helper_spec{
+        name = HelperName,
+        configuration = ConfigurationParams,
+        credentials = CredentialsParams
+    }, undefined),
+    ok = storage:on_storage_created(StorageId),
+    StorageId.
 
 
 %%--------------------------------------------------------------------

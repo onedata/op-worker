@@ -11,6 +11,7 @@
 -module(helper_s3_test_SUITE).
 -author("Krzysztof Trzepla").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -240,16 +241,16 @@ new_helper(Config) ->
         <<"accessKey">> => atom_to_binary(?config(access_key, S3Config), utf8),
         <<"secretKey">> => atom_to_binary(?config(secret_key, S3Config), utf8)
     },
-    Helper = helper:new(
-        ?S3_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?S3_HELPER_NAME,
+        configuration = #{
             <<"hostname">> => atom_to_binary(?config(host_name, S3Config), utf8),
             <<"bucketName">> => ?S3_BUCKET_NAME,
             <<"scheme">> => <<"http">>,
             <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
-        StorageCredentials
-    ),
+        credentials = StorageCredentials
+    },
 
     spawn(Node, fun() ->
         helper_loop(Helper, StorageCredentials)

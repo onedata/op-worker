@@ -13,6 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -291,14 +292,14 @@ gen_filename() ->
 
 helper_handle_server(Config) ->
     StorageCredentials = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
-    Helper = helper:new(
-        ?POSIX_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?POSIX_HELPER_NAME,
+        configuration = #{
             <<"mountPoint">> => ?path(Config, ""),
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
-        StorageCredentials
-    ),
+        credentials = StorageCredentials
+    },
     Handle = helpers:get_helper_handle(Helper, StorageCredentials),
     helper_handle_server(Config, Handle).
 helper_handle_server(Config, Handle) ->

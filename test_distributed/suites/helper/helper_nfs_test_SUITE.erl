@@ -11,6 +11,7 @@
 -module(helper_nfs_test_SUITE).
 -author("Bartek Kryza").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -363,16 +364,16 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     NFSConfig = ?config(nfs, ?config(nfs, ?config(storages, Config))),
     StorageCredentials = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
-    Helper = helper:new(
-        ?NFS_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?NFS_HELPER_NAME,
+        configuration = #{
             <<"volume">> => ?NFS_VOLUME,
             <<"version">> => ?NFS_VERSION,
             <<"host">> => atom_to_binary(?config(host, NFSConfig), utf8),
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
-        StorageCredentials
-    ),
+        credentials = StorageCredentials
+    },
     spawn_link(Node, fun() ->
         helper_loop(Helper, StorageCredentials)
     end).

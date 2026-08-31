@@ -11,6 +11,7 @@
 -module(helper_swift_test_SUITE).
 -author("Michal Wrona").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -241,16 +242,16 @@ new_helper(Config) ->
         <<"password">> => atom_to_binary(?config(password, SwiftConfig), utf8),
         <<"projectName">> => atom_to_binary(?config(project_name, SwiftConfig), utf8)
     },
-    Helper = helper:new(
-        ?SWIFT_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?SWIFT_HELPER_NAME,
+        configuration = #{
             <<"authUrl">> => <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,
             ":", (integer_to_binary(?config(keystone_port, SwiftConfig)))/binary, "/v3">>,
             <<"containerName">> => ?SWIFT_CONTAINER_NAME,
             <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
-        StorageCredentials
-    ),
+        credentials = StorageCredentials
+    },
 
     spawn_link(Node, fun() ->
         helper_loop(Helper, StorageCredentials)

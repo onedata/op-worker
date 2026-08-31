@@ -11,6 +11,7 @@
 -module(helper_nulldevice_test_SUITE).
 -author("Bartek Kryza").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -385,9 +386,9 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     StorageCredentials = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
-    Helper = helper:new(
-        ?NULL_DEVICE_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?NULL_DEVICE_HELPER_NAME,
+        configuration = #{
             <<"latencyMin">> => <<"0">>,
             <<"latencyMax">> => <<"0">>,
             <<"timeoutProbability">> => <<"0.0">>,
@@ -396,8 +397,8 @@ new_helper(Config) ->
             <<"simulatedFilesystemGrowSpeed">> => <<"0.0">>,
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
-        StorageCredentials
-      ),
+        credentials = StorageCredentials
+    },
     spawn_link(Node, fun() ->
         helper_loop(Helper, StorageCredentials)
     end).

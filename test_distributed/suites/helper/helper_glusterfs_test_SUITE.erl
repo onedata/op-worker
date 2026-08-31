@@ -11,6 +11,7 @@
 -module(helper_glusterfs_test_SUITE).
 -author("Bartek Kryza").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -395,9 +396,9 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     GlusterFSConfig = ?config(glusterfs, ?config(glusterfs, ?config(storages, Config))),
     StorageCredentials = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
-    Helper = helper:new(
-        ?GLUSTERFS_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?GLUSTERFS_HELPER_NAME,
+        configuration = #{
             <<"volume">> => ?GLUSTERFS_VOLUME,
             <<"hostname">> => atom_to_binary(?config(host_name, GlusterFSConfig), utf8),
             <<"port">> => integer_to_binary(?GLUSTERFS_PORT),
@@ -406,8 +407,8 @@ new_helper(Config) ->
             <<"xlatorOptions">> => <<"cluster.write-freq-threshold=100;">>,
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
-        StorageCredentials
-    ),
+        credentials = StorageCredentials
+    },
     spawn_link(Node, fun() ->
         helper_loop(Helper, StorageCredentials)
     end).

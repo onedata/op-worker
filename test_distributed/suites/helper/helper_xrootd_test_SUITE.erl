@@ -11,6 +11,7 @@
 -module(helper_xrootd_test_SUITE).
 -author("Bartek Kryza").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -299,14 +300,14 @@ new_helper(Config) ->
         <<"credentialsType">> => atom_to_binary(?config(credentials_type, XRootDConfig), utf8),
         <<"credentials">> => atom_to_binary(?config(credentials, XRootDConfig), utf8)
     },
-    Helper = helper:new(
-        ?XROOTD_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?XROOTD_HELPER_NAME,
+        configuration = #{
             <<"url">> => atom_to_binary(?config(url, XRootDConfig), utf8),
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
-        StorageCredentials
-      ),
+        credentials = StorageCredentials
+    },
     spawn_link(Node, fun() ->
         helper_loop(Helper, StorageCredentials)
     end).

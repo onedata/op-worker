@@ -11,6 +11,7 @@
 -module(helper_webdav_test_SUITE).
 -author("Bartek Kryza").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -347,15 +348,15 @@ new_helper(Config) ->
         <<"credentialsType">> => atom_to_binary(?config(credentials_type, WebDAVConfig), utf8),
         <<"credentials">> => atom_to_binary(?config(credentials, WebDAVConfig), utf8)
     },
-    Helper = helper:new(
-        ?WEBDAV_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?WEBDAV_HELPER_NAME,
+        configuration = #{
             <<"endpoint">> => atom_to_binary(?config(endpoint, WebDAVConfig), utf8),
             <<"rangeWriteSupport">> => atom_to_binary(?config(range_write_support, WebDAVConfig), utf8),
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
-        StorageCredentials
-      ),
+        credentials = StorageCredentials
+    },
     spawn_link(Node, fun() ->
         helper_loop(Helper, StorageCredentials)
     end).

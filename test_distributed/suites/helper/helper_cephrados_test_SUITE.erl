@@ -11,6 +11,7 @@
 -module(helper_cephrados_test_SUITE).
 -author("Bartek Kryza").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -257,16 +258,16 @@ new_helper(Config) ->
         <<"username">> => atom_to_binary(?config(username, CephConfig), utf8),
         <<"key">> => atom_to_binary(?config(key, CephConfig), utf8)
     },
-    Helper = helper:new(
-        ?CEPHRADOS_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?CEPHRADOS_HELPER_NAME,
+        configuration = #{
             <<"monitorHostname">> => atom_to_binary(?config(host_name, CephConfig), utf8),
             <<"clusterName">> => ?CEPH_CLUSTER_NAME,
             <<"poolName">> => ?CEPH_POOL_NAME,
             <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
-        StorageCredentials
-    ),
+        credentials = StorageCredentials
+    },
 
     spawn_link(Node, fun() ->
         helper_loop(Helper, StorageCredentials)
