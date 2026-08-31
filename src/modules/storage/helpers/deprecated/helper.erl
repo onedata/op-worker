@@ -14,6 +14,7 @@
 -author("Krzysztof Trzepla").
 
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 %% API
 -export([new/3]).

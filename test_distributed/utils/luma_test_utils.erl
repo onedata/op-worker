@@ -14,6 +14,7 @@
 
 -include("luma_test_utils.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 -export([run_test_for_all_storage_configs/5, clear_luma_db_for_all_storages/1,
     mock_stat_on_space_mount_dir/1, setup_local_feed_luma/3, mock_storage_is_imported/1, change_admin_creds/1]).

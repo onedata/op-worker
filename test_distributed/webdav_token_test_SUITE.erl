@@ -20,6 +20,7 @@
 -include("proto/common/credentials.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

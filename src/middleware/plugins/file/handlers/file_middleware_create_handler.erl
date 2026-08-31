@@ -21,6 +21,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 

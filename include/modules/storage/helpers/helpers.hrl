@@ -66,12 +66,14 @@
 -type storage_path_type() :: binary().
 -export_type([storage_path_type/0]).
 
--record(helper_spec, {
-    name :: helper_spec:name(),
-    configuration = #{} :: helper_spec:configuration(),
-    credentials = #{} :: helper_spec:credentials()
-}).
+%% NOTE: #helper_spec{} is defined in datastore_models.hrl - it is persisted
+%% as part of the storage_config model, so changing it requires bumping that
+%% model's record struct.
 
+%% The typed counterpart of #helper_spec{}: the same content with the flat
+%% binary maps turned back into the contract's records and the confidential
+%% credentials redacted. Built on demand to answer a storage GET, never
+%% persisted.
 -record(helper_spec_description, {
     type :: onedata_storage:type(),
     configuration :: onedata_storage:helper_configuration(),

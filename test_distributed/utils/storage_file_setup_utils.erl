@@ -20,6 +20,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("kernel/include/file.hrl").
 
 %% API

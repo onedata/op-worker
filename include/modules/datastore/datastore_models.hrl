@@ -503,6 +503,17 @@
 -record(deletion_marker, {}).
 
 
+%% Everything a storage helper needs before LUMA substitutes the per-user
+%% credentials, as the flat binary maps the C++ helper layer consumes.
+%% The typed, redacted view of the same content is #helper_spec_description{}
+%% in helpers.hrl.
+-record(helper_spec, {
+    name :: helper_spec:name(),
+    configuration = #{} :: helper_spec:configuration(),
+    credentials = #{} :: helper_spec:credentials()
+}).
+
+
 -record(storage_config, {
     helper_spec :: helper_spec:t(),
     luma_config :: storage:luma_config(),

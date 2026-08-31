@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

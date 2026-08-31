@@ -15,6 +15,7 @@
 -behaviour(helper_spec_behaviour).
 
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
 -include_lib("opw_panel_contracts/include/storage/s3.hrl").
 
