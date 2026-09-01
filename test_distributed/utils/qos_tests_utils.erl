@@ -22,6 +22,7 @@
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
 
 
 % util functions
@@ -330,8 +331,13 @@ map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->
 
 
 set_qos_parameters(Provider, StorageId, QosParameters) ->
-    ok = opw_test_rpc:call(Provider, storage, set_qos_parameters,
-        [StorageId, QosParameters]).
+    % QoS parameters are set through the regular storage update, the same way
+    % Onepanel does it - among others, this reevaluates impossible QoS entries
+    StorageType = opw_test_rpc:call(Provider, storage, get_helper_name, [StorageId]),
+    ok = opw_test_rpc:call(Provider, storage, update, [StorageId, #storage_update_spec{
+        type = StorageType,
+        qos_parameters = QosParameters
+    }]).
 
 
 reset_qos_parameters() ->
@@ -339,7 +345,7 @@ reset_qos_parameters() ->
     lists:foreach(fun(Provider) ->
         {ok, Storages} = opw_test_rpc:call(Provider, provider_logic, get_storages, []),
         lists:foreach(fun(StorageId) ->
-            ok = opw_test_rpc:call(Provider, storage, set_qos_parameters, [StorageId, #{}])
+            set_qos_parameters(Provider, StorageId, #{})
         end, Storages)
     end, Providers).
 

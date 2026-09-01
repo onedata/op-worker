@@ -51,9 +51,6 @@
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 
-%%% Functions to modify storage details
--export([set_qos_parameters/2]).
-
 %%% Support related functions
 -export([support_space/4, update_space_support_size/3, revoke_space_support/2]).
 -export([supports_any_space/1]).
@@ -282,24 +279,6 @@ is_local(StorageId) ->
 is_posix_compatible(StorageDataOrId) ->
     HelperSpec = get_helper_spec(StorageDataOrId),
     helper_spec:is_posix_compatible(HelperSpec).
-
-
-%%%===================================================================
-%%% Functions to modify storage details
-%%%===================================================================
-
-
-%% TODO VFS-12677 rm
--spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
-set_qos_parameters(StorageId, QosParameters) ->
-    case storage_logic:set_qos_parameters(StorageId, QosParameters) of
-        ok ->
-            {ok, Spaces} = storage_logic:get_spaces(StorageId),
-            lists:foreach(fun(SpaceId) ->
-                ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId)
-            end, Spaces);
-        Error -> Error
-    end.
 
 
 %%%===================================================================
