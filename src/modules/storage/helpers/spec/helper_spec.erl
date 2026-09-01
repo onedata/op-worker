@@ -153,52 +153,46 @@ describe(HelperSpec) ->
     Module:describe(HelperSpec).
 
 
--spec is_posix_compatible(t() | helper_spec:name()) -> boolean().
+-spec is_posix_compatible(t() | name()) -> boolean().
 is_posix_compatible(HelperSpecOrName) ->
-    Module = get_module(HelperSpecOrName),
-    Module:is_posix_compatible().
+    has_capability(HelperSpecOrName, posix_compatible).
 
 
--spec is_object_storage(t() | helper_spec:name()) -> boolean().
+-spec is_object_storage(t() | name()) -> boolean().
 is_object_storage(HelperSpecOrName) ->
-    Module = get_module(HelperSpecOrName),
-    Module:is_object_storage().
+    has_capability(HelperSpecOrName, object_storage).
 
 
--spec is_rename_supported(t() | helper_spec:name()) -> boolean().
+-spec is_rename_supported(t() | name()) -> boolean().
 is_rename_supported(HelperSpecOrName) ->
-    Module = get_module(HelperSpecOrName),
-    Module:is_rename_supported().
+    has_capability(HelperSpecOrName, rename).
 
 
--spec is_nfs4_acl_supported(t() | helper_spec:name()) -> boolean().
+-spec is_nfs4_acl_supported(t() | name()) -> boolean().
 is_nfs4_acl_supported(HelperSpecOrName) ->
-    Module = get_module(HelperSpecOrName),
-    Module:is_nfs4_acl_supported().
+    has_capability(HelperSpecOrName, nfs4_acl).
 
 
--spec is_oauth2_supported(t() | helper_spec:name()) -> boolean().
+-spec is_oauth2_supported(t() | name()) -> boolean().
 is_oauth2_supported(HelperSpecOrName) ->
-    Module = get_module(HelperSpecOrName),
-    Module:is_oauth2_supported().
+    has_capability(HelperSpecOrName, oauth2).
 
 
--spec is_storage_access_type_supported(t() | helper_spec:name(), helper_spec:access_type()) -> boolean().
-is_storage_access_type_supported(HelperSpecName, AccessType) ->
-    Module = get_module(HelperSpecName),
-    Module:is_storage_access_type_supported(AccessType).
+-spec is_storage_access_type_supported(t() | name(), access_type()) -> boolean().
+is_storage_access_type_supported(_HelperSpecOrName, ?READONLY) ->
+    true;
+is_storage_access_type_supported(HelperSpecOrName, ?READWRITE) ->
+    has_capability(HelperSpecOrName, readwrite).
 
 
 -spec is_auto_import_supported(t()) -> boolean().
 is_auto_import_supported(HelperSpec) ->
-    Module = get_module(HelperSpec),
-    Module:is_auto_import_supported(HelperSpec).
+    has_capability(HelperSpec, auto_import) andalso is_import_possible(HelperSpec).
 
 
 -spec is_file_registration_supported(t()) -> boolean().
 is_file_registration_supported(HelperSpec) ->
-    Module = get_module(HelperSpec),
-    Module:is_file_registration_supported(HelperSpec).
+    has_capability(HelperSpec, manual_import) andalso is_import_possible(HelperSpec).
 
 
 -spec is_import_supported(t()) -> boolean().
@@ -209,8 +203,7 @@ is_import_supported(HelperSpec) ->
 
 -spec is_getting_size_supported(t()) -> boolean().
 is_getting_size_supported(HelperSpec) ->
-    Module = get_module(HelperSpec),
-    Module:is_getting_size_supported(HelperSpec).
+    has_capability(HelperSpec, getting_size) andalso not splits_files_into_blocks(HelperSpec).
 
 
 -spec get_name(t()) -> name().
@@ -246,14 +239,21 @@ get_effective_timeout(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the block size used by the storage.
-%% Returns undefined for non-object storage types.
+%% Returns the size of the objects the storage splits a file into, undefined
+%% for storage types that always store a file as a whole.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_block_size(t()) -> non_neg_integer() | undefined.
-get_block_size(HelperSpec) ->
-    Module = get_module(HelperSpec),
-    Module:get_block_size(HelperSpec).
+get_block_size(#helper_spec{name = Type, configuration = ConfigurationParams}) ->
+    case storage_type:get_default_block_size(Type) of
+        undefined ->
+            undefined;
+        DefaultBlockSize ->
+            case maps:get(<<"blockSize">>, ConfigurationParams, DefaultBlockSize) of
+                Bin when is_binary(Bin) -> binary_to_integer(Bin);
+                Int when is_integer(Int) -> Int
+            end
+    end.
 
 
 -spec get_storage_path_type(t()) -> binary().
@@ -302,6 +302,40 @@ redact_confidential_credentials_diff(HelperSpecOrName, CredentialsDiff) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec has_capability(t() | name(), storage_type:capability()) -> boolean().
+has_capability(HelperSpecOrName, Capability) ->
+    storage_type:has_capability(get_type(HelperSpecOrName), Capability).
+
+
+%% @private
+-spec get_type(t() | name()) -> onedata_storage:type().
+get_type(#helper_spec{name = Name}) -> Name;
+get_type(Name) -> Name.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Importing data that already sits on the storage requires that a logical file
+%% maps onto exactly one storage file - the storage path must mirror the logical
+%% one and the file must not be split into fixed size objects.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_import_possible(t()) -> boolean().
+is_import_possible(HelperSpec) ->
+    helper_spec_utils:is_canonical(HelperSpec) andalso not splits_files_into_blocks(HelperSpec).
+
+
+%% @private
+-spec splits_files_into_blocks(t()) -> boolean().
+splits_files_into_blocks(HelperSpec) ->
+    case get_block_size(HelperSpec) of
+        undefined -> false;
+        BlockSize -> BlockSize > 0
+    end.
 
 
 %% @private

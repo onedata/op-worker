@@ -109,7 +109,10 @@ check_helper_against_imported_option(true, HelperSpec) ->
     case helper_spec:is_import_supported(HelperSpec) of
         false ->
             HelperName = helper_spec:get_name(HelperSpec),
-            throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(?err_ctx(), HelperName, ?OBJECT_HELPERS));
+            throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(
+                ?err_ctx(), HelperName,
+                storage_type:list_types_with_capability(object_storage)
+            ));
         true ->
             ok
     end.

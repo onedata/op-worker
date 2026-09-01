@@ -27,22 +27,9 @@
     build_credentials_diff/2,
     describe/1,
 
-    is_posix_compatible/0,
-    is_object_storage/0,
-    is_rename_supported/0,
-    is_nfs4_acl_supported/0,
-    is_oauth2_supported/0,
-    is_storage_access_type_supported/1,
-    is_auto_import_supported/1,
-    is_file_registration_supported/1,
-    is_getting_size_supported/1,
-    get_block_size/1,
-
     redact_confidential_credentials/1,
     redact_confidential_credentials_diff/1
 ]).
-
--define(DEFAULT_CEPHRADOS_BLOCK_SIZE, 4194304).
 
 
 %%%===================================================================
@@ -128,53 +115,6 @@ describe(#helper_spec{
     {Configuration, Credentials}.
 
 
--spec is_posix_compatible() -> boolean().
-is_posix_compatible() -> false.
-
-
--spec is_object_storage() -> boolean().
-is_object_storage() -> true.
-
-
--spec is_rename_supported() -> boolean().
-is_rename_supported() -> false.
-
-
--spec is_nfs4_acl_supported() -> boolean().
-is_nfs4_acl_supported() -> false.
-
-
--spec is_oauth2_supported() -> boolean().
-is_oauth2_supported() -> false.
-
-
--spec is_storage_access_type_supported(helper_spec:access_type()) -> boolean().
-is_storage_access_type_supported(_) -> true.
-
-
--spec is_auto_import_supported(#helper_spec{}) -> boolean().
-is_auto_import_supported(_HelperSpec) ->
-    false.
-
-
--spec is_file_registration_supported(#helper_spec{}) -> boolean().
-is_file_registration_supported(HelperSpec) ->
-    helper_spec_utils:is_canonical(HelperSpec) andalso block_size_equals_0(HelperSpec).
-
-
--spec is_getting_size_supported(#helper_spec{}) -> boolean().
-is_getting_size_supported(HelperSpec) ->
-    block_size_equals_0(HelperSpec).
-
-
--spec get_block_size(#helper_spec{}) -> non_neg_integer() | undefined.
-get_block_size(#helper_spec{configuration = ConfigurationParams}) ->
-    case maps:get(<<"blockSize">>, ConfigurationParams, ?DEFAULT_CEPHRADOS_BLOCK_SIZE) of
-        Bin when is_binary(Bin) -> binary_to_integer(Bin);
-        Int when is_integer(Int) -> Int
-    end.
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -212,12 +152,6 @@ build_credentials(#cephrados_helper_credentials{
         <<"username">> => Username,
         <<"key">> => Key
     }.
-
-
-%% @private
--spec block_size_equals_0(helper_spec:t()) -> boolean().
-block_size_equals_0(HelperSpec) ->
-    get_block_size(HelperSpec) =:= 0.
 
 
 -spec redact_confidential_credentials(#cephrados_helper_credentials{}) -> #cephrados_helper_credentials{}.

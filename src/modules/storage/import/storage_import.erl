@@ -303,8 +303,10 @@ assert_auto_storage_import_supported(SpaceId) ->
                     ok;
                 false ->
                     throw(?ERR_AUTO_STORAGE_IMPORT_NOT_SUPPORTED(
-                        ?err_ctx(), StorageId, ?AUTO_IMPORT_HELPERS, ?AUTO_IMPORT_OBJECT_HELPERS)
-                    )
+                        ?err_ctx(), StorageId,
+                        storage_type:list_types_with_capability(auto_import),
+                        storage_type:list_types_with_capabilities([auto_import, object_storage])
+                    ))
             end;
         Error ->
             throw(Error)
@@ -321,7 +323,10 @@ assert_manual_storage_import_supported(SpaceId) ->
                 true ->
                     ok;
                 false ->
-                    throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(?err_ctx(), StorageId, ?OBJECT_HELPERS))
+                    throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(
+                        ?err_ctx(), StorageId,
+                        storage_type:list_types_with_capability(object_storage)
+                    ))
             end;
         Error ->
             throw(Error)

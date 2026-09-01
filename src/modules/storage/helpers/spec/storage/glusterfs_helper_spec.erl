@@ -27,17 +27,6 @@
     build_credentials_diff/2,
     describe/1,
 
-    is_posix_compatible/0,
-    is_object_storage/0,
-    is_rename_supported/0,
-    is_nfs4_acl_supported/0,
-    is_oauth2_supported/0,
-    is_storage_access_type_supported/1,
-    is_auto_import_supported/1,
-    is_file_registration_supported/1,
-    is_getting_size_supported/1,
-    get_block_size/1,
-
     redact_confidential_credentials/1,
     redact_confidential_credentials_diff/1
 ]).
@@ -136,50 +125,6 @@ describe(#helper_spec{
     ),
 
     {Configuration, Credentials}.
-
-
--spec is_posix_compatible() -> boolean().
-is_posix_compatible() -> true.
-
-
--spec is_object_storage() -> boolean().
-is_object_storage() -> false.
-
-
--spec is_rename_supported() -> boolean().
-is_rename_supported() -> true.
-
-
--spec is_nfs4_acl_supported() -> boolean().
-is_nfs4_acl_supported() -> true.
-
-
--spec is_oauth2_supported() -> boolean().
-is_oauth2_supported() -> false.
-
-
--spec is_storage_access_type_supported(helper_spec:access_type()) -> boolean().
-is_storage_access_type_supported(_) -> true.
-
-
--spec is_auto_import_supported(#helper_spec{}) -> boolean().
-is_auto_import_supported(HelperSpec) ->
-    helper_spec_utils:is_canonical(HelperSpec).
-
-
--spec is_file_registration_supported(#helper_spec{}) -> boolean().
-is_file_registration_supported(HelperSpec) ->
-    helper_spec_utils:is_canonical(HelperSpec).
-
-
--spec is_getting_size_supported(#helper_spec{}) -> boolean().
-is_getting_size_supported(_HelperSpec) ->
-    true.
-
-
--spec get_block_size(#helper_spec{}) -> non_neg_integer() | undefined.
-get_block_size(#helper_spec{}) ->
-    undefined.
 
 
 %%%===================================================================

@@ -32,22 +32,8 @@
 -define(HTTP_HELPER_NAME, <<"http">>).
 -define(NULL_DEVICE_HELPER_NAME, <<"nulldevice">>).
 
--define(POSIX_COMPATIBLE_HELPERS, [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
-                                   ?NFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME]).
-
--define(OBJECT_HELPERS, [?SWIFT_HELPER_NAME, ?S3_HELPER_NAME, ?CEPHRADOS_HELPER_NAME, ?CEPH_HELPER_NAME]).
--define(AUTO_IMPORT_HELPERS, [
-    ?POSIX_HELPER_NAME,
-    ?GLUSTERFS_HELPER_NAME,
-    ?NULL_DEVICE_HELPER_NAME,
-    ?WEBDAV_HELPER_NAME,
-    ?XROOTD_HELPER_NAME,
-    ?NFS_HELPER_NAME
-] ++ ?AUTO_IMPORT_OBJECT_HELPERS).
-
--define(AUTO_IMPORT_OBJECT_HELPERS, [
-    ?S3_HELPER_NAME
-]).
+%% NOTE: which storage types are posix compatible, are object storages or
+%% support importing data is defined in the storage_type module.
 
 %% Storage path types
 -define(CANONICAL_STORAGE_PATH, <<"canonical">>).

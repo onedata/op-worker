@@ -6,7 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Behaviour for storage helper spec modules.
+%%% Behaviour for storage helper spec modules - the per type translation between
+%%% the typed records of the Onepanel contract and the flat parameter maps
+%%% understood by the C++ helper layer.
+%%%
+%%% Constant properties of a storage type are not part of this behaviour - they
+%%% are listed in the storage_type module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helper_spec_behaviour).
@@ -62,42 +67,6 @@
 %%--------------------------------------------------------------------
 -callback describe(helper_spec:t()) ->
     {onedata_storage:helper_configuration(), onedata_storage:helper_credentials()}.
-
-
--callback is_posix_compatible() -> boolean().
-
-
--callback is_object_storage() -> boolean().
-
-
--callback is_rename_supported() -> boolean().
-
-
--callback is_nfs4_acl_supported() -> boolean().
-
-
--callback is_oauth2_supported() -> boolean().
-
-
--callback is_storage_access_type_supported(helper_spec:access_type()) -> boolean().
-
-
--callback is_auto_import_supported(helper_spec:t()) -> boolean().
-
-
--callback is_file_registration_supported(helper_spec:t()) -> boolean().
-
-
--callback is_getting_size_supported(helper_spec:t()) -> boolean().
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the block size used by the storage.
-%% Returns undefined for non-object storage types.
-%% @end
-%%--------------------------------------------------------------------
--callback get_block_size(helper_spec:t()) -> non_neg_integer() | undefined.
 
 
 %%--------------------------------------------------------------------
