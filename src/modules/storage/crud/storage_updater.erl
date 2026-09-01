@@ -290,7 +290,7 @@ emit_helper_params_changed_event(StorageId) ->
         ok ->
             ok;
         {error, Reason} ->
-            ?warning("Failed to emit helper changed event for storage '~ts' due to: ~p", [
+            ?warning("Failed to emit helper changed event for storage '~ts' due to: ~tp", [
                 StorageId, Reason
             ])
     end.

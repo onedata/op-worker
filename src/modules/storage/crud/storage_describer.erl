@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% High-level unified API (to be used by REST?GUI) to describe storage.
+%%% High-level unified API (to be used by REST/GUI) to describe storage.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_describer).
