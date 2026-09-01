@@ -58,7 +58,7 @@ refresh_handle_params(Handle, SessionId, SpaceId, Storage) ->
     {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, StorageCredentials),
     HelperParamsWithType = maps:put(<<"type">>, helper_spec:get_name(HelperSpec), HelperParams),
     % do the refresh
-    % @TODO VFS-12677 Propagate storage update errors to onepanel and roll back
+    % @TODO VFS-12931 Propagate storage update errors to onepanel and roll back
     helpers:refresh_params(Handle, HelperParamsWithType).
 
 %%%===================================================================
