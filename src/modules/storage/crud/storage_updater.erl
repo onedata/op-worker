@@ -215,9 +215,13 @@ prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStora
     end,
 
     NewLumaFeed = luma_config:get_feed(NewLumaConfig),
-    IgnoreReadWriteTest = NewReadonly orelse
+    MustNotWriteToStorage = NewReadonly orelse
         (NewImported andalso storage:supports_any_space(StorageId)),
-    storage_crud_utils:run_diagnostics(NewHelperSpec, NewLumaFeed, not IgnoreReadWriteTest),
+    DiagnosticsMode = case MustNotWriteToStorage of
+        true -> access_only;
+        false -> access_and_read_write
+    end,
+    storage_crud_utils:run_diagnostics(NewHelperSpec, NewLumaFeed, DiagnosticsMode),
 
     {HelperSpecChanged, LumaChanged, #storage_config{
         helper_spec = NewHelperSpec,

@@ -60,10 +60,13 @@ classify_backends_by_health() ->
 is_storage_healthy(StorageData) ->
     HelperSpec = storage:get_helper_spec(StorageData),
     LumaFeed = storage:get_luma_feed(StorageData),
-    IgnoreReadWriteTest = storage:is_local_storage_readonly(StorageData) orelse
+    MustNotWriteToStorage = storage:is_local_storage_readonly(StorageData) orelse
         (storage:is_imported(StorageData) andalso storage:supports_any_space(StorageData)),
-    DiagnosticOpts = #{read_write_test => not IgnoreReadWriteTest},
-    case storage_detector:run_diagnostics(this_node, HelperSpec, LumaFeed, DiagnosticOpts) of
+    DiagnosticsMode = case MustNotWriteToStorage of
+        true -> access_only;
+        false -> access_and_read_write
+    end,
+    case storage_detector:run_diagnostics(this_node, HelperSpec, LumaFeed, DiagnosticsMode) of
         ok ->
             true;
         {_Error, Reason} ->

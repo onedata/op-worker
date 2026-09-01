@@ -35,10 +35,12 @@
 ]).
 
 -type operation() :: access | create | write | read | remove.
--type diagnostic_opts() :: #{read_write_test := boolean()}.
+%% Scope of the diagnostics: storage access is always checked, the read-write
+%% test (which creates a file on the storage) only when explicitly asked for.
+-type diagnostics_mode() :: access_only | access_and_read_write.
 -type diagnostic_error_details() :: any().
 
--export_type([diagnostic_opts/0, diagnostic_error_details/0]).
+-export_type([diagnostics_mode/0, diagnostic_error_details/0]).
 
 -define(DUMMY_SPACE_DIR_NAME, <<"test_space_name">>).
 -define(TEST_FILE_NAME_LEN, op_worker:get_env(storage_test_file_name_size, 32)).
@@ -53,13 +55,13 @@
 %%% API
 %%%===================================================================
 
--spec run_diagnostics(all_nodes | this_node, helper_spec:t(), luma_config:feed(), diagnostic_opts()) ->
+-spec run_diagnostics(all_nodes | this_node, helper_spec:t(), luma_config:feed(), diagnostics_mode()) ->
     ok | {errors:error(), diagnostic_error_details()}.
-run_diagnostics(all_nodes, HelperSpec, LumaFeed, Opts) ->
+run_diagnostics(all_nodes, HelperSpec, LumaFeed, DiagnosticsMode) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    run_diagnostics_on_nodes(Nodes, HelperSpec, LumaFeed, Opts);
-run_diagnostics(this_node, HelperSpec, LumaFeed, Opts) ->
-    run_diagnostics_on_nodes([node()], HelperSpec, LumaFeed, Opts).
+    run_diagnostics_on_nodes(Nodes, HelperSpec, LumaFeed, DiagnosticsMode);
+run_diagnostics(this_node, HelperSpec, LumaFeed, DiagnosticsMode) ->
+    run_diagnostics_on_nodes([node()], HelperSpec, LumaFeed, DiagnosticsMode).
 
 
 -spec check_storage_access(helper_spec:t(), helper_spec:credentials()) ->
@@ -132,13 +134,13 @@ remove_test_file(HelperSpec, StorageCredentials, FileId, Size) ->
 %%%===================================================================
 
 %% @private
--spec run_diagnostics_on_nodes([node()], helper_spec:t(), luma_config:feed(), diagnostic_opts()) ->
+-spec run_diagnostics_on_nodes([node()], helper_spec:t(), luma_config:feed(), diagnostics_mode()) ->
     ok | {errors:error(), diagnostic_error_details()}.
 run_diagnostics_on_nodes(_Nodes, #helper_spec{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed, _) ->
     ok;
 run_diagnostics_on_nodes(_Nodes, #helper_spec{name = ?HTTP_HELPER_NAME}, _LumaFeed, _) ->
     ok;
-run_diagnostics_on_nodes(Nodes, HelperSpec, LumaFeed, Options) ->
+run_diagnostics_on_nodes(Nodes, HelperSpec, LumaFeed, DiagnosticsMode) ->
     try
         case ?SKIP_STORAGE_DETECTION of
             true ->
@@ -148,7 +150,7 @@ run_diagnostics_on_nodes(Nodes, HelperSpec, LumaFeed, Options) ->
                 {ok, ExtendedAdminCredentials} = luma:add_helper_specific_fields(
                     ?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCredentials, HelperSpec, LumaFeed
                 ),
-                run_diagnostics_on_nodes_insecure(Nodes, HelperSpec, ExtendedAdminCredentials, Options)
+                run_diagnostics_on_nodes_insecure(Nodes, HelperSpec, ExtendedAdminCredentials, DiagnosticsMode)
         end
     catch throw:?OPERATION_FAILED(Operation, Reason) ->
         {?ERR_STORAGE_TEST_FAILED(?err_ctx(), Operation), Reason}
@@ -156,14 +158,14 @@ run_diagnostics_on_nodes(Nodes, HelperSpec, LumaFeed, Options) ->
 
 
 %% @private
--spec run_diagnostics_on_nodes_insecure([node()], helper_spec:t(), helper_spec:credentials(), diagnostic_opts()) ->
+-spec run_diagnostics_on_nodes_insecure([node()], helper_spec:t(), helper_spec:credentials(), diagnostics_mode()) ->
     ok.
-run_diagnostics_on_nodes_insecure(Nodes, HelperSpec, StorageCredentials, Opts) ->
+run_diagnostics_on_nodes_insecure(Nodes, HelperSpec, StorageCredentials, DiagnosticsMode) ->
     BasicArgList = [[HelperSpec, StorageCredentials] || _N <- Nodes],
     perform_operation(Nodes, access, check_storage_access, BasicArgList),
-    case maps:get(read_write_test, Opts) of
-        true -> perform_read_write_test(Nodes, BasicArgList);
-        false -> ok
+    case DiagnosticsMode of
+        access_and_read_write -> perform_read_write_test(Nodes, BasicArgList);
+        access_only -> ok
     end.
 
 

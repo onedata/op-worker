@@ -107,9 +107,15 @@ run_diagnostics(HelperSpec, LumaConfig, #storage_create_spec{
     readonly = Readonly
 }) ->
     LumaFeed = luma_config:get_feed(LumaConfig),
+    % the storage supports no spaces yet, so being readonly is the only reason
+    % not to write a test file on it
+    DiagnosticsMode = case Readonly of
+        true -> access_only;
+        false -> access_and_read_write
+    end,
 
     ?info("Verifying storage access: '~ts' (~ts)", [Name, Type]),
-    storage_crud_utils:run_diagnostics(HelperSpec, LumaFeed, not Readonly).
+    storage_crud_utils:run_diagnostics(HelperSpec, LumaFeed, DiagnosticsMode).
 
 
 %% @private

@@ -79,11 +79,10 @@ verify_configuration(IdOrName, Readonly, Imported, HelperSpec) ->
     check_helper_against_imported_option(Imported, HelperSpec).
 
 
--spec run_diagnostics(helper_spec:t(), luma:feed(), boolean()) -> ok | no_return().
-run_diagnostics(HelperSpec, LumaFeed, PerformReadWriteTest) ->
-    Opts = #{read_write_test => PerformReadWriteTest},
-
-    case storage_detector:run_diagnostics(all_nodes, HelperSpec, LumaFeed, Opts) of
+-spec run_diagnostics(helper_spec:t(), luma:feed(), storage_detector:diagnostics_mode()) ->
+    ok | no_return().
+run_diagnostics(HelperSpec, LumaFeed, DiagnosticsMode) ->
+    case storage_detector:run_diagnostics(all_nodes, HelperSpec, LumaFeed, DiagnosticsMode) of
         ok ->
             ok;
         {{error, _} = Error, Details} ->
