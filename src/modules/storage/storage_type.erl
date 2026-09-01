@@ -24,10 +24,12 @@
 -export([
     list_all/0,
     list_capabilities/1,
+    list_supported_storage_path_types/1,
+    get_default_block_size/1,
+
     has_capability/2,
     list_types_with_capability/1,
-    list_types_with_capabilities/1,
-    get_default_block_size/1
+    list_types_with_capabilities/1
 ]).
 
 %% posix_compatible - files carry POSIX ownership (uid/gid) and mode.
@@ -97,6 +99,52 @@ list_capabilities(?XROOTD_HELPER_NAME) ->
     [readwrite, rename, auto_import, manual_import, getting_size].
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Storage path types the backend is able to work with. Mirrors the domain
+%% declared by the <type>_helper_configuration record in the Onepanel contract
+%% (and by the storagePathType enums in the Onepanel swagger).
+%% @end
+%%--------------------------------------------------------------------
+-spec list_supported_storage_path_types(onedata_storage:type()) -> [storage_path_type()].
+list_supported_storage_path_types(?CEPH_HELPER_NAME) ->
+    [?CANONICAL_STORAGE_PATH, ?FLAT_STORAGE_PATH];
+list_supported_storage_path_types(?CEPHRADOS_HELPER_NAME) ->
+    [?FLAT_STORAGE_PATH];
+list_supported_storage_path_types(?GLUSTERFS_HELPER_NAME) ->
+    [?CANONICAL_STORAGE_PATH];
+list_supported_storage_path_types(?HTTP_HELPER_NAME) ->
+    [?CANONICAL_STORAGE_PATH, ?FLAT_STORAGE_PATH];
+list_supported_storage_path_types(?NFS_HELPER_NAME) ->
+    [?CANONICAL_STORAGE_PATH];
+list_supported_storage_path_types(?NULL_DEVICE_HELPER_NAME) ->
+    [?CANONICAL_STORAGE_PATH, ?FLAT_STORAGE_PATH];
+list_supported_storage_path_types(?POSIX_HELPER_NAME) ->
+    [?CANONICAL_STORAGE_PATH];
+list_supported_storage_path_types(?S3_HELPER_NAME) ->
+    [?CANONICAL_STORAGE_PATH, ?FLAT_STORAGE_PATH];
+list_supported_storage_path_types(?SWIFT_HELPER_NAME) ->
+    [?CANONICAL_STORAGE_PATH, ?FLAT_STORAGE_PATH];
+list_supported_storage_path_types(?WEBDAV_HELPER_NAME) ->
+    [?CANONICAL_STORAGE_PATH];
+list_supported_storage_path_types(?XROOTD_HELPER_NAME) ->
+    [?CANONICAL_STORAGE_PATH, ?FLAT_STORAGE_PATH].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Size of the objects a file is split into on the storage, used unless the
+%% admin sets one explicitly. Returns undefined for types that always store
+%% a file as a whole.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_default_block_size(onedata_storage:type()) -> undefined | non_neg_integer().
+get_default_block_size(?CEPHRADOS_HELPER_NAME) -> 4194304;
+get_default_block_size(?S3_HELPER_NAME) -> 10485760;
+get_default_block_size(?SWIFT_HELPER_NAME) -> 10485760;
+get_default_block_size(_) -> undefined.
+
+
 -spec has_capability(onedata_storage:type(), capability()) -> boolean().
 has_capability(Type, Capability) ->
     lists:member(Capability, list_capabilities(Type)).
@@ -112,17 +160,3 @@ list_types_with_capabilities(Capabilities) ->
     lists:filter(fun(Type) ->
         lists:all(fun(Capability) -> has_capability(Type, Capability) end, Capabilities)
     end, list_all()).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Size of the objects a file is split into on the storage, used unless the
-%% admin sets one explicitly. Returns undefined for types that always store
-%% a file as a whole.
-%% @end
-%%--------------------------------------------------------------------
--spec get_default_block_size(onedata_storage:type()) -> undefined | non_neg_integer().
-get_default_block_size(?CEPHRADOS_HELPER_NAME) -> 4194304;
-get_default_block_size(?S3_HELPER_NAME) -> 10485760;
-get_default_block_size(?SWIFT_HELPER_NAME) -> 10485760;
-get_default_block_size(_) -> undefined.

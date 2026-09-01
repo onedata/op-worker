@@ -31,6 +31,7 @@
 %% API
 -export([
     pretty_print_spec/1,
+    verify_storage_path_type/1,
     verify_configuration/4,
     run_diagnostics/3
 ]).
@@ -46,6 +47,28 @@
 pretty_print_spec(Spec) ->
     RedactedSpec = redact_confidential_data(Spec),
     io_lib_pretty:print(RedactedSpec, fun get_record_def/2).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks the storage path type against the domain of the storage type.
+%% Done on storage creation only - the storage path type is not part of any
+%% helper configuration diff, so an update can never change it.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_storage_path_type(helper_spec:t()) -> ok | no_return().
+verify_storage_path_type(HelperSpec) ->
+    SupportedStoragePathTypes = storage_type:list_supported_storage_path_types(
+        helper_spec:get_name(HelperSpec)
+    ),
+    case lists:member(helper_spec:get_storage_path_type(HelperSpec), SupportedStoragePathTypes) of
+        true ->
+            ok;
+        false ->
+            throw(?ERR_BAD_VALUE_NOT_ALLOWED(
+                ?err_ctx(), <<"storagePathType">>, SupportedStoragePathTypes
+            ))
+    end.
 
 
 -spec verify_configuration(storage:id() | storage:name(), storage:readonly(), storage:imported(), helper_spec:t()) ->

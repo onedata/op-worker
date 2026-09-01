@@ -69,6 +69,7 @@ do_create(StorageCreateSpec = #storage_create_spec{
     qos_parameters = QosParameters
 }) ->
     HelperSpec = helper_spec:build(StorageCreateSpec),
+    storage_crud_utils:verify_storage_path_type(HelperSpec),
     storage_crud_utils:verify_configuration(Name, Readonly, Imported, HelperSpec),
 
     LumaConfig = build_luma_config(LumaSpec),
