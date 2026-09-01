@@ -42,7 +42,6 @@
 
 -export_type([diagnostics_mode/0, diagnostic_error_details/0]).
 
--define(DUMMY_SPACE_DIR_NAME, <<"test_space_name">>).
 -define(TEST_FILE_NAME_LEN, op_worker:get_env(storage_test_file_name_size, 32)).
 -define(TEST_FILE_CONTENT_LEN, op_worker:get_env(storage_test_file_content_size, 100)).
 
@@ -73,10 +72,6 @@ check_storage_access(HelperSpec, StorageCredentials) ->
 
 -spec create_test_file(helper_spec:t(), helper_spec:credentials()) ->
     {ok, helpers:file_id()}.
-create_test_file(#helper_spec{name = ?S3_HELPER_NAME, configuration = #{<<"archiveStorage">> := <<"true">>}} = HelperSpec, StorageCredentials) ->
-    % S3 storage with archive_storage set to true requires all files to be created in a space directory
-    % therefore test file also needs to be created in such a directory.
-    create_test_file(HelperSpec, StorageCredentials, ?DUMMY_SPACE_DIR_NAME);
 create_test_file(HelperSpec, StorageCredentials) ->
     create_test_file(HelperSpec, StorageCredentials, <<>>).
 

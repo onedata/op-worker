@@ -337,10 +337,13 @@ upgrade_record(2, {?MODULE, Helper, LumaConfig, _ImportedStorage}) ->
 upgrade_record(3, {?MODULE, Helper, LumaConfig}) ->
     {helper, Name, ConfigurationParams, CredentialsParams} = Helper,
     % timeout used to be stored among the flat helper params, it is now a typed field
-    {TimeoutBin, RemainingConfigurationParams} = case maps:take(<<"timeout">>, ConfigurationParams) of
+    {TimeoutBin, ConfigurationParamsWithoutTimeout} = case maps:take(<<"timeout">>, ConfigurationParams) of
         error -> {undefined, ConfigurationParams};
         Result -> Result
     end,
+    % the archive storage option is gone - left among the params it would still
+    % be handed to the storage helper, which does implement it
+    RemainingConfigurationParams = maps:remove(<<"archiveStorage">>, ConfigurationParamsWithoutTimeout),
     HelperSpec = #helper_spec{
         name = Name,
         timeout = utils:convert_defined(TimeoutBin, fun binary_to_integer/1),
