@@ -214,14 +214,26 @@ prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStora
             end
     end,
 
-    NewLumaFeed = luma_config:get_feed(NewLumaConfig),
-    MustNotWriteToStorage = NewReadonly orelse
-        (NewImported andalso storage:supports_any_space(StorageId)),
-    DiagnosticsMode = case MustNotWriteToStorage of
-        true -> access_only;
-        false -> access_and_read_write
+    % diagnostics is run for the same reason verify_configuration/4 above is - to
+    % catch an update that would leave the storage inaccessible - so it is run
+    % under the same condition, plus a LUMA change, as the feed is what the
+    % diagnostics resolves its storage credentials with. An update touching only
+    % the storage name or its QoS parameters no longer writes a test file on
+    % every node.
+    case HelperSpecChanged orelse LumaChanged orelse ReadonlyChanged orelse ImportedChanged of
+        true ->
+            MustNotWriteToStorage = NewReadonly orelse
+                (NewImported andalso storage:supports_any_space(StorageId)),
+            DiagnosticsMode = case MustNotWriteToStorage of
+                true -> access_only;
+                false -> access_and_read_write
+            end,
+            storage_crud_utils:run_diagnostics(
+                NewHelperSpec, luma_config:get_feed(NewLumaConfig), DiagnosticsMode
+            );
+        false ->
+            ok
     end,
-    storage_crud_utils:run_diagnostics(NewHelperSpec, NewLumaFeed, DiagnosticsMode),
 
     {HelperSpecChanged, LumaChanged, #storage_config{
         helper_spec = NewHelperSpec,
