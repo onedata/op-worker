@@ -38,7 +38,8 @@
 ]).
 -export([is_space_owner/2]).
 -export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/2]).
--export([is_in_public_data_mode/1, get_session_mode/1, set_session_mode/2]).
+-export([is_in_public_data_mode/1, get_session_mode/1, set_session_mode/2, get_client_type/1,
+    get_client_options/1, get_client_system_properties/1]).
 
 %%%===================================================================
 %%% API functions
@@ -202,6 +203,18 @@ is_in_public_data_mode(UserCtx) ->
 -spec get_session_mode(ctx()) -> session:mode().
 get_session_mode(#user_ctx{session = #document{value = #session{mode = SessMode}}}) ->
     SessMode.
+
+-spec get_client_type(ctx()) -> session:fuse_client_type().
+get_client_type(#user_ctx{session = #document{value = #session{client_type = ClientType}}}) ->
+    ClientType.
+
+-spec get_client_options(ctx()) -> [tuple()].
+get_client_options(#user_ctx{session = #document{value = #session{client_options = ClientOptions}}}) ->
+    ClientOptions.
+
+-spec get_client_system_properties(ctx()) -> [tuple()].
+get_client_system_properties(#user_ctx{session = #document{value = #session{client_system_properties = ClientSystemProperties}}}) ->
+    ClientSystemProperties.
 
 -spec set_session_mode(ctx(), session:mode()) -> ctx().
 set_session_mode(#user_ctx{session = #document{value = SessRec} = SessDoc} = UserCtx, SessMode) ->

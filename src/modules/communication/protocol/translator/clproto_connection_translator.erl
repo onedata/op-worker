@@ -37,14 +37,20 @@ from_protobuf(#'ClientHandshakeRequest'{
     session_id = Nonce,
     version = Version,
     compatible_oneprovider_versions = CompOpVersions,
-    session_mode = SessionMode
+    session_mode = SessionMode,
+    client_type = ClientType,
+    client_options = ClientOptions,
+    client_system_properties = ClientSystemProperties
 }) ->
     #client_handshake_request{
         client_tokens = from_protobuf(Macaroon),
         nonce = Nonce,
         version = Version,
         compatible_oneprovider_versions = CompOpVersions,
-        session_mode = session_mode_from_protobuf(SessionMode)
+        session_mode = session_mode_from_protobuf(SessionMode),
+        client_type = client_type_from_protobuf(ClientType),
+        client_options = ClientOptions,
+        client_system_properties = ClientSystemProperties
     };
 from_protobuf(#'ProviderHandshakeRequest'{
     provider_id = ProviderId,
@@ -60,7 +66,10 @@ from_protobuf(#'Macaroon'{
     #client_tokens{access_token = AccessToken};
 from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
-
+from_protobuf(#'ClientOption'{name = Name, value = Value}) ->
+    #client_option{name = Name, value = Value};
+from_protobuf(#'ClientSystemProperty'{name = Name, value = Value}) ->
+    #client_system_property{name = Name, value = Value};
 
 % PROCESSING STATUS
 from_protobuf(#'ProcessingStatus'{code = Code}) ->
@@ -130,6 +139,12 @@ from_protobuf(undefined) -> undefined.
 session_mode_from_protobuf('OPEN_HANDLE') -> public_data;   % TODO VFS-12625 rework to PUBLIC_DATA
 session_mode_from_protobuf(_)             -> normal.
 
+-spec client_type_from_protobuf(undefined | 'ONECLIENT_TYPE' | 'ONEDATAFS_TYPE' | 'ONES3_TYPE') ->
+    session:fuse_client_type().
+client_type_from_protobuf('ONECLIENT_TYPE') -> oneclient;
+client_type_from_protobuf('ONEDATAFS_TYPE') -> onedatafs;
+client_type_from_protobuf('ONES3_TYPE')     -> ones3;
+client_type_from_protobuf(_)               -> undefined.
 
 
 %%%===================================================================
