@@ -413,9 +413,8 @@ handle_info({Ok, Socket, Data}, #state{
                 undefined ->
                     ok;
                 ClientType ->
-                    FmtProps = fun(List) -> [{N, V} || {_, N, V} <- List] end,
-                    ClientOptions = FmtProps(user_ctx:get_client_options(Ctx)),
-                    ClientSystemProperties = FmtProps(user_ctx:get_client_system_properties(Ctx)),
+                    ClientOptions = user_ctx:get_client_options(Ctx),
+                    ClientSystemProperties = user_ctx:get_client_system_properties(Ctx),
                     ?info(?autoformat_with_msg("Fuse client connected:",
                         [ClientType, ClientOptions, ClientSystemProperties]))
             end,

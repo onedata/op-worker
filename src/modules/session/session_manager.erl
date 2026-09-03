@@ -60,14 +60,14 @@ reuse_or_create_fuse_session(Nonce, Identity, Credentials) ->
 
 
 -spec reuse_or_create_fuse_session(Nonce :: binary(), aai:subject(), session:mode(),
-    auth_manager:credentials(), session:fuse_client_type()) -> {ok, session:id()} | error().
+    auth_manager:credentials(), session:client_type()) -> {ok, session:id()} | error().
 reuse_or_create_fuse_session(Nonce, Identity, SessMode, Credentials, ClientType) ->
     SessId = datastore_key:new_from_digest([<<"fuse">>, Nonce]),
     reuse_or_create_session(SessId, fuse, ClientType, SessMode, Identity, Credentials).
 
 
 -spec reuse_or_create_fuse_session(Nonce :: binary(), aai:subject(), session:mode(),
-    auth_manager:credentials(), session:fuse_client_type(),
+    auth_manager:credentials(), session:client_type(),
     ClientOptions :: undefined | [tuple()],
     ClientSystemProperties :: undefined | [tuple()]
 ) -> {ok, session:id()} | error().
@@ -273,7 +273,7 @@ clean_terminated_session(SessId) ->
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
-    session:fuse_client_type(),
+    session:client_type(),
     aai:subject(),
     undefined | auth_manager:credentials()
 ) ->
@@ -286,7 +286,7 @@ reuse_or_create_session(SessId, SessType, ClientType, Identity, Credentials) ->
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
-    session:fuse_client_type(),
+    session:client_type(),
     session:mode(),
     aai:subject(),
     undefined | auth_manager:credentials()
@@ -300,7 +300,7 @@ reuse_or_create_session(SessId, SessType, SessClientType, SessMode, Identity, Cr
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
-    session:fuse_client_type(),
+    session:client_type(),
     session:mode(),
     aai:subject(),
     undefined | auth_manager:credentials(),
@@ -345,7 +345,7 @@ get_caveats(Credentials) ->
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
-    session:fuse_client_type(),
+    session:client_type(),
     session:mode(),
     aai:subject(),
     undefined | auth_manager:credentials(),
@@ -373,7 +373,7 @@ reuse_or_create_session(SessId, SessType, SessClientType, SessMode, Identity, Cr
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
-    session:fuse_client_type(),
+    session:client_type(),
     session:mode(),
     aai:subject(),
     undefined | auth_manager:credentials(),
@@ -490,7 +490,7 @@ renew_connection_if_needed(_, _) ->
 -spec maybe_retry_session_init(
     session:id(),
     session:type(),
-    session:fuse_client_type(),
+    session:client_type(),
     session:mode(),
     aai:subject(),
     undefined | auth_manager:credentials(),

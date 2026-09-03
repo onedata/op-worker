@@ -49,8 +49,8 @@ from_protobuf(#'ClientHandshakeRequest'{
         compatible_oneprovider_versions = CompOpVersions,
         session_mode = session_mode_from_protobuf(SessionMode),
         client_type = client_type_from_protobuf(ClientType),
-        client_options = ClientOptions,
-        client_system_properties = ClientSystemProperties
+        client_options = client_options_from_protobuf(ClientOptions),
+        client_system_properties = client_system_properties_from_protobuf(ClientSystemProperties)
     };
 from_protobuf(#'ProviderHandshakeRequest'{
     provider_id = ProviderId,
@@ -67,9 +67,9 @@ from_protobuf(#'Macaroon'{
 from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
 from_protobuf(#'ClientOption'{name = Name, value = Value}) ->
-    #client_option{name = Name, value = Value};
+    {Name, Value};
 from_protobuf(#'ClientSystemProperty'{name = Name, value = Value}) ->
-    #client_system_property{name = Name, value = Value};
+    {Name, Value};
 
 % PROCESSING STATUS
 from_protobuf(#'ProcessingStatus'{code = Code}) ->
@@ -140,11 +140,21 @@ session_mode_from_protobuf('OPEN_HANDLE') -> public_data;   % TODO VFS-12625 rew
 session_mode_from_protobuf(_)             -> normal.
 
 -spec client_type_from_protobuf(undefined | 'ONECLIENT_TYPE' | 'ONEDATAFS_TYPE' | 'ONES3_TYPE') ->
-    session:fuse_client_type().
+    session:client_type().
 client_type_from_protobuf('ONECLIENT_TYPE') -> oneclient;
 client_type_from_protobuf('ONEDATAFS_TYPE') -> onedatafs;
 client_type_from_protobuf('ONES3_TYPE')     -> ones3;
 client_type_from_protobuf(_)               -> undefined.
+
+
+-spec client_options_from_protobuf([#'ClientOption'{}]) -> [session:client_option()].
+client_options_from_protobuf(ClientOptions) ->
+    [from_protobuf(ClientOption) || ClientOption <- ClientOptions].
+
+-spec client_system_properties_from_protobuf([#'ClientSystemProperty'{}])
+        -> [session:client_system_property()].
+client_system_properties_from_protobuf(ClientSystemProperties) ->
+    [from_protobuf(ClientSystemProperty) || ClientSystemProperty <- ClientSystemProperties].
 
 
 %%%===================================================================

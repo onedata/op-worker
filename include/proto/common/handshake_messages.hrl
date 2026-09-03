@@ -15,25 +15,15 @@
 
 -include("proto/common/credentials.hrl").
 
--record(client_option, {
-    name :: binary(),
-    value :: binary()
-}).
-
--record(client_system_property, {
-    name :: binary(),
-    value :: binary()
-}).
-
 -record(client_handshake_request, {
     client_tokens :: auth_manager:client_tokens(),
     nonce :: binary(),
     version :: binary(),
     compatible_oneprovider_versions :: [binary()],
     session_mode :: session:mode(),
-    client_type :: session:fuse_client_type(),
-    client_options :: [client_option],
-    client_system_properties :: [client_system_property]
+    client_type :: session:client_type(),
+    client_options :: [session:client_option()],
+    client_system_properties :: [session:client_system_property()]
 }).
 
 -record(provider_handshake_request, {

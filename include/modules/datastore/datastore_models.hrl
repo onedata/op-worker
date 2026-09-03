@@ -295,7 +295,7 @@
     status :: undefined | session:status(),
     accessed :: undefined | time:seconds(),
     type :: undefined | session:type(),
-    client_type :: undefined | session:fuse_client_type(),
+    client_type :: undefined | session:client_type(),
     client_options :: undefined | [tuple()],
     client_system_properties :: undefined | [tuple()],
     mode = normal :: session:mode(),

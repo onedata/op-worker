@@ -17,6 +17,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
@@ -48,8 +49,11 @@
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
 -type type() :: fuse | rest | gui | offline | provider_outgoing | provider_incoming | root | guest.
+
 % Specifies type of client - only applicable when type() is fuse
--type fuse_client_type() :: undefined | oneclient | onedatafs | ones3.
+-type client_type() :: undefined | oneclient | onedatafs | ones3.
+-type client_option() :: {binary(), binary()}.
+-type client_system_property() :: {binary(), binary()}.
 
 % Supported session modes:
 % - normal
@@ -69,7 +73,9 @@
 -export_type([
     id/0, record/0, doc/0,
     ttl/0, grace_period/0,
-    type/0, fuse_client_type/0, mode/0, status/0
+    type/0,
+    client_type/0, client_option/0, client_system_property/0,
+    mode/0, status/0
 ]).
 
 -define(CTX, #{
