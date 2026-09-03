@@ -96,7 +96,7 @@ translate_client_handshake_request_client_options_from_protobuf_test() ->
         #'ClientOption'{name = <<"force-direct-io">>, value = <<"true">>}
     ],
     ProtobufWithOptions = Protobuf#'ClientHandshakeRequest'{client_options = Options},
-    InternalWithOptions = Internal#client_handshake_request{client_options = Options},
+    InternalWithOptions = Internal#client_handshake_request{client_options = [{<<"host">>, <<"example.com">>}, {<<"force-direct-io">>, <<"true">>}]},
     ?assertEqual(InternalWithOptions, clproto_translator:from_protobuf(ProtobufWithOptions)),
 
     %% empty list when not sent by client (protobuf repeated field default)
@@ -114,25 +114,13 @@ translate_client_handshake_request_client_system_properties_from_protobuf_test()
         #'ClientSystemProperty'{name = <<"os.arch">>, value = <<"x86_64">>}
     ],
     ProtobufWithProps = Protobuf#'ClientHandshakeRequest'{client_system_properties = SystemProperties},
-    InternalWithProps = Internal#client_handshake_request{client_system_properties = SystemProperties},
+    InternalWithProps = Internal#client_handshake_request{client_system_properties = [{<<"os.name">>, <<"Linux">>}, {<<"os.arch">>, <<"x86_64">>}]},
     ?assertEqual(InternalWithProps, clproto_translator:from_protobuf(ProtobufWithProps)),
 
     %% empty list when not sent by client (protobuf repeated field default)
     ProtobufNoProps = Protobuf#'ClientHandshakeRequest'{client_system_properties = []},
     InternalNoProps = Internal#client_handshake_request{client_system_properties = []},
     ?assertEqual(InternalNoProps, clproto_translator:from_protobuf(ProtobufNoProps)).
-
-translate_client_option_from_protobuf_test() ->
-    ?assertEqual(
-        #client_option{name = <<"host">>, value = <<"example.com">>},
-        clproto_connection_translator:from_protobuf(#'ClientOption'{name = <<"host">>, value = <<"example.com">>})
-    ).
-
-translate_client_system_property_from_protobuf_test() ->
-    ?assertEqual(
-        #client_system_property{name = <<"os.name">>, value = <<"Linux">>},
-        clproto_connection_translator:from_protobuf(#'ClientSystemProperty'{name = <<"os.name">>, value = <<"Linux">>})
-    ).
 
 translate_provider_handshake_request_from_protobuf_test() ->
     {Internal, Protobuf} = get_provider_handshake_request(<<"abcd">>, <<"token">>),

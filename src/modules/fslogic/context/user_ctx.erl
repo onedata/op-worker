@@ -204,7 +204,7 @@ is_in_public_data_mode(UserCtx) ->
 get_session_mode(#user_ctx{session = #document{value = #session{mode = SessMode}}}) ->
     SessMode.
 
--spec get_client_type(ctx()) -> session:client_type().
+-spec get_client_type(ctx()) -> undefined | session:client_type().
 get_client_type(#user_ctx{session = #document{value = #session{client_type = ClientType}}}) ->
     ClientType.
 

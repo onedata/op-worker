@@ -17,7 +17,6 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
--include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
@@ -49,9 +48,7 @@
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
 -type type() :: fuse | rest | gui | offline | provider_outgoing | provider_incoming | root | guest.
-
-% Specifies type of client - only applicable when type() is fuse
--type client_type() :: undefined | oneclient | onedatafs | ones3.
+-type client_type() :: oneprovider | oneclient | onedatafs | ones3.
 -type client_option() :: {binary(), binary()}.
 -type client_system_property() :: {binary(), binary()}.
 
