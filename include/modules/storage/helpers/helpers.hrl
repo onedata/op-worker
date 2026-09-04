@@ -43,8 +43,6 @@
 -define(READWRITE, readwrite).
 -define(READONLY, readonly).
 
--define(DEFAULT_HELPER_TIMEOUT, 120000).
-
 %% This type determines the filename and path generation
 %% on the storage. Currently 2 modes are supported:
 %% - 'canonical' - posix-style
