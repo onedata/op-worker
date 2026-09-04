@@ -21,7 +21,7 @@
     version :: binary(),
     compatible_oneprovider_versions :: [binary()],
     session_mode :: session:mode(),
-    client_type :: session:client_type(),
+    client_type :: undefined | session:client_type(),
     client_options :: [session:client_option()],
     client_system_properties :: [session:client_system_property()]
 }).

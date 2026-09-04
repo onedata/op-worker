@@ -99,10 +99,13 @@ translate_client_handshake_request_client_options_from_protobuf_test() ->
     InternalWithOptions = Internal#client_handshake_request{client_options = [{<<"host">>, <<"example.com">>}, {<<"force-direct-io">>, <<"true">>}]},
     ?assertEqual(InternalWithOptions, clproto_translator:from_protobuf(ProtobufWithOptions)),
 
-    %% empty list when not sent by client (protobuf repeated field default)
+    %% empty list when explicitly set to []
     ProtobufNoOptions = Protobuf#'ClientHandshakeRequest'{client_options = []},
     InternalNoOptions = Internal#client_handshake_request{client_options = []},
-    ?assertEqual(InternalNoOptions, clproto_translator:from_protobuf(ProtobufNoOptions)).
+    ?assertEqual(InternalNoOptions, clproto_translator:from_protobuf(ProtobufNoOptions)),
+
+    %% field absent from message - protobuf repeated fields default to [] so result is also []
+    ?assertEqual(Internal, clproto_translator:from_protobuf(Protobuf)).
 
 translate_client_handshake_request_client_system_properties_from_protobuf_test() ->
     Token = <<"DUMMY-TOKEN">>,

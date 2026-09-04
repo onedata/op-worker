@@ -78,13 +78,13 @@ reuse_or_create_fuse_session(Nonce, Identity, SessMode, Credentials, SessClientT
     {ok, session:id()} | error().
 reuse_or_create_incoming_provider_session(?SUB(?ONEPROVIDER, ProviderId) = Identity) ->
     SessId = session_utils:get_provider_session_id(incoming, ProviderId),
-    reuse_or_create_session(SessId, provider_incoming, oneprovider, [], [], Identity, undefined).
+    reuse_or_create_session(SessId, provider_incoming, undefined, [], [], Identity, undefined).
 
 
 -spec reuse_or_create_outgoing_provider_session(session:id(), aai:subject()) ->
     {ok, session:id()} | error().
 reuse_or_create_outgoing_provider_session(SessId, Identity) ->
-    reuse_or_create_session(SessId, provider_outgoing, oneprovider, [], [], Identity, undefined).
+    reuse_or_create_session(SessId, provider_outgoing, undefined, [], [], Identity, undefined).
 
 
 -spec reuse_or_create_proxied_session(
@@ -99,7 +99,7 @@ reuse_or_create_proxied_session(SessId, ProxyVia, Credentials, SessionType, Sess
     case auth_manager:verify_credentials(Credentials) of
         {ok, #auth{subject = ?SUB(user, _) = Identity}, _TokenValidUntil} ->
             reuse_or_create_session(
-                SessId, SessionType, oneprovider, [], [], SessMode, Identity, Credentials, ProxyVia
+                SessId, SessionType, undefined, [], [], SessMode, Identity, Credentials, ProxyVia
             );
         Error ->
             Error
@@ -112,7 +112,7 @@ reuse_or_create_rest_session(?SUB(user, UserId) = Identity, Credentials) ->
     SessId = datastore_key:new_from_digest([<<"rest">>, Credentials]),
     case provider_logic:has_eff_user(UserId) of
         true ->
-            reuse_or_create_session(SessId, rest, oneprovider, [], [], Identity, Credentials);
+            reuse_or_create_session(SessId, rest, undefined, [], [], Identity, Credentials);
         false ->
             {error, {invalid_identity, Identity}}
     end.
@@ -122,13 +122,13 @@ reuse_or_create_rest_session(?SUB(user, UserId) = Identity, Credentials) ->
     {ok, session:id()} | error().
 reuse_or_create_gui_session(Identity, Credentials) ->
     SessId = datastore_key:new_from_digest([<<"gui">>, Credentials]),
-    reuse_or_create_session(SessId, gui, oneprovider, [], [], Identity, Credentials).
+    reuse_or_create_session(SessId, gui, undefined, [], [], Identity, Credentials).
 
 
 -spec reuse_or_create_offline_session(session:id(), aai:subject(), auth_manager:credentials()) ->
     {ok, session:id()} | error().
 reuse_or_create_offline_session(SessId, Identity, Credentials) ->
-    reuse_or_create_session(SessId, offline, oneprovider, [], [], Identity, Credentials).
+    reuse_or_create_session(SessId, offline, undefined, [], [], Identity, Credentials).
 
 
 -spec create_root_session() -> {ok, session:id()} | error().
@@ -140,7 +140,9 @@ create_root_session() ->
             status = active,
             identity = ?ROOT_IDENTITY,
             credentials = ?ROOT_CREDENTIALS,
-            data_constraints = data_constraints:get_allow_all_constraints()
+            data_constraints = data_constraints:get_allow_all_constraints(),
+            client_options = [],
+            client_system_properties = []
         }
     }).
 
@@ -154,7 +156,9 @@ create_guest_session() ->
             status = active,
             identity = ?GUEST_IDENTITY,
             credentials = ?GUEST_CREDENTIALS,
-            data_constraints = data_constraints:get_allow_all_constraints()
+            data_constraints = data_constraints:get_allow_all_constraints(),
+            client_options = [],
+            client_system_properties = []
         }
     }).
 
@@ -261,7 +265,7 @@ clean_terminated_session(SessId) ->
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
-    session:client_type(),
+    undefined | session:client_type(),
     [session:client_option()],
     [session:client_system_property()],
     aai:subject(),
@@ -277,7 +281,7 @@ reuse_or_create_session(SessId, SessType, ClientType, ClientOptions, ClientSyste
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
-    session:client_type(),
+    undefined | session:client_type(),
     [session:client_option()],
     [session:client_system_property()],
     session:mode(),
@@ -295,7 +299,7 @@ reuse_or_create_session(SessId, SessType, SessClientType, ClientOptions, ClientS
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
-    session:client_type(),
+    undefined | session:client_type(),
     [session:client_option()],
     [session:client_system_property()],
     session:mode(),
@@ -343,7 +347,7 @@ get_caveats(Credentials) ->
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
-    session:client_type(),
+    undefined | session:client_type(),
     [session:client_option()],
     [session:client_system_property()],
     session:mode(),
@@ -374,7 +378,7 @@ reuse_or_create_session(SessId, SessType, SessClientType, ClientOptions, ClientS
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
-    session:client_type(),
+    undefined | session:client_type(),
     [session:client_option()],
     [session:client_system_property()],
     session:mode(),

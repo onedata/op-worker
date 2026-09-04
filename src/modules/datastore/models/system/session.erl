@@ -48,7 +48,7 @@
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
 -type type() :: fuse | rest | gui | offline | provider_outgoing | provider_incoming | root | guest.
--type client_type() :: oneprovider | oneclient | onedatafs | ones3.
+-type client_type() :: oneclient | onedatafs | ones3.
 -type client_option() :: {binary(), binary()}.
 -type client_system_property() :: {binary(), binary()}.
 

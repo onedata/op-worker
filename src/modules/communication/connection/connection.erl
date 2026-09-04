@@ -412,8 +412,6 @@ handle_info({Ok, Socket, Data}, #state{
             case user_ctx:get_client_type(Ctx) of
                 undefined ->
                     ok;
-                oneprovider ->
-                    ok;
                 ClientType ->
                     ClientOptions = user_ctx:get_client_options(Ctx),
                     ClientSystemProperties = user_ctx:get_client_system_properties(Ctx),

@@ -74,7 +74,7 @@ create_session(Node, UserId, AccessToken, SessionMode) ->
         Node,
         session_manager,
         reuse_or_create_fuse_session,
-        [Nonce, Identity, SessionMode, TokenCredentials]
+        [Nonce, Identity, SessionMode, TokenCredentials, oneclient, [], []]
     )),
     SessionId.
 
