@@ -15,6 +15,7 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
 
 %% API
@@ -138,14 +139,32 @@ validate_credentials(CredentialsParams, RequiredFields, OptionalFields) ->
     end.
 
 
--spec resolve_admin_id(helper_spec:credentials()) -> helper_spec:credentials().
+%%--------------------------------------------------------------------
+%% @doc
+%% Stamps into the credentials the id of the Onedata user that the supplied
+%% onedataAccessToken belongs to. The OAuth2 exchange mints an IdP token for
+%% exactly that user (see luma:add_helper_specific_fields/5), so this must be
+%% rerun every time the token changes - on creation and on update alike.
+%% Called with a credentials diff it resolves only when the diff carries a new
+%% token, which is what makes the update path additive.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_admin_id(helper_spec:credentials()) -> helper_spec:credentials() | no_return().
 resolve_admin_id(Credentials = #{<<"onedataAccessToken">> := OnedataAccessToken}) ->
     TokenCredentials = auth_manager:build_token_credentials(
         OnedataAccessToken, undefined, undefined,
         undefined, disallow_data_access_caveats
     ),
-    {ok, ?USER(UserId), _} = auth_manager:verify_credentials(TokenCredentials),
-    Credentials#{<<"adminId">> => UserId};
+    case auth_manager:verify_credentials(TokenCredentials) of
+        {ok, ?USER(UserId), _} ->
+            Credentials#{<<"adminId">> => UserId};
+        {ok, _, _} ->
+            throw(?ERR_BAD_VALUE_TOKEN(
+                ?err_ctx(), <<"onedataAccessToken">>, ?ERR_TOKEN_SUBJECT_INVALID(?err_ctx())
+            ));
+        {error, _} = Error ->
+            throw(?ERR_BAD_VALUE_TOKEN(?err_ctx(), <<"onedataAccessToken">>, Error))
+    end;
 
 resolve_admin_id(Credentials) ->
     Credentials.

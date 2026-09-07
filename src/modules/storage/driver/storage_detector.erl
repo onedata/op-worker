@@ -142,9 +142,13 @@ run_diagnostics_on_nodes(Nodes, HelperSpec, LumaFeed, DiagnosticsMode) ->
                 ok;
             false ->
                 AdminCredentials = helper_spec:get_credentials(HelperSpec),
-                {ok, ExtendedAdminCredentials} = luma:add_helper_specific_fields(
+                ExtendedAdminCredentials = case luma:add_helper_specific_fields(
                     ?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCredentials, HelperSpec, LumaFeed
-                ),
+                ) of
+                    {ok, Credentials} -> Credentials;
+                    % resolving the credentials is a prerequisite of accessing the storage
+                    {error, _} = Error -> throw(?OPERATION_FAILED(access, Error))
+                end,
                 run_diagnostics_on_nodes_insecure(Nodes, HelperSpec, ExtendedAdminCredentials, DiagnosticsMode)
         end
     catch throw:?OPERATION_FAILED(Operation, Reason) ->

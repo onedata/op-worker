@@ -69,6 +69,12 @@
 
 -export_type([t/0, name/0, configuration/0, credentials/0, helper_params/0, access_type/0]).
 
+%% Credential keys that op-worker resolves and spends internally. They mean
+%% nothing to a storage backend and must never reach a helper - the same params
+%% are also sent to Oneclient as #helper_params{} in direct IO mode
+%% (see storage_req:get_helper_params/4).
+-define(OP_WORKER_ONLY_CREDENTIAL_KEYS, [<<"onedataAccessToken">>]).
+
 
 %%%===================================================================
 %%% API
@@ -87,7 +93,10 @@ build(CreateReq = #storage_create_spec{type = Type, timeout = Timeout}) ->
 build_helper_params(HelperSpec = #helper_spec{timeout = Timeout}, CredentialsParams) ->
     case validate_credentials(HelperSpec, CredentialsParams) of
         ok ->
-            HelperParams = maps:merge(HelperSpec#helper_spec.configuration, CredentialsParams),
+            HelperParams = maps:merge(
+                HelperSpec#helper_spec.configuration,
+                maps:without(?OP_WORKER_ONLY_CREDENTIAL_KEYS, CredentialsParams)
+            ),
             {ok, case Timeout of
                 undefined -> HelperParams;
                 _ -> HelperParams#{<<"timeout">> => integer_to_binary(Timeout)}

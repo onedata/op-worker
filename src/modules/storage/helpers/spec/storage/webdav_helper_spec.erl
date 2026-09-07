@@ -107,12 +107,15 @@ build_credentials_diff(HelperSpec, #storage_update_spec{
         onedata_access_token = OnedataAccessToken
     }
 }) ->
-    helper_spec_utils:build_diff_from_specs(HelperSpec#helper_spec.credentials, [
+    CredentialsDiff = helper_spec_utils:build_diff_from_specs(HelperSpec#helper_spec.credentials, [
         {<<"credentialsType">>, CredentialsType, fun credentials_type_to_binary/1},
         {<<"credentials">>, Credentials},
         {<<"oauth2IdP">>, OAuth2IdP},
         {<<"onedataAccessToken">>, OnedataAccessToken}
-    ]).
+    ]),
+    %% adminId belongs to whoever the onedataAccessToken was issued for, so a new
+    %% token must bring a newly resolved adminId along in the same diff
+    helper_spec_utils:resolve_admin_id(CredentialsDiff).
 
 
 -spec describe(helper_spec:t()) ->
