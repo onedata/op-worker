@@ -351,9 +351,14 @@ support_space(StorageId, Token, SupportSize, SupportParameters) ->
 
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.
 revoke_space_support(SpaceId) ->
-    {ok, StorageIds} = space_logic:get_local_storages(SpaceId),
-    StorageId = hd(StorageIds),
-    storage:revoke_space_support(StorageId, SpaceId).
+    case space_logic:get_local_storages(SpaceId) of
+        {ok, StorageIds} ->
+            lists:foreach(fun(StorageId) ->
+                storage:revoke_space_support(StorageId, SpaceId)
+            end, StorageIds);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec get_spaces() -> {ok, [od_space:id()]} | errors:error().
