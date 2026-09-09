@@ -11,12 +11,13 @@
 -module(helper_archivestorage_test_SUITE).
 -author("Bartek Kryza").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
--include_lib("op_panel_contracts/include/storage/s3.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/s3.hrl").
 
 %% export for ct
 -export([all/0]).
@@ -193,14 +194,14 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     S3Config = ?config(s3, ?config(s3, ?config(storages, Config))),
 
-    UserCtx = #{
+    StorageCredentials = #{
         <<"accessKey">> => atom_to_binary(?config(access_key, S3Config), utf8),
         <<"secretKey">> => atom_to_binary(?config(secret_key, S3Config), utf8)
     },
 
-    {ok, Helper} = helper:new_helper(
-        <<"s3">>,
-        #{
+    Helper = #helper_spec{
+        name = <<"s3">>,
+        configuration = #{
             <<"hostname">> => atom_to_binary(?config(host_name, S3Config), utf8),
             <<"bucketName">> => ?S3_BUCKET_NAME,
             <<"scheme">> => <<"http">>,
@@ -208,18 +209,18 @@ new_helper(Config) ->
             <<"blockSize">> => list_to_binary(integer_to_list(5 * ?MB)),
             <<"archiveStorage">> => <<"true">>
         },
-        UserCtx
-    ),
+        credentials = StorageCredentials
+    },
 
     spawn(Node, fun() ->
-        helper_loop(Helper, UserCtx)
+        helper_loop(Helper, StorageCredentials)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(Helper, UserCtx) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+helper_loop(Helper, StorageCredentials) ->
+    Handle = helpers:get_helper_handle(Helper, StorageCredentials),
     helper_loop(Handle).
 
 helper_loop(Handle) ->

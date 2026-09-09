@@ -203,14 +203,14 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 %%--------------------------------------------------------------------
 -spec add_storage(storage:id()) -> ok | errors:error().
 add_storage(StorageId) ->
-    HelperConfig = storage:get_helper_config(StorageId),
-    AdminCtx = helper_config:get_admin_ctx(HelperConfig),
-    {ok, HelperArgs} = helper_config:build_helper_nif_args(HelperConfig, AdminCtx),
-    HelperName = helper_config:get_name(HelperConfig),
+    HelperSpec = storage:get_helper_spec(StorageId),
+    CredentialsParams = helper_spec:get_credentials(HelperSpec),
+    {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, CredentialsParams),
+    HelperName = helper_spec:get_name(HelperSpec),
     AllNodes = consistent_hashing:get_all_nodes(),
 
     case utils:rpc_multicall(
-        AllNodes, rtransfer_link, add_storage, [StorageId, HelperName, maps:to_list(HelperArgs)]
+        AllNodes, rtransfer_link, add_storage, [StorageId, HelperName, maps:to_list(HelperParams)]
     ) of
         {GatheredResults, []} ->
             case lists:filter(fun(R) -> R =/= ok end, GatheredResults) of

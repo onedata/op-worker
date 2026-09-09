@@ -18,12 +18,12 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
 
 %% API
 -export([
     update/2,
-    update_helper_config/2
+    update_helper_spec/2
 ]).
 
 
@@ -64,10 +64,10 @@ update(StorageId, UpdateSpec) ->
     end.
 
 
--spec update_helper_config(storage:id(), fun((helper_config:t()) -> {ok, helper_config:t()} | {error, term()})) ->
+-spec update_helper_spec(storage:id(), fun((helper_spec:t()) -> {ok, helper_spec:t()} | {error, term()})) ->
     ok | {error, term()}.
-update_helper_config(StorageId, UpdateFun) ->
-    case storage_config:update_helper_config(StorageId, UpdateFun) of
+update_helper_spec(StorageId, UpdateFun) ->
+    case storage_config:update_helper_spec(StorageId, UpdateFun) of
         ok -> on_helper_changed(StorageId);
         {error, no_changes} -> ok;
         {error, _} = Error -> Error
@@ -89,19 +89,19 @@ do_update(StorageId, UpdateSpec) ->
 
     PrevOzStorageData = get_oz_storage_data(StorageId),
 
-    {HelperConfigChanged, LumaChanged, NewStorageConfig} = prepare_new_storage_config(
+    {HelperSpecChanged, LumaChanged, NewStorageConfig} = prepare_new_storage_config(
         StorageId, UpdateSpec, PrevStorageConfig, PrevOzStorageData
     ),
 
     Result = execute_saga([
         #saga_step{
             name = <<"update OP storage config">>,
-            should_run = HelperConfigChanged orelse LumaChanged,
+            should_run = HelperSpecChanged orelse LumaChanged,
             action = fun() ->
-                update_in_op(StorageId, NewStorageConfig, HelperConfigChanged)
+                update_in_op(StorageId, NewStorageConfig, HelperSpecChanged)
             end,
             compensation = fun() ->
-                update_in_op(StorageId, PrevStorageConfig, HelperConfigChanged)
+                update_in_op(StorageId, PrevStorageConfig, HelperSpecChanged)
             end
         },
         #saga_step{
@@ -152,8 +152,8 @@ get_op_storage_config_doc(StorageId) ->
 %% @private
 -spec assert_valid_type(storage_config:record(), onedata_storage:update_spec()) -> ok | no_return().
 assert_valid_type(StorageConfig, UpdateSpec) ->
-    HelperConfig = StorageConfig#storage_config.helper_config,
-    StorageType = helper_config:get_name(HelperConfig),
+    HelperSpec = StorageConfig#storage_config.helper_spec,
+    StorageType = helper_spec:get_name(HelperSpec),
 
     case StorageType == UpdateSpec#storage_update_spec.type of
         true -> ok;
@@ -170,7 +170,7 @@ assert_valid_type(StorageConfig, UpdateSpec) ->
 ) ->
     {boolean(), boolean(), storage_config:record()} | no_return().
 prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStorageData) ->
-    PrevHelperConfig = PrevStorageConfig#storage_config.helper_config,
+    PrevHelperSpec = PrevStorageConfig#storage_config.helper_spec,
 
     {ReadonlyChanged, NewReadonly} = infer_new_value(
         UpdateSpec#storage_update_spec.readonly,
@@ -181,19 +181,19 @@ prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStora
         PrevOzStorageData#od_storage.imported
     ),
 
-    {HelperConfigChanged, NewHelperConfig} = case helper_config:update(PrevHelperConfig, UpdateSpec) of
-        {ok, UpdatedHelperConfig} ->
+    {HelperSpecChanged, NewHelperSpec} = case helper_spec:update(PrevHelperSpec, UpdateSpec) of
+        {ok, UpdatedHelperSpec} ->
             storage_crud_utils:verify_configuration(
-                StorageId, NewReadonly, NewImported, UpdatedHelperConfig
+                StorageId, NewReadonly, NewImported, UpdatedHelperSpec
             ),
-            {true, UpdatedHelperConfig};
+            {true, UpdatedHelperSpec};
         {error, no_change} when ReadonlyChanged orelse ImportedChanged ->
             storage_crud_utils:verify_configuration(
-                StorageId, NewReadonly, NewImported, PrevHelperConfig
+                StorageId, NewReadonly, NewImported, PrevHelperSpec
             ),
-            {false, PrevHelperConfig};
+            {false, PrevHelperSpec};
         {error, no_change} ->
-            {false, PrevHelperConfig}
+            {false, PrevHelperSpec}
     end,
 
     PrevLumaConfig = PrevStorageConfig#storage_config.luma_config,
@@ -214,13 +214,29 @@ prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStora
             end
     end,
 
-    NewLumaFeed = luma_config:get_feed(NewLumaConfig),
-    IgnoreReadWriteTest = NewReadonly orelse
-        (NewImported andalso storage:supports_any_space(StorageId)),
-    storage_crud_utils:run_diagnostics(NewHelperConfig, NewLumaFeed, not IgnoreReadWriteTest),
+    % diagnostics is run for the same reason verify_configuration/4 above is - to
+    % catch an update that would leave the storage inaccessible - so it is run
+    % under the same condition, plus a LUMA change, as the feed is what the
+    % diagnostics resolves its storage credentials with. An update touching only
+    % the storage name or its QoS parameters no longer writes a test file on
+    % every node.
+    case HelperSpecChanged orelse LumaChanged orelse ReadonlyChanged orelse ImportedChanged of
+        true ->
+            MustNotWriteToStorage = NewReadonly orelse
+                (NewImported andalso storage:supports_any_space(StorageId)),
+            DiagnosticsMode = case MustNotWriteToStorage of
+                true -> access_only;
+                false -> access_and_read_write
+            end,
+            storage_crud_utils:run_diagnostics(
+                NewHelperSpec, luma_config:get_feed(NewLumaConfig), DiagnosticsMode
+            );
+        false ->
+            ok
+    end,
 
-    {HelperConfigChanged, LumaChanged, #storage_config{
-        helper_config = NewHelperConfig,
+    {HelperSpecChanged, LumaChanged, #storage_config{
+        helper_spec = NewHelperSpec,
         luma_config = NewLumaConfig,
         luma_generation = case LumaChanged of
             true -> PrevLumaGeneration + 1;
@@ -247,9 +263,9 @@ build_luma_diff(#luma_spec{feed = Feed, url = Url, api_key = ApiKey}) ->
 
 %% @private
 -spec update_in_op(storage:id(), storage_config:record(), boolean()) -> ok | {error, term()}.
-update_in_op(StorageId, StorageConfig, HelperConfigChanged) ->
+update_in_op(StorageId, StorageConfig, HelperSpecChanged) ->
     case storage_config:update(StorageId, fun(_) -> {ok, StorageConfig} end) of
-        {ok, _} when HelperConfigChanged ->
+        {ok, _} when HelperSpecChanged ->
             on_helper_changed(StorageId);
         {ok, _} ->
             ok;
@@ -272,7 +288,7 @@ emit_helper_params_changed_event(StorageId) ->
         ok ->
             ok;
         {error, Reason} ->
-            ?warning("Failed to emit helper changed event for storage '~ts' due to: ~p", [
+            ?warning("Failed to emit helper changed event for storage '~ts' due to: ~tp", [
                 StorageId, Reason
             ])
     end.

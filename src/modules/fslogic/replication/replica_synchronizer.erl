@@ -744,7 +744,7 @@ handle_info(?FLUSH_BLOCKS, State) ->
 handle_info(?FLUSH_EVENTS, State) ->
     {noreply, flush_events(State), ?DIE_AFTER};
 
-handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries, file_ctx = FileCtx} = State) ->
+handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries} = State) ->
     {Block, _Priority, _AffectedFroms, FinishedFroms, State1} =
         disassociate_ref(Ref, State),
     {FinishedBlocks, ExcludeSessions, EndedTransfers, State2} =
@@ -1380,10 +1380,12 @@ start_transfers(InitialBlocks, TransferId, State, Priority, MaxJobRestarts) ->
     DestFileId = State#state.dest_file_id,
     lists:flatmap(
         fun({ProviderId, Blocks, {SrcStorageId, SrcFileId}}) ->
+            {ok, ProviderDomain} = provider_logic:get_domain(ProviderId),
             lists:map(
                 fun(#file_block{offset = O, size = S} = FetchedBlock) ->
                     Request = #{
                         provider_id => ProviderId,
+                        provider_domain => ProviderDomain,
                         file_guid => FileGuid,
                         src_storage_id => SrcStorageId,
                         src_file_id => SrcFileId,

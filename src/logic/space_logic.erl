@@ -221,8 +221,6 @@ has_eff_group(#document{value = #od_space{eff_groups = EffGroups}}, GroupId) ->
 -spec get_shares(gs_client_worker:client(), od_space:id()) ->
     {ok, [od_share:id()]} | errors:error().
 get_shares(SessionId, SpaceId) ->
-    %% @TODO VFS-12760 fetching new space doc is always required, as due to a bug Onezone does not send updates when share list changes
-    od_space:invalidate_cache(SpaceId),
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{shares = Shares}}} ->
             {ok, Shares};

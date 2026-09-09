@@ -342,7 +342,10 @@ validate_constraints_end_execute(StorageData, [Constraint | Rest], Fun) ->
 validate_constraint(StorageData, ?POSIX_STORAGE) ->
     case storage:is_posix_compatible(StorageData) of
         true -> ok;
-        false -> ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), storage:get_id(StorageData), ?POSIX_COMPATIBLE_HELPERS)
+        false -> ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(
+            ?err_ctx(), storage:get_id(StorageData),
+            storage_type:list_types_with_capability(posix_compatible)
+        )
     end;
 
 validate_constraint(StorageData, ?IMPORTED_STORAGE) ->

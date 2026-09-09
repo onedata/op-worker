@@ -243,8 +243,8 @@ init_per_testcase(blocks_suiting_test, Config) ->
             meck:passthrough([UserCtx, FileCtx, Block, false, TransferId, Priority])
         end),
 
-    test_utils:mock_new(Worker1, helper_config, [passthrough]),
-    test_utils:mock_expect(Worker1, helper_config, get_block_size,
+    test_utils:mock_new(Worker1, helper_spec, [passthrough]),
+    test_utils:mock_expect(Worker1, helper_spec, get_block_size,
         fun(_) ->
             10
         end),

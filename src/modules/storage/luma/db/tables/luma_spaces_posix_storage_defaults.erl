@@ -66,7 +66,10 @@ store(StorageData, SpaceId, PosixDefaultsMap) ->
                     Error2
             end;
         false ->
-            ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), storage:get_id(StorageData), ?POSIX_COMPATIBLE_HELPERS)
+            ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(
+                ?err_ctx(), storage:get_id(StorageData),
+                storage_type:list_types_with_capability(posix_compatible)
+            )
     end.
 
 

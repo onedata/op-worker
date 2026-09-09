@@ -38,7 +38,7 @@
 
 %%% Functions to retrieve storage details
 -export([
-    get_id/1, get_block_size/1, get_helper_config/1, get_helper_name/1,
+    get_id/1, get_block_size/1, get_helper_spec/1, get_helper_name/1,
     get_luma_feed/1, get_luma_config/1, get_luma_generation/1
 ]).
 -export([
@@ -50,9 +50,6 @@
 -export([is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
-
-%%% Functions to modify storage details
--export([set_qos_parameters/2]).
 
 %%% Support related functions
 -export([support_space/4, update_space_support_size/3, revoke_space_support/2]).
@@ -185,17 +182,17 @@ get_id(StorageData) ->
 %%--------------------------------------------------------------------
 -spec get_block_size(id()) -> non_neg_integer() | undefined.
 get_block_size(StorageId) ->
-    helper_config:get_block_size(get_helper_config(StorageId)).
+    helper_spec:get_block_size(get_helper_spec(StorageId)).
 
 
--spec get_helper_config(data() | id()) -> helper_config:t().
-get_helper_config(StorageDataOrId) ->
-    storage_config:get_helper_config(StorageDataOrId).
+-spec get_helper_spec(data() | id()) -> helper_spec:t().
+get_helper_spec(StorageDataOrId) ->
+    storage_config:get_helper_spec(StorageDataOrId).
 
--spec get_helper_name(data() | id()) -> helper_config:name().
+-spec get_helper_name(data() | id()) -> helper_spec:name().
 get_helper_name(StorageDataOrId) ->
-    HelperConfig = storage_config:get_helper_config(StorageDataOrId),
-    helper_config:get_name(HelperConfig).
+    HelperSpec = storage_config:get_helper_spec(StorageDataOrId),
+    helper_spec:get_name(HelperSpec).
 
 -spec get_luma_feed(id() | data()) -> luma_feed().
 get_luma_feed(Storage) ->
@@ -280,26 +277,8 @@ is_local(StorageId) ->
 
 -spec is_posix_compatible(id() | data()) -> boolean().
 is_posix_compatible(StorageDataOrId) ->
-    HelperConfig = get_helper_config(StorageDataOrId),
-    helper_config:is_posix_compatible(HelperConfig).
-
-
-%%%===================================================================
-%%% Functions to modify storage details
-%%%===================================================================
-
-
-%% TODO VFS-12677 rm
--spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
-set_qos_parameters(StorageId, QosParameters) ->
-    case storage_logic:set_qos_parameters(StorageId, QosParameters) of
-        ok ->
-            {ok, Spaces} = storage_logic:get_spaces(StorageId),
-            lists:foreach(fun(SpaceId) ->
-                ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId)
-            end, Spaces);
-        Error -> Error
-    end.
+    HelperSpec = get_helper_spec(StorageDataOrId),
+    helper_spec:is_posix_compatible(HelperSpec).
 
 
 %%%===================================================================

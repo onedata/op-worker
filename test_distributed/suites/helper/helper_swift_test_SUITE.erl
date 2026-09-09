@@ -11,6 +11,7 @@
 -module(helper_swift_test_SUITE).
 -author("Michal Wrona").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -236,31 +237,31 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     SwiftConfig = ?config(swift, ?config(swift, ?config(storages, Config))),
 
-    UserCtx = #{
+    StorageCredentials = #{
         <<"username">> => atom_to_binary(?config(user_name, SwiftConfig), utf8),
         <<"password">> => atom_to_binary(?config(password, SwiftConfig), utf8),
         <<"projectName">> => atom_to_binary(?config(project_name, SwiftConfig), utf8)
     },
-    {ok, Helper} = helper:new_helper(
-        ?SWIFT_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?SWIFT_HELPER_NAME,
+        configuration = #{
             <<"authUrl">> => <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,
             ":", (integer_to_binary(?config(keystone_port, SwiftConfig)))/binary, "/v3">>,
             <<"containerName">> => ?SWIFT_CONTAINER_NAME,
             <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
-        UserCtx
-    ),
+        credentials = StorageCredentials
+    },
 
     spawn_link(Node, fun() ->
-        helper_loop(Helper, UserCtx)
+        helper_loop(Helper, StorageCredentials)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(Helper, UserCtx) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+helper_loop(Helper, StorageCredentials) ->
+    Handle = helpers:get_helper_handle(Helper, StorageCredentials),
     helper_loop(Handle).
 
 helper_loop(Handle) ->

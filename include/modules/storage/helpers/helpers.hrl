@@ -32,22 +32,8 @@
 -define(HTTP_HELPER_NAME, <<"http">>).
 -define(NULL_DEVICE_HELPER_NAME, <<"nulldevice">>).
 
--define(POSIX_COMPATIBLE_HELPERS, [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
-                                   ?NFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME]).
-
--define(OBJECT_HELPERS, [?SWIFT_HELPER_NAME, ?S3_HELPER_NAME, ?CEPHRADOS_HELPER_NAME, ?CEPH_HELPER_NAME]).
--define(AUTO_IMPORT_HELPERS, [
-    ?POSIX_HELPER_NAME,
-    ?GLUSTERFS_HELPER_NAME,
-    ?NULL_DEVICE_HELPER_NAME,
-    ?WEBDAV_HELPER_NAME,
-    ?XROOTD_HELPER_NAME,
-    ?NFS_HELPER_NAME
-] ++ ?AUTO_IMPORT_OBJECT_HELPERS).
-
--define(AUTO_IMPORT_OBJECT_HELPERS, [
-    ?S3_HELPER_NAME
-]).
+%% NOTE: which storage types are posix compatible, are object storages or
+%% support importing data is defined in the storage_type module.
 
 %% Storage path types
 -define(CANONICAL_STORAGE_PATH, <<"canonical">>).
@@ -57,8 +43,6 @@
 -define(READWRITE, readwrite).
 -define(READONLY, readonly).
 
--define(DEFAULT_HELPER_TIMEOUT, 120000).
-
 %% This type determines the filename and path generation
 %% on the storage. Currently 2 modes are supported:
 %% - 'canonical' - posix-style
@@ -66,19 +50,9 @@
 -type storage_path_type() :: binary().
 -export_type([storage_path_type/0]).
 
--record(helper_config, {
-    name :: helper_config:name(),
-    args = #{} :: helper_config:args(),
-    admin_ctx = #{} :: helper_config:user_ctx()
-}).
-
--record(helper_config_description, {
-    type :: onedata_storage:type(),
-    configuration :: onedata_storage:configuration(),
-    credentials :: onedata_storage:credentials(),
-    timeout :: integer()
-}).
-
+%% NOTE: #helper_spec{} is defined in datastore_models.hrl - it is persisted
+%% as part of the storage_config model, so changing it requires bumping that
+%% model's record struct.
 
 -define(CONFIDENTIAL_MASK, <<"*****">>).
 

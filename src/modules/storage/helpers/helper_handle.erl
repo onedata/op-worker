@@ -26,10 +26,10 @@
 get(SessionId, SpaceId, StorageId) ->
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, Storage} = storage:get(StorageId),
-    HelperConfig = storage:get_helper_config(Storage),
+    HelperSpec = storage:get_helper_spec(Storage),
     case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
-        {ok, UserCtx} ->
-            HelperHandle = helpers:get_helper_handle(HelperConfig, UserCtx),
+        {ok, StorageCredentials} ->
+            HelperHandle = helpers:get_helper_handle(HelperSpec, StorageCredentials),
             {ok, HelperHandle};
         {error, _} = Error ->
             Error
@@ -38,7 +38,7 @@ get(SessionId, SpaceId, StorageId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Regenerates user context with up-to-date args for given storage
+%% Regenerates user credentials with up-to-date configuration for given storage
 %% and calls nif to update them in the existing helper.
 %% @end
 %%--------------------------------------------------------------------
@@ -54,9 +54,10 @@ refresh(Handle, SessionId, SpaceId, StorageId) when is_binary(StorageId) ->
     refresh(Handle, SessionId, SpaceId, Storage);
 
 refresh(Handle, SessionId, SpaceId, Storage) ->
-    HelperConfig = storage:get_helper_config(Storage),
+    HelperSpec = storage:get_helper_spec(Storage),
     {ok, UserId} = session:get_user_id(SessionId),
-    {ok, UserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
-    {ok, ArgsWithUserCtx} = helper_config:build_helper_nif_args(HelperConfig, UserCtx),
-    ArgsWithUserCtxAndType = maps:put(<<"type">>, helper_config:get_name(HelperConfig), ArgsWithUserCtx),
-    ok = helpers:refresh_params(Handle, ArgsWithUserCtxAndType).
+    {ok, StorageCredentials} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
+    {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, StorageCredentials),
+    HelperParamsWithType = maps:put(<<"type">>, helper_spec:get_name(HelperSpec), HelperParams),
+    % @TODO VFS-12931 Propagate storage update errors to onepanel and roll back
+    ok = helpers:refresh_params(Handle, HelperParamsWithType).

@@ -11,6 +11,7 @@
 -module(helper_nfs_test_SUITE).
 -author("Bartek Kryza").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -362,26 +363,26 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     NFSConfig = ?config(nfs, ?config(nfs, ?config(storages, Config))),
-    UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
-    {ok, Helper} = helper:new_helper(
-        ?NFS_HELPER_NAME,
-        #{
+    StorageCredentials = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
+    Helper = #helper_spec{
+        name = ?NFS_HELPER_NAME,
+        configuration = #{
             <<"volume">> => ?NFS_VOLUME,
             <<"version">> => ?NFS_VERSION,
             <<"host">> => atom_to_binary(?config(host, NFSConfig), utf8),
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
-        UserCtx
-    ),
+        credentials = StorageCredentials
+    },
     spawn_link(Node, fun() ->
-        helper_loop(Helper, UserCtx)
+        helper_loop(Helper, StorageCredentials)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(Helper, UserCtx) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+helper_loop(Helper, StorageCredentials) ->
+    Handle = helpers:get_helper_handle(Helper, StorageCredentials),
     helper_loop(Handle).
 
 helper_loop(Handle) ->

@@ -122,6 +122,8 @@ switch_context_if_shared_file_request(#op_req{gri = #gri{
     boolean().
 is_shared_file_request(op_file, download_url, Scope, _) ->
     Scope == public;
+is_shared_file_request(op_file, download_status, Scope, _) ->
+    Scope == public;
 is_shared_file_request(op_file, _, _, Id) when is_binary(Id) ->
     file_id:is_share_guid(Id);
 is_shared_file_request(op_replica, As, _, Id) when

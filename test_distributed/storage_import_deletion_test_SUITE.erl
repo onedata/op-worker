@@ -21,6 +21,8 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/errors.hrl").
 
+-define(ATTEMPTS, 30).
+
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
@@ -493,8 +495,18 @@ run_test(TestFun, StorageConfig = {StorageType, IsImportedStorage}, [Config | Ot
             error
     after
         [W | _] = ?config(op_worker_nodes, Config),
-        storage_import_test_base:clean_traverse_tasks(W)
+        clean_traverse_tasks(W)
     end.
+
+clean_traverse_tasks(Worker) ->
+    Pool = <<"storage_sync_traverse">>,
+    ?assertMatch({ok, [], _}, rpc:call(Worker, traverse_task_list, list, [Pool, ongoing]), ?ATTEMPTS),
+    {ok, TaskIds, _} = rpc:call(Worker, traverse_task_list, list, [Pool, ended]),
+    lists:foreach(fun(T) ->
+        ok = rpc:call(Worker, traverse_task, delete_ended, [Pool, T])
+    end, TaskIds),
+    ?assertMatch({ok, [], _}, rpc:call(Worker, traverse_task_list, list, [Pool, ended])).
+
 
 get_sd_handle(Worker, Guid) ->
     SpaceId = file_id:guid_to_space_id(Guid),

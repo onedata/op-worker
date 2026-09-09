@@ -11,6 +11,7 @@
 -module(helper_ceph_test_SUITE).
 -author("Krzysztof Trzepla").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -296,30 +297,30 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     CephConfig = ?config(ceph, ?config(ceph, ?config(storages, Config))),
 
-    UserCtx = #{
+    StorageCredentials = #{
         <<"username">> => atom_to_binary(?config(username, CephConfig), utf8),
         <<"key">> => atom_to_binary(?config(key, CephConfig), utf8)
     },
-    {ok, Helper} = helper:new_helper(
-        ?CEPH_HELPER_NAME,
-        #{
+    Helper = #helper_spec{
+        name = ?CEPH_HELPER_NAME,
+        configuration = #{
             <<"monitorHostname">> => atom_to_binary(?config(host_name, CephConfig), utf8),
             <<"clusterName">> => ?CEPH_CLUSTER_NAME,
             <<"poolName">> => ?CEPH_POOL_NAME,
             <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
-        UserCtx
-    ),
+        credentials = StorageCredentials
+    },
 
     spawn_link(Node, fun() ->
-        helper_loop(Helper, UserCtx)
+        helper_loop(Helper, StorageCredentials)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(Helper, UserCtx) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+helper_loop(Helper, StorageCredentials) ->
+    Handle = helpers:get_helper_handle(Helper, StorageCredentials),
     helper_loop(Handle).
 
 helper_loop(Handle) ->

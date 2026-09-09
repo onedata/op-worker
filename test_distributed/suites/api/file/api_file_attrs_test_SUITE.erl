@@ -1161,7 +1161,7 @@ get_dir_distribution_4_test(Config) ->
                 logical_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0},
                 locations_per_storage = #{
-                    P1StorageId => ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(P1StorageId, ?POSIX_COMPATIBLE_HELPERS)
+                    P1StorageId => ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(P1StorageId, storage_type:list_types_with_capability(posix_compatible))
                 }
             },
             P2Id => #provider_dir_distribution{
@@ -1169,7 +1169,7 @@ get_dir_distribution_4_test(Config) ->
                 logical_size = 0,
                 physical_size_per_storage = #{P2StorageId => 0},
                 locations_per_storage = #{
-                    P2StorageId => ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(P2StorageId, ?POSIX_COMPATIBLE_HELPERS)
+                    P2StorageId => ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(P2StorageId, storage_type:list_types_with_capability(posix_compatible))
                 }
             }
         }
@@ -1867,7 +1867,7 @@ get_file_storage_locations_test(Config, FileType, StorageType) ->
                 <<"locationsPerStorageBackend">> => #{
                     StorageId => #{
                         <<"success">> => false,
-                        <<"error">> => errors:to_json(?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(StorageId, ?POSIX_COMPATIBLE_HELPERS))
+                        <<"error">> => errors:to_json(?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(StorageId, storage_type:list_types_with_capability(posix_compatible)))
                     }
                 }
             };

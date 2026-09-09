@@ -15,7 +15,7 @@
 -author("Bartosz Walkowicz").
 
 -include_lib("ctool/include/logging.hrl").
--include_lib("op_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
 
 %% API
 -export([create/1]).
@@ -68,17 +68,18 @@ do_create(StorageCreateSpec = #storage_create_spec{
     luma = LumaSpec,
     qos_parameters = QosParameters
 }) ->
-    HelperConfig = helper_config:build(StorageCreateSpec),
-    storage_crud_utils:verify_configuration(Name, Readonly, Imported, HelperConfig),
+    HelperSpec = helper_spec:build(StorageCreateSpec),
+    storage_crud_utils:verify_storage_path_type(HelperSpec),
+    storage_crud_utils:verify_configuration(Name, Readonly, Imported, HelperSpec),
 
     LumaConfig = build_luma_config(LumaSpec),
-    run_diagnostics(HelperConfig, LumaConfig, StorageCreateSpec),
+    run_diagnostics(HelperSpec, LumaConfig, StorageCreateSpec),
 
     ?info("Adding storage: '~ts' (~ts)", [Name, Type]),
     maybe
         {ok, Id} ?= storage_logic:create_in_zone(Name, Imported, Readonly, QosParameters),
 
-        case storage_config:create(Id, HelperConfig, LumaConfig) of
+        case storage_config:create(Id, HelperSpec, LumaConfig) of
             {ok, Id} ->
                 storage:on_storage_created(Id),
                 {ok, Id};
@@ -98,17 +99,23 @@ build_luma_config(#luma_spec{feed = Feed}) ->
 
 
 %% @private
--spec run_diagnostics(helper_config:t(), luma_config:config(), onedata_storage:create_spec()) ->
+-spec run_diagnostics(helper_spec:t(), luma_config:config(), onedata_storage:create_spec()) ->
     ok.
-run_diagnostics(HelperConfig, LumaConfig, #storage_create_spec{
+run_diagnostics(HelperSpec, LumaConfig, #storage_create_spec{
     name = Name,
     type = Type,
     readonly = Readonly
 }) ->
     LumaFeed = luma_config:get_feed(LumaConfig),
+    % the storage supports no spaces yet, so being readonly is the only reason
+    % not to write a test file on it
+    DiagnosticsMode = case Readonly of
+        true -> access_only;
+        false -> access_and_read_write
+    end,
 
     ?info("Verifying storage access: '~ts' (~ts)", [Name, Type]),
-    storage_crud_utils:run_diagnostics(HelperConfig, LumaFeed, not Readonly).
+    storage_crud_utils:run_diagnostics(HelperSpec, LumaFeed, DiagnosticsMode).
 
 
 %% @private

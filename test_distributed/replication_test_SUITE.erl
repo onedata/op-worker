@@ -471,6 +471,7 @@ read_should_synchronize_file(Config) ->
             {ok, ref}
         end
     ),
+    test_utils:mock_expect(Workers, provider_logic, get_domain, fun(_) -> {ok, <<"dummy-domain">>} end),
 
     % when
     {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
