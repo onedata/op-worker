@@ -98,10 +98,10 @@ do_update(StorageId, UpdateSpec) ->
             name = <<"update OP storage config">>,
             should_run = HelperSpecChanged orelse LumaChanged,
             action = fun() ->
-                update_in_op(StorageId, NewStorageConfig, HelperSpecChanged)
+                update_in_op(StorageId, NewStorageConfig, HelperSpecChanged, LumaChanged)
             end,
             compensation = fun() ->
-                update_in_op(StorageId, PrevStorageConfig, HelperSpecChanged)
+                update_in_op(StorageId, PrevStorageConfig, HelperSpecChanged, LumaChanged)
             end
         },
         #saga_step{
@@ -262,11 +262,16 @@ build_luma_diff(#luma_spec{feed = Feed, url = Url, api_key = ApiKey}) ->
 
 
 %% @private
--spec update_in_op(storage:id(), storage_config:record(), boolean()) -> ok | {error, term()}.
-update_in_op(StorageId, StorageConfig, HelperSpecChanged) ->
+-spec update_in_op(storage:id(), storage_config:record(), boolean(), boolean()) ->
+    ok | {error, term()}.
+update_in_op(StorageId, StorageConfig, HelperSpecChanged, LumaChanged) ->
     case storage_config:update(StorageId, fun(_) -> {ok, StorageConfig} end) of
         {ok, _} when HelperSpecChanged ->
+            % covers a simultaneous LUMA change as well - the event carries only
+            % the storage id, so one is enough
             on_helper_changed(StorageId);
+        {ok, _} when LumaChanged ->
+            on_luma_changed(StorageId);
         {ok, _} ->
             ok;
         {error, _} = Error ->
@@ -277,21 +282,17 @@ update_in_op(StorageId, StorageConfig, HelperSpecChanged) ->
 %% @private
 -spec on_helper_changed(storage:id()) -> ok.
 on_helper_changed(StorageId) ->
-    emit_helper_params_changed_event(StorageId),
+    fslogic_event_emitter:emit_helper_params_changed(StorageId),
     ?check(rtransfer_config:add_storage(StorageId)).
 
 
 %% @private
--spec emit_helper_params_changed_event(storage:id()) -> ok.
-emit_helper_params_changed_event(StorageId) ->
-    case fslogic_event_emitter:emit_helper_params_changed(StorageId) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            ?warning("Failed to emit helper changed event for storage '~ts' due to: ~tp", [
-                StorageId, Reason
-            ])
-    end.
+-spec on_luma_changed(storage:id()) -> ok.
+on_luma_changed(StorageId) ->
+    % NOTE: unlike a helper spec change, this does not re-register the storage in
+    % rtransfer - rtransfer accesses storages with the helper spec's own
+    % credentials, which LUMA does not resolve
+    fslogic_event_emitter:emit_helper_params_changed(StorageId).
 
 
 %% @private

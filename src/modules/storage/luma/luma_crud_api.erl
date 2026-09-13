@@ -8,6 +8,16 @@
 %%% @doc
 %%% Facade module for all LUMA CRUD operations called from outside the LUMA
 %%% subsystem (e.g., rpc_api, storage lifecycle).
+%%%
+%%% NOTE: writes that change how a user resolves to storage credentials emit the
+%%% 'helper_params_changed' event, so that direct IO clients re-fetch their
+%%% params - op-worker itself resolves them anew for every operation and needs no
+%%% notification. Only two of the five tables feed that resolution:
+%%% luma_storage_users and luma_spaces_posix_storage_defaults. Writes to the
+%%% display defaults and to the reverse mapping tables change nothing on the IO
+%%% path and are therefore silent, and so is the lazy population performed by
+%%% luma_db:get_or_acquire during ordinary traffic - it stores exactly what the
+%%% requester has just been given.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_crud_api).
@@ -70,6 +80,11 @@ clear_db(StorageIdOrData) ->
         ClearFun(StorageData)
     end, Tables),
 
+    % NOTE: when clearing the dead generation after a LUMA config change, the
+    % event has already been emitted for that change (see storage_updater) - a
+    % duplicate only makes the clients re-fetch twice
+    emit_helper_params_changed_event(StorageData),
+
     ?info("Successfully cleared LUMA DB").
 
 
@@ -77,6 +92,8 @@ clear_db(StorageIdOrData) ->
 clear_db(StorageIdOrData, SpaceId) ->
     StorageData = ensure_storage_data(StorageIdOrData),
 
+    % NOTE: no event - this is called when the space is being unsupported, so the
+    % clients are losing access to it altogether
     luma_spaces_display_defaults:delete(StorageData, SpaceId),
     luma_spaces_posix_storage_defaults:delete(StorageData, SpaceId).
 
@@ -94,7 +111,9 @@ clear_db(StorageIdOrData, SpaceId) ->
     {ok, od_user:id()} | {error, term()}.
 storage_users_store(StorageIdOrData, OnedataUserMap, StorageUserMap) ->
     StorageData = ensure_storage_data(StorageIdOrData),
-    luma_storage_users:store(StorageData, OnedataUserMap, StorageUserMap).
+    emit_event_on_success(StorageData, luma_storage_users:store(
+        StorageData, OnedataUserMap, StorageUserMap
+    )).
 
 
 -spec storage_users_get_and_describe(storage:id() | storage:data(), od_user:id()) ->
@@ -108,13 +127,15 @@ storage_users_get_and_describe(StorageIdOrData, UserId) ->
     ok | {error, term()}.
 storage_users_update(StorageIdOrData, UserId, StorageUserMap) ->
     StorageData = ensure_storage_data(StorageIdOrData),
-    luma_storage_users:update(StorageData, UserId, StorageUserMap).
+    emit_event_on_success(StorageData, luma_storage_users:update(
+        StorageData, UserId, StorageUserMap
+    )).
 
 
 -spec storage_users_delete(storage:id() | storage:data(), od_user:id()) -> ok.
 storage_users_delete(StorageIdOrData, UserId) ->
     StorageData = ensure_storage_data(StorageIdOrData),
-    luma_storage_users:delete(StorageData, UserId).
+    emit_event_on_success(StorageData, luma_storage_users:delete(StorageData, UserId)).
 
 
 %%%===================================================================
@@ -159,7 +180,9 @@ spaces_display_defaults_delete(StorageIdOrData, SpaceId) ->
     ok | {error, term()}.
 spaces_posix_storage_defaults_store(StorageIdOrData, SpaceId, PosixDefaults) ->
     StorageData = ensure_storage_data(StorageIdOrData),
-    luma_spaces_posix_storage_defaults:store(StorageData, SpaceId, PosixDefaults).
+    emit_event_on_success(StorageData, luma_spaces_posix_storage_defaults:store(
+        StorageData, SpaceId, PosixDefaults
+    )).
 
 
 -spec spaces_posix_storage_defaults_get_and_describe(storage:id() | storage:data(), od_space:id()) ->
@@ -172,7 +195,7 @@ spaces_posix_storage_defaults_get_and_describe(StorageIdOrData, SpaceId) ->
 -spec spaces_posix_storage_defaults_delete(storage:id() | storage:data(), od_space:id()) -> ok.
 spaces_posix_storage_defaults_delete(StorageIdOrData, SpaceId) ->
     StorageData = ensure_storage_data(StorageIdOrData),
-    luma_spaces_posix_storage_defaults:delete(StorageData, SpaceId).
+    emit_event_on_success(StorageData, luma_spaces_posix_storage_defaults:delete(StorageData, SpaceId)).
 
 
 %%%===================================================================
@@ -270,3 +293,22 @@ onedata_groups_delete(StorageIdOrData, AclGroup) ->
 ensure_storage_data(StorageIdOrDataOrConfig) ->
     {ok, Data} = storage:get(StorageIdOrDataOrConfig),
     Data.
+
+
+%% @private
+-spec emit_event_on_success(storage:data(), Result) -> Result when
+    Result :: ok | {ok, term()} | {error, term()}.
+emit_event_on_success(StorageData, ok) ->
+    emit_helper_params_changed_event(StorageData),
+    ok;
+emit_event_on_success(StorageData, Result = {ok, _}) ->
+    emit_helper_params_changed_event(StorageData),
+    Result;
+emit_event_on_success(_StorageData, Error = {error, _}) ->
+    Error.
+
+
+%% @private
+-spec emit_helper_params_changed_event(storage:data()) -> ok.
+emit_helper_params_changed_event(StorageData) ->
+    fslogic_event_emitter:emit_helper_params_changed(storage:get_id(StorageData)).

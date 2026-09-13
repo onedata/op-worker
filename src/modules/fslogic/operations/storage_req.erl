@@ -123,16 +123,15 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
 
     HelperSpec = storage:get_helper_spec(Storage),
     case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
-        {ok, ClientStorageCredentials} ->
-            {ok, ServerStorageCredentials} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
-            HelperParams = helper_spec:get_params(HelperSpec, ClientStorageCredentials),
+        {ok, StorageCredentials} ->
+            HelperParams = helper_spec:get_params(HelperSpec, StorageCredentials),
             {SpaceStorageFileId, _SpaceCtx3} = file_ctx:get_storage_file_id(SpaceCtx2),
             DirName = filename:dirname(SpaceStorageFileId),
             try
-                {ok, TestFileId} = storage_detector:create_test_file(HelperSpec, ServerStorageCredentials, DirName),
-                {ok, FileContent} = storage_detector:write_test_file(HelperSpec, ServerStorageCredentials, TestFileId),
+                {ok, TestFileId} = storage_detector:create_test_file(HelperSpec, StorageCredentials, DirName),
+                {ok, FileContent} = storage_detector:write_test_file(HelperSpec, StorageCredentials, TestFileId),
                 spawn(storage_req, remove_storage_test_file, [
-                    HelperSpec, ServerStorageCredentials, TestFileId, byte_size(FileContent), ?REMOVE_STORAGE_TEST_FILE_DELAY]),
+                    HelperSpec, StorageCredentials, TestFileId, byte_size(FileContent), ?REMOVE_STORAGE_TEST_FILE_DELAY]),
                 #fuse_response{
                     status = #status{code = ?OK},
                     fuse_response = #storage_test_file{
@@ -152,8 +151,9 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates handle to the test file in ROOT context and tries to verify
-%% its content VERIFY_STORAGE_TEST_FILE_ATTEMPTS times.
+%% Tries to verify the content of the test file, VERIFY_STORAGE_TEST_FILE_ATTEMPTS
+%% times. The storage is reached with the storage credentials of the calling user -
+%% the same ones the file was created with.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_storage_test_file(user_ctx:ctx(), od_space:id(),
