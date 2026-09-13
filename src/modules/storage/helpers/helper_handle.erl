@@ -40,24 +40,20 @@ get(SessionId, SpaceId, StorageId) ->
 %% @doc
 %% Regenerates user credentials with up-to-date configuration for given storage
 %% and calls nif to update them in the existing helper.
+%%
+%% NOTE: meant for the handle of an open file - the one place whose params cannot
+%% be resolved anew, as they were frozen in the helper instance the file was
+%% opened with. A helper handle must go through get/3 instead: refreshing it in
+%% place swaps the instance behind a C++ helper cache entry that stays keyed by
+%% the previous params.
 %% @end
 %%--------------------------------------------------------------------
--spec refresh(
-    helpers:helper_handle() | helpers:file_handle(),
-    session:id(),
-    od_space:id(),
-    storage:data() | storage:id()
-) ->
+-spec refresh(helpers:file_handle(), session:id(), od_space:id(), storage:data()) ->
     ok.
-refresh(Handle, SessionId, SpaceId, StorageId) when is_binary(StorageId) ->
-    {ok, Storage} = storage:get(StorageId),
-    refresh(Handle, SessionId, SpaceId, Storage);
-
 refresh(Handle, SessionId, SpaceId, Storage) ->
     HelperSpec = storage:get_helper_spec(Storage),
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, StorageCredentials} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
     {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, StorageCredentials),
     HelperParamsWithType = maps:put(<<"type">>, helper_spec:get_name(HelperSpec), HelperParams),
-    % @TODO VFS-12931 Propagate storage update errors to onepanel and roll back
     ok = helpers:refresh_params(Handle, HelperParamsWithType).
