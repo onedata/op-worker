@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_helper_handle/2, clean_helper_cache/0, get_helper_cache_stats/0]).
+-export([get_helper_handle/2, prune_cache/0, get_helper_cache_stats/0]).
 -export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
     mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
@@ -82,8 +82,8 @@ get_helper_handle(#helper_spec{name = Name} = HelperSpec, StorageCredentials) ->
 %% record.
 %% @end
 %%--------------------------------------------------------------------
--spec clean_helper_cache() -> ok | {error, Reason :: term()}.
-clean_helper_cache() ->
+-spec prune_cache() -> ok | {error, Reason :: term()}.
+prune_cache() ->
     helpers_nif:clean_helper_cache().
 
 %%--------------------------------------------------------------------
