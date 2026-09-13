@@ -634,11 +634,6 @@
     config :: undefined | autocleaning:config()
 }).
 
--record(helper_handle, {
-    handle :: helpers_nif:helper_handle(),
-    timeout = infinity :: timeout()
-}).
-
 %% Model for storing file's location data
 -record(file_location, {
     uuid :: file_meta:uuid(),

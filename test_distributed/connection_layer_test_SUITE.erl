@@ -16,6 +16,7 @@
 
 -include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
@@ -80,11 +81,6 @@
 -define(PERFORMANCE_CASES, []).
 
 all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
-
--record(file_handle, {
-    handle :: helpers_nif:file_handle(),
-    timeout :: timeout()
-}).
 
 -define(ATTEMPTS, 90).
 

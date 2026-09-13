@@ -33,11 +33,6 @@
 %% For tests
 -export([apply_helper_nif/3, receive_loop/2]).
 
--record(file_handle, {
-    handle :: helpers_nif:file_handle(),
-    timeout :: timeout()
-}).
-
 -type file_id() :: binary().
 %% Argument passed to ?MODULE:listobjects/5 function
 %% Listing objects starts from object with id == Marker.
