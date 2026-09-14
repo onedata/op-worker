@@ -169,6 +169,7 @@ stages:
         - massive_multi_provider_file_ops
         - massive_multi_provider_file_ops2
         - memory_pools_cleanup
+        - missing_storage_dirs_recreation
         - model_file_meta
         - monitoring
         - multi_provider_changes_rest
@@ -1322,6 +1323,13 @@ memory_pools_cleanup:
     - <<: *ct_logs
       name: ct_logs_memory_pools_cleanup.tar.gz
 
+missing_storage_dirs_recreation:
+  <<: *ct-onenv-job
+  key: MSDR
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_missing_storage_dirs_recreation.tar.gz
+
 model_file_meta:
   <<: *ct-job
   key: MO
@@ -2019,6 +2027,7 @@ Coverage report:
     - artifact: ct_logs_massive_multi_provider_file_ops.tar.gz
     - artifact: ct_logs_massive_multi_provider_file_ops2.tar.gz
     - artifact: ct_logs_memory_pools_cleanup.tar.gz
+    - artifact: ct_logs_missing_storage_dirs_recreation.tar.gz
     - artifact: ct_logs_model_file_meta.tar.gz
     - artifact: ct_logs_monitoring.tar.gz
     - artifact: ct_logs_multi_provider_changes_rest.tar.gz
