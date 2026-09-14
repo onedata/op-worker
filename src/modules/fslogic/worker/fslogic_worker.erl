@@ -528,7 +528,37 @@ handle_request_remotely(_UserCtx, _Req, []) ->
     #fuse_response{status = #status{code = ?ENOTSUP}};
 handle_request_remotely(UserCtx, Req, Providers) ->
     ProviderId = fslogic_remote:get_provider_to_route(Providers),
-    fslogic_remote:route(UserCtx, ProviderId, Req).
+    Response = fslogic_remote:route(UserCtx, ProviderId, Req),
+    note_handle_whereabouts(UserCtx, ProviderId, Req, Response),
+    Response.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Keeps track of the file handles that other providers hold on this one's
+%% behalf, so that the requests carrying them can be routed back to their
+%% holders (see fslogic_request:get_target_providers/3). A handle registered
+%% elsewhere can be released nowhere else - the local provider does not even
+%% know of it, and would silently do nothing about it.
+%% @end
+%%--------------------------------------------------------------------
+-spec note_handle_whereabouts(user_ctx:ctx(), od_provider:id(), request(), response()) -> ok.
+note_handle_whereabouts(UserCtx, ProviderId, #fuse_request{fuse_request = #file_request{
+    file_request = #open_file{}
+}}, #fuse_response{fuse_response = #file_opened{handle_id = HandleId}}) ->
+    ok = session_remote_handles:add(user_ctx:get_session_id(UserCtx), HandleId, ProviderId);
+note_handle_whereabouts(UserCtx, ProviderId, #fuse_request{fuse_request = #file_request{
+    file_request = #open_file_with_extended_info{}
+}}, #fuse_response{fuse_response = #file_opened_extended{handle_id = HandleId}}) ->
+    ok = session_remote_handles:add(user_ctx:get_session_id(UserCtx), HandleId, ProviderId);
+note_handle_whereabouts(UserCtx, _ProviderId, #fuse_request{fuse_request = #file_request{
+    file_request = #release{handle_id = HandleId}
+}}, _Response) ->
+    % the handle is gone even if its holder reported a failure, and a retry that
+    % finds no note of it is served locally, which is a no-op just the same
+    ok = session_remote_handles:remove(user_ctx:get_session_id(UserCtx), HandleId);
+note_handle_whereabouts(_UserCtx, _ProviderId, _Req, _Response) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -195,7 +195,6 @@ stages:
         - qos_replica_protection
         - qos_status
         - quota
-        - readonly_storage
         - rename
         - replica_deletion
         - replication
@@ -228,6 +227,7 @@ stages:
         - storage_import_race_posix
         - storage_import_race_s3
         - storage_monitoring
+        - storage_readonly
         - storage_req
         - storage_sync_links
         - storage_traverse
@@ -1518,13 +1518,6 @@ quota:
     - <<: *ct_logs
       name: ct_logs_quota.tar.gz
 
-readonly_storage:
-  <<: *ct-job
-  key: ROST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_readonly_storage.tar.gz
-
 rename:
   <<: *ct-job
   key: RE
@@ -1750,6 +1743,13 @@ storage_monitoring:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_storage_monitoring.tar.gz
+
+storage_readonly:
+  <<: *ct-onenv-job
+  key: ROST
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_readonly.tar.gz
 
 storage_req:
   <<: *ct-job
@@ -2076,7 +2076,6 @@ Coverage report:
     - artifact: ct_logs_qos_replica_protection.tar.gz
     - artifact: ct_logs_qos_status.tar.gz
     - artifact: ct_logs_quota.tar.gz
-    - artifact: ct_logs_readonly_storage.tar.gz
     - artifact: ct_logs_rename.tar.gz
     - artifact: ct_logs_replica_deletion.tar.gz
     - artifact: ct_logs_replication.tar.gz
@@ -2109,6 +2108,7 @@ Coverage report:
     - artifact: ct_logs_storage_import_race_posix.tar.gz
     - artifact: ct_logs_storage_import_race_s3.tar.gz
     - artifact: ct_logs_storage_monitoring.tar.gz
+    - artifact: ct_logs_storage_readonly.tar.gz
     - artifact: ct_logs_storage_req.tar.gz
     - artifact: ct_logs_storage_sync_links.tar.gz
     - artifact: ct_logs_storage_traverse.tar.gz
