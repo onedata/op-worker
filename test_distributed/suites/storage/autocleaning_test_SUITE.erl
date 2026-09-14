@@ -13,8 +13,9 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("distribution_assert.hrl").
--include("space_setup_utils.hrl").
+-include("file/distribution_assert.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("env/space_setup_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/datastore/datastore_models.hrl").
@@ -112,12 +113,8 @@ all() -> [
 
 % Gate suspending the auto-cleaning traverse at a chosen candidate
 % (see mock_gated_candidate_processing/1)
--define(CANDIDATE_PERMITS_KEY, autocleaning_candidate_permits).
--define(INFINITE_PERMITS, 1 bsl 50).
--define(CANDIDATE_JOB_GATED_MSG, autocleaning_candidate_job_gated).
--define(CANDIDATE_PERMIT_POLL_INTERVAL_MS, 100).
--define(MOCKED_MODULE_CALLS_DRAIN_ATTEMPTS, 150).
--define(MOCKED_MODULE_CALLS_DRAIN_POLL_INTERVAL_MS, 100).
+% gate suspending the auto-cleaning traverse (see permit_gate_test_utils)
+-define(CANDIDATE_PROCESSING_GATE, autocleaning_candidate_processing).
 
 -define(FILE_NAME, <<"file_", (atom_to_binary(?FUNCTION_NAME, utf8))/binary>>).
 
@@ -294,7 +291,7 @@ periodical_autocleaning_should_evict_file_replica_when_it_is_replicated(Config) 
 
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [Size, Size]), Guid),
     ?assertFilesInView(KrkNode, SpaceId, [Guid]),
-    ?assertEqual(Size, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(Size, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     configure_autocleaning(KrkNode, SpaceId, #{
         enabled => true,
         target => 0,
@@ -328,7 +325,7 @@ forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated(
     ?assertEqual({ok, [[0, Size]]},
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(KrkNode, Guid, ParisId), ?ATTEMPTS),
     ?assertFilesInView(KrkNode, SpaceId, [Guid]),
-    ?assertEqual(Size, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(Size, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     configure_autocleaning(KrkNode, SpaceId, #{
         enabled => true,
         target => 0,
@@ -370,7 +367,7 @@ restart_autocleaning_run_test(Config) ->
     ?assertEqual({ok, [[0, Size]]},
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(KrkNode, Guid, ParisId), ?ATTEMPTS),
     ?assertFilesInView(KrkNode, SpaceId, [Guid]),
-    ?assertEqual(Size, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(Size, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     % pretend that there is a stalled autocleaning_run
     Ctx = rpc:call(KrkNode, autocleaning_run, get_ctx, []),
     Doc = #document{
@@ -425,7 +422,7 @@ autocleaning_should_evict_file_replica_replicated_by_job(Config) ->
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [0, Size]), Guid),
     schedule_file_replication(KrkNode, KrkSessId, Guid, KrkId, Size),
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [Size, Size]), Guid),
-    ?assertEqual(Size, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(Size, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [0, Size]), Guid),
     ?assertOneOfReports({ok, #{
         released_bytes := Size,
@@ -454,7 +451,7 @@ autocleaning_should_evict_file_replica_replicated_by_qos(Config) ->
     {ok, QosEntryId} = opt_qos:add_qos_entry(KrkNode, KrkSessId, ?FILE_REF(Guid), <<"providerId=", KrkId/binary>>, 1),
     ?assertMatch({ok, {#{QosEntryId := _}, _}}, opt_qos:get_effective_file_qos(KrkNode, KrkSessId, ?FILE_REF(Guid))),
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [Size, Size]), Guid),
-    ?assertEqual(Size, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(Size, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     ok = opt_qos:remove_qos_entry(KrkNode, KrkSessId, QosEntryId),
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [0, Size]), Guid),
     ?assertOneOfReports({ok, #{
@@ -504,15 +501,15 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
     }),
 
     ?assertFilesInView(KrkNode, SpaceId, Guids),
-    ?assertEqual(FilesNum * FileSize, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(FilesNum * FileSize, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     % "On the fly" replication of the ExtraFile will cause occupancy to exceed the Threshold.
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [0, ExtraFileSize]), EG),
     file_test_utils:replicate_by_read(ParisNode, KrkNode, KrkSessId, EG),
     {ok, [ARId]} = ?assertMatch({ok, [_]}, list(KrkNode, SpaceId), ?ATTEMPTS),
     ?assertRunFinished(KrkNode, ARId, ?BULK_EVICTION_ATTEMPTS),
-    ?assertEqual(true, current_size(KrkNode, SpaceId) =< Target, ?ATTEMPTS),
+    ?assertEqual(true, opt_spaces:get_occupancy(KrkNode, SpaceId) =< Target, ?ATTEMPTS),
     % ensure that not all files will be cleaned
-    ?assertEqual(true, current_size(KrkNode, SpaceId) >= 100, ?ATTEMPTS).
+    ?assertEqual(true, opt_spaces:get_occupancy(KrkNode, SpaceId) >= 100, ?ATTEMPTS).
 
 autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules(Config) ->
     #{
@@ -798,7 +795,7 @@ cancel_autocleaning_run(Config) ->
     }),
 
     ?assertFilesInView(KrkNode, SpaceId, Guids),
-    ?assertEqual(FilesNum * FileSize, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(FilesNum * FileSize, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     % "On the fly" replication of the ExtraFile will cause occupancy to exceed the Threshold.
     ?assertDistribution(KrkNode, KrkSessId, ?DISTS([KrkId, ParisId], [0, ExtraFileSize]), EG),
     file_test_utils:replicate_by_read(ParisNode, KrkNode, KrkSessId, EG),
@@ -874,7 +871,7 @@ time_warp_test(Config) ->
     }),
 
     ?assertFilesInView(KrkNode, SpaceId, Guids),
-    ?assertEqual(FilesNum * FileSize, current_size(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertEqual(FilesNum * FileSize, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
     StartTimeSeconds = 1000000000, % 10 ^ 9
 
     ok = time_test_utils:set_current_time_seconds(StartTimeSeconds),
@@ -938,7 +935,7 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
 %%%===================================================================
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [?MODULE]} | Config], #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, permit_gate_test_utils]} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60},
@@ -1181,30 +1178,19 @@ enable_file_popularity(Worker, SpaceId) ->
 -spec mock_gated_candidate_processing(node()) -> ok.
 mock_gated_candidate_processing(Node) ->
     TestProcess = self(),
-    % the permit counter must be created on the provider node (atomics are node-local);
-    % the node-wide cache entry keeps the ref alive (an ets table would die with its
-    % owner - the transient rpc process)
-    ok = opw_test_rpc:call(Node, fun() ->
-        node_cache:put(?CANDIDATE_PERMITS_KEY, atomics:new(1, []))
-    end),
+    ok = permit_gate_test_utils:install(?CANDIDATE_PROCESSING_GATE, Node),
     ok = test_utils:mock_new(Node, autocleaning_view_traverse, [passthrough]),
     ok = test_utils:mock_expect(Node, autocleaning_view_traverse, process_row, fun(
         Row, Info, RowNumber
     ) ->
-        acquire_candidate_processing_permit(TestProcess),
+        permit_gate_test_utils:acquire_permit(?CANDIDATE_PROCESSING_GATE, TestProcess),
         meck:passthrough([Row, Info, RowNumber])
     end).
 
 
 -spec grant_candidate_processing_permits(node(), pos_integer() | all) -> ok.
 grant_candidate_processing_permits(Node, CountOrAll) ->
-    ok = opw_test_rpc:call(Node, fun() ->
-        PermitsRef = node_cache:get(?CANDIDATE_PERMITS_KEY),
-        case CountOrAll of
-            all -> atomics:put(PermitsRef, 1, ?INFINITE_PERMITS);
-            Count -> atomics:add(PermitsRef, 1, Count)
-        end
-    end).
+    permit_gate_test_utils:grant_permits(?CANDIDATE_PROCESSING_GATE, Node, CountOrAll).
 
 
 %%--------------------------------------------------------------------
@@ -1216,11 +1202,7 @@ grant_candidate_processing_permits(Node, CountOrAll) ->
 %%--------------------------------------------------------------------
 -spec await_gated_candidate_processing_job() -> ok.
 await_gated_candidate_processing_job() ->
-    receive
-        ?CANDIDATE_JOB_GATED_MSG -> ok
-    after timer:seconds(?ATTEMPTS) ->
-        ct:fail(no_candidate_job_awaiting_permit)
-    end.
+    permit_gate_test_utils:await_parked_job(?CANDIDATE_PROCESSING_GATE, ?ATTEMPTS).
 
 
 %%--------------------------------------------------------------------
@@ -1231,100 +1213,12 @@ await_gated_candidate_processing_job() ->
 %%--------------------------------------------------------------------
 -spec unmock_gated_candidate_processing(node()) -> ok.
 unmock_gated_candidate_processing(Node) ->
-    % release any still-parked jobs first - cancelling the run does not release them, and
-    % the traverse slave job pool is shared by the whole node, so jobs left parked would
-    % outlive this test case and stall the auto-cleaning of every later one
-    ok = opw_test_rpc:call(Node, fun() ->
-        case node_cache:get(?CANDIDATE_PERMITS_KEY, undefined) of
-            undefined -> ok;
-            PermitsRef -> atomics:put(PermitsRef, 1, ?INFINITE_PERMITS)
-        end
-    end),
-    % released jobs need a moment to run to completion; purging them mid-call would lose
-    % their notify_processed_file report to the run controller, which then never learns
-    % that the batch is done and keeps the run ongoing forever
-    await_no_ongoing_calls_within_module(Node, autocleaning_view_traverse),
-    test_utils:mock_unload(Node, autocleaning_view_traverse),
-    ok = opw_test_rpc:call(Node, node_cache, clear, [?CANDIDATE_PERMITS_KEY]).
-
-
-%% @private
-%% Executed on the provider node within the gate-mocked candidate processing jobs
-%% (see mock_gated_candidate_processing/1).
--spec acquire_candidate_processing_permit(pid()) -> ok.
-acquire_candidate_processing_permit(TestProcess) ->
-    PermitsRef = node_cache:get(?CANDIDATE_PERMITS_KEY),
-    case try_acquire_candidate_processing_permit(PermitsRef) of
-        true ->
-            ok;
-        false ->
-            TestProcess ! ?CANDIDATE_JOB_GATED_MSG,
-            wait_for_candidate_processing_permit(PermitsRef)
-    end.
-
-
-%% @private
--spec wait_for_candidate_processing_permit(atomics:atomics_ref()) -> ok.
-wait_for_candidate_processing_permit(PermitsRef) ->
-    case try_acquire_candidate_processing_permit(PermitsRef) of
-        true ->
-            ok;
-        false ->
-            timer:sleep(?CANDIDATE_PERMIT_POLL_INTERVAL_MS),
-            wait_for_candidate_processing_permit(PermitsRef)
-    end.
-
-
-%% @private
--spec try_acquire_candidate_processing_permit(atomics:atomics_ref()) -> boolean().
-try_acquire_candidate_processing_permit(PermitsRef) ->
-    case atomics:sub_get(PermitsRef, 1, 1) of
-        Permits when Permits >= 0 ->
-            true;
-        _ ->
-            % return the overdrawn permit (the counter may transiently go negative under
-            % concurrent acquisitions but never loses permits)
-            atomics:add(PermitsRef, 1, 1),
-            false
-    end.
-
-
-%% @private
--spec await_no_ongoing_calls_within_module(node(), module()) -> ok.
-await_no_ongoing_calls_within_module(Node, Module) ->
-    await_no_ongoing_calls_within_module(
-        Node, [Module, meck_util:original_name(Module)], ?MOCKED_MODULE_CALLS_DRAIN_ATTEMPTS
+    % cancelling a run does not release the jobs parked at the gate, and the traverse
+    % slave job pool is shared by the whole node - jobs left parked would outlive this
+    % test case and stall the auto-cleaning of every later one
+    permit_gate_test_utils:uninstall(
+        ?CANDIDATE_PROCESSING_GATE, Node, autocleaning_view_traverse
     ).
-
-
-%% @private
--spec await_no_ongoing_calls_within_module(node(), [module()], non_neg_integer()) -> ok.
-await_no_ongoing_calls_within_module(Node, MatchedModules, 0) ->
-    ct:pal(
-        "WARNING: unloading the mock of ~tp on node ~tp while some process is "
-        "still executing its code - the code purge will kill it",
-        [hd(MatchedModules), Node]
-    );
-await_no_ongoing_calls_within_module(Node, MatchedModules, AttemptsLeft) ->
-    AnyProcessExecutingModule = opw_test_rpc:call(Node, fun() ->
-        lists:any(fun(Pid) ->
-            case erlang:process_info(Pid, current_stacktrace) of
-                {current_stacktrace, Stacktrace} ->
-                    lists:any(fun(StackModule) ->
-                        lists:keymember(StackModule, 1, Stacktrace)
-                    end, MatchedModules);
-                undefined ->
-                    false
-            end
-        end, erlang:processes())
-    end),
-    case AnyProcessExecutingModule of
-        false ->
-            ok;
-        true ->
-            timer:sleep(?MOCKED_MODULE_CALLS_DRAIN_POLL_INTERVAL_MS),
-            await_no_ongoing_calls_within_module(Node, MatchedModules, AttemptsLeft - 1)
-    end.
 
 
 %% @private
@@ -1376,11 +1270,6 @@ list(Worker, SpaceId) ->
 -spec get_run_report(node(), autocleaning_run:id()) -> {ok, map()} | {error, term()}.
 get_run_report(Worker, ARId) ->
     rpc:call(Worker, autocleaning_api, get_run_report, [ARId]).
-
-%% @private
--spec current_size(node(), od_space:id()) -> non_neg_integer().
-current_size(Worker, SpaceId) ->
-    rpc:call(Worker, space_quota, current_size, [SpaceId]).
 
 %% @private
 -spec change_last_open(node(), file_id:file_guid(), NewLastOpen :: non_neg_integer()) ->

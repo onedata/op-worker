@@ -13,7 +13,6 @@
 -author("Jakub Kudzia").
 
 
--include("onenv_test_utils.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
@@ -118,7 +117,10 @@ nested_verification_bagit(_Config) ->
 
 init_per_suite(Config) ->
     opt:init_per_suite(
-        [{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils, archive_sequential_test_base]} | Config],
+        [{?LOAD_MODULES, [
+            ?MODULE, archive_test_utils, archive_check_test_utils,
+            dir_stats_test_utils, archive_sequential_test_base
+        ]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op-archive",
             envs = [{op_worker, op_worker, [

@@ -13,8 +13,8 @@
 -module(transfer_common_test_base).
 -author("Bartosz Walkowicz").
 
--include("transfer_test.hrl").
--include("onenv_test_utils.hrl").
+-include("transfers/transfer_test.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -164,7 +164,7 @@ tree_of_empty_dirs_test(TestSuiteCtx) ->
     % (the original shape was 10 dirs per level - 1110 overall) floods dbsync
     % for minutes, starving the cross-provider syncs the tests await
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([5, 5, 5, 0], <<>>)
+        children = file_tree_test_utils:gen_nested_tree_spec([5, 5, 5, 0], <<>>)
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
@@ -245,7 +245,7 @@ big_file_test(TestSuiteCtx = #transfer_test_suite_ctx{
 hundred_files_in_one_transfer_test(TestSuiteCtx) ->
     % 10 directories with 10 files each
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([10, 10], ?RAND_CONTENT())
+        children = file_tree_test_utils:gen_nested_tree_spec([10, 10], ?RAND_CONTENT())
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
@@ -260,7 +260,7 @@ hundred_files_in_one_transfer_test(TestSuiteCtx) ->
 hundred_files_in_separate_transfers_test(TestSuiteCtx) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-            children = transfer_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -284,9 +284,9 @@ transfer_despite_protection_flags_test(TestSuiteCtx) ->
                 dataset = #dataset_spec{
                     protection_flags = [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
                 },
-                children = transfer_test_utils:gen_nested_tree_spec([10], ?RAND_CONTENT())
+                children = file_tree_test_utils:gen_nested_tree_spec([10], ?RAND_CONTENT())
             }
-            | transfer_test_utils:gen_nested_tree_spec([10], ?RAND_CONTENT())
+            | file_tree_test_utils:gen_nested_tree_spec([10], ?RAND_CONTENT())
         ]
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -326,7 +326,7 @@ regular_file_by_view_test(TestSuiteCtx) ->
 files_matched_by_view_with_reduce_test(TestSuiteCtx) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-            children = transfer_test_utils:gen_nested_tree_spec([6], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec([6], ?RAND_CONTENT())
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -524,7 +524,7 @@ hundred_files_by_view_with_batch_10_test(TestSuiteCtx) ->
 hundred_files_by_view_test_base(TestSuiteCtx, CaseName) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, CaseName, #dir_spec{
-            children = transfer_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -561,7 +561,7 @@ cancel_ongoing_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
     FilesCount = 10,
     FileContent = ?RAND_CONTENT(),
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([FilesCount], FileContent)
+        children = file_tree_test_utils:gen_nested_tree_spec([FilesCount], FileContent)
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
@@ -623,7 +623,7 @@ rerun_failed_dir_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
     % 2 directories with 3 files each
     FilesCount = 6,
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([2, 3], ?RAND_CONTENT())
+        children = file_tree_test_utils:gen_nested_tree_spec([2, 3], ?RAND_CONTENT())
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
@@ -677,7 +677,7 @@ many_simultaneous_failed_transfers_test(TestSuiteCtx = #transfer_test_suite_ctx{
 }) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-            children = transfer_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -729,7 +729,7 @@ file_removed_during_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
     CreationSessionId = oct_background:get_user_session_id(UserSelector, CreationProviderSelector),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(
         CreationNode, CreationSessionId, ?FILE_REF(FileGuid)
-    ), ?ATTEMPTS),
+    ), ?TRANSFER_ATTEMPTS),
 
     % release the job - the removal must not derail the transfer: a file job
     % finding its file already gone is counted as processed but neither
@@ -864,7 +864,7 @@ rerun_transfer_and_await_completed(TestSuiteCtx = #transfer_test_suite_ctx{
 %% Creates the single-file tree most view test cases operate on, ensures
 %% the initial replicas and returns the file object.
 -spec setup_single_file_for_view_test(transfer_test_utils:suite_ctx(), CaseName :: atom()) ->
-    onenv_file_test_utils:object().
+    file_tree_test_utils:object().
 setup_single_file_for_view_test(TestSuiteCtx, CaseName) ->
     RootDir = #object{children = [FileObject]} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, CaseName,

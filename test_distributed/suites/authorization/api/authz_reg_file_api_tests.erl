@@ -12,7 +12,7 @@
 -module(authz_reg_file_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+-include("authz/authz_api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -39,7 +39,7 @@ test_create_file(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             required_perms = [?traverse_container, ?add_object]
         }],
@@ -69,7 +69,7 @@ test_open_for_read(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?read_object]
         }],
@@ -93,7 +93,7 @@ test_open_for_write(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?write_object]
         }],
@@ -117,7 +117,7 @@ test_open_for_rdwr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?read_object, ?write_object]
         }],
@@ -141,7 +141,7 @@ test_create_and_open(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             required_perms = [?traverse_container, ?add_object]
         }],
@@ -166,7 +166,7 @@ test_truncate(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?write_object]
         }],
@@ -191,17 +191,17 @@ test_mv_file(SpaceId) ->
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
         files = [
-            #ct_authz_dir_spec{
+            #authz_dir_spec{
                 name = <<"dir1">>,
                 required_perms = [?traverse_container, ?delete_object],
                 children = [
-                    #ct_authz_file_spec{
+                    #authz_file_spec{
                         name = <<"file11">>,
                         required_perms = [?delete]
                     }
                 ]
             },
-            #ct_authz_dir_spec{
+            #authz_dir_spec{
                 name = <<"dir2">>,
                 required_perms = [?traverse_container, ?add_object]
             }
@@ -229,11 +229,11 @@ test_rm_file(SpaceId) ->
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
         files = [
-            #ct_authz_dir_spec{
+            #authz_dir_spec{
                 name = <<"dir1">>,
                 required_perms = [?traverse_container, ?delete_object],
                 children = [
-                    #ct_authz_file_spec{
+                    #authz_file_spec{
                         name = <<"file1">>,
                         required_perms = [?delete]
                     }

@@ -1,12 +1,16 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% Thin rpc facade over the storage_sync_links datastore structure - the per
+%%% directory link trees that storage import keeps to compare the files found on
+%%% the storage with the ones already known to the system (see
+%%% storage_sync_links.erl). Lets tests read, extend and prune those trees
+%%% directly, without waiting for a scan to do it.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_links_test_utils).

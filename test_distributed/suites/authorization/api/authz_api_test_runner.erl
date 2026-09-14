@@ -16,11 +16,11 @@
 -module(authz_api_test_runner).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+-include("authz/authz_api_test_runner.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -29,7 +29,7 @@
 -export([run_suite/1]).
 -export([extract_test_file_key/3]).
 
--type file_tree_spec() :: #ct_authz_dir_spec{} | #ct_authz_file_spec{}.
+-type file_tree_spec() :: #authz_dir_spec{} | #authz_file_spec{}.
 
 -type perms() :: [binary()].
 
@@ -368,10 +368,10 @@ gather_required_perms(FileTreeSpec) ->
 
 %% @private
 -spec gather_required_perms(file_tree_spec() | [file_tree_spec()], perms()) -> perms().
-gather_required_perms(#ct_authz_file_spec{required_perms = RequiredPerms}, Acc) ->
+gather_required_perms(#authz_file_spec{required_perms = RequiredPerms}, Acc) ->
     RequiredPerms ++ Acc;
 
-gather_required_perms(#ct_authz_dir_spec{required_perms = RequiredPerms, children = ChildrenSpec}, Acc) ->
+gather_required_perms(#authz_dir_spec{required_perms = RequiredPerms, children = ChildrenSpec}, Acc) ->
     lists:foldl(fun gather_required_perms/2, RequiredPerms ++ Acc, ChildrenSpec);
 
 gather_required_perms(FileTreeSpec, Acc) when is_list(FileTreeSpec) ->
@@ -542,7 +542,7 @@ init_data_access_caveats_test_case(TestCaseName, ExecutionerSelector, TestSuiteC
     FullPermsPerFile = set_full_perms(TestSuiteCtx, FileGuids),
 
     ExecutionerUserId = oct_background:get_user_id(ExecutionerSelector),
-    ExecutionerMainToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
+    ExecutionerMainToken = provider_test_utils:create_oz_temp_access_token(ExecutionerUserId),
 
     #authz_cv_test_case_ctx{
         test_case_ctx = TestCaseCtx,
@@ -632,7 +632,7 @@ constrain_executioner_session(CvTestCaseCtx = #authz_cv_test_case_ctx{
     executioner_main_token = MainToken
 }, Caveat) ->
     TokenWithCaveat = tokens:confine(MainToken, Caveat),
-    ConstrainedSessionId = provider_onenv_test_utils:create_session(TestNode, UserId, TokenWithCaveat),
+    ConstrainedSessionId = provider_test_utils:create_session(TestNode, UserId, TokenWithCaveat),
     CvTestCaseCtx#authz_cv_test_case_ctx{test_case_ctx = TestCaseCtx#authz_test_case_ctx{
         executioner_session_id = ConstrainedSessionId
     }}.
@@ -826,9 +826,9 @@ init_public_data_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx)
     TestCaseCtx = init_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
 
     ExecutionerUserId = oct_background:get_user_id(ExecutionerSelector),
-    ExecutionerToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
+    ExecutionerToken = provider_test_utils:create_oz_temp_access_token(ExecutionerUserId),
     TestCaseCtx#authz_test_case_ctx{
-        executioner_session_id = provider_onenv_test_utils:create_session(
+        executioner_session_id = provider_test_utils:create_session(
             TestNode, ExecutionerUserId, ExecutionerToken, public_data
         )
     }.
@@ -1257,9 +1257,9 @@ run_special_dirs_test_group(TestSuiteCtx = #authz_test_suite_ctx{
             share_container ->
                 TestNode = TestSuiteCtx#authz_test_suite_ctx.test_node,
                 ExecutionerUserId = oct_background:get_user_id(SpaceOwnerSelector),
-                ExecutionerToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
+                ExecutionerToken = provider_test_utils:create_oz_temp_access_token(ExecutionerUserId),
                 TestCaseCtx#authz_test_case_ctx{
-                    executioner_session_id = provider_onenv_test_utils:create_session(
+                    executioner_session_id = provider_test_utils:create_session(
                         TestNode, ExecutionerUserId, ExecutionerToken, public_data
                     )
                 };
@@ -1403,7 +1403,7 @@ init_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx = #authz_test_sui
     test_node = TestNode,
     files_owner_session_id = FilesOwnerSessionId
 }) ->
-    FileTreeSpec = #ct_authz_dir_spec{
+    FileTreeSpec = #authz_dir_spec{
         name = TestCaseName,
         required_perms = infer_test_case_root_dir_permissions(TestSuiteSpec),
         children = TestSuiteSpec#authz_test_suite_spec.files
@@ -1615,7 +1615,7 @@ get_user_space_privileges(Node, SpaceId, UserId) ->
 %% @private
 -spec create_file_tree(node(), session:id(), file_meta:path(), file_tree_spec()) ->
     {perms_per_file(), extra_data()}.
-create_file_tree(Node, FileOwnerSessId, ParentDirPath, #ct_authz_file_spec{
+create_file_tree(Node, FileOwnerSessId, ParentDirPath, #authz_file_spec{
     name = FileName,
     required_perms = RequiredFilePerms,
     on_create = HookFun
@@ -1630,7 +1630,7 @@ create_file_tree(Node, FileOwnerSessId, ParentDirPath, #ct_authz_file_spec{
 
     {#{FileGuid => RequiredFilePerms}, ExtraData};
 
-create_file_tree(Node, FileOwnerSessId, ParentDirPath, #ct_authz_dir_spec{
+create_file_tree(Node, FileOwnerSessId, ParentDirPath, #authz_dir_spec{
     name = DirName,
     required_perms = RequiredDirPerms,
     on_create = HookFun,

@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Katarzyna Such
-%%% @copyright (C) 2024 ACK CYFRONET AGH
+%%% @copyright (C) 2024-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -31,13 +31,14 @@ list_handle_services() ->
 
 -spec add_user_to_all_handle_services(oct_background:entity_selector()) -> ok.
 add_user_to_all_handle_services(UserSelector) ->
-    Privileges = privileges:handle_service_member(),
-    UserId = oct_background:get_user_id(UserSelector),
-    lists:foreach(fun(HServiceId) ->
-        ozw_test_rpc:add_user_to_handle_service(HServiceId, UserId, Privileges)
-    end, list_handle_services()).
+    add_user_to_all_handle_services(UserSelector, privileges:handle_service_member()).
 
--spec add_user_to_all_handle_services(oct_background:entity_selector(), [atom()]) -> ok.
+
+-spec add_user_to_all_handle_services(
+    oct_background:entity_selector(),
+    [privileges:handle_service_privilege()]
+) ->
+    ok.
 add_user_to_all_handle_services(UserSelector, Privileges) ->
     UserId = oct_background:get_user_id(UserSelector),
     lists:foreach(fun(HServiceId) ->

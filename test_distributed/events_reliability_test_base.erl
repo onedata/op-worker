@@ -11,7 +11,6 @@
 -module(events_reliability_test_base).
 -author("Bartosz Walkowicz").
 
--include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/common_messages.hrl").

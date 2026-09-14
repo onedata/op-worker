@@ -22,7 +22,7 @@
 -module(view_test_utils).
 -author("Bartosz Walkowicz").
 
--include("view_test.hrl").
+-include("view/view_test.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% API

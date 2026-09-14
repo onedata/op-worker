@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2022-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -22,7 +22,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% API
@@ -37,12 +37,10 @@
 
     set_current_lane_run/3,
 
-    get_task_selector/2,
     get_task_schema_id/2,
     get_task_id/2,
     get_task_stats/2,
-    adjust_abruptly_stopped_task_stats/1,
-    get_task_status/2
+    adjust_abruptly_stopped_task_stats/1
 ]).
 
 % json object similar in structure to translations returned via API endpoints
@@ -492,19 +490,6 @@ set_current_lane_run(AtmLaneIndex, AtmRunNum, ExpState) ->
     }.
 
 
--spec get_task_selector(atm_task_execution:id(), ctx()) -> task_selector().
-get_task_selector(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
-    exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
-}) ->
-    #exp_task_execution_state_ctx{
-        lane_run_selector = AtmLaneRunSelector,
-        parallel_box_schema_id = AtmParallelBoxSchemaId,
-        exp_state = #{<<"schemaId">> := AtmTaskSchemaId}
-    } = maps:get(AtmTaskExecutionId, ExpAtmTaskExecutionsRegistry),
-
-    {AtmLaneRunSelector, AtmParallelBoxSchemaId, AtmTaskSchemaId}.
-
-
 -spec get_task_schema_id(atm_task_execution:id(), ctx()) -> automation:id().
 get_task_schema_id(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
     exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
@@ -551,16 +536,6 @@ adjust_abruptly_stopped_task_stats(ExpAtmTaskExecutionState = #{
         <<"itemsProcessed">> => ItemsProcessed + ItemsInProcessing,
         <<"itemsFailed">> => ItemsFailed + ItemsInProcessing
     }.
-
-
--spec get_task_status(atm_task_execution:id(), ctx()) -> binary().
-get_task_status(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
-    exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
-}) ->
-    #exp_task_execution_state_ctx{exp_state = #{<<"status">> := ExpStatus}} = maps:get(
-        AtmTaskExecutionId, ExpAtmTaskExecutionsRegistry
-    ),
-    ExpStatus.
 
 
 %%%===================================================================
@@ -1628,3 +1603,14 @@ assert_json_expectations(Path, Expected, Value, LogFun) ->
             ]),
             throw(badmatch)
     end.
+
+
+%% @private
+-spec get_task_status(atm_task_execution:id(), ctx()) -> binary().
+get_task_status(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
+    exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
+}) ->
+    #exp_task_execution_state_ctx{exp_state = #{<<"status">> := ExpStatus}} = maps:get(
+        AtmTaskExecutionId, ExpAtmTaskExecutionsRegistry
+    ),
+    ExpStatus.

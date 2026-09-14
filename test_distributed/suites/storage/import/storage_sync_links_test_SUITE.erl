@@ -11,10 +11,10 @@
 -module(storage_sync_links_test_SUITE).
 -author("Jakub Kudzia").
 
--include("storage_sync_links_test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -76,6 +76,17 @@ all() -> ?ALL(?TEST_CASES).
 -define(RAND_STR, <<(crypto:strong_rand_bytes(16))/binary>>).
 -define(SPACE_ID, <<"space_", ?RAND_STR/binary>>).
 -define(STORAGE_ID, <<"storage_", ?RAND_STR/binary>>).
+
+% Links are added asynchronously (see cast_add_link/4), so listing must be retried.
+-define(ASSERT_LIST_ATTEMPTS, 30).
+
+-define(assertList(ExpectedList, Worker, RootStorageFileId, StorageId),
+    ?assertEqual(lists:sort(ExpectedList), try
+        {ok, Result} = storage_sync_links_test_utils:list_recursive(Worker, RootStorageFileId, StorageId),
+        lists:sort(Result)
+    catch _:_ ->
+        error
+    end, ?ASSERT_LIST_ATTEMPTS)).
 
 
 %%%==================================================================

@@ -41,8 +41,8 @@
 -module(transfer_test_utils).
 -author("Bartosz Walkowicz").
 
--include("transfer_test.hrl").
--include("onenv_test_utils.hrl").
+-include("transfers/transfer_test.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -54,7 +54,6 @@
 %% API
 -export([
     remove_leftover_file_trees/2,
-    gen_nested_tree_spec/2,
     create_file_tree/3,
     ensure_initial_replicas/2,
     schedule_transfer/2,
@@ -82,11 +81,7 @@
     assert_distribution/2, assert_distribution/3,
     assert_initial_distribution/2,
     await_distribution/3,
-    remove_all_transfers/1,
-
-    get_space_support_size/2,
-    get_space_occupancy/2,
-    set_space_occupancy/3
+    remove_all_transfers/1
 ]).
 
 -type transfer_type() :: replication | eviction | migration.
@@ -111,7 +106,7 @@
 % transferred files given either as a (nested) file tree or a flat list of
 % its objects (e.g. the subset of tree files matched by a view)
 -type file_tree_objects() ::
-    onenv_file_test_utils:object() | [onenv_file_test_utils:object()].
+    file_tree_test_utils:object() | [file_tree_test_utils:object()].
 
 -type suite_ctx() :: #transfer_test_suite_ctx{}.
 
@@ -123,20 +118,13 @@
 
 -define(SPACE_ROOT_LS_LIMIT, 10000).
 
-% how long to wait, before unloading a mock of a module, for the processes
-% still executing its code to leave it (the unload purge would kill them)
--define(MOCKED_MODULE_CALLS_DRAIN_ATTEMPTS, 150).
--define(MOCKED_MODULE_CALLS_DRAIN_POLL_INTERVAL_MS, 100).
-
 % how much longer to poll a transfer that has already ended but does not match
 % the expectations - enough for the trailing dbsync revisions of the end state,
 % while orders of magnitude less than the full attempt budgets
 -define(ENDED_TRANSFER_GRACE_ATTEMPTS, 10).
 
--define(FILE_PROCESSING_PERMITS_KEY, file_processing_permits).
--define(FILE_PROCESSING_JOB_GATED_MSG, file_processing_job_gated).
--define(FILE_PROCESSING_PERMIT_POLL_INTERVAL_MS, 100).
--define(INFINITE_PERMITS, 1 bsl 50).
+% gate suspending the transfer's file jobs (see permit_gate_test_utils)
+-define(FILE_PROCESSING_GATE, transfer_file_processing).
 
 -define(FILE_PROCESSING_FAILURE_ENABLED_KEY, file_processing_failure_enabled).
 
@@ -162,7 +150,7 @@ remove_leftover_file_trees(#transfer_test_suite_ctx{
     % block the file tree removal below (rm_recursive moves the tree to the trash,
     % but its protected entries can never be purged from there)
     remove_all_datasets(SpaceSelector, UserSelector),
-    {ok, Children} = onenv_file_test_utils:ls(UserSelector, SpaceSelector, 0, ?SPACE_ROOT_LS_LIMIT),
+    {ok, Children} = file_tree_test_utils:ls(UserSelector, SpaceSelector, 0, ?SPACE_ROOT_LS_LIMIT),
     CaseNamePrefix = <<(atom_to_binary(CaseName, utf8))/binary, "_">>,
 
     LeftoverTreeGuids = [ChildGuid || {ChildGuid, ChildName} <- Children,
@@ -172,37 +160,15 @@ remove_leftover_file_trees(#transfer_test_suite_ctx{
     end, LeftoverTreeGuids).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Generates a nested file tree spec of uniform branching, with all leaf
-%% files getting the given content. Consecutive list elements give the
-%% directory count on consecutive nesting levels and the last one gives
-%% the file count in every innermost directory. E.g.:
-%% - gen_nested_tree_spec([10, 10, 0], C) - 10 directories, each with
-%%   10 subdirectories, no files;
-%% - gen_nested_tree_spec([100], C) - 100 files.
-%% @end
-%%--------------------------------------------------------------------
--spec gen_nested_tree_spec([non_neg_integer()], binary()) ->
-    [onenv_file_test_utils:object_spec()].
-gen_nested_tree_spec([FilesCount], FileContent) ->
-    [#file_spec{content = FileContent} || _ <- lists:seq(1, FilesCount)];
-gen_nested_tree_spec([DirsCount | RestBranching], FileContent) ->
-    [
-        #dir_spec{children = gen_nested_tree_spec(RestBranching, FileContent)}
-        || _ <- lists:seq(1, DirsCount)
-    ].
-
-
--spec create_file_tree(suite_ctx(), atom(), onenv_file_test_utils:object_spec()) ->
-    onenv_file_test_utils:object().
+-spec create_file_tree(suite_ctx(), atom(), file_tree_test_utils:object_spec()) ->
+    file_tree_test_utils:object().
 create_file_tree(#transfer_test_suite_ctx{
     space_selector = SpaceSelector,
     user_selector = UserSelector,
     creation_provider_selector = CreationProviderSelector
 }, CaseName, #dir_spec{} = RootDirSpec) ->
     RootDirName = str_utils:format_bin("~ts_~ts", [CaseName, str_utils:rand_hex(6)]),
-    onenv_file_test_utils:create_and_sync_file_tree(
+    file_tree_test_utils:create_and_sync_file_tree(
         UserSelector, SpaceSelector,
         RootDirSpec#dir_spec{name = RootDirName},
         CreationProviderSelector
@@ -224,7 +190,7 @@ create_file_tree(#transfer_test_suite_ctx{
 %% eviction would then honestly evict nothing.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_initial_replicas(suite_ctx(), onenv_file_test_utils:object()) -> ok.
+-spec ensure_initial_replicas(suite_ctx(), file_tree_test_utils:object()) -> ok.
 ensure_initial_replicas(#transfer_test_suite_ctx{
     transfer_type = eviction,
     user_selector = UserSelector,
@@ -242,7 +208,7 @@ ensure_initial_replicas(_TestSuiteCtx, _TransferRootObject) ->
     ok.
 
 
--spec schedule_transfer(suite_ctx(), onenv_file_test_utils:object()) ->
+-spec schedule_transfer(suite_ctx(), file_tree_test_utils:object()) ->
     transfer:id().
 schedule_transfer(TestSuiteCtx = #transfer_test_suite_ctx{
     user_selector = UserSelector,
@@ -360,22 +326,14 @@ remove_all_views(#transfer_test_suite_ctx{space_selector = SpaceSelector}) ->
 mock_gated_file_processing(SuiteCtx) ->
     TestProcess = self(),
     Nodes = get_file_processing_nodes(SuiteCtx),
-
-    lists:foreach(fun(Node) ->
-        % the permit counter must be created on the provider node (atomics are
-        % node-local); the node-wide cache entry keeps the ref alive (an ets
-        % table would die with its owner - the transient rpc process)
-        ok = opw_test_rpc:call(Node, fun() ->
-            node_cache:put(?FILE_PROCESSING_PERMITS_KEY, atomics:new(1, []))
-        end)
-    end, Nodes),
+    ok = permit_gate_test_utils:install(?FILE_PROCESSING_GATE, Nodes),
 
     WorkerModule = get_file_processing_worker_module(SuiteCtx),
     ok = test_utils:mock_new(Nodes, WorkerModule, [passthrough]),
     ok = test_utils:mock_expect(Nodes, WorkerModule, transfer_regular_file, fun(
         FileCtx, TransferParams
     ) ->
-        acquire_file_processing_permit(TestProcess),
+        permit_gate_test_utils:acquire_permit(?FILE_PROCESSING_GATE, TestProcess),
         meck:passthrough([FileCtx, TransferParams])
     end).
 
@@ -383,17 +341,9 @@ mock_gated_file_processing(SuiteCtx) ->
 -spec grant_file_processing_permits(suite_ctx(), pos_integer() | all) ->
     ok.
 grant_file_processing_permits(SuiteCtx, CountOrAll) ->
-    % permits are granted per provider node (irrelevant for the single-node
-    % providers the transfer suites run on)
-    lists:foreach(fun(Node) ->
-        ok = opw_test_rpc:call(Node, fun() ->
-            PermitsRef = node_cache:get(?FILE_PROCESSING_PERMITS_KEY),
-            case CountOrAll of
-                all -> atomics:put(PermitsRef, 1, ?INFINITE_PERMITS);
-                Count -> atomics:add(PermitsRef, 1, Count)
-            end
-        end)
-    end, get_file_processing_nodes(SuiteCtx)).
+    permit_gate_test_utils:grant_permits(
+        ?FILE_PROCESSING_GATE, get_file_processing_nodes(SuiteCtx), CountOrAll
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -406,11 +356,7 @@ grant_file_processing_permits(SuiteCtx, CountOrAll) ->
 %%--------------------------------------------------------------------
 -spec await_gated_file_processing_job() -> ok.
 await_gated_file_processing_job() ->
-    receive
-        ?FILE_PROCESSING_JOB_GATED_MSG -> ok
-    after timer:seconds(?ATTEMPTS) ->
-        ct:fail(no_file_processing_job_awaiting_permit)
-    end.
+    permit_gate_test_utils:await_parked_job(?FILE_PROCESSING_GATE, ?TRANSFER_ATTEMPTS).
 
 
 -spec await_files_replicated(oct_background:entity_selector(), transfer:id(), non_neg_integer()) ->
@@ -423,27 +369,16 @@ await_files_replicated(ProviderSelector, TransferId, ExpFilesReplicated) ->
             FilesReplicated;
         {error, _} = Error ->
             Error
-    end, ?ATTEMPTS).
+    end, ?TRANSFER_ATTEMPTS).
 
 
 -spec unmock_gated_file_processing(suite_ctx()) -> ok.
 unmock_gated_file_processing(SuiteCtx) ->
-    % release any still-parked jobs first - a process parked inside the mock
-    % call would be killed by the code purge on unload
-    grant_file_processing_permits(SuiteCtx, all),
-    Nodes = get_file_processing_nodes(SuiteCtx),
-    WorkerModule = get_file_processing_worker_module(SuiteCtx),
-    % released jobs need a moment to run their file processing to completion;
-    % purging them mid-call would lose their reports to the transfer traverse,
-    % leaving the transfer ongoing forever - each such transfer permanently
-    % occupies one of the (10) replication controller pool workers of the
-    % provider, and with all of them gone no replication or migration can even
-    % start on that provider until its restart (see replication_controller)
-    await_no_ongoing_calls_within_module(Nodes, WorkerModule),
-    test_utils:mock_unload(Nodes, WorkerModule),
-    lists:foreach(fun(Node) ->
-        ok = opw_test_rpc:call(Node, node_cache, clear, [?FILE_PROCESSING_PERMITS_KEY])
-    end, Nodes).
+    permit_gate_test_utils:uninstall(
+        ?FILE_PROCESSING_GATE,
+        get_file_processing_nodes(SuiteCtx),
+        get_file_processing_worker_module(SuiteCtx)
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -508,8 +443,8 @@ unmock_file_processing_failure(SuiteCtx = #transfer_test_suite_ctx{transfer_type
         eviction -> replica_deletion_req;
         _ -> replica_synchronizer
     end,
-    % see the analogous await in unmock_gated_file_processing/1
-    await_no_ongoing_calls_within_module(Nodes, MockedModule),
+    % see the analogous await in permit_gate_test_utils:uninstall/3
+    permit_gate_test_utils:await_no_ongoing_calls_within_module(Nodes, MockedModule),
     test_utils:mock_unload(Nodes, MockedModule),
     lists:foreach(fun(Node) ->
         ok = opw_test_rpc:call(Node, node_cache, clear, [?FILE_PROCESSING_FAILURE_ENABLED_KEY])
@@ -572,14 +507,14 @@ await_transfer_rerun_id(#transfer_test_suite_ctx{
         ) of
             {ok, #document{value = #transfer{rerun_id = RerunId}}} -> RerunId;
             {error, _} = Error -> Error
-        end, ?ATTEMPTS)
+        end, ?TRANSFER_ATTEMPTS)
     end, [CreationProviderSelector, OtherProviderSelector]).
 
 
 -spec await_transfer_ended(suite_ctx(), transfer:id(), file_tree_objects(), expected_transfer()) ->
     ok.
 await_transfer_ended(SuiteCtx, TransferId, TransferRootObjects, Overrides) ->
-    await_transfer_ended(SuiteCtx, TransferId, TransferRootObjects, Overrides, ?ATTEMPTS).
+    await_transfer_ended(SuiteCtx, TransferId, TransferRootObjects, Overrides, ?TRANSFER_ATTEMPTS).
 
 
 -spec await_transfer_ended(
@@ -690,30 +625,18 @@ assert_distribution(#transfer_test_suite_ctx{
     CreationNode = oct_background:get_random_provider_node(CreationProviderSelector),
     OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
 
-    FilesWithExpDistribution = lists:map(fun(#object{
-        guid = FileGuid, name = FileName, content = Content
-    }) ->
+    FilesWithExpDistribution = lists:map(fun(#object{guid = FileGuid, content = Content}) ->
         FileSize = maps:get(FileGuid, FileSizeOverrides, byte_size(Content)),
         ExpSizePerNode = case TransferType of
             replication -> [{CreationNode, FileSize}, {OtherNode, FileSize}];
             eviction -> [{CreationNode, FileSize}, {OtherNode, 0}];
             migration -> [{CreationNode, 0}, {OtherNode, FileSize}]
         end,
-        {FileName, FileGuid, ExpSizePerNode}
+        {FileGuid, ExpSizePerNode}
     end, collect_regular_files(TransferRootObjects)),
 
-    lists_utils:pforeach(fun({FileName, FileGuid, ExpSizePerNode}) ->
-        try
-            file_test_utils:await_distribution([CreationNode, OtherNode], FileGuid, ExpSizePerNode)
-        catch Class:Reason:Stacktrace ->
-            % the shared assert reports only the mismatched distributions, naming
-            % neither the file they belong to (of the many asserted in parallel)
-            % nor the expectation in the terms it was declared in
-            ct:pal("Unexpected distribution of file ~ts (~ts) after ~tp, expected:~n~tp", [
-                FileName, FileGuid, TransferType, ExpSizePerNode
-            ]),
-            erlang:raise(Class, Reason, Stacktrace)
-        end
+    lists_utils:pforeach(fun({FileGuid, ExpSizePerNode}) ->
+        file_test_utils:await_distribution([CreationNode, OtherNode], FileGuid, ExpSizePerNode)
     end, FilesWithExpDistribution).
 
 
@@ -816,29 +739,6 @@ delete_transfer_ignoring_missing_doc(ProviderSelector, TransferId) ->
     end).
 
 
--spec get_space_support_size(oct_background:entity_selector(), od_space:id()) ->
-    non_neg_integer().
-get_space_support_size(ProviderSelector, SpaceId) ->
-    {ok, SupportSize} = opw_test_rpc:call(ProviderSelector, provider_logic, get_support_size, [SpaceId]),
-    SupportSize.
-
-
--spec get_space_occupancy(oct_background:entity_selector(), od_space:id()) ->
-    non_neg_integer().
-get_space_occupancy(ProviderSelector, SpaceId) ->
-    opw_test_rpc:call(ProviderSelector, space_quota, current_size, [SpaceId]).
-
-
--spec set_space_occupancy(oct_background:entity_selector(), od_space:id(), non_neg_integer()) ->
-    ok.
-set_space_occupancy(ProviderSelector, SpaceId, TargetSize) ->
-    CurrentSize = get_space_occupancy(ProviderSelector, SpaceId),
-    opw_test_rpc:call(ProviderSelector, space_quota, apply_size_change, [
-        SpaceId, TargetSize - CurrentSize
-    ]),
-    ok.
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -868,94 +768,6 @@ get_file_processing_nodes(#transfer_test_suite_ctx{
 
 
 %% @private
-%% Executed on the provider nodes within the gate-mocked file processing job
-%% processes (see mock_gated_file_processing/1).
--spec acquire_file_processing_permit(pid()) -> ok.
-acquire_file_processing_permit(TestProcess) ->
-    PermitsRef = node_cache:get(?FILE_PROCESSING_PERMITS_KEY),
-    case try_acquire_file_processing_permit(PermitsRef) of
-        true ->
-            ok;
-        false ->
-            TestProcess ! ?FILE_PROCESSING_JOB_GATED_MSG,
-            wait_for_file_processing_permit(PermitsRef)
-    end.
-
-
-%% @private
--spec wait_for_file_processing_permit(atomics:atomics_ref()) -> ok.
-wait_for_file_processing_permit(PermitsRef) ->
-    case try_acquire_file_processing_permit(PermitsRef) of
-        true ->
-            ok;
-        false ->
-            timer:sleep(?FILE_PROCESSING_PERMIT_POLL_INTERVAL_MS),
-            wait_for_file_processing_permit(PermitsRef)
-    end.
-
-
-%% @private
--spec try_acquire_file_processing_permit(atomics:atomics_ref()) -> boolean().
-try_acquire_file_processing_permit(PermitsRef) ->
-    case atomics:sub_get(PermitsRef, 1, 1) of
-        Permits when Permits >= 0 ->
-            true;
-        _ ->
-            % return the overdrawn permit (the counter may transiently go
-            % negative under concurrent acquisitions but never loses permits)
-            atomics:add(PermitsRef, 1, 1),
-            false
-    end.
-
-
-%% @private
-%% Awaits until no process on the given nodes executes the code of the given
-%% (mocked) module - unloading a mock purges the module's code, killing any
-%% process executing it (the mock and the meck-renamed original alike). The
-%% await is bounded: on timeout a warning is logged and the caller proceeds
-%% with the unload (a test run must not hang on a wedged job forever).
--spec await_no_ongoing_calls_within_module([node()], module()) -> ok.
-await_no_ongoing_calls_within_module(Nodes, Module) ->
-    MatchedModules = [Module, meck_util:original_name(Module)],
-    lists:foreach(fun(Node) ->
-        await_no_ongoing_calls_within_module(
-            Node, MatchedModules, ?MOCKED_MODULE_CALLS_DRAIN_ATTEMPTS
-        )
-    end, Nodes).
-
-
-%% @private
--spec await_no_ongoing_calls_within_module(node(), [module()], non_neg_integer()) ->
-    ok.
-await_no_ongoing_calls_within_module(Node, MatchedModules, 0) ->
-    ct:pal(
-        "WARNING: unloading the mock of ~tp on node ~tp while some process is "
-        "still executing its code - the code purge will kill it",
-        [hd(MatchedModules), Node]
-    );
-await_no_ongoing_calls_within_module(Node, MatchedModules, AttemptsLeft) ->
-    AnyProcessExecutingModule = opw_test_rpc:call(Node, fun() ->
-        lists:any(fun(Pid) ->
-            case erlang:process_info(Pid, current_stacktrace) of
-                {current_stacktrace, Stacktrace} ->
-                    lists:any(fun(StackModule) ->
-                        lists:keymember(StackModule, 1, Stacktrace)
-                    end, MatchedModules);
-                undefined ->
-                    false
-            end
-        end, erlang:processes())
-    end),
-    case AnyProcessExecutingModule of
-        false ->
-            ok;
-        true ->
-            timer:sleep(?MOCKED_MODULE_CALLS_DRAIN_POLL_INTERVAL_MS),
-            await_no_ongoing_calls_within_module(Node, MatchedModules, AttemptsLeft - 1)
-    end.
-
-
-%% @private
 %% Removes a leftover file tree. Only the removing provider is awaited
 %% (lfm_proxy:rm_recursive synchronously moves the tree to the trash; the
 %% purge from the trash is asynchronous and size-proportional). The tree
@@ -981,7 +793,7 @@ rm_leftover_file_tree(SpaceSelector, UserSelector, FileGuid) ->
 %% @private
 %% Removes all top-level datasets in the space so that any protection flags
 %% they carry no longer block the removal of leftover file trees. Unlike
-%% onenv_dataset_test_utils:cleanup_all_datasets/1, it does not walk dataset
+%% dataset_test_utils:cleanup_all_datasets/1, it does not walk dataset
 %% archives (transfer tests never create any, and listing them fails with
 %% not_found for a never-archived dataset).
 -spec remove_all_datasets(oct_background:entity_selector(), oct_background:entity_selector()) ->
@@ -1149,7 +961,7 @@ count_files_and_bytes(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
 
 %% @private
 -spec collect_regular_files(file_tree_objects()) ->
-    [onenv_file_test_utils:object()].
+    [file_tree_test_utils:object()].
 collect_regular_files(Objects) when is_list(Objects) ->
     lists:flatmap(fun collect_regular_files/1, Objects);
 collect_regular_files(#object{type = ?REGULAR_FILE_TYPE} = Object) ->

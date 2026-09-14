@@ -12,7 +12,7 @@
 -module(atm_workflow_execution_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_execution_test.hrl").
+-include("atm/atm_workflow_execution_test.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 %% exported for CT
@@ -1033,9 +1033,9 @@ init_per_suite(Config) ->
                 {atm_workflow_executions_graceful_stop_timeout_sec, 3}
             ]}],
             posthook = fun(NewConfig) ->
-                atm_test_inventory:init_per_suite(?PROVIDER_SELECTOR, user1),
-                atm_test_inventory:add_member(?USER_SELECTOR),
-                ozt_spaces:set_privileges(?SPACE_SELECTOR, ?USER_SELECTOR, [
+                atm_test_inventory:set_up(?ATM_PROVIDER_SELECTOR, user1),
+                atm_test_inventory:add_member(?ATM_USER_SELECTOR),
+                ozt_spaces:set_privileges(?ATM_SPACE_SELECTOR, ?ATM_USER_SELECTOR, [
                     ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS,
                     ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
                     | privileges:space_member()
@@ -1054,7 +1054,7 @@ init_per_group(scheduling_non_executable_workflow_schema_tests, Config) ->
     Config;
 
 init_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Config) ->
-    atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
+    atm_openfaas_task_executor_mock:init(?ATM_PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     Config;
 
 init_per_group(TestGroup, Config) when
@@ -1073,16 +1073,16 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= force_continue_tests;
     TestGroup =:= restarts_tests
 ->
-    atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
+    atm_workflow_execution_test_runner:init(?ATM_PROVIDER_SELECTOR),
     Config;
 
 init_per_group(gc_tests, Config0) ->
     Config1 = lists:foldl(fun(EnvVar, ConfigAcc) ->
-        [{EnvVar, ?rpc(?PROVIDER_SELECTOR, op_worker:get_env(EnvVar))} | ConfigAcc]
+        [{EnvVar, ?rpc(?ATM_PROVIDER_SELECTOR, op_worker:get_env(EnvVar))} | ConfigAcc]
     end, Config0, ?GC_RELATED_ENV_VARS),
 
     time_test_utils:freeze_time(Config1),
-    atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
+    atm_workflow_execution_test_runner:init(?ATM_PROVIDER_SELECTOR),
     Config1.
 
 
@@ -1090,7 +1090,7 @@ end_per_group(scheduling_non_executable_workflow_schema_tests, Config) ->
     Config;
 
 end_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Config) ->
-    atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
+    atm_openfaas_task_executor_mock:teardown(?ATM_PROVIDER_SELECTOR),
     Config;
 
 end_per_group(TestGroup, Config) when
@@ -1109,16 +1109,16 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= force_continue_tests;
     TestGroup =:= restarts_tests
 ->
-    atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
+    atm_workflow_execution_test_runner:teardown(?ATM_PROVIDER_SELECTOR),
     Config;
 
 end_per_group(gc_tests, Config) ->
     % Reset atm gc env as it may have been tampered by gc tests
     lists:foreach(fun(EnvVar) ->
-        ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(EnvVar, ?config(EnvVar, Config)))
+        ?rpc(?ATM_PROVIDER_SELECTOR, op_worker:set_env(EnvVar, ?config(EnvVar, Config)))
     end, ?GC_RELATED_ENV_VARS),
 
-    atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
+    atm_workflow_execution_test_runner:teardown(?ATM_PROVIDER_SELECTOR),
     time_test_utils:unfreeze_time(Config),
     Config.
 

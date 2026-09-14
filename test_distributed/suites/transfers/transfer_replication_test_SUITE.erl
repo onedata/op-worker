@@ -12,8 +12,8 @@
 -module(transfer_replication_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("transfer_test.hrl").
--include("onenv_test_utils.hrl").
+-include("transfers/transfer_test.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -377,8 +377,8 @@ replication_with_exactly_enough_space_test(_Config) ->
     }),
 
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    SupportSize = transfer_test_utils:get_space_support_size(OtherProviderSelector, SpaceId),
-    transfer_test_utils:set_space_occupancy(
+    SupportSize = opt_spaces:get_support_size(OtherProviderSelector, SpaceId),
+    opt_spaces:set_occupancy(
         OtherProviderSelector, SpaceId, SupportSize - ?EXACT_FIT_FILE_SIZE
     ),
 
@@ -399,8 +399,8 @@ replication_into_full_space_test(_Config) ->
         }),
 
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    SupportSize = transfer_test_utils:get_space_support_size(OtherProviderSelector, SpaceId),
-    transfer_test_utils:set_space_occupancy(OtherProviderSelector, SpaceId, SupportSize),
+    SupportSize = opt_spaces:get_support_size(OtherProviderSelector, SpaceId),
+    opt_spaces:set_occupancy(OtherProviderSelector, SpaceId, SupportSize),
 
     TransferId = transfer_test_utils:schedule_transfer(TestSuiteCtx, FileObject),
     transfer_test_utils:await_transfer_ended(TestSuiteCtx, TransferId, FileObject, #{
@@ -509,7 +509,7 @@ replication_continues_on_modified_storage_test(_Config) ->
     FileContent = ?RAND_CONTENT(),
     % 10 directories with 10 files each
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([10, 10], FileContent)
+        children = file_tree_test_utils:gen_nested_tree_spec([10, 10], FileContent)
     }),
 
     % file replication jobs are gated (init_per_testcase) and no permits are
@@ -571,7 +571,7 @@ warp_time_during_replication_test(_Config) ->
     FileContent = ?RAND_CONTENT(),
     FileSize = byte_size(FileContent),
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec(
+        children = file_tree_test_utils:gen_nested_tree_spec(
             [?WARP_TEST_FILES_COUNT], FileContent
         )
     }),
@@ -639,7 +639,7 @@ warp_time_during_replication_test(_Config) ->
                 MthSum >= TotalBytes
             }
         end,
-        ?ATTEMPTS
+        ?TRANSFER_ATTEMPTS
     ).
 
 
@@ -649,7 +649,7 @@ warp_time_during_replication_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base],
+    ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base, permit_gate_test_utils],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [
@@ -702,7 +702,7 @@ init_per_testcase(Case, Config) when
     % leftover file trees of previous runs
     NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    OccupancyBefore = transfer_test_utils:get_space_occupancy(OtherProviderSelector, SpaceId),
+    OccupancyBefore = opt_spaces:get_occupancy(OtherProviderSelector, SpaceId),
     [{space_occupancy_before, OccupancyBefore} | NewConfig];
 
 init_per_testcase(Case, Config) when
@@ -752,7 +752,7 @@ end_per_testcase(Case, Config) when
     } = ?SUITE_CTX,
     SpaceId = oct_background:get_space_id(SpaceSelector),
     OccupancyBefore = ?config(space_occupancy_before, Config),
-    transfer_test_utils:set_space_occupancy(OtherProviderSelector, SpaceId, OccupancyBefore),
+    opt_spaces:set_occupancy(OtherProviderSelector, SpaceId, OccupancyBefore),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case = replication_continues_on_modified_storage_test, Config) ->

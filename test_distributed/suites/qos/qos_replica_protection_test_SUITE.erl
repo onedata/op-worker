@@ -11,8 +11,8 @@
 -module(qos_replica_protection_test_SUITE).
 -author("Michal Stanisz").
 
--include("transfers_test_mechanism.hrl").
--include("qos_tests_utils.hrl").
+-include("transfers/transfers_test_mechanism.hrl").
+-include("qos/qos_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -103,11 +103,6 @@ all() -> [
 %%    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately
 ].
 
--define(SPACE_PLACEHOLDER, space1).
--define(SPACE_NAME, <<"space1">>).
--define(FILE_PATH(FileName), filename:join(["/", ?SPACE_NAME, FileName])).
--define(USER_PLACEHOLDER, user2).
--define(SESS_ID(ProviderPlaceholder), oct_background:get_user_session_id(?USER_PLACEHOLDER, ProviderPlaceholder)).
 
 % qos for test providers
 -define(TEST_QOS(Val), #{
@@ -172,7 +167,7 @@ migration_of_replica_protected_by_qos_file(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 0,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2
@@ -185,7 +180,7 @@ migration_of_replica_not_protected_by_qos_file(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider2,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2
@@ -200,7 +195,7 @@ migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2,
@@ -238,7 +233,7 @@ migration_of_replica_protected_by_qos_dir(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 0,
         dir_structure_type = nested,
@@ -252,7 +247,7 @@ migration_of_replica_not_protected_by_qos_dir(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider2,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 4,
         dir_structure_type = nested,
@@ -268,7 +263,7 @@ migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 4,
         dir_structure_type = nested,
@@ -307,7 +302,7 @@ migration_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 0,
         dir_structure_type = nested,
@@ -321,7 +316,7 @@ migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config) ->
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider2,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         dir_structure_type = nested,
@@ -337,7 +332,7 @@ migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately(
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         dir_structure_type = nested,
@@ -377,7 +372,7 @@ remote_migration_of_replica_protected_by_qos_file(Config) ->
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 0,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2
@@ -391,7 +386,7 @@ remote_migration_of_replica_not_protected_by_qos_file(Config) ->
         evicting_provider = Provider2,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2
@@ -407,7 +402,7 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2,
@@ -448,7 +443,7 @@ remote_migration_of_replica_protected_by_qos_dir(Config) ->
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 0,
         dir_structure_type = nested,
@@ -463,7 +458,7 @@ remote_migration_of_replica_not_protected_by_qos_dir(Config) ->
         evicting_provider = Provider2,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 4,
         dir_structure_type = nested,
@@ -480,7 +475,7 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = 4*byte_size(?TEST_DATA),
+        bytes_replicated = 4*byte_size(?QOS_TEST_DATA),
         files_replicated = 4,
         files_evicted = 4,
         dir_structure_type = nested,
@@ -522,7 +517,7 @@ remote_migration_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 0,
         dir_structure_type = nested,
@@ -537,7 +532,7 @@ remote_migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config
         evicting_provider = Provider2,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         dir_structure_type = nested,
@@ -554,7 +549,7 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_sepa
         evicting_provider = Provider1,
         remote_schedule = true,
         replicating_provider = Provider3,
-        bytes_replicated = byte_size(?TEST_DATA),
+        bytes_replicated = byte_size(?QOS_TEST_DATA),
         files_replicated = 1,
         files_evicted = 1,
         dir_structure_type = nested,
@@ -572,7 +567,7 @@ autocleaning_of_replica_protected_by_qos_file(Config) ->
         run_provider = Provider1,
         dir_structure_type = simple,
         released_bytes = 0,
-        bytes_to_release = byte_size(?TEST_DATA),
+        bytes_to_release = byte_size(?QOS_TEST_DATA),
         files_number = 0
     }).
 
@@ -583,8 +578,8 @@ autocleaning_of_replica_not_protected_by_qos_file(Config) ->
     qos_autocleaning_protection_test_base(Config, #test_spec_autocleaning{
         run_provider = Provider2,
         dir_structure_type = simple,
-        released_bytes = byte_size(?TEST_DATA),
-        bytes_to_release = byte_size(?TEST_DATA),
+        released_bytes = byte_size(?QOS_TEST_DATA),
+        bytes_to_release = byte_size(?QOS_TEST_DATA),
         files_number = 1
     }).
 
@@ -596,7 +591,7 @@ autocleaning_of_replica_protected_by_qos_dir(Config) ->
         run_provider = Provider1,
         dir_structure_type = nested,
         released_bytes = 0,
-        bytes_to_release = 4*byte_size(?TEST_DATA),
+        bytes_to_release = 4*byte_size(?QOS_TEST_DATA),
         files_number = 0
     }).
 
@@ -607,8 +602,8 @@ autocleaning_of_replica_not_protected_by_qos_dir(Config) ->
     qos_autocleaning_protection_test_base(Config, #test_spec_autocleaning{
         run_provider = Provider2,
         dir_structure_type = nested,
-        released_bytes = 4*byte_size(?TEST_DATA),
-        bytes_to_release = 4*byte_size(?TEST_DATA),
+        released_bytes = 4*byte_size(?QOS_TEST_DATA),
+        bytes_to_release = 4*byte_size(?QOS_TEST_DATA),
         files_number = 4
     }).
 
@@ -633,7 +628,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
     [Provider1, Provider2, _Provider3 | _] = oct_background:get_provider_ids(),
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Filename),
-    {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    {GuidsAndPaths, _} = qos_test_utils:fulfill_qos_test_base(QosSpec),
     
     % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
@@ -646,7 +641,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         _ ->
             maps:fold(fun(Provider, NewQosParams) ->
                 maps:fold(fun(StorageId, Params, _) ->
-                    qos_tests_utils:set_qos_parameters(Provider, StorageId, Params)
+                    qos_test_utils:set_qos_parameters(Provider, StorageId, Params)
                 end, ok, NewQosParams)
             end, ok, NewQosParamsPerProvider)
     end,
@@ -679,7 +674,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
                 user = UserId,
                 assertion_nodes = oct_background:get_all_providers_nodes(),
                 files_structure = {pre_created, GuidsAndPaths},
-                root_directory = {qos_tests_utils:get_guid(?FILE_PATH(Filename), GuidsAndPaths), ?FILE_PATH(Filename)}
+                root_directory = {qos_test_utils:get_guid(?FILE_PATH(Filename), GuidsAndPaths), ?FILE_PATH(Filename)}
             },
             scenario = #scenario{
                 user = UserId,
@@ -726,19 +721,19 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
             ?assertEqual(
                 {error, ?ENOENT},
                 lfm_proxy:stat(Node, ?SESS_ID(Provider), {path, <<"/", ?SPACE_NAME/binary, "/", Name/binary>>}),
-                ?ATTEMPTS)
+                ?QOS_ATTEMPTS)
         end, oct_background:get_provider_nodes(Provider))
     end, oct_background:get_provider_ids()),
 
     ok = opw_test_rpc:call(RunNode, file_popularity_api, enable, [SpaceId]),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Name),
-    {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    {GuidsAndPaths, _} = qos_test_utils:fulfill_qos_test_base(QosSpec),
     
     % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
     % as otherwise it will skip eviction.
     assert_initial_local_blocks_knowledge(RunNode, GuidsAndPaths),
-    ?assert(opw_test_rpc:call(RunNode, space_quota, current_size, [SpaceId]) > 0, ?ATTEMPTS),
+    ?assert(opt_spaces:get_occupancy(RunNode, SpaceId) > 0, ?QOS_ATTEMPTS),
 
     Configuration =  #{
         enabled => true,
@@ -753,7 +748,7 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
         StoppedAt
     end,
     % wait for auto-cleaning run to finish
-    ?assertEqual(true, null =/= F(), ?ATTEMPTS),
+    ?assertEqual(true, null =/= F(), ?QOS_ATTEMPTS),
 
     ?assertMatch({ok, #{
         released_bytes := ReleasedBytes,
@@ -778,7 +773,7 @@ init_per_suite(Config) ->
     }).
 
 init_per_testcase(_Case, Config) ->
-    qos_tests_utils:reset_qos_parameters(),
+    qos_test_utils:reset_qos_parameters(),
     lfm_proxy:init(Config),
     Config.
 
@@ -788,7 +783,7 @@ end_per_testcase(_Case, Config) ->
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 
 %%%===================================================================
@@ -797,19 +792,19 @@ end_per_suite(Config) ->
 
 -define(simple_dir_structure(Name, Distribution),
     {?SPACE_NAME, [
-        {Name, ?TEST_DATA, Distribution}
+        {Name, ?QOS_TEST_DATA, Distribution}
     ]}
 ).
 -define(nested_dir_structure(Name, Distribution),
     {?SPACE_NAME, [
         {Name, [
             {?filename(Name, 1), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution},
-                {?filename(Name, 2), ?TEST_DATA, Distribution}
+                {?filename(Name, 1), ?QOS_TEST_DATA, Distribution},
+                {?filename(Name, 2), ?QOS_TEST_DATA, Distribution}
             ]},
             {?filename(Name, 2), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution},
-                {?filename(Name, 2), ?TEST_DATA, Distribution}
+                {?filename(Name, 1), ?QOS_TEST_DATA, Distribution},
+                {?filename(Name, 2), ?QOS_TEST_DATA, Distribution}
             ]}
         ]}
     ]}
@@ -869,6 +864,6 @@ assert_initial_local_blocks_knowledge(Node, GuidsAndPaths) ->
     lists_utils:pforeach(fun({Guid, _Path}) ->
         lists_utils:pforeach(fun(P) ->
             ?assertMatch({ok, [_ | _]}, opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(
-                Node, Guid, P), ?ATTEMPTS)
+                Node, Guid, P), ?QOS_ATTEMPTS)
         end, [QosTargetProvider, FileCreationProvider])
     end, maps:get(files, GuidsAndPaths)).

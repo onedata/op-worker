@@ -14,7 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("transfers_test_mechanism.hrl").
+-include("transfers/transfers_test_mechanism.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

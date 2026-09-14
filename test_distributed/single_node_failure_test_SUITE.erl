@@ -14,7 +14,8 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
--include("distribution_assert.hrl").
+-include("file/distribution_assert.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -54,7 +55,7 @@ all() -> [
 
 failure_test(Config) ->
     UpdatedConfig = cm_failure_test_base(Config),
-    InitialData = create_initial_data_structure(UpdatedConfig),
+    InitialData = create_initial_data_structure(),
     UpdatedConfig2 = worker_failure_test_base(UpdatedConfig, InitialData, true),
     worker_failure_test_base(UpdatedConfig2, InitialData, false),
 
@@ -62,7 +63,7 @@ failure_test(Config) ->
 
 
 cm_failure_test_base(Config) ->
-    KilledCM = provider_onenv_test_utils:get_primary_cm_node(Config, krakow),
+    KilledCM = provider_test_utils:get_primary_cm_node(Config, krakow),
     [NodeExpectedToStopItself] = oct_background:get_provider_nodes(krakow),
 
     failure_test_utils:kill_nodes(Config, KilledCM),
@@ -104,7 +105,7 @@ worker_failure_test_base(Config, InitialData, StopAppBeforeKill) ->
 %%% Helper Functions
 %%%===================================================================
 
-create_initial_data_structure(Config) ->
+create_initial_data_structure() ->
     Providers = [P1, P2] = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
     [WorkerP1] = oct_background:get_provider_nodes(krakow),
     [WorkerP2] = oct_background:get_provider_nodes(paris),
@@ -127,7 +128,7 @@ create_initial_data_structure(Config) ->
         end, [{WorkerP1, P1}, {WorkerP2, P2}])
     end, [P1DirGuid, P2DirGuid]),
 
-    FailingProvider = provider_onenv_test_utils:find_importing_provider(Config, SpaceId),
+    FailingProvider = provider_test_utils:find_importing_provider(Providers, SpaceId),
     [HealthyProvider] = Providers -- [FailingProvider],
     #{
         test_dirs => #{
@@ -647,7 +648,7 @@ block_eviction_transfer(OpwNode) ->
 
 
 get_current_space_quota(Node, SpaceId) ->
-    rpc:call(Node, space_quota, current_size, [SpaceId]).
+    opt_spaces:get_occupancy(Node, SpaceId).
 
 enable_file_popularity(Node, SpaceId) ->
     ok = rpc:call(Node, file_popularity_api, enable, [SpaceId]).

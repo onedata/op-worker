@@ -12,7 +12,7 @@
 -module(transfer_migration_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("transfer_test.hrl").
+-include("transfers/transfer_test.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -174,7 +174,7 @@ file_removed_during_transfer_test(_Config) -> ?run_test().
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base],
+    ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base, permit_gate_test_utils],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [

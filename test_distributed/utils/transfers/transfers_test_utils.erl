@@ -1,11 +1,13 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains util functions used in tests of transfers.
+%%% Helpers for the (envup based) transfer test suites: reading and removing
+%%% transfer documents, asserting the state of a #transfer{} record and
+%%% mocking the replica synchronizer.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfers_test_utils).
@@ -14,7 +16,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
--include("transfers_test_mechanism.hrl").
+-include("transfers/transfers_test_mechanism.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -102,9 +104,9 @@ remove_transfers(Config) ->
     lists:foreach(fun(Worker) ->
         {ok, SpaceIds} = rpc:call(Worker, provider_logic, get_spaces, []),
         lists:foreach(fun(SpaceId) ->
-            Ongoing = transfers_test_utils:list_ongoing_transfers(Worker, SpaceId),
-            Past = transfers_test_utils:list_ended_transfers(Worker, SpaceId),
-            Scheduled = transfers_test_utils:list_waiting_transfers(Worker, SpaceId),
+            Ongoing = list_ongoing_transfers(Worker, SpaceId),
+            Past = list_ended_transfers(Worker, SpaceId),
+            Scheduled = list_waiting_transfers(Worker, SpaceId),
             lists:foreach(fun(Tid) ->
                 rpc:call(Worker, transfer, delete, [Tid])
             end, lists:umerge([Ongoing, Past, Scheduled]))
@@ -250,7 +252,7 @@ get_transfer_value(Transfer, FieldName) ->
     {Format :: string(), Args :: [term()]}.
 transfer_fields_description(Node, TransferId) ->
     FieldsList = record_info(fields, transfer),
-    Transfer = transfers_test_utils:get_transfer(Node, TransferId),
+    Transfer = get_transfer(Node, TransferId),
     lists:foldl(fun(FieldName, {AccFormat, AccArgs}) ->
         {AccFormat ++ "    ~tp = ~tp~n", AccArgs ++ [FieldName, get_transfer_value(Transfer, FieldName)]}
     end, {"~nTransfer ~tp fields values:~n", [TransferId]}, FieldsList).

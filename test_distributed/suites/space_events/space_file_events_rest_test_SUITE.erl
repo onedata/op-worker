@@ -14,8 +14,9 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
--include("storage_test.hrl").
+-include("file/file_tree_test.hrl").
+-include("test_rpc.hrl").
+-include("storage/storage_test.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -115,7 +116,7 @@ all() -> [
     file_owner_user_id => od_user:id(),
     file_owner_session_id => session:id(),
 
-    file_tree => onenv_file_test_utils:object_spec() | [onenv_file_test_utils:object_spec()],
+    file_tree => file_tree_test_utils:object_spec() | [file_tree_test_utils:object_spec()],
     observed_dir_guid => file_id:file_guid(),
     work_dir_guid => file_id:file_guid(),
 
@@ -168,7 +169,7 @@ invalid_args_test(_Config) ->
             #object{guid = ForbiddenDirGuid},
             #object{guid = FileGuid}
         ]
-    } = onenv_file_test_utils:create_file_tree(
+    } = file_tree_test_utils:create_file_tree(
         FileOwnerUserId, SpaceKrkGuid, krakow, #dir_spec{
             mode = ?FILE_MODE(8#777),
             children = [
@@ -270,13 +271,13 @@ deleted_events_test(_Config) ->
 
     % Removing file in observed dir should result in event
     % NOTE: rm will choose random provider for removal (not necessarily krakow)
-    onenv_file_test_utils:rm_and_sync_file(FileOwnerUserId, ChildFileGuid),
+    file_tree_test_utils:rm_and_sync_file(FileOwnerUserId, ChildFileGuid),
     ?assert(count_file_deleted_events(get_events_for_file(ClientPid, ChildFileGuid)) > 0, ?ATTEMPTS),
 
     %% TODO VFS-12134 Assert deleted child event
     % while deleting dir, at least for now, does not produce events
     % NOTE: rm will choose random provider for removal (not necessarily krakow)
-    onenv_file_test_utils:rm_and_sync_file(FileOwnerUserId, ChildDirGuid),
+    file_tree_test_utils:rm_and_sync_file(FileOwnerUserId, ChildDirGuid),
     ?assertEqual(0, count_file_deleted_events(get_events_for_file(ClientPid, ChildDirGuid)), ?ATTEMPTS),
 
     ok = space_file_events_test_sse_client:stop(ClientPid).
@@ -303,7 +304,7 @@ changed_or_created_events_test(_Config) ->
 
     % Creating new files in observed dir should result in its events for all observed documents
     ChildFileName = ?RAND_STR(),
-    #object{guid = ChildFileGuid} = onenv_file_test_utils:create_file_tree(
+    #object{guid = ChildFileGuid} = file_tree_test_utils:create_file_tree(
         FileOwnerUserId, ObservedDirGuid, ModifyingProvider, #file_spec{name = ChildFileName}
     ),
 
@@ -342,7 +343,7 @@ nested_directory_not_observed_test(_Config) ->
     % Create file in subdirectory → should NOT receive event (not recursive)
     FileOwnerUserId = maps:get(file_owner_user_id, TestEnv),
     SetupProvider = maps:get(setup_provider, TestEnv),
-    #object{guid = FileInSubDirGuid} = onenv_file_test_utils:create_file_tree(
+    #object{guid = FileInSubDirGuid} = file_tree_test_utils:create_file_tree(
         FileOwnerUserId, SubDirGuid, SetupProvider, #file_spec{name = ?RAND_STR()}
     ),
 
@@ -374,7 +375,7 @@ observe_space_root_test(_Config) ->
     SetupProvider = maps:get(setup_provider, TestEnv),
 
     FileSpecInRoot = #file_spec{name = ?RAND_STR()},
-    #object{guid = FileInRootGuid} = onenv_file_test_utils:create_file_tree(
+    #object{guid = FileInRootGuid} = file_tree_test_utils:create_file_tree(
         FileOwnerUserId, SpaceGuid, SetupProvider, FileSpecInRoot
     ),
     await_event_for_file(ClientPid, FileInRootGuid),
@@ -1072,7 +1073,7 @@ create_test_env(Opts) ->
     FileOwnerSessionId = oct_background:get_user_session_id(FileOwner, SetupProviderSelector),
 
     FileTreeSpec = maps:get(file_tree_spec, Opts, #dir_spec{mode = ?FILE_MODE(8#777)}),
-    FileTree = onenv_file_test_utils:create_and_sync_file_tree(
+    FileTree = file_tree_test_utils:create_and_sync_file_tree(
         FileOwnerUserId, SpaceGuid, FileTreeSpec, SetupProviderSelector
     ),
     ObservedDirGuid = case FileTree of
@@ -1158,7 +1159,7 @@ create_file_and_await_sync(TestEnv, FileSpec, ControlClientPid) ->
     FileOwnerUserId = maps:get(file_owner_user_id, TestEnv),
     WorkDirGuid = maps:get(work_dir_guid, TestEnv),
 
-    #object{guid = FileGuid} = onenv_file_test_utils:create_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_file_tree(
         FileOwnerUserId, WorkDirGuid, SetupProvider, FileSpec
     ),
     await_event_for_file(ControlClientPid, FileGuid),

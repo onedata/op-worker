@@ -31,7 +31,7 @@
 -module(storage_import_race_test_base).
 -author("Bartosz Walkowicz").
 
--include("storage_import_test.hrl").
+-include("storage/storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -183,7 +183,7 @@ create_remote_file_import_conflict_test(SuiteCtx) ->
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId,
         filepath_utils:join([<<"/">>, FileName]), StorageContent
     ),
@@ -197,7 +197,7 @@ create_remote_file_import_conflict_test(SuiteCtx) ->
         lfm_proxy:stat(
             ImportingProviderNode, ImportingProviderSessionId, {path, ImportedConflictingFilePath}
         ),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     storage_import_test_utils:assert_file_content(
         ImportingProviderCtx, ImportedConflictingFilePath, StorageContent
@@ -302,11 +302,11 @@ create_remote_entry_import_race_test_base(TestCaseName, SuiteCtx, EntryType) ->
     StorageFileId = filepath_utils:join([<<"/">>, EntryName]),
     case EntryType of
         dir ->
-            storage_file_setup_utils:create_dir(
+            storage_file_tree_test_utils:create_dir(
                 ImportingProviderSelector, ImportedStorageId, StorageFileId
             );
         file ->
-            storage_file_setup_utils:create_file(
+            storage_file_tree_test_utils:create_file(
                 ImportingProviderSelector, ImportedStorageId, StorageFileId, Content
             )
     end,
@@ -316,7 +316,7 @@ create_remote_entry_import_race_test_base(TestCaseName, SuiteCtx, EntryType) ->
     %% provider and await its dbsync to the importing one
     DanglingUuid = datastore_key:new(),
     add_space_root_child_link_via_remote_provider(TestCaseCtx, EntryName, DanglingUuid),
-    ?assertMatch({ok, _, _}, get_space_root_child_link(TestCaseCtx, EntryName), ?ATTEMPTS),
+    ?assertMatch({ok, _, _}, get_space_root_child_link(TestCaseCtx, EntryName), ?STORAGE_IMPORT_ATTEMPTS),
 
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
@@ -327,7 +327,7 @@ create_remote_entry_import_race_test_base(TestCaseName, SuiteCtx, EntryType) ->
         lfm_proxy:stat(
             ImportingProviderNode, ImportingProviderSessionId, {path, ImportedConflictingEntryPath}
         ),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     %% the imported entry is backed by its own, fresh file_meta document - not
     %% by the half-synchronized one
@@ -391,7 +391,7 @@ create_file_import_race_test(SuiteCtx) ->
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId,
         filepath_utils:join([<<"/">>, FileName]), StorageContent
     ),
@@ -423,7 +423,7 @@ create_file_import_race_test(SuiteCtx) ->
         lfm_proxy:stat(
             ImportingProviderNode, ImportingProviderSessionId, {path, ImportedConflictingFilePath}
         ),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     storage_import_test_utils:assert_file_content(
         ImportingProviderCtx, ImportedConflictingFilePath, StorageContent
@@ -500,7 +500,7 @@ close_file_import_race_test(SuiteCtx) ->
     ?assertMatch({ok, []}, lfm_proxy:get_children(
         ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
     )),
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     )),
 
@@ -516,7 +516,7 @@ close_file_import_race_test(SuiteCtx) ->
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
-    ?assertMatch({error, ?ENOENT}, storage_file_setup_utils:stat(
+    ?assertMatch({error, ?ENOENT}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     )),
 
@@ -570,7 +570,7 @@ delete_file_reimport_race_test(SuiteCtx) ->
     lfm_test_utils:write_file(
         ImportingProviderNode, ImportingProviderSessionId, FileGuid, Content
     ),
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, filepath_utils:join([<<"/">>, FileName])
     )),
 
@@ -675,13 +675,13 @@ remote_delete_file_reimport_race_test_base(TestCaseName, SuiteCtx, CreatingProvi
     ?assertEqual(
         {ok, Content},
         lfm_proxy:check_size_and_read(ReplicatorNode, ReadHandle, 0, byte_size(Content)),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     ok = lfm_proxy:close(ReplicatorNode, ReadHandle),
     %% either way the file's data has reached the imported storage by now
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
 
     %% pretend that only the deletion of the file's LINK has been synchronized:
     %% remove the link directly on the remote provider and await the removal's
@@ -690,17 +690,17 @@ remote_delete_file_reimport_race_test_base(TestCaseName, SuiteCtx, CreatingProvi
     remove_space_root_child_link_via_remote_provider(
         TestCaseCtx, FileName, file_id:guid_to_uuid(FileGuid)
     ),
-    ?assertEqual({error, not_found}, get_space_root_child_link(TestCaseCtx, FileName), ?ATTEMPTS),
+    ?assertEqual({error, not_found}, get_space_root_child_link(TestCaseCtx, FileName), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(
         ImportingProviderNode, ImportingProviderSessionId, {path, SpaceFilePath}
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
 
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     %% not reimported: the space stays empty on both providers, while the
     %% storage file stays untouched
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     )),
 
@@ -769,7 +769,7 @@ delete_opened_file_reimport_race_test(SuiteCtx) ->
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     )),
     ok = lfm_proxy:close(ImportingProviderNode, OpenHandle),
@@ -901,7 +901,7 @@ create_list_race_test(SuiteCtx) ->
         ImportingProviderNode, ImportingProviderSessionId,
         {path, filepath_utils:join([SpacePath, FileToDeleteViaLfm])}
     ),
-    storage_file_setup_utils:delete_file(
+    storage_file_tree_test_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId,
         filepath_utils:join([<<"/">>, FileToDeleteOnStorage]), byte_size(Content)
     ),
@@ -941,7 +941,7 @@ create_list_race_test(SuiteCtx) ->
 
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(
         ImportingProviderNode, ImportingProviderSessionId, {path, FileDeletedOnStoragePath}
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(
         NonImportingProviderNode, NonImportingProviderSessionId, {path, FileDeletedOnStoragePath}
     ), ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS),
@@ -1091,7 +1091,7 @@ open_deletion_detection_gate(TestCaseCtx = #storage_import_test_case_ctx{
 }) ->
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     Now = ?rpc(ImportingProviderSelector, global_clock:timestamp_seconds()),
-    storage_file_setup_utils:set_mtime(
+    storage_file_tree_test_utils:set_mtime(
         ImportingProviderSelector, ImportedStorageId, <<"/">>, Now
     );
 open_deletion_detection_gate(TestCaseCtx = #storage_import_test_case_ctx{

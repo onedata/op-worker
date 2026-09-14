@@ -14,8 +14,8 @@
 -module(storage_cleanup_test_SUITE).
 -author("Jakub Kudzia").
 
--include("space_setup_utils.hrl").
--include("storage_test.hrl").
+-include("env/space_setup_utils.hrl").
+-include("storage/storage_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").

@@ -18,12 +18,12 @@
 %%% imported logical tree on both providers and assert the scan's monitoring
 %%% counters against expectations derived from the declared tree. Continuous
 %%% scan tests additionally mutate the storage in between (via
-%%% storage_file_setup_utils) and rerun a scan via run_continuous_scan/2,3,4.
+%%% storage_file_tree_test_utils) and rerun a scan via run_continuous_scan/2,3,4.
 %%%
 %%% == Usage invariants ==
 %%%
 %%% Rules that look incidental but are load-bearing for the suites' correctness:
-%%%  * this module (together with storage_file_setup_utils) must be added to
+%%%  * this module (together with storage_file_tree_test_utils) must be added to
 %%%    ?LOAD_MODULES of any suite that uses it, as some routines run on the
 %%%    op_worker node via rpc;
 %%%  * never hand-roll enable_continuous_scan/1,2 -> await ->
@@ -163,7 +163,7 @@
 -module(storage_import_test_utils).
 -author("Bartosz Walkowicz").
 
--include("storage_import_test.hrl").
+-include("storage/storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
@@ -176,13 +176,9 @@
     clean_up_after_previous_run/2,
     mock_space_dir_statbuf_on_flat_storage/1, unmock_space_dir_statbuf_on_flat_storage/1,
     create_storage/3,
-    advance_mocked_space_dir_mtime/3,
     init_testcase/3, init_testcase/4,
     setup_and_verify_initial_import/3, setup_and_verify_initial_import/4,
-    gen_nested_tree_spec/2,
-    create_file_tree_on_storage/3,
     create_file_tree_via_remote_provider/2,
-    delete_file_tree_from_storage/3,
     flatten_objects/1
 ]).
 %% API - scan control
@@ -225,26 +221,12 @@
 
 -type suite_ctx() :: #storage_import_test_suite_ctx{}.
 -type case_ctx() :: #storage_import_test_case_ctx{}.
-% A single node of a declared storage file tree: either a generic onenv file/dir
-% spec, or a storage-import-specific FIFO spec (created on storage but not imported).
--type file_tree_node_spec() :: onenv_file_test_utils:object_spec() | #storage_fifo_spec{}.
--type file_tree_spec() ::
-    undefined
-    | file_tree_node_spec()
-    | [file_tree_node_spec()].
-
 -export_type([suite_ctx/0, case_ctx/0]).
 
 % Max number of concurrent processes used to verify the imported tree; bounds the
 % load on the providers while still parallelizing the (RPC-heavy, retry-prone)
 % per-node assertions - important for large trees (hundreds/thousands of nodes).
 -define(VERIFY_PARALLELISM, 20).
-% Max number of concurrent processes used to create/delete the top-level tree nodes
-% on the storage. Only the top-level siblings are parallelized (each subtree is
-% processed sequentially), so the total concurrency stays bounded by this value -
-% parallelizing every level would multiply across levels and overload the provider.
--define(SETUP_PARALLELISM, 20).
-
 % Statbuf the space root dir is mocked with on flat (object) storages - see
 % mock_space_dir_statbuf_on_flat_storage/1. The mtime lies far in the past on
 % purpose and can be moved forward per-space via the node_cache key below - see
@@ -278,7 +260,7 @@ clean_up_after_previous_run(AllTestCases, #storage_import_test_suite_ctx{
     ).
 
 
--spec init_testcase(atom(), file_tree_spec(), suite_ctx()) -> case_ctx().
+-spec init_testcase(atom(), storage_file_tree_test_utils:file_tree_spec(), suite_ctx()) -> case_ctx().
 init_testcase(TestCaseName, FileTreeSpec, SuiteCtx) ->
     init_testcase(TestCaseName, FileTreeSpec, SuiteCtx, #{}).
 
@@ -291,7 +273,7 @@ init_testcase(TestCaseName, FileTreeSpec, SuiteCtx) ->
 %% keeps the onepanel defaults (equivalent to init_testcase/3).
 %% @end
 %%--------------------------------------------------------------------
--spec init_testcase(atom(), file_tree_spec(), suite_ctx(), map()) -> case_ctx().
+-spec init_testcase(atom(), storage_file_tree_test_utils:file_tree_spec(), suite_ctx(), map()) -> case_ctx().
 init_testcase(TestCaseName, FileTreeSpec, SuiteCtx = #storage_import_test_suite_ctx{
     storage_type = StorageType,
     importing_provider_selector = ImportingProviderSelector,
@@ -299,7 +281,7 @@ init_testcase(TestCaseName, FileTreeSpec, SuiteCtx = #storage_import_test_suite_
     space_owner_selector = SpaceOwnerSelector
 }, AutoImportConfig) ->
     ImportedStorageId = create_storage(StorageType, ImportingProviderSelector, true),
-    ConcreteFileTreeSpec = create_file_tree_on_storage(
+    ConcreteFileTreeSpec = storage_file_tree_test_utils:create_file_tree_on_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
     OtherStorageId = create_storage(StorageType, NonImportingProviderSelector, false),
@@ -348,67 +330,30 @@ init_testcase(TestCaseName, FileTreeSpec, SuiteCtx = #storage_import_test_suite_
 %%  * auto_import_config := map() - non-default auto import config for the
 %%    support (e.g. #{sync_acl => true}); default #{} (onepanel defaults);
 %%  * scan_attempts := non_neg_integer() - attempts awaiting the initial scan;
-%%    default ?ATTEMPTS, pass ?LARGE_IMPORT_SCAN_ATTEMPTS for large trees;
+%%    default ?STORAGE_IMPORT_ATTEMPTS, pass ?LARGE_IMPORT_SCAN_ATTEMPTS for large trees;
 %%  * verify_dir_stats := boolean() - additionally assert the space's dir_size
 %%    stats after import; default false;
 %%  * monitoring_overrides := map() - overrides for
 %%    assert_storage_import_monitoring_state/2; default #{} (pristine initial scan).
 %% @end
 %%--------------------------------------------------------------------
--spec setup_and_verify_initial_import(atom(), file_tree_spec(), suite_ctx()) -> case_ctx().
+-spec setup_and_verify_initial_import(atom(), storage_file_tree_test_utils:file_tree_spec(), suite_ctx()) -> case_ctx().
 setup_and_verify_initial_import(CaseName, FileTreeSpec, SuiteCtx) ->
     setup_and_verify_initial_import(CaseName, FileTreeSpec, SuiteCtx, #{}).
 
 
--spec setup_and_verify_initial_import(atom(), file_tree_spec(), suite_ctx(), map()) -> case_ctx().
+-spec setup_and_verify_initial_import(atom(), storage_file_tree_test_utils:file_tree_spec(), suite_ctx(), map()) -> case_ctx().
 setup_and_verify_initial_import(CaseName, FileTreeSpec, SuiteCtx, Opts) ->
     TestCaseCtx = init_testcase(
         CaseName, FileTreeSpec, SuiteCtx, maps:get(auto_import_config, Opts, #{})
     ),
-    await_initial_scan_finished(TestCaseCtx, maps:get(scan_attempts, Opts, ?ATTEMPTS)),
+    await_initial_scan_finished(TestCaseCtx, maps:get(scan_attempts, Opts, ?STORAGE_IMPORT_ATTEMPTS)),
     verify_imported_tree(TestCaseCtx),
     maps:get(verify_dir_stats, Opts, false) andalso verify_dir_stats(TestCaseCtx),
     assert_storage_import_monitoring_state(TestCaseCtx, maps:get(monitoring_overrides, Opts, #{})),
     TestCaseCtx.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Builds a declarative spec for a regular, nested directory tree from a branching
-%% list: the LAST element is the number of regular files at the leaf level, and
-%% each preceding element is the number of subdirectories at that level. All leaf
-%% files get the given content. E.g. gen_nested_tree_spec([13, 13, 13], C) yields
-%% 13 directories, each with 13 subdirectories, each with 13 files (2379 nodes).
-%% @end
-%%--------------------------------------------------------------------
--spec gen_nested_tree_spec([pos_integer()], binary()) -> [onenv_file_test_utils:object_spec()].
-gen_nested_tree_spec([FilesCount], FileContent) ->
-    [#file_spec{content = FileContent} || _ <- lists:seq(1, FilesCount)];
-gen_nested_tree_spec([DirsCount | RestBranching], FileContent) ->
-    [
-        #dir_spec{children = gen_nested_tree_spec(RestBranching, FileContent)}
-        || _ <- lists:seq(1, DirsCount)
-    ].
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates the declared file tree directly on the storage (bypassing the logical
-%% filesystem) so that it can later be imported. Returns the spec with all file
-%% names concretized (undefined names are replaced with random ones), so that the
-%% same structure can be used for verification.
-%% @end
-%%--------------------------------------------------------------------
--spec create_file_tree_on_storage(oct_background:entity_selector(), storage:id(), file_tree_spec()) ->
-    file_tree_spec().
-create_file_tree_on_storage(_ProviderSelector, _StorageId, undefined) ->
-    undefined;
-create_file_tree_on_storage(ProviderSelector, StorageId, Specs) when is_list(Specs) ->
-    lists_utils:pmap(fun(Spec) ->
-        create_file_tree_on_storage(ProviderSelector, StorageId, Spec)
-    end, Specs, ?SETUP_PARALLELISM);
-create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
-    create_node_on_storage(ProviderSelector, StorageId, <<"/">>, Spec).
 
 
 %%--------------------------------------------------------------------
@@ -421,8 +366,8 @@ create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
 %% returns the created tree with all names concretized.
 %% @end
 %%--------------------------------------------------------------------
--spec create_file_tree_via_remote_provider(case_ctx(), onenv_file_test_utils:object_spec()) ->
-    onenv_file_test_utils:object().
+-spec create_file_tree_via_remote_provider(case_ctx(), file_tree_test_utils:object_spec()) ->
+    file_tree_test_utils:object().
 create_file_tree_via_remote_provider(#storage_import_test_case_ctx{
     suite_ctx = #storage_import_test_suite_ctx{
         non_importing_provider_selector = NonImportingProviderSelector,
@@ -435,7 +380,7 @@ create_file_tree_via_remote_provider(#storage_import_test_case_ctx{
         session_id = ImportingProviderSessionId
     }
 }, FileTreeSpec) ->
-    Object = onenv_file_test_utils:create_file_tree(
+    Object = file_tree_test_utils:create_file_tree(
         oct_background:get_user_id(SpaceOwnerSelector),
         space_dir:guid(SpaceId),
         NonImportingProviderSelector,
@@ -454,27 +399,6 @@ create_file_tree_via_remote_provider(#storage_import_test_case_ctx{
     Object.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes a declared file tree directly from the storage (bypassing the logical
-%% filesystem) - the inverse of create_file_tree_on_storage/3, used by continuous
-%% (update) scan tests to simulate whole (sub)trees disappearing from the storage.
-%% Regular files are unlinked (their size taken from the declared content) and
-%% directories are removed bottom-up (the rmdir is a no-op on object storages -
-%% see storage_file_setup_utils:rmdir_on_storage/2). The spec must be concretized
-%% (all names filled in) - pass the file_tree_spec stored in the case ctx.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_file_tree_from_storage(oct_background:entity_selector(), storage:id(), file_tree_spec()) ->
-    ok.
-delete_file_tree_from_storage(_ProviderSelector, _StorageId, undefined) ->
-    ok;
-delete_file_tree_from_storage(ProviderSelector, StorageId, Specs) when is_list(Specs) ->
-    lists_utils:pforeach(fun(Spec) ->
-        delete_file_tree_from_storage(ProviderSelector, StorageId, Spec)
-    end, Specs, ?SETUP_PARALLELISM);
-delete_file_tree_from_storage(ProviderSelector, StorageId, Spec) ->
-    delete_node_from_storage(ProviderSelector, StorageId, <<"/">>, Spec).
 
 
 %%--------------------------------------------------------------------
@@ -484,8 +408,8 @@ delete_file_tree_from_storage(ProviderSelector, StorageId, Spec) ->
 %% segments relative to the tree's parent.
 %% @end
 %%--------------------------------------------------------------------
--spec flatten_objects(onenv_file_test_utils:object()) ->
-    [{[file_meta:name()], onenv_file_test_utils:object()}].
+-spec flatten_objects(file_tree_test_utils:object()) ->
+    [{[file_meta:name()], file_tree_test_utils:object()}].
 flatten_objects(Object = #object{name = Name, children = Children}) ->
     [{[Name], Object} | [
         {[Name | DescendantSegments], Descendant}
@@ -497,7 +421,7 @@ flatten_objects(Object = #object{name = Name, children = Children}) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Awaits the completion of the initial import scan, retrying for the default
-%% (?ATTEMPTS) number of seconds. For large imports (many files), where the scan
+%% (?STORAGE_IMPORT_ATTEMPTS) number of seconds. For large imports (many files), where the scan
 %% may take much longer, use await_initial_scan_finished/2 with a higher Attempts
 %% (e.g. ?LARGE_IMPORT_SCAN_ATTEMPTS) - kept per-test so that small tests still
 %% fail fast if something goes wrong.
@@ -505,7 +429,7 @@ flatten_objects(Object = #object{name = Name, children = Children}) ->
 %%--------------------------------------------------------------------
 -spec await_initial_scan_finished(case_ctx()) -> true.
 await_initial_scan_finished(CaseCtx) ->
-    await_initial_scan_finished(CaseCtx, ?ATTEMPTS).
+    await_initial_scan_finished(CaseCtx, ?STORAGE_IMPORT_ATTEMPTS).
 
 
 -spec await_initial_scan_finished(case_ctx(), non_neg_integer()) -> true.
@@ -528,7 +452,7 @@ await_initial_scan_finished(#storage_import_test_case_ctx{
 %%--------------------------------------------------------------------
 -spec await_scan_finished(case_ctx(), non_neg_integer()) -> true.
 await_scan_finished(CaseCtx, ScanNum) ->
-    await_scan_finished(CaseCtx, ScanNum, ?ATTEMPTS).
+    await_scan_finished(CaseCtx, ScanNum, ?STORAGE_IMPORT_ATTEMPTS).
 
 
 -spec await_scan_finished(case_ctx(), non_neg_integer(), non_neg_integer()) -> true.
@@ -568,7 +492,7 @@ run_continuous_scan(CaseCtx, ScanNum) ->
 %%--------------------------------------------------------------------
 -spec run_continuous_scan(case_ctx(), non_neg_integer(), map()) -> ok.
 run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides) ->
-    run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides, ?ATTEMPTS).
+    run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides, ?STORAGE_IMPORT_ATTEMPTS).
 
 
 %% Like run_continuous_scan/3, but with an explicit attempts budget for awaiting
@@ -689,6 +613,7 @@ mock_space_dir_statbuf_on_flat_storage(ImportingProviderSelector) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Moves the mocked flat-storage space root dir mtime (see
 %% mock_space_dir_statbuf_on_flat_storage/1) forward by the given number of
@@ -757,7 +682,7 @@ create_trigger_file_on_storage(#storage_import_test_case_ctx{
     imported_storage_id = ImportedStorageId
 }) ->
     TriggerFileName = ?RAND_STR(),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId,
         filepath_utils:join([<<"/">>, TriggerFileName]), ?RAND_STR()
     ),
@@ -798,7 +723,7 @@ verify_imported_tree(CaseCtx = #storage_import_test_case_ctx{file_tree_spec = Fi
 %% tree) is mutated between scans.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_imported_tree(case_ctx(), file_tree_spec()) -> ok.
+-spec verify_imported_tree(case_ctx(), storage_file_tree_test_utils:file_tree_spec()) -> ok.
 verify_imported_tree(#storage_import_test_case_ctx{
     suite_ctx = #storage_import_test_suite_ctx{storage_type = StorageType},
     space_path = SpacePath,
@@ -822,7 +747,7 @@ verify_imported_tree(#storage_import_test_case_ctx{
             verify_node(ProviderCtx, Path, Spec, Attempts)
         end, AllNodes, ?VERIFY_PARALLELISM)
     end, [
-        {ImportingProviderCtx, ?ATTEMPTS},
+        {ImportingProviderCtx, ?STORAGE_IMPORT_ATTEMPTS},
         {NonImportingProviderCtx, ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS}
     ]).
 
@@ -856,7 +781,7 @@ verify_dir_stats(CaseCtx = #storage_import_test_case_ctx{file_tree_spec = FileTr
 %% is mutated between scans.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_dir_stats(case_ctx(), file_tree_spec()) -> ok.
+-spec verify_dir_stats(case_ctx(), storage_file_tree_test_utils:file_tree_spec()) -> ok.
 verify_dir_stats(#storage_import_test_case_ctx{
     space_path = SpacePath,
     importing_provider_ctx = ImportingProviderCtx,
@@ -897,7 +822,7 @@ verify_dir_stats(#storage_import_test_case_ctx{
 %%--------------------------------------------------------------------
 -spec assert_attrs(#provider_ctx{}, file_meta:path(), #{atom() => term()}) -> ok.
 assert_attrs(ProviderCtx, Path, ExpectedAttrs) ->
-    assert_attrs(ProviderCtx, Path, ExpectedAttrs, ?ATTEMPTS).
+    assert_attrs(ProviderCtx, Path, ExpectedAttrs, ?STORAGE_IMPORT_ATTEMPTS).
 
 
 -spec assert_attrs(#provider_ctx{}, file_meta:path(), #{atom() => term()}, non_neg_integer()) -> ok.
@@ -923,7 +848,7 @@ assert_attrs(ProviderCtx, Path, ExpectedAttrs, Attempts) ->
 %%--------------------------------------------------------------------
 -spec assert_file_content(#provider_ctx{}, file_meta:path(), binary()) -> ok.
 assert_file_content(ProviderCtx, Path, Content) ->
-    assert_file_content(ProviderCtx, Path, Content, ?ATTEMPTS).
+    assert_file_content(ProviderCtx, Path, Content, ?STORAGE_IMPORT_ATTEMPTS).
 
 
 %% @private
@@ -1299,7 +1224,7 @@ await_scan_started(#storage_import_test_case_ctx{
     ?assertEqual(
         true,
         catch(?rpc(ImportingProviderSelector, is_scan_started(SpaceId, ScanNum))),
-        10 * ?ATTEMPTS,
+        10 * ?STORAGE_IMPORT_ATTEMPTS,
         100
     ).
 
@@ -1381,90 +1306,6 @@ build_provider_ctx(SpaceOwnerSelector, ProviderSelector) ->
 
 
 %%%===================================================================
-%%% Internal functions - file tree creation on storage
-%%%===================================================================
-
-
-%% @private
--spec create_node_on_storage(
-    oct_background:entity_selector(), storage:id(), file_meta:path(), file_tree_node_spec()
-) ->
-    file_tree_node_spec().
-create_node_on_storage(ProviderSelector, StorageId, ParentPath, DirSpec = #dir_spec{}) ->
-    #dir_spec{name = Name, mode = Mode, uid = Uid, gid = Gid, children = Children} =
-        ConcreteDirSpec = ensure_name(DirSpec),
-    StorageFileId = filepath_utils:join([ParentPath, Name]),
-    ok = storage_file_setup_utils:create_dir(ProviderSelector, StorageId, StorageFileId, Mode),
-    maybe_chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid),
-    ConcreteChildren = [
-        create_node_on_storage(ProviderSelector, StorageId, StorageFileId, ChildSpec)
-        || ChildSpec <- Children
-    ],
-    ConcreteDirSpec#dir_spec{children = ConcreteChildren};
-
-create_node_on_storage(ProviderSelector, StorageId, ParentPath, FileSpec = #file_spec{}) ->
-    #file_spec{name = Name, mode = Mode, content = Content, uid = Uid, gid = Gid} =
-        ConcreteFileSpec = ensure_name(FileSpec),
-    StorageFileId = filepath_utils:join([ParentPath, Name]),
-    ok = storage_file_setup_utils:create_file(ProviderSelector, StorageId, StorageFileId, Content, Mode),
-    maybe_chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid),
-    ConcreteFileSpec;
-
-create_node_on_storage(ProviderSelector, StorageId, ParentPath, FifoSpec = #storage_fifo_spec{}) ->
-    #storage_fifo_spec{name = Name} = ConcreteFifoSpec = ensure_name(FifoSpec),
-    StorageFileId = filepath_utils:join([ParentPath, Name]),
-    ok = storage_file_setup_utils:create_fifo(ProviderSelector, StorageId, StorageFileId),
-    ConcreteFifoSpec.
-
-
-%% @private
--spec delete_node_from_storage(
-    oct_background:entity_selector(), storage:id(), file_meta:path(), file_tree_node_spec()
-) ->
-    ok.
-delete_node_from_storage(ProviderSelector, StorageId, ParentPath, #dir_spec{name = Name, children = Children}) ->
-    StorageFileId = filepath_utils:join([ParentPath, Name]),
-    % delete all children first (required on POSIX, where a non-empty directory
-    % cannot be removed), then the now-empty directory itself
-    lists:foreach(fun(ChildSpec) ->
-        delete_node_from_storage(ProviderSelector, StorageId, StorageFileId, ChildSpec)
-    end, Children),
-    storage_file_setup_utils:rmdir(ProviderSelector, StorageId, StorageFileId);
-delete_node_from_storage(ProviderSelector, StorageId, ParentPath, #file_spec{name = Name, content = Content}) ->
-    StorageFileId = filepath_utils:join([ParentPath, Name]),
-    storage_file_setup_utils:delete_file(ProviderSelector, StorageId, StorageFileId, byte_size(Content));
-delete_node_from_storage(ProviderSelector, StorageId, ParentPath, #storage_fifo_spec{name = Name}) ->
-    StorageFileId = filepath_utils:join([ParentPath, Name]),
-    storage_file_setup_utils:delete_file(ProviderSelector, StorageId, StorageFileId, 0).
-
-
-%% @private
--spec maybe_chown(
-    oct_background:entity_selector(), storage:id(), helpers:file_id(),
-    luma:uid() | undefined, luma:gid() | undefined
-) ->
-    ok.
-maybe_chown(_ProviderSelector, _StorageId, _StorageFileId, undefined, _Gid) ->
-    ok;
-maybe_chown(_ProviderSelector, _StorageId, _StorageFileId, _Uid, undefined) ->
-    ok;
-maybe_chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid) ->
-    ok = storage_file_setup_utils:chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid).
-
-
-%% @private
--spec ensure_name(file_tree_node_spec()) -> file_tree_node_spec().
-ensure_name(DirSpec = #dir_spec{name = undefined}) ->
-    DirSpec#dir_spec{name = str_utils:rand_hex(20)};
-ensure_name(FileSpec = #file_spec{name = undefined}) ->
-    FileSpec#file_spec{name = str_utils:rand_hex(20)};
-ensure_name(FifoSpec = #storage_fifo_spec{name = undefined}) ->
-    FifoSpec#storage_fifo_spec{name = str_utils:rand_hex(20)};
-ensure_name(Spec) ->
-    Spec.
-
-
-%%%===================================================================
 %%% Internal functions - imported tree verification
 %%%===================================================================
 
@@ -1475,8 +1316,8 @@ ensure_name(Spec) ->
 %% (directories and files alike). Pure, in-process - performs no RPC - so that the
 %% expensive per-node verification can then be run in parallel.
 %% @end
--spec flatten_nodes(file_meta:path(), [onenv_file_test_utils:object_spec()]) ->
-    [{file_meta:path(), onenv_file_test_utils:object_spec()}].
+-spec flatten_nodes(file_meta:path(), [file_tree_test_utils:object_spec()]) ->
+    [{file_meta:path(), file_tree_test_utils:object_spec()}].
 flatten_nodes(ParentPath, Specs) ->
     lists:flatmap(fun(Spec) ->
         Path = filepath_utils:join([ParentPath, spec_name(Spec)]),
@@ -1496,7 +1337,7 @@ flatten_nodes(ParentPath, Specs) ->
 %% entry, so each is verified independently (and possibly in parallel).
 %% @end
 -spec verify_node(
-    #provider_ctx{}, file_meta:path(), onenv_file_test_utils:object_spec(), non_neg_integer()
+    #provider_ctx{}, file_meta:path(), file_tree_test_utils:object_spec(), non_neg_integer()
 ) ->
     ok.
 verify_node(ProviderCtx, Path, #dir_spec{children = Children}, Attempts) ->
@@ -1545,7 +1386,7 @@ assert_node_type(#provider_ctx{node = Node, session_id = SessId}, Path, Expected
 
 %% @private
 -spec assert_children(
-    #provider_ctx{}, file_meta:path(), [onenv_file_test_utils:object_spec()], non_neg_integer()
+    #provider_ctx{}, file_meta:path(), [file_tree_test_utils:object_spec()], non_neg_integer()
 ) ->
     ok.
 assert_children(#provider_ctx{node = Node, session_id = SessId}, ParentPath, ChildrenSpecs, Attempts) ->
@@ -1565,13 +1406,13 @@ list_child_names(Node, SessId, ParentPath) ->
 
 
 %% @private
--spec spec_name(onenv_file_test_utils:object_spec()) -> file_meta:name().
+-spec spec_name(file_tree_test_utils:object_spec()) -> file_meta:name().
 spec_name(#dir_spec{name = Name}) -> Name;
 spec_name(#file_spec{name = Name}) -> Name.
 
 
 %% @private
--spec to_spec_list(file_tree_spec()) -> [onenv_file_test_utils:object_spec()].
+-spec to_spec_list(storage_file_tree_test_utils:file_tree_spec()) -> [file_tree_test_utils:object_spec()].
 to_spec_list(undefined) -> [];
 to_spec_list(Specs) when is_list(Specs) -> Specs;
 to_spec_list(Spec) -> [Spec].
@@ -1585,8 +1426,8 @@ to_spec_list(Spec) -> [Spec].
 %% divergences" section of the module doc). No-op on POSIX, where real (possibly
 %% empty) directories are always observable.
 %% @end
--spec filter_out_unobservable_dirs(posix | s3, [onenv_file_test_utils:object_spec()]) ->
-    [onenv_file_test_utils:object_spec()].
+-spec filter_out_unobservable_dirs(posix | s3, [file_tree_test_utils:object_spec()]) ->
+    [file_tree_test_utils:object_spec()].
 filter_out_unobservable_dirs(posix, Specs) ->
     Specs;
 filter_out_unobservable_dirs(s3, Specs) ->
@@ -1605,12 +1446,12 @@ filter_out_unobservable_dirs(s3, Specs) ->
 -spec assert_dir_stats(#provider_ctx{}, file_meta:path(), #dir_spec{}) -> ok.
 assert_dir_stats(#provider_ctx{selector = Selector, node = Node, session_id = SessId}, Path, DirSpec) ->
     {ok, #file_attr{guid = Guid}} = ?assertMatch(
-        {ok, _}, lfm_proxy:stat(Node, SessId, {path, Path}), ?ATTEMPTS),
+        {ok, _}, lfm_proxy:stat(Node, SessId, {path, Path}), ?STORAGE_IMPORT_ATTEMPTS),
     ExpectedStats = expected_dir_stats(DirSpec),
     ?assertEqual(
         ExpectedStats,
         get_current_dir_stats(Selector, Guid, maps:keys(ExpectedStats)),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ).
 
 
@@ -1658,7 +1499,7 @@ aggregate_subtree_stats(Children) ->
 %% Counts the storage entries that storage import reports as "created" for the
 %% declared file tree - see expected_created_count/1. FIFOs are created on the
 %% storage but never imported, hence never counted.
--spec count_imported_nodes(posix | s3, file_tree_spec()) -> non_neg_integer().
+-spec count_imported_nodes(posix | s3, storage_file_tree_test_utils:file_tree_spec()) -> non_neg_integer().
 count_imported_nodes(_StorageType, undefined) -> 0;
 count_imported_nodes(StorageType, Specs) when is_list(Specs) ->
     lists:sum([count_imported_nodes(StorageType, Spec) || Spec <- Specs]);

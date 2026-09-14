@@ -150,7 +150,7 @@ init_per_suite(Config) ->
     opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
         posthook = fun(NewConfig) ->
-            provider_onenv_test_utils:setup_sessions(NewConfig)
+            provider_test_utils:setup_sessions(NewConfig)
         end
     }).
 

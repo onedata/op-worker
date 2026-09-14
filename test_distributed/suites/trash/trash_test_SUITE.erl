@@ -12,9 +12,10 @@
 -module(trash_test_SUITE).
 -author("Jakub Kudzia").
 
--include("permissions_test.hrl").
+-include("authz/authz_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("distribution_assert.hrl").
+-include("file/distribution_assert.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -694,7 +695,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= deletion_lasting_for_4_days_should_succeed orelse
