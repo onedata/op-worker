@@ -64,7 +64,7 @@
     read_registered_file_after_source_modified_on_storage_test/1,
     read_registered_file_when_storage_returns_error_test/1,
     large_registered_file_should_be_correctly_replicated_to_other_provider_test/1,
-    register_shared_file_via_public_url_test/1
+    register_shared_file_via_public_url_test/1  %% TODO VFS-13718
 ]).
 
 -define(SUPPORT_SIZE, 1000000000).
@@ -1157,14 +1157,7 @@ register_shared_file_via_public_url_test(#file_registration_test_suite_ctx{
 
     % The shared file's public content URL. A full URL in the storage file id makes the HTTP
     % helper target it directly, ignoring the storage endpoint.
-    %
-    % The Onezone public-share redirector root is intentionally NOT exercised yet:
-    % registration relies on the helper's getattr (HTTP HEAD) which - unlike its read - did
-    % not re-point the request path to the redirect target, so following the Onezone 302
-    % queried the wrong path. This is fixed in the helpers repo (HTTPHelper::getattr); once
-    % that fix is pulled in as a dependency, switch to the commented line below - the source
-    % space is supported only by the owning provider, so the redirector always points there.
-    RestApiRoot = onenv_api_test_runner:get_rest_api_root(OtherNode),
+    RestApiRoot = onenv_api_test_runner:random_share_rest_api_root([OtherNode]),
     ct:pal("RestApiRoot: ~tp~n", [RestApiRoot]),
 
     PublicUrl = <<RestApiRoot/binary, "data/", ShareObjectId/binary, "/content">>,
@@ -1383,7 +1376,6 @@ read_full_content(Node, Handle, Offset, Size, Acc) ->
     end.
 
 
-%% @private
 %% @private
 %% @doc Freezes the save of the file_meta doc of the given file for 5 seconds,
 %% notifying the test master process the moment the save is entered.

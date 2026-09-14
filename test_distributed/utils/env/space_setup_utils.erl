@@ -206,6 +206,11 @@ delete_space_with_supporting_storages(SpaceId, ProviderSelectors) ->
 
     ok = ozw_test_rpc:delete_space(SpaceId),
 
+    % a storage still supporting any other space cannot be deleted - storage:delete/1 (as
+    % well as Onezone) refuses with ?ERR_STORAGE_IN_USE, so no space is left behind without
+    % its storage; the retries in delete_storage/2 only wait for the provider to learn that
+    % the deleted space is no longer supported, while a storage shared with a space that
+    % outlives the cleanup fails it rather than breaking that space
     lists:foreach(fun({ProviderSelector, Storages}) ->
         lists:foreach(fun(StorageId) -> delete_storage(ProviderSelector, StorageId) end, Storages)
     end, StoragesPerProvider).

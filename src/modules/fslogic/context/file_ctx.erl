@@ -533,13 +533,12 @@ get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate)
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
     {StorageFileId, FileCtx}.
 
--spec get_new_storage_file_id(ctx()) -> {helpers:file_id(), ctx()} | no_return().
+-spec get_new_storage_file_id(ctx()) -> {helpers:file_id(), ctx()}.
 get_new_storage_file_id(FileCtx) ->
     ReferencedUuidBasedFileCtx = ensure_based_on_referenced_guid(FileCtx),
     {Storage, ReferencedUuidBasedFileCtx2} = get_storage(ReferencedUuidBasedFileCtx),
-    SpaceId = file_ctx:get_space_id_const(ReferencedUuidBasedFileCtx2),
-    Storage == undefined andalso throw(build_missing_local_storage_error(SpaceId)),
     Helper = storage:get_helper(Storage),
+    SpaceId = file_ctx:get_space_id_const(ReferencedUuidBasedFileCtx2),
     {CanonicalPath, ReferencedUuidBasedFileCtx3} = file_ctx:get_canonical_path(ReferencedUuidBasedFileCtx2),
     case helper:get_storage_path_type(Helper) of
         ?FLAT_STORAGE_PATH ->
@@ -1260,28 +1259,6 @@ clean_cached_deleted_doc(#file_ctx{file_doc = #document{} = FileDoc} = FileCtx) 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Builds the error reported when no local storage could be resolved for
-%% the space. get_storage/1 collapses every reason for that into 'undefined'
-%% (which is a legitimate outcome for some of its callers), so the space
-%% storages are re-resolved here to report the actual cause.
-%% @end
-%%--------------------------------------------------------------------
--spec build_missing_local_storage_error(od_space:id()) -> errors:error() | {error, term()}.
-build_missing_local_storage_error(SpaceId) ->
-    case space_logic:get_local_storages(SpaceId) of
-        {ok, []} ->
-            ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, oneprovider:get_id());
-        {ok, [_ | _]} ->
-            % the space is supported locally, but the storage doc itself is missing
-            ?ERROR_NOT_FOUND;
-        {error, _} = Error ->
-            Error
-    end.
-
 
 -spec resolve_and_cache_path(ctx(), file_meta:path_type()) ->
     {file_meta:uuid() | file_meta:name(), ctx()} | no_return().

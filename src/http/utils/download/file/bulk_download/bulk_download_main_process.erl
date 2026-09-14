@@ -34,12 +34,13 @@
 -endif.
 
 %% API
--export([start/5, resume/2, abort/1]).
+-export([start/6, resume/2, abort/1]).
 -export([report_next_file/3, report_data_sent/2, report_traverse_done/1]).
 -export([is_offset_allowed/2]).
 
 -record(state, {
-    id :: bulk_download:id(),
+    id :: bulk_download:id(), % download code (stable across the whole download)
+    traverse_incarnation = 0 :: non_neg_integer(),
     sent_bytes = 0 :: integer(),
     buffer = <<>> :: binary(),
     connection_pid :: pid(),
@@ -57,17 +58,22 @@
     download_code_expiration_interval_seconds, 1800))).
 % buffer cannot be smaller than tar stream internal buffer (32768 bytes)
 -define(MAX_BUFFER_SIZE, (op_worker:get_env(max_download_buffer_size, 104857600) + 32768)).
+-define(ABORT_TIMEOUT, timer:seconds(10)).
+% separator between the download code and the traverse incarnation in the per-attempt traverse id;
+-define(TRAVERSE_ID_SEP, <<"#">>).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec start(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean()) -> 
-    {ok, pid()} | {error, term()}.
-start(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
+-spec start(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean(),
+    non_neg_integer()) -> {ok, pid()} | {error, term()}.
+start(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks, TraverseIncarnation) ->
     case tree_traverse_session:setup_for_task(user_ctx:new(SessionId), BulkDownloadId) of
-        ok -> {ok, spawn(fun() -> main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) end)};
+        ok -> {ok, spawn(fun() ->
+            main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks, TraverseIncarnation)
+        end)};
         {error, _} = Error -> Error
     end.
 
@@ -78,10 +84,23 @@ resume(MainPid, ResumeOffset) ->
     ok.
 
 
--spec abort(pid()) -> ok.
+-spec abort(pid()) -> non_neg_integer().
 abort(MainPid) ->
-    MainPid ! ?MSG_ABORT,
-    ok.
+    Ref = monitor(process, MainPid),
+    MainPid ! ?MSG_ABORT(self()),
+    receive
+        {aborted, MainPid, TraverseIncarnation} ->
+            % the old process exits immediately after replying; consume the imminent 'DOWN'
+            receive {'DOWN', Ref, process, MainPid, _} -> ok
+            after ?ABORT_TIMEOUT -> demonitor(Ref, [flush]) end,
+            TraverseIncarnation;
+        {'DOWN', Ref, process, MainPid, _Reason} ->
+            % died before handing off its retry number (rare race) — fall back to 0
+            0
+    after ?ABORT_TIMEOUT ->
+        demonitor(Ref, [flush]),
+        error({bulk_download_abort_timeout, MainPid})
+    end.
 
 
 -spec report_data_sent(pid(), time:millis()) -> ok.
@@ -116,8 +135,9 @@ is_offset_allowed(MainPid, Offset) ->
 %%%===================================================================
 
 %% @private
--spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean()) -> no_return().
-main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
+-spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean(),
+    non_neg_integer()) -> no_return().
+main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks, TraverseIncarnation) ->
     bulk_download_task:save(BulkDownloadId, self(), SessionId),
     TarStream = tar_utils:open_archive_stream(#{gzip => false}),
     %% @TODO VFS-8882 - use preserve/follow_external in API
@@ -126,7 +146,8 @@ main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
         false -> preserve
     end,
     State = #state{
-        id = BulkDownloadId, 
+        id = BulkDownloadId,
+        traverse_incarnation = TraverseIncarnation,
         connection_pid = InitialConn,
         tar_stream = TarStream, 
         symlink_resolution_policy = SymlinkResolutionPolicy
@@ -158,9 +179,17 @@ handle_multiple_files(
     % add starting dir to the tarball here as traverse does not execute slave job on it
     {Bytes, UpdatedState2} = new_tar_file_entry(UpdatedState, FileAttrs, Name),
     UpdatedState3 = send_data(Bytes, UpdatedState2),
-    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.symlink_resolution_policy, Name),
+    TraverseId = traverse_id(UpdatedState3),
+    % tree_traverse acquires the offline session by the traverse task_id, so it must be set up
+    % under that id (not the download code). Each per-attempt/per-directory traverse gets its own.
+    ok = tree_traverse_session:setup_for_task(UserCtx, TraverseId),
+    bulk_download_traverse:start(
+        TraverseId, UserCtx, Guid, State#state.symlink_resolution_policy, Name),
     FinalState = wait_for_traverse(UpdatedState3, user_ctx:get_session_id(UserCtx)),
-    handle_multiple_files(Tail, BulkDownloadId, UserCtx, FinalState#state{root_dir_path = undefined});
+    tree_traverse_session:close_for_task(TraverseId),
+    % increment traverse_incarnation so each subsequent directory traverse gets a fresh, unique, deterministic id
+    handle_multiple_files(Tail, BulkDownloadId, UserCtx,
+        FinalState#state{traverse_incarnation = FinalState#state.traverse_incarnation + 1, root_dir_path = undefined});
 handle_multiple_files(
     [#file_attr{type = ?REGULAR_FILE_TYPE, name = Name} = FileAttrs | Tail], 
     BulkDownloadId, UserCtx, State
@@ -318,7 +347,8 @@ new_tar_file_entry(#state{tar_stream = TarStream, root_dir_path = RootDirPath} =
 -spec wait_for_conn(state()) -> state().
 wait_for_conn(#state{id = Id} = State) ->
     receive
-        ?MSG_ABORT ->
+        ?MSG_ABORT(From) ->
+            From ! {aborted, self(), State#state.traverse_incarnation},
             finalize(State);
         ?MSG_DATA_SENT(NewDelay) ->
             State#state{send_retry_delay = NewDelay};
@@ -387,11 +417,17 @@ is_offset_within_buffer_bounds(#state{buffer = Buffer, sent_bytes = SentBytes}, 
 
 %% @private
 -spec finalize(state()) -> no_return().
-finalize(#state{id = Id, tar_stream = TarStream}) ->
-    traverse:cancel(bulk_download_traverse:get_pool_name(), Id),
+finalize(#state{tar_stream = TarStream} = State) ->
+    traverse:cancel(bulk_download_traverse:get_pool_name(), traverse_id(State)),
     % tar stream could have already been closed, so crash here is expected
     catch tar_utils:close_archive_stream(TarStream),
     exit(kill).
+
+
+%% @private
+-spec traverse_id(state()) -> bulk_download:id().
+traverse_id(#state{id = Id, traverse_incarnation = TraverseIncarnation}) ->
+    <<Id/binary, (?TRAVERSE_ID_SEP)/binary, (integer_to_binary(TraverseIncarnation))/binary>>.
 
 
 %% @private
