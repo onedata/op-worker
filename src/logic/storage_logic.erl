@@ -31,8 +31,9 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
 
--export([create_in_zone/4, create_in_zone/5, delete_in_zone/1]).
+-export([create_in_zone/4, create_in_zone/5, update_in_zone/2, delete_in_zone/1]).
 -export([get/1, get_shared_data/2]).
 -export([force_fetch/1]).
 -export([support_space/4]).
@@ -88,6 +89,35 @@ create_in_zone(Name, ImportedStorage, Readonly, QosParameters, StorageId) ->
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
         provider_logic:force_fetch()
     end)).
+
+
+-spec update_in_zone(storage:id(), onedata_storage:update_spec()) ->
+    ok | errors:error().
+update_in_zone(StorageId, #storage_update_spec{
+    name = MaybeName,
+    readonly = MaybeNewReadonly,
+    imported = MaybeNewImported,
+    qos_parameters = MaybeQosParams
+}) ->
+    Diff = maps_utils:remove_undefined(#{
+        <<"name">> => MaybeName,
+        <<"imported">> => MaybeNewImported,
+        <<"readonly">> => MaybeNewReadonly,
+        <<"qosParameters">> => MaybeQosParams
+    }),
+    case maps_utils:is_empty(Diff) of
+        true ->
+            ok;
+        false ->
+            Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+                operation = update,
+                gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+                data = Diff
+            }),
+            ?ON_SUCCESS(Result, fun(_) ->
+                storage_logic:force_fetch(StorageId)
+            end)
+    end.
 
 
 -spec delete_in_zone(storage:id()) -> ok | errors:error().

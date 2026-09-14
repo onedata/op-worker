@@ -94,7 +94,6 @@ stages:
         - archive_model
         - archive_recall
         - archive_sequential
-        - archivestorage_helper
         - archivisation_cancellation
         - atm_audit_log_store
         - atm_exception_store
@@ -113,8 +112,6 @@ stages:
         - autocleaning
         - cdmi_single_provider
         - cdmi_multi_provider
-        - ceph_helper
-        - cephrados_helper
         - client_events
         - client_events_user_root_dir
         - cluster_upgrade
@@ -142,7 +139,6 @@ stages:
         - file_registration_http
         - file_registration_s3
         - fslogic_req
-        - glusterfs_helper
         - gs_atm_inventory_logic
         - gs_atm_lambda_logic
         - gs_atm_workflow_schema_logic
@@ -163,12 +159,24 @@ stages:
         - harvesting
         - harvesting_custom_metadata
         - harvesting_stream
+        - helper_archivestorage
+        - helper_ceph
+        - helper_cephrados
+        - helper_glusterfs
+#        - helper_nfs # uncomment after fixing helper
+        - helper_nulldevice
+        - helper_posix
+        - helper_s3
+        - helper_swift
+        - helper_webdav
+        - helper_xrootd
         - idp_access_token
         - lfm_attrs
         - lfm_files_posix
         - lfm_files_s3
         - lfm_symlinks_resolution
         - luma
+        - luma_reverse
         - massive_multi_provider_file_ops
         - massive_multi_provider_file_ops2
         - memory_pools_cleanup
@@ -182,12 +190,9 @@ stages:
         - multi_provider_rest
         - multipart_upload
         - multiple_workflow_scheduling
-#        - nfs_helper # uncomment after fixing helper
 #        - node_failure # TODO VFS-11953
-        - nulldevice_helper
         - op_worker_circuit_breaker
         - performance_2_provider
-        - posix_helper
         - provider_connection
         - qos
         - qos_api
@@ -201,8 +206,6 @@ stages:
         - replication
         - replication_transfers_rest
         - rest_handler
-        - reverse_luma
-        - s3_helper
         - sequencer
         - sequencer_in_stream
         - sequencer_manager
@@ -232,7 +235,6 @@ stages:
         - storage_req
         - storage_sync_links
         - storage_traverse
-        - swift_helper
         - tmp_db_error
         - transfer_eviction
         - transfer_migration
@@ -244,11 +246,9 @@ stages:
         - user_auth
         - view
         - view_rest
-        - webdav_helper
         - webdav_token
         - workflow_scheduling
         - workflow_scheduling_cancellation_and_restart
-        - xrootd_helper
   - Coverage report:
       manual: false
       final: false
@@ -777,26 +777,6 @@ archive_sequential:
     - <<: *ct_logs
       name: ct_logs_archive_sequential.tar.gz
 
-archivestorage_helper: &ct-job
-  key: AR
-  description: Archive storage S3 helper test
-  other: *common-opts
-  tasks:
-    - checkout: *fake-checkout
-    - script: *unpack
-    - script: *quarantine-hack-pull-surefire
-    - script:
-        <<: *run-script-working-dir
-        scripts:
-          - ./ct_run.py --suite ${bamboo.shortJobName}
-        description: Run CT
-  final-tasks: *final-tasks
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_archivestorage_helper.tar.gz
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
-
 archivisation_cancellation:
   <<: *ct-onenv-job
   key: ARCC
@@ -923,27 +903,25 @@ cdmi_multi_provider:
     - <<: *ct_logs
       name: ct_logs_cdmi_multi_provider.tar.gz
 
-ceph_helper:
-  <<: *ct-job
-  key: CE
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_ceph_helper.tar.gz
-
-cephrados_helper:
-  <<: *ct-job
-  key: CEP
-  description: CephRados helper integration test
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_cephrados_helper.tar.gz
-
-client_events:
-  <<: *ct-job
+client_events: &ct-job
   key: CLIEVE
+  description: Client events test
+  other: *common-opts
+  tasks:
+    - checkout: *fake-checkout
+    - script: *unpack
+    - script: *quarantine-hack-pull-surefire
+    - script:
+        <<: *run-script-working-dir
+        scripts:
+          - ./ct_run.py --suite ${bamboo.shortJobName}
+        description: Run CT
+  final-tasks: *final-tasks
   artifacts:
     - <<: *ct_logs
       name: ct_logs_client_events.tar.gz
+  requirements: *requirements
+  artifact-subscriptions: *op-worker
 
 client_events_user_root_dir:
   <<: *ct-onenv-job
@@ -1133,14 +1111,6 @@ fslogic_req:
     - <<: *ct_logs
       name: ct_logs_fslogic_req.tar.gz
 
-glusterfs_helper:
-  <<: *ct-job
-  key: GLUS
-  description: GlusterFS helper test
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_glusterfs_helper.tar.gz
-
 gs_atm_inventory_logic:
   <<: *ct-job
   key: GSAT
@@ -1283,6 +1253,89 @@ harvesting_stream:
       name: ct_logs_harvesting_stream.tar.gz
   requirements: *os-agent
 
+helper_archivestorage:
+  <<: *ct-job
+  key: AR
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_helper_archivestorage.tar.gz
+
+helper_ceph:
+  <<: *ct-job
+  key: CE
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_helper_ceph.tar.gz
+
+helper_cephrados:
+  <<: *ct-job
+  key: CEP
+  description: CephRados helper integration test
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_helper_cephrados.tar.gz
+
+helper_glusterfs:
+  <<: *ct-job
+  key: GLUS
+  description: GlusterFS helper test
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_helper_glusterfs.tar.gz
+
+# uncomment after fixing helper
+#helper_nfs:
+#  <<: *ct-job
+#  key: NFSHEL
+#  description: NFS helper test
+#  artifacts:
+#    - <<: *ct_logs
+#      name: ct_logs_helper_nfs.tar.gz
+
+helper_nulldevice:
+  <<: *ct-job
+  key: NUL
+  description: Null Device helper integration test
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_helper_nulldevice.tar.gz
+
+helper_posix:
+  <<: *ct-job
+  key: HELP
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_helper_posix.tar.gz
+
+helper_s3:
+  <<: *ct-job
+  key: S3HEL
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_helper_s3.tar.gz
+
+helper_swift:
+  <<: *ct-job
+  key: SWIHEL
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_helper_swift.tar.gz
+
+helper_webdav:
+  <<: *ct-job
+  key: WEB
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_helper_webdav.tar.gz
+
+helper_xrootd:
+  <<: *ct-job
+  key: XROOT
+  description: Test XRootD helper
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_helper_xrootd.tar.gz
+
 idp_access_token:
   <<: *ct-job
   key: IAT
@@ -1324,6 +1377,13 @@ luma:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_luma.tar.gz
+
+luma_reverse:
+  <<: *ct-job
+  key: REV
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_luma_reverse.tar.gz
 
 massive_multi_provider_file_ops2:
   <<: *ct-job
@@ -1422,15 +1482,6 @@ multiple_workflow_scheduling:
     - <<: *ct_logs
       name: ct_logs_multiple_workflow_scheduling.tar.gz
 
-# uncomment after fixing helper
-#nfs_helper:
-#  <<: *ct-job
-#  key: NFSHEL
-#  description: NFS helper test
-#  artifacts:
-#    - <<: *ct_logs
-#      name: ct_logs_nfs_helper.tar.gz
-
 # TODO VFS-11953
 #node_failure:
 #  <<: *ct-onenv-job
@@ -1439,14 +1490,6 @@ multiple_workflow_scheduling:
 #    - <<: *ct_logs
 #      name: ct_logs_node_failure.tar.gz
 #  requirements: *os-agent
-
-nulldevice_helper:
-  <<: *ct-job
-  key: NUL
-  description: Null Device helper integration test
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_nulldevice_helper.tar.gz
 
 op_worker_circuit_breaker:
   <<: *ct-onenv-job
@@ -1461,13 +1504,6 @@ performance_2_provider:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_performance_2_provider.tar.gz
-
-posix_helper:
-  <<: *ct-job
-  key: HELP
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_posix_helper.tar.gz
 
 provider_connection:
   <<: *ct-job
@@ -1560,20 +1596,6 @@ rest_handler:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_rest_handler.tar.gz
-
-reverse_luma:
-  <<: *ct-job
-  key: REV
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_reverse_luma.tar.gz
-
-s3_helper:
-  <<: *ct-job
-  key: S3HEL
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_s3_helper.tar.gz
 
 sequencer:
   <<: *ct-job
@@ -1780,13 +1802,6 @@ storage_traverse:
     - <<: *ct_logs
       name: ct_logs_storage_traverse.tar.gz
 
-swift_helper:
-  <<: *ct-job
-  key: SWIHEL
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_swift_helper.tar.gz
-
 tmp_db_error:
   <<: *ct-onenv-job
   key: TMPDBER
@@ -1864,13 +1879,6 @@ view_rest:
     - <<: *ct_logs
       name: ct_logs_view_rest.tar.gz
 
-webdav_helper:
-  <<: *ct-job
-  key: WEB
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_webdav_helper.tar.gz
-
 webdav_token:
   <<: *ct-job
   key: WDT
@@ -1891,14 +1899,6 @@ workflow_scheduling_cancellation_and_restart:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_workflow_scheduling_cancellation_and_restart.tar.gz
-
-xrootd_helper:
-  <<: *ct-job
-  key: XROOT
-  description: Test XRootD helper
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_xrootd_helper.tar.gz
 
 Coverage report:
   key: CR
@@ -1983,7 +1983,6 @@ Coverage report:
     - artifact: ct_logs_archive_model.tar.gz
     - artifact: ct_logs_archive_recall.tar.gz
     - artifact: ct_logs_archive_sequential.tar.gz
-    - artifact: ct_logs_archivestorage_helper.tar.gz
     - artifact: ct_logs_archivisation_cancellation.tar.gz
     - artifact: ct_logs_atm_audit_log_store.tar.gz
     - artifact: ct_logs_atm_exception_store.tar.gz
@@ -2002,8 +2001,6 @@ Coverage report:
     - artifact: ct_logs_autocleaning.tar.gz
     - artifact: ct_logs_cdmi_single_provider.tar.gz
     - artifact: ct_logs_cdmi_multi_provider.tar.gz
-    - artifact: ct_logs_ceph_helper.tar.gz
-    - artifact: ct_logs_cephrados_helper.tar.gz
     - artifact: ct_logs_client_events.tar.gz
     - artifact: ct_logs_client_events_user_root_dir.tar.gz
     - artifact: ct_logs_cluster_upgrade.tar.gz
@@ -2031,7 +2028,6 @@ Coverage report:
     - artifact: ct_logs_file_registration_http.tar.gz
     - artifact: ct_logs_file_registration_s3.tar.gz
     - artifact: ct_logs_fslogic_req.tar.gz
-    - artifact: ct_logs_glusterfs_helper.tar.gz
     - artifact: ct_logs_gs_atm_inventory_logic.tar.gz
     - artifact: ct_logs_gs_atm_lambda_logic.tar.gz
     - artifact: ct_logs_gs_atm_workflow_schema_logic.tar.gz
@@ -2052,12 +2048,24 @@ Coverage report:
     - artifact: ct_logs_harvesting.tar.gz
     - artifact: ct_logs_harvesting_custom_metadata.tar.gz
     - artifact: ct_logs_harvesting_stream.tar.gz
+    - artifact: ct_logs_helper_archivestorage.tar.gz
+    - artifact: ct_logs_helper_ceph.tar.gz
+    - artifact: ct_logs_helper_cephrados.tar.gz
+    - artifact: ct_logs_helper_glusterfs.tar.gz
+    #    - artifact: ct_logs_helper_nfs.tar.gz # uncomment after fixing helper
+    - artifact: ct_logs_helper_nulldevice.tar.gz
+    - artifact: ct_logs_helper_posix.tar.gz
+    - artifact: ct_logs_helper_s3.tar.gz
+    - artifact: ct_logs_helper_swift.tar.gz
+    - artifact: ct_logs_helper_webdav.tar.gz
+    - artifact: ct_logs_helper_xrootd.tar.gz
     - artifact: ct_logs_idp_access_token.tar.gz
     - artifact: ct_logs_lfm_attrs.tar.gz
     - artifact: ct_logs_lfm_files_posix.tar.gz
     - artifact: ct_logs_lfm_files_s3.tar.gz
     - artifact: ct_logs_lfm_symlinks_resolution.tar.gz
     - artifact: ct_logs_luma.tar.gz
+    - artifact: ct_logs_luma_reverse.tar.gz
     - artifact: ct_logs_massive_multi_provider_file_ops.tar.gz
     - artifact: ct_logs_massive_multi_provider_file_ops2.tar.gz
     - artifact: ct_logs_memory_pools_cleanup.tar.gz
@@ -2071,12 +2079,9 @@ Coverage report:
     - artifact: ct_logs_multi_provider_rest.tar.gz
     - artifact: ct_logs_multipart_upload.tar.gz
     - artifact: ct_logs_multiple_workflow_scheduling.tar.gz
-#    - artifact: ct_logs_nfs_helper.tar.gz # uncomment after fixing helper
 #    - artifact: ct_logs_node_failure.tar.gz # TODO VFS-11953
-    - artifact: ct_logs_nulldevice_helper.tar.gz
     - artifact: ct_logs_op_worker_circuit_breaker.tar.gz
     - artifact: ct_logs_performance_2_provider.tar.gz
-    - artifact: ct_logs_posix_helper.tar.gz
     - artifact: ct_logs_provider_connection.tar.gz
     - artifact: ct_logs_qos.tar.gz
     - artifact: ct_logs_qos_api.tar.gz
@@ -2090,8 +2095,6 @@ Coverage report:
     - artifact: ct_logs_replication.tar.gz
     - artifact: ct_logs_replication_transfers_rest.tar.gz
     - artifact: ct_logs_rest_handler.tar.gz
-    - artifact: ct_logs_reverse_luma.tar.gz
-    - artifact: ct_logs_s3_helper.tar.gz
     - artifact: ct_logs_sequencer.tar.gz
     - artifact: ct_logs_sequencer_in_stream.tar.gz
     - artifact: ct_logs_sequencer_manager.tar.gz
@@ -2121,7 +2124,6 @@ Coverage report:
     - artifact: ct_logs_storage_req.tar.gz
     - artifact: ct_logs_storage_sync_links.tar.gz
     - artifact: ct_logs_storage_traverse.tar.gz
-    - artifact: ct_logs_swift_helper.tar.gz
     - artifact: ct_logs_tmp_db_error.tar.gz
     - artifact: ct_logs_transfer_eviction.tar.gz
     - artifact: ct_logs_transfer_migration.tar.gz
@@ -2133,11 +2135,9 @@ Coverage report:
     - artifact: ct_logs_user_auth.tar.gz
     - artifact: ct_logs_view.tar.gz
     - artifact: ct_logs_view_rest.tar.gz
-    - artifact: ct_logs_webdav_helper.tar.gz
     - artifact: ct_logs_webdav_token.tar.gz
     - artifact: ct_logs_workflow_scheduling.tar.gz
     - artifact: ct_logs_workflow_scheduling_cancellation_and_restart.tar.gz
-    - artifact: ct_logs_xrootd_helper.tar.gz
 
 Qnthack - rerun:
   key: ZREQN

@@ -311,14 +311,14 @@ upgrade_cluster(7) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
-        storage:upgrade_after_swift_version_update_to_v3(),
+        storage_upgrader:upgrade_after_swift_version_update_to_v3(),
 
         % clear cached auto luma entries in db
         {ok, StorageIds} = provider_logic:get_storages(),
         lists:foreach(fun(StorageId) ->
             ?info("Clearing cached auto-feed LUMA entries for storage: ~ts", [StorageId]),
             case storage_config:get_luma_feed(StorageId) of
-                ?AUTO_FEED -> luma:clear_db(StorageId);
+                ?AUTO_FEED -> luma_crud_api:clear_db(StorageId);
                 _ -> ok
             end
         end, StorageIds)

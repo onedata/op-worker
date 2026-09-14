@@ -14,10 +14,9 @@
 -define(LUMA_TEST_UTILS_HRL, 1).
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 
-
--define(STRIP_OK(Result), element(2, {ok, _} = Result)).
 
 -define(RUN(Config, StorageConfigs, TestFun),
     luma_test_utils:run_test_for_all_storage_configs(TestFun, ?MODULE, Config, StorageConfigs)).
@@ -63,21 +62,21 @@
 -define(DISPLAY_UID1, 2222).
 
 -define(POSIX_ID_RANGE, {100000, 2000000}).
--define(POSIX_CREDS_TO_TUPLE(UserCtx), begin
-    #{<<"uid">> := __UID, <<"gid">> := __GID} = UserCtx,
+-define(POSIX_CREDS_TO_TUPLE(Credentials), begin
+    #{<<"uid">> := __UID, <<"gid">> := __GID} = Credentials,
     {binary_to_integer(__UID),binary_to_integer(__GID)}
 end).
 
 -define(ROOT_DISPLAY_CREDS, {?ROOT_UID, ?ROOT_GID}).
 
--define(AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS, luma_test_utils:new_posix_user_ctx(
+-define(AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS, luma_test_utils:new_posix_credentials(
     luma_auto_feed:generate_posix_identifier(?SPACE_OWNER_ID(?LUMA_SPACE_ID), ?POSIX_ID_RANGE),
     luma_auto_feed:generate_posix_identifier(?LUMA_SPACE_ID, ?POSIX_ID_RANGE)
 )).
 -define(EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
-    luma_test_utils:new_posix_user_ctx(?SPACE_DISPLAY_UID1, ?SPACE_DISPLAY_GID1)).
+    luma_test_utils:new_posix_credentials(?SPACE_DISPLAY_UID1, ?SPACE_DISPLAY_GID1)).
 -define(LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
-    luma_test_utils:new_posix_user_ctx(?SPACE_DISPLAY_UID2, ?SPACE_DISPLAY_GID2)).
+    luma_test_utils:new_posix_credentials(?SPACE_DISPLAY_UID2, ?SPACE_DISPLAY_GID2)).
 
 -define(AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX, {
     luma_auto_feed:generate_posix_identifier(?LUMA_USER_ID, ?POSIX_ID_RANGE),
@@ -107,13 +106,13 @@ end).
 %%% Posix helper and storage macros
 %%%===================================================================
 
--define(POSIX_ADMIN_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?ROOT_UID, ?ROOT_GID)).
--define(POSIX_USER_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?UID0, ?SPACE_GID1)).
--define(IMPORTED_POSIX_USER_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?UID0, ?SPACE_MOUNT_GID)).
--define(POSIX_GENERATED_USER_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?GEN_UID(?LUMA_USER_ID), ?SPACE_MOUNT_GID)).
--define(POSIX_MOUNT_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
--define(POSIX_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
--define(POSIX_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
+-define(POSIX_ADMIN_CREDENTIALS, luma_test_utils:new_posix_credentials(?ROOT_UID, ?ROOT_GID)).
+-define(POSIX_USER_CREDENTIALS, luma_test_utils:new_posix_credentials(?UID0, ?SPACE_GID1)).
+-define(IMPORTED_POSIX_USER_CREDENTIALS, luma_test_utils:new_posix_credentials(?UID0, ?SPACE_MOUNT_GID)).
+-define(POSIX_GENERATED_USER_CREDENTIALS, luma_test_utils:new_posix_credentials(?GEN_UID(?LUMA_USER_ID), ?SPACE_MOUNT_GID)).
+-define(POSIX_MOUNT_CREDENTIALS, luma_test_utils:new_posix_credentials(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
+-define(POSIX_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_posix_credentials(?SPACE_UID1, ?SPACE_GID1)).
+-define(POSIX_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_posix_credentials(?SPACE_UID1, ?SPACE_GID1)).
 
 % Macros used to define posix compatible ownerships (UID, GID)
 -define(GEN_UID(UserId), luma_auto_feed:generate_posix_identifier(UserId, ?LUMA_UID_RANGE)).
@@ -127,14 +126,14 @@ end).
 -define(POSIX_IMPORTED_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"posixImportedStorageIdExternalFeedLuma">>).
 -define(POSIX_IMPORTED_STORAGE_ID_LOCAL_FEED_LUMA, <<"posixImportedStorageIdLocalFeedLuma">>).
 
--define(POSIX_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(
-        ?POSIX_HELPER_NAME,
-        #{
-            <<"mountPoint">> => <<"mountPoint">>,
-            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
-        },
-        AdminCtx
-))).
+-define(POSIX_HELPER(Credentials), #helper_spec{
+    name = ?POSIX_HELPER_NAME,
+    configuration = #{
+        <<"mountPoint">> => <<"mountPoint">>,
+        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
+    },
+    credentials = Credentials
+}).
 
 -define(POSIX_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"POSIX">>, ?POSIX_HELPER(?POSIX_ADMIN_CREDENTIALS), LumaMode)).
@@ -153,22 +152,23 @@ end).
 %%% CEPH helper and storage macros
 %%%===================================================================
 
--define(CEPH_ADMIN_CREDENTIALS, luma_test_utils:new_ceph_user_ctx(<<"ADMIN">>, <<"ADMIN_KEY">>)).
--define(CEPH_USER_CREDENTIALS, luma_test_utils:new_ceph_user_ctx(<<"USER">>, <<"USER_KEY">>)).
+-define(CEPH_ADMIN_CREDENTIALS, luma_test_utils:new_ceph_credentials(<<"ADMIN">>, <<"ADMIN_KEY">>)).
+-define(CEPH_USER_CREDENTIALS, luma_test_utils:new_ceph_credentials(<<"USER">>, <<"USER_KEY">>)).
 
 -define(CEPH_STORAGE_ID_AUTO_FEED_LUMA, <<"cephStorageIdAutoFeedLuma">>).
 -define(CEPH_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"cephStorageIdExternalFeedLuma">>).
 -define(CEPH_STORAGE_ID_LOCAL_FEED_LUMA, <<"cephStorageIdLocalFeedLuma">>).
 
--define(CEPH_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(?CEPH_HELPER_NAME,
-    #{
+-define(CEPH_HELPER(Credentials), #helper_spec{
+    name = ?CEPH_HELPER_NAME,
+    configuration = #{
         <<"monitorHostname">> => <<"monitorHostname">>,
         <<"clusterName">> => <<"clusterName">>,
         <<"poolName">> => <<"poolName">>,
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
-    AdminCtx
-))).
+    credentials = Credentials
+}).
 
 -define(CEPH_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"CEPH">>, ?CEPH_HELPER(?CEPH_ADMIN_CREDENTIALS), LumaMode)
@@ -185,23 +185,24 @@ end).
 %%%===================================================================
 
 -define(S3_ADMIN_CREDENTIALS,
-     luma_test_utils:new_s3_user_ctx(<<"ADMIN_ACCESS_KEY">>, <<"ADMIN_SECRET_KEY">>)).
+     luma_test_utils:new_s3_credentials(<<"ADMIN_ACCESS_KEY">>, <<"ADMIN_SECRET_KEY">>)).
 -define(S3_USER_CREDENTIALS,
-     luma_test_utils:new_s3_user_ctx(<<"USER_ACCESS_KEY">>, <<"USER_SECRET_KEY">>)).
+     luma_test_utils:new_s3_credentials(<<"USER_ACCESS_KEY">>, <<"USER_SECRET_KEY">>)).
 
 -define(S3_STORAGE_ID_AUTO_FEED_LUMA, <<"s3StorageIdAutoFeedLuma">>).
 -define(S3_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"s3StorageIdExternalFeedLuma">>).
 -define(S3_STORAGE_ID_LOCAL_FEED_LUMA, <<"s3StorageIdLocalFeedLuma">>).
 
--define(S3_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(?S3_HELPER_NAME,
-    #{
+-define(S3_HELPER(Credentials), #helper_spec{
+    name = ?S3_HELPER_NAME,
+    configuration = #{
         <<"scheme">> => <<"https">>,
         <<"hostname">> => <<"hostname">>,
         <<"bucketName">> => <<"bucketName">>,
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
-    AdminCtx
-))).
+    credentials = Credentials
+}).
 
 -define(S3_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"S3">>, ?S3_HELPER(?S3_ADMIN_CREDENTIALS), LumaMode)
@@ -218,21 +219,22 @@ end).
 %%%===================================================================
 
 -define(SWIFT_ADMIN_CREDENTIALS,
-     luma_test_utils:new_swift_user_ctx(<<"ADMIN">>, <<"ADMIN_PASSWD">>, <<"PROJECT_NAME">>)).
+     luma_test_utils:new_swift_credentials(<<"ADMIN">>, <<"ADMIN_PASSWD">>, <<"PROJECT_NAME">>)).
 -define(SWIFT_USER_CREDENTIALS,
-     luma_test_utils:new_swift_user_ctx(<<"USER">>, <<"USER_PASSWD">>, <<"PROJECT_NAME">>)).
+     luma_test_utils:new_swift_credentials(<<"USER">>, <<"USER_PASSWD">>, <<"PROJECT_NAME">>)).
 
 -define(SWIFT_STORAGE_ID_AUTO_FEED_LUMA, <<"swiftStorageIdAutoFeedLuma">>).
 -define(SWIFT_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"swiftStorageIdExternalFeedLuma">>).
 -define(SWIFT_STORAGE_ID_LOCAL_FEED_LUMA, <<"swiftStorageIdLocalFeedLuma">>).
 
--define(SWIFT_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(?SWIFT_HELPER_NAME,
-    #{<<"authUrl">> => <<"authUrl">>,
+-define(SWIFT_HELPER(Credentials), #helper_spec{
+    name = ?SWIFT_HELPER_NAME,
+    configuration = #{<<"authUrl">> => <<"authUrl">>,
         <<"containerName">> => <<"containerName">>,
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
-    AdminCtx
-))).
+    credentials = Credentials
+}).
 
 -define(SWIFT_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"SWIFT">>, ?SWIFT_HELPER(?SWIFT_ADMIN_CREDENTIALS), LumaMode)
@@ -249,23 +251,24 @@ end).
 %%%===================================================================
 
 -define(CEPHRADOS_ADMIN_CREDENTIALS,
-     luma_test_utils:new_cephrados_user_ctx(<<"ADMIN">>, <<"ADMIN_KEY">>)).
+     luma_test_utils:new_cephrados_credentials(<<"ADMIN">>, <<"ADMIN_KEY">>)).
 -define(CEPHRADOS_USER_CREDENTIALS,
-     luma_test_utils:new_cephrados_user_ctx(<<"USER">>, <<"USER_KEY">>)).
+     luma_test_utils:new_cephrados_credentials(<<"USER">>, <<"USER_KEY">>)).
 
 -define(CEPHRADOS_STORAGE_ID_AUTO_FEED_LUMA, <<"cephradosStorageIdAutoFeedLuma">>).
 -define(CEPHRADOS_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"cephradosStorageIdExternalFeedLuma">>).
 -define(CEPHRADOS_STORAGE_ID_LOCAL_FEED_LUMA, <<"cephradosStorageIdLocalFeedLuma">>).
 
--define(CEPHRADOS_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(?CEPHRADOS_HELPER_NAME,
-    #{
+-define(CEPHRADOS_HELPER(Credentials), #helper_spec{
+    name = ?CEPHRADOS_HELPER_NAME,
+    configuration = #{
         <<"monitorHostname">> => <<"monitorHostname">>,
         <<"clusterName">> => <<"clusterName">>,
         <<"poolName">> => <<"poolName">>,
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
-    AdminCtx
-))).
+    credentials = Credentials
+}).
 
 -define(CEPHRADOS_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"CEPHRADOS">>, ?CEPHRADOS_HELPER(?CEPHRADOS_ADMIN_CREDENTIALS), LumaMode)
@@ -281,13 +284,13 @@ end).
 %%% GLUSTERFS helper and storage macros
 %%%===================================================================
 
--define(GLUSTERFS_ADMIN_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(0, 0)).
--define(GLUSTERFS_USER_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?UID0, ?SPACE_GID1)).
--define(IMPORTED_GLUSTERFS_USER_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?UID0, ?SPACE_MOUNT_GID)).
--define(GLUSTERFS_GENERATED_USER_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?GEN_UID(?LUMA_USER_ID), ?SPACE_MOUNT_GID)).
--define(GLUSTERFS_MOUNT_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
--define(GLUSTERFS_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
--define(GLUSTERFS_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
+-define(GLUSTERFS_ADMIN_CREDENTIALS, luma_test_utils:new_glusterfs_credentials(0, 0)).
+-define(GLUSTERFS_USER_CREDENTIALS, luma_test_utils:new_glusterfs_credentials(?UID0, ?SPACE_GID1)).
+-define(IMPORTED_GLUSTERFS_USER_CREDENTIALS, luma_test_utils:new_glusterfs_credentials(?UID0, ?SPACE_MOUNT_GID)).
+-define(GLUSTERFS_GENERATED_USER_CREDENTIALS, luma_test_utils:new_glusterfs_credentials(?GEN_UID(?LUMA_USER_ID), ?SPACE_MOUNT_GID)).
+-define(GLUSTERFS_MOUNT_CREDENTIALS, luma_test_utils:new_glusterfs_credentials(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
+-define(GLUSTERFS_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_glusterfs_credentials(?SPACE_UID1, ?SPACE_GID1)).
+-define(GLUSTERFS_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_glusterfs_credentials(?SPACE_UID1, ?SPACE_GID1)).
 
 
 -define(GLUSTERFS_STORAGE_ID_AUTO_FEED_LUMA, <<"glusterfsStorageIdAutoFeedLuma">>).
@@ -297,15 +300,15 @@ end).
 -define(IMPORTED_GLUSTERFS_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"glusterfsImportedStorageIdExternalFeedLuma">>).
 -define(IMPORTED_GLUSTERFS_STORAGE_ID_LOCAL_FEED_LUMA, <<"glusterfsImportedStorageIdLocalFeedLuma">>).
 
--define(GLUSTERFS_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(
-    ?GLUSTERFS_HELPER_NAME,
-    #{
+-define(GLUSTERFS_HELPER(Credentials), #helper_spec{
+    name = ?GLUSTERFS_HELPER_NAME,
+    configuration = #{
         <<"volume">> => <<"volume">>,
         <<"hostname">> => <<"hostname">>,
         <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
     },
-    AdminCtx
-))).
+    credentials = Credentials
+}).
 
 -define(GLUSTERFS_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"GLUSTERFS">>, ?GLUSTERFS_HELPER(?GLUSTERFS_ADMIN_CREDENTIALS), LumaMode)
@@ -328,13 +331,13 @@ end).
 %%% NULLDEVICE helper and storage macros
 %%%===================================================================
 
--define(NULLDEVICE_ADMIN_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(0, 0)).
--define(NULLDEVICE_USER_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?UID0, ?SPACE_GID1)).
--define(IMPORTED_NULLDEVICE_USER_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?UID0, ?SPACE_MOUNT_GID)).
--define(NULLDEVICE_GENERATED_USER_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?GEN_UID(?LUMA_USER_ID), ?SPACE_MOUNT_GID)).
--define(NULLDEVICE_MOUNT_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
--define(NULLDEVICE_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
--define(NULLDEVICE_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
+-define(NULLDEVICE_ADMIN_CREDENTIALS, luma_test_utils:new_nulldevice_credentials(0, 0)).
+-define(NULLDEVICE_USER_CREDENTIALS, luma_test_utils:new_nulldevice_credentials(?UID0, ?SPACE_GID1)).
+-define(IMPORTED_NULLDEVICE_USER_CREDENTIALS, luma_test_utils:new_nulldevice_credentials(?UID0, ?SPACE_MOUNT_GID)).
+-define(NULLDEVICE_GENERATED_USER_CREDENTIALS, luma_test_utils:new_nulldevice_credentials(?GEN_UID(?LUMA_USER_ID), ?SPACE_MOUNT_GID)).
+-define(NULLDEVICE_MOUNT_CREDENTIALS, luma_test_utils:new_nulldevice_credentials(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
+-define(NULLDEVICE_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_nulldevice_credentials(?SPACE_UID1, ?SPACE_GID1)).
+-define(NULLDEVICE_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_nulldevice_credentials(?SPACE_UID1, ?SPACE_GID1)).
 
 -define(NULLDEVICE_STORAGE_ID_AUTO_FEED_LUMA, <<"nulldeviceStorageIdAutoFeedLuma">>).
 -define(NULLDEVICE_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"nulldeviceStorageIdExternalFeedLuma">>).
@@ -343,12 +346,13 @@ end).
 -define(IMPORTED_NULLDEVICE_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"nulldeviceImportedStorageIdExternalFeedLuma">>).
 -define(IMPORTED_NULLDEVICE_STORAGE_ID_LOCAL_FEED_LUMA, <<"nulldeviceImportedStorageIdLocalFeedLuma">>).
 
--define(NULLDEVICE_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(
-    ?NULL_DEVICE_HELPER_NAME, #{
-        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
-    },
-    AdminCtx
-))).
+-define(NULLDEVICE_HELPER(Credentials), #helper_spec{
+    name = ?NULL_DEVICE_HELPER_NAME,
+    configuration = #{
+           <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
+       },
+    credentials = Credentials
+}).
 
 -define(NULLDEVICE_STORAGE_DOC(Id, LumaMode),
     ?STORAGE_RECORD(Id, <<"NULLDEVICE">>, ?NULLDEVICE_HELPER(?NULLDEVICE_ADMIN_CREDENTIALS), LumaMode)
@@ -380,44 +384,46 @@ end).
 
 -define(WEBDAV_BASIC_CREDENTIALS_TYPE, <<"basic">>).
 -define(WEBDAV_BASIC_CREDENTIALS(Credentials),
-     luma_test_utils:new_webdav_user_ctx(?WEBDAV_BASIC_CREDENTIALS_TYPE, Credentials)).
+     luma_test_utils:new_webdav_credentials(?WEBDAV_BASIC_CREDENTIALS_TYPE, Credentials)).
 -define(WEBDAV_BASIC_ADMIN_CREDENTIALS, ?WEBDAV_BASIC_CREDENTIALS(<<"admin:password">>)).
 -define(WEBDAV_BASIC_USER_CREDENTIALS, ?WEBDAV_BASIC_CREDENTIALS(<<"user:password">>)).
 
 -define(WEBDAV_TOKEN_CREDENTIALS_TYPE, <<"token">>).
 -define(WEBDAV_TOKEN_CTX(Credentials),
-     luma_test_utils:new_webdav_user_ctx(?WEBDAV_TOKEN_CREDENTIALS_TYPE, Credentials)).
+     luma_test_utils:new_webdav_credentials(?WEBDAV_TOKEN_CREDENTIALS_TYPE, Credentials)).
 -define(WEBDAV_TOKEN_ADMIN_CREDENTIALS, ?WEBDAV_TOKEN_CTX(<<"ADMIN_TOKEN">>)).
 -define(WEBDAV_TOKEN_USER_CREDENTIALS, ?WEBDAV_TOKEN_CTX(<<"USER_TOKEN">>)).
 
 -define(WEBDAV_NONE_CREDENTIALS_TYPE, <<"none">>).
 -define(WEBDAV_NONE_CTX,
-     luma_test_utils:new_webdav_user_ctx(?WEBDAV_NONE_CREDENTIALS_TYPE, <<"">>)).
+     luma_test_utils:new_webdav_credentials(?WEBDAV_NONE_CREDENTIALS_TYPE, <<"">>)).
 
 -define(WEBDAV_OAUTH2_CREDENTIALS_TYPE, <<"oauth2">>).
 
 -define(WEBDAV_OAUTH2_ADMIN_CREDENTIALS,
-    (luma_test_utils:new_webdav_user_ctx(
+    (luma_test_utils:new_webdav_credentials(
         ?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
         <<"ADMIN_OAUTH2">>
     ))#{
         <<"onedataAccessToken">> => ?OD_ACCESS_TOKEN,
-        <<"adminId">> => ?LUMA_ADMIN_ID
+        <<"adminId">> => ?LUMA_ADMIN_ID,
+        <<"oauth2IdP">> => ?OAUTH2_IDP
     }
 ).
 -define(EXPECTED_WEBDAV_OAUTH2_ADMIN_CREDENTIALS,
-    (luma_test_utils:new_webdav_user_ctx(
+    (luma_test_utils:new_webdav_credentials(
         ?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
         <<"ADMIN_OAUTH2">>
     ))#{
         <<"accessToken">> => ?IDP_ADMIN_TOKEN,
         <<"accessTokenTTL">> => integer_to_binary(?TTL),
-        <<"adminId">> => ?LUMA_ADMIN_ID
+        <<"adminId">> => ?LUMA_ADMIN_ID,
+        <<"oauth2IdP">> => ?OAUTH2_IDP
     }
 ).
 
 -define(WEBDAV_OAUTH2_USER_CREDENTIALS,
-    luma_test_utils:new_webdav_user_ctx(?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
+    luma_test_utils:new_webdav_credentials(?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
         <<"USER_OAUTH2">>)
     ).
 
@@ -442,15 +448,14 @@ end).
 -define(WEBDAV_OAUTH2_STORAGE_ID_LOCAL_FEED_LUMA, <<"webdavOauth2StorageIdLocalFeedLuma">>).
 
 
--define(WEBDAV_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(
-    ?WEBDAV_HELPER_NAME,
-    #{
+-define(WEBDAV_HELPER(Credentials), #helper_spec{
+    name = ?WEBDAV_HELPER_NAME,
+    configuration = #{
         <<"endpoint">> => <<"endpoint">>,
-        <<"oauth2IdP">> => ?OAUTH2_IDP,
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
-    AdminCtx
-))).
+    credentials = Credentials
+}).
 -define(WEBDAV_BASIC_HELPER,
     ?WEBDAV_HELPER(?WEBDAV_BASIC_ADMIN_CREDENTIALS)).
 -define(WEBDAV_TOKEN_HELPER,
@@ -497,11 +502,12 @@ end).
 %%% storage test configs
 %%%===================================================================
 
--define(STORAGE_RECORD(Id, Name, Helper, LumaMode), #document{
+-define(STORAGE_RECORD(Id, Name, HelperSpec, LumaMode), #document{
     key = Id,
     value = #storage_config{
-        helper = Helper,
-        luma_config = ?LUMA_CONFIG(LumaMode)
+        helper_spec = HelperSpec,
+        luma_config = ?LUMA_CONFIG(LumaMode),
+        luma_generation = 0
     }
 }).
 

@@ -742,7 +742,7 @@ clean_up_after_sub_run(Env, RowName) ->
         case maps:get(feed, Row) of
             % never cleared for the local feed - its mappings live in the LUMA DB
             local -> ok;
-            _ -> ok = rpc:call(Node, luma, clear_db, [StorageId])
+            _ -> ok = rpc:call(Node, luma_crud_api, clear_db, [StorageId])
         end
     end, NodesWithStorages).
 
@@ -908,7 +908,7 @@ set_up_matrix_row(?POSIX_EXTERNAL_NO_USER_MAPPINGS = RowName, LumaFeedUrl) ->
 -spec populate_external_feed(storage:id(), json_utils:json_map()) -> ok.
 populate_external_feed(StorageId, FeedData) ->
     ok = luma_test_server:set_storage_feed_data(krakow, StorageId, FeedData),
-    ok = opw_test_rpc:call(krakow, luma, clear_db, [StorageId]).
+    ok = opw_test_rpc:call(krakow, luma_crud_api, clear_db, [StorageId]).
 
 
 %% @private

@@ -201,31 +201,33 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 %% Adds storage to rtransfer.
 %% @end
 %%--------------------------------------------------------------------
--spec add_storage(storage:id()) -> ok.
+-spec add_storage(storage:id()) -> ok | errors:error().
 add_storage(StorageId) ->
-    Helper = storage:get_helper(StorageId),
-    AdminCtx = helper:get_admin_ctx(Helper),
-    {ok, HelperArgs} = helper:get_args_with_user_ctx(Helper, AdminCtx),
-    HelperName = helper:get_name(Helper),
+    HelperSpec = storage:get_helper_spec(StorageId),
+    CredentialsParams = helper_spec:get_credentials(HelperSpec),
+    {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, CredentialsParams),
+    HelperName = helper_spec:get_name(HelperSpec),
     AllNodes = consistent_hashing:get_all_nodes(),
-    {GatheredResults, BadNodes} = utils:rpc_multicall(AllNodes,
-                                  rtransfer_link, add_storage,
-                                  [StorageId, HelperName, maps:to_list(HelperArgs)]),
 
-    BadNodes =/= [] andalso
-        ?error(?autoformat_with_msg("Failed to call some nodes to add storage to rtransfer",
-            [StorageId, BadNodes])),
-
-    case lists:filter(fun(R) -> R =/= ok end, GatheredResults) of
-        [] ->
-            ok;
-        _ErrorResults ->
-            ?error(?autoformat_with_msg("There were errors while adding storage to rtransfer",
-                [StorageId, AllNodes, GatheredResults]
+    case utils:rpc_multicall(
+        AllNodes, rtransfer_link, add_storage, [StorageId, HelperName, maps:to_list(HelperParams)]
+    ) of
+        {GatheredResults, []} ->
+            case lists:filter(fun(R) -> R =/= ok end, GatheredResults) of
+                [] ->
+                    ok;
+                _ErrorResults ->
+                    ?report_internal_server_error(?autoformat_with_msg(
+                        "There were errors while adding storage to rtransfer",
+                        [StorageId, AllNodes, GatheredResults]
+                    ))
+            end;
+        {_, BadNodes} ->
+            ?report_internal_server_error(?autoformat_with_msg(
+                "Failed to call some nodes to add storage to rtransfer",
+                [StorageId, BadNodes]
             ))
-    end,
-
-    ok.
+    end.
 
 
 %%--------------------------------------------------------------------

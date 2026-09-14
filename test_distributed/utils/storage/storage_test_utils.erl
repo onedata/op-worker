@@ -146,23 +146,23 @@ get_supporting_storage_id(Worker, SpaceId) ->
 
 
 %% @private
--spec get_helper(node(), storage:id()) -> helpers:helper().
+-spec get_helper(node(), storage:id()) -> helper_spec:t().
 get_helper(Worker, StorageId) ->
-    rpc:call(Worker, storage, get_helper, [StorageId]).
+    rpc:call(Worker, storage, get_helper_spec, [StorageId]).
 
 
 -spec storage_mount_point(node(), storage:id()) -> binary().
 storage_mount_point(Worker, StorageId) ->
     Helper = get_helper(Worker, StorageId),
-    HelperArgs = helper:get_args(Helper),
-    maps:get(<<"mountPoint">>, HelperArgs).
+    ConfigurationParams = helper_spec:get_configuration(Helper),
+    maps:get(<<"mountPoint">>, ConfigurationParams).
 
 
 %% @private
 -spec is_posix_compatible_storage(node(), storage:id()) -> boolean().
 is_posix_compatible_storage(Worker, StorageId) ->
     Helper = get_helper(Worker, StorageId),
-    helper:is_posix_compatible(Helper).
+    helper_spec:is_posix_compatible(Helper).
 
 
 -spec ensure_file_created_on_storage(node(), file_id:file_guid()) -> ok.
