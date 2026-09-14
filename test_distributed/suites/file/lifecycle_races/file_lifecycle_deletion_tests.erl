@@ -89,7 +89,7 @@
 
 %% NOTE: runs on an object storage, which cannot rename a storage file and so
 %% takes the deletion marker method (fslogic_delete:get_open_file_handling_method/1
-%% -> helper:is_rename_supported/1) of its own accord - no mock involved.
+%% -> helper_spec:is_rename_supported/1) of its own accord - no mock involved.
 delete_during_open_with_deletion_marker_test(Config) ->
     Node = file_lifecycle_test_utils:get_node(),
 

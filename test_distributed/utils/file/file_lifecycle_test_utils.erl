@@ -80,8 +80,9 @@ create_posix_storage() ->
 %% @doc
 %% Counterpart of the above for the cases concerning an object storage, which
 %% the Oneprovider treats differently in that it cannot rename a storage file
-%% (see helper:is_rename_supported/1). A bucket of its own per storage keeps the
-%% guarantee the posix storages give - that a case starts with an empty one.
+%% (see helper_spec:is_rename_supported/1). A bucket of its own per storage
+%% keeps the guarantee the posix storages give - that a case starts with an
+%% empty one.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_s3_storage() -> storage:id().
