@@ -397,12 +397,24 @@ getting_view_of_space_unsupported_by_provider_should_fail(_Config) ->
         <<"spatial">> => false
     }}, get_view_via_rest(?P1, SpaceId, ViewName), ?ATTEMPTS),
 
-    % a provider not supporting the space is not authorized to fetch its record
-    % from the zone, so it cannot tell whether the user holds the space privilege
-    % required to view views - and refuses before ever checking the support
-    ExpRestError = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
+    ForbiddenRestError = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
     lists:foreach(fun(ProviderSelector) ->
-        ?assertMatch(ExpRestError, get_view_via_rest(ProviderSelector, SpaceId, ViewName))
+        % a provider not supporting the space is not authorized to fetch its record
+        % from the zone, so it cannot tell whether the user holds the space privilege
+        % required to view views - and refuses before ever checking the support ...
+        ok = opw_test_rpc:call(ProviderSelector, gs_client_worker, invalidate_cache, [od_space, SpaceId]),
+        ?assertMatch(ForbiddenRestError, get_view_via_rest(ProviderSelector, SpaceId, ViewName)),
+
+        % ... unless the record has been fetched on behalf of a space member (e.g. when
+        % listing their spaces) - it is cached then and the privilege check is made against
+        % the cached copy, so the request is refused only for the lack of support
+        ?assertMatch({ok, _}, opw_test_rpc:call(ProviderSelector, space_logic, get, [
+            oct_background:get_user_session_id(?USER_SELECTOR, ProviderSelector), SpaceId
+        ])),
+        NotSupportedRestError = rest_test_utils:get_rest_error(?ERR_SPACE_NOT_SUPPORTED_BY(
+            SpaceId, oct_background:get_provider_id(ProviderSelector)
+        )),
+        ?assertMatch(NotSupportedRestError, get_view_via_rest(ProviderSelector, SpaceId, ViewName))
     end, ?ALL_PROVIDERS -- [?P1]).
 
 

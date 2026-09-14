@@ -1377,7 +1377,6 @@ read_full_content(Node, Handle, Offset, Size, Acc) ->
 
 
 %% @private
-%% @private
 %% @doc Freezes the save of the file_meta doc of the given file for 5 seconds,
 %% notifying the test master process the moment the save is entered.
 -spec mock_file_meta_save(oct_background:entity_selector(), file_meta:name()) -> ok.

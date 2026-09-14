@@ -290,9 +290,10 @@ race_on_remote_deletion_of_parent_and_child(Config) ->
     {ok, FileDoc} = rpc:call(KrkNode, file_meta, get_including_deleted, [FileUuid]),
     ok = rpc:call(KrkNode, dbsync_events, change_replicated, [SpaceId, DirDoc]),
 
-    % the directory must not be deleted from storage as long as it still holds the child;
-    % the provider is given time to (incorrectly) react to the parent's deletion first,
-    % as a retried assertion would pass on the very first attempt and prove nothing
+    % the directory must not be deleted from storage as long as it still holds the child
+    % (whose deletion is withheld until after the assertion); the provider is given time
+    % to (incorrectly) react to the parent's deletion first, as right after the deletion
+    % the directory would still be there even if the provider did
     timer:sleep(timer:seconds(5)),
     ?assertStorageDirChildren(KrkNode, SpaceId, ?DIR_NAME, [?FILE_NAME], 1),
 

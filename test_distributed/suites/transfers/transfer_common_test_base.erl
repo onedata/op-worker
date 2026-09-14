@@ -520,7 +520,6 @@ hundred_files_by_view_with_batch_10_test(TestSuiteCtx) ->
 
 
 %% @private
-%% @private
 -spec hundred_files_by_view_test_base(transfer_test_utils:suite_ctx(), CaseName :: atom()) -> ok.
 hundred_files_by_view_test_base(TestSuiteCtx, CaseName) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(

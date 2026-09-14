@@ -26,12 +26,6 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("kernel/include/file.hrl").
 
-% Number of one second attempts the assertions retry for by default. Applying a logical
-% operation to the storage is asynchronous (and, in case of a remote replica, requires
-% a round trip to the other provider), so the expected state is never there immediately.
-% Assertions that state that something must NOT have happened yet are the exception -
-% they are to be called with 1 attempt, as retrying them would make them pass on the
-% first attempt and prove nothing.
 -define(DEFAULT_STORAGE_ASSERT_ATTEMPTS, 60).
 
 % Full #file_info.mode of a storage file/directory with the given permissions
