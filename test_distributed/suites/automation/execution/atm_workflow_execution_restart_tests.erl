@@ -13,7 +13,7 @@
 -module(atm_workflow_execution_restart_tests).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_execution_test.hrl").
+-include("atm/atm_workflow_execution_test.hrl").
 -include("modules/automation/atm_execution.hrl").
 
 -export([
@@ -75,8 +75,8 @@
 
 
 pause_workflow_execution(AtmWorkflowExecutionId) ->
-    SessionId = oct_background:get_user_session_id(?USER_SELECTOR, ?PROVIDER_SELECTOR),
-    ?rpc(?PROVIDER_SELECTOR, mi_atm:init_pause_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+    SessionId = oct_background:get_user_session_id(?ATM_USER_SELECTOR, ?ATM_PROVIDER_SELECTOR),
+    ?rpc(?ATM_PROVIDER_SELECTOR, mi_atm:init_pause_workflow_execution(SessionId, AtmWorkflowExecutionId)).
 
 
 restart_op_worker_after_graceful_stop(Config) ->
@@ -231,7 +231,7 @@ restart_op_worker_after_graceful_stop(Config) ->
 -spec mock_atm_supervision_worker() -> ok.
 mock_atm_supervision_worker() ->
     TestProcPid = self(),
-    Workers = oct_background:get_provider_nodes(?PROVIDER_SELECTOR),
+    Workers = oct_background:get_provider_nodes(?ATM_PROVIDER_SELECTOR),
 
     Module = atm_supervision_worker,
     test_utils:mock_new(Workers, Module, [passthrough, no_history]),
@@ -272,13 +272,13 @@ reply({Pid, MRef}, Reply) ->
 %% @private
 -spec set_env(atom(), term()) -> ok.
 set_env(EnvVar, EnvValue) ->
-    ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(EnvVar, EnvValue)).
+    ?rpc(?ATM_PROVIDER_SELECTOR, op_worker:set_env(EnvVar, EnvValue)).
 
 
 %% @private
 -spec init_op_worker_stop() -> erpc:request_id().
 init_op_worker_stop() ->
-    Node = oct_background:get_random_provider_node(?PROVIDER_SELECTOR),
+    Node = oct_background:get_random_provider_node(?ATM_PROVIDER_SELECTOR),
     erpc:send_request(Node, application, stop, [?APP_NAME]).
 
 
@@ -290,7 +290,7 @@ finalize_op_worker_stop(OpWorkerStopRequestId) ->
 
 %% @private
 restart_op_worker(Config) ->
-    Node = oct_background:get_random_provider_node(?PROVIDER_SELECTOR),
+    Node = oct_background:get_random_provider_node(?ATM_PROVIDER_SELECTOR),
     failure_test_utils:kill_nodes(Config, Node),
     failure_test_utils:restart_nodes(Config, Node),
     ok.
@@ -314,10 +314,10 @@ get_workflow_schema_revision(AtmWorkflowSchemaId) ->
 -spec schedule_workflow_execution(od_atm_workflow_schema:id()) ->
     atm_workflow_execution:id().
 schedule_workflow_execution(AtmWorkflowSchemaId) ->
-    SessionId = oct_background:get_user_session_id(?USER_SELECTOR, ?PROVIDER_SELECTOR),
-    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
+    SessionId = oct_background:get_user_session_id(?ATM_USER_SELECTOR, ?ATM_PROVIDER_SELECTOR),
+    SpaceId = oct_background:get_space_id(?ATM_SPACE_SELECTOR),
 
-    {AtmWorkflowExecutionId, _} = ?rpc(?PROVIDER_SELECTOR, mi_atm:schedule_workflow_execution(
+    {AtmWorkflowExecutionId, _} = ?rpc(?ATM_PROVIDER_SELECTOR, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, 1, #{}, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined
     )),
     AtmWorkflowExecutionId.
@@ -327,10 +327,10 @@ schedule_workflow_execution(AtmWorkflowSchemaId) ->
 -spec expect_workflow_execution_active(atm_workflow_execution:id(), atm_workflow_schema_revision:record()) ->
     atm_workflow_execution_exp_state_builder:ctx().
 expect_workflow_execution_active(AtmWorkflowExecutionId, AtmWorkflowSchemaRevision) ->
-    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
+    SpaceId = oct_background:get_space_id(?ATM_SPACE_SELECTOR),
 
     ExpInitialState = atm_workflow_execution_exp_state_builder:init(
-        ?PROVIDER_SELECTOR, SpaceId, normal, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
+        ?ATM_PROVIDER_SELECTOR, SpaceId, normal, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
     ),
     atm_workflow_execution_exp_state_builder:expect(ExpInitialState, [
         {lane_run, {1, 1}, started_preparing},
@@ -364,7 +364,7 @@ expect_workflow_execution_paused(ExpState) ->
 
 
 %% @private
--spec assert_all_match_with_backend([atm_workflow_execution_exp_state_builder:exp_state()]) ->
+-spec assert_all_match_with_backend([atm_workflow_execution_exp_state_builder:ctx()]) ->
     ok.
 assert_all_match_with_backend(ExpAtmWorkflowExecutionStates) ->
     lists:foreach(fun(ExpAtmWorkflowExecutionState) ->

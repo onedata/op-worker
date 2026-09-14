@@ -12,7 +12,7 @@
 -module(datasets_structure_test_SUITE).
 -author("Jakub Kudzia").
 
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -911,7 +911,7 @@ iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, ListingType, Starti
 list_children_with_prefix_names_using_start_index(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    #object{dataset = #dataset_object{id = DatasetId}} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, #dir_spec{
+    #object{dataset = #dataset_object{id = DatasetId}} = file_tree_test_utils:create_and_sync_file_tree(user1, space1, #dir_spec{
         dataset = #dataset_spec{},
         children = [
             #file_spec{name = <<"a">>, dataset = #dataset_spec{}},
@@ -943,7 +943,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 init_per_testcase(Case, Config)
     when Case =:= move_dataset_with_1_children

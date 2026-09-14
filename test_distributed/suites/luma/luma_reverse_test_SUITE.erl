@@ -11,7 +11,7 @@
 -module(luma_reverse_test_SUITE).
 -author("Jakub Kudzia").
 
--include("luma_test_utils.hrl").
+-include("luma/luma_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -183,8 +183,8 @@ map_acl_group_to_onedata_group_failure_external_feed_luma(Config) ->
 map_uid_to_onedata_user_on_storage_with_auto_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
-    ?assertEqual({ok, ?SPACE_OWNER_ID(?SPACE_ID)},
-        luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?SPACE_ID, Storage)).
+    ?assertEqual({ok, ?SPACE_OWNER_ID(?LUMA_SPACE_ID)},
+        luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?LUMA_SPACE_ID, Storage)).
 
 map_acl_user_to_onedata_user_should_fail_on_storage_with_auto_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -202,7 +202,7 @@ map_uid_to_onedata_user_should_fail_on_non_imported_posix_compatible_storages_ba
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertMatch(?ERR_REQUIRES_IMPORTED_STORAGE(_),
-        luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?SPACE_ID, Storage)).
+        luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?LUMA_SPACE_ID, Storage)).
 
 map_acl_user_to_onedata_user_should_fail_on_non_imported_posix_compatible_storages_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -220,7 +220,7 @@ map_uid_to_onedata_user_should_fail_on_posix_incompatible_storages_base(Config, 
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertMatch(?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(_, _),
-        luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?SPACE_ID, Storage)).
+        luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?LUMA_SPACE_ID, Storage)).
 
 map_acl_user_to_onedata_user_should_fail_on_posix_incompatible_storages_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -237,39 +237,39 @@ map_acl_group_to_onedata_group_should_fail_on_posix_incompatible_storages_base(C
 map_uid_to_onedata_user_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
-    ?assertEqual({ok, ?USER_ID},
-        luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?SPACE_ID, Storage)),
+    ?assertEqual({ok, ?LUMA_USER_ID},
+        luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?LUMA_SPACE_ID, Storage)),
     % reverse mapping should be cached automatically,
     UidBin = integer_to_binary(?UID0),
     ?assertMatch({ok, #{<<"uid">> := UidBin}},
-        luma_test_utils:map_to_storage_creds(Worker, ?USER_ID, ?SPACE_ID, Storage)),
+        luma_test_utils:map_to_storage_creds(Worker, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage)),
     ?assertMatch({ok, {?UID0, ?SPACE_MOUNT_GID}},
-        luma_test_utils:map_to_display_creds(Worker, ?USER_ID, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_display_creds(Worker, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage)).
 
 map_uid_to_onedata_user_using_idp_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({ok, ?USER_ID2},
-        luma_test_utils:map_uid_to_onedata_user(Worker, ?UID1, ?SPACE_ID, Storage)),
+        luma_test_utils:map_uid_to_onedata_user(Worker, ?UID1, ?LUMA_SPACE_ID, Storage)),
     % reverse mapping should be cached automatically,
     UidBin = integer_to_binary(?UID1),
     ?assertMatch({ok, #{<<"uid">> := UidBin}},
-        luma_test_utils:map_to_storage_creds(Worker, ?USER_ID2, ?SPACE_ID, Storage)),
+        luma_test_utils:map_to_storage_creds(Worker, ?USER_ID2, ?LUMA_SPACE_ID, Storage)),
     ?assertMatch({ok, {?UID1, ?SPACE_MOUNT_GID}},
-        luma_test_utils:map_to_display_creds(Worker, ?USER_ID2, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_display_creds(Worker, ?USER_ID2, ?LUMA_SPACE_ID, Storage)).
 
 map_uid_to_onedata_user_failure_external_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(Uid) ->
         ?assertEqual({error, luma_external_feed_error},
-            luma_test_utils:map_uid_to_onedata_user(Worker, Uid, ?SPACE_ID, Storage))
+            luma_test_utils:map_uid_to_onedata_user(Worker, Uid, ?LUMA_SPACE_ID, Storage))
     end, ?ERR_UIDS).
 
 map_acl_user_to_onedata_user_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
-    ?assertEqual({ok, ?USER_ID},
+    ?assertEqual({ok, ?LUMA_USER_ID},
         luma_test_utils:map_acl_user_to_onedata_user(Worker, ?ACL_USER0, Storage)).
 
 map_acl_user_to_onedata_user_using_idp_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->

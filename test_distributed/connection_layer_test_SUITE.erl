@@ -14,7 +14,6 @@
 -module(connection_layer_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
@@ -86,6 +85,7 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
     timeout :: timeout()
 }).
 
+-define(TIMEOUT, timer:minutes(1)).
 -define(ATTEMPTS, 90).
 
 %%%===================================================================

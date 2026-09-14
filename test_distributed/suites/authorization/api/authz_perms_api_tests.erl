@@ -12,11 +12,12 @@
 -module(authz_perms_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+-include("authz/authz_api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
--include("storage_files_test_SUITE.hrl").
+-include("file/file_tree_test.hrl").
+-include("storage/storage_test.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
     test_set_perms/1,
@@ -47,7 +48,7 @@ test_set_perms(SpaceId) ->
         children = [
             #object{guid = FileGuid}
         ]
-    } = onenv_file_test_utils:create_file_tree(
+    } = file_tree_test_utils:create_file_tree(
         FileOwnerUserId, SpaceDirGuid, krakow, #dir_spec{
             name = <<"root_dir">>,
             mode = ?FILE_MODE(8#700),
@@ -145,7 +146,7 @@ test_check_read_perms(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?read_object]
         }],
@@ -169,7 +170,7 @@ test_check_write_perms(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?write_object]
         }],
@@ -193,7 +194,7 @@ test_check_rdwr_perms(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?read_object, ?write_object]
         }],

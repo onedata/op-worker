@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2021-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -17,7 +17,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -112,12 +112,12 @@ build_create_store_with_initial_content_fun(
     fun(ContentInitializer) ->
         case rand:uniform(3) of
             1 ->
-                StoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig, false),
+                StoreSchema = build_store_schema(AtmStoreConfig, false),
                 atm_store_api:create(
                     AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, ContentInitializer, StoreSchema
                 );
             2 ->
-                StoreSchema = atm_store_test_utils:build_store_schema(
+                StoreSchema = build_store_schema(
                     AtmStoreConfig, false, ContentInitializer
                 ),
                 atm_store_api:create(
@@ -126,7 +126,7 @@ build_create_store_with_initial_content_fun(
             3 ->
                 % Default content initializer (from schema) should be overridden
                 % by one specified in args when creating store
-                StoreSchema = atm_store_test_utils:build_store_schema(
+                StoreSchema = build_store_schema(
                     AtmStoreConfig, false, DefaultContentInitializer
                 ),
                 atm_store_api:create(

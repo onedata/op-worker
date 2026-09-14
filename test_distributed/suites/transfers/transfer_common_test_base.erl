@@ -13,8 +13,8 @@
 -module(transfer_common_test_base).
 -author("Bartosz Walkowicz").
 
--include("transfer_test.hrl").
--include("onenv_test_utils.hrl").
+-include("transfers/transfer_test.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -164,7 +164,7 @@ tree_of_empty_dirs_test(TestSuiteCtx) ->
     % (the original shape was 10 dirs per level - 1110 overall) floods dbsync
     % for minutes, starving the cross-provider syncs the tests await
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([5, 5, 5, 0], <<>>)
+        children = file_tree_test_utils:gen_nested_tree_spec([5, 5, 5, 0], <<>>)
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
@@ -245,7 +245,7 @@ big_file_test(TestSuiteCtx = #transfer_test_suite_ctx{
 hundred_files_in_one_transfer_test(TestSuiteCtx) ->
     % 10 directories with 10 files each
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([10, 10], ?RAND_CONTENT())
+        children = file_tree_test_utils:gen_nested_tree_spec([10, 10], ?RAND_CONTENT())
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
@@ -260,7 +260,7 @@ hundred_files_in_one_transfer_test(TestSuiteCtx) ->
 hundred_files_in_separate_transfers_test(TestSuiteCtx) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-            children = transfer_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -284,9 +284,9 @@ transfer_despite_protection_flags_test(TestSuiteCtx) ->
                 dataset = #dataset_spec{
                     protection_flags = [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
                 },
-                children = transfer_test_utils:gen_nested_tree_spec([10], ?RAND_CONTENT())
+                children = file_tree_test_utils:gen_nested_tree_spec([10], ?RAND_CONTENT())
             }
-            | transfer_test_utils:gen_nested_tree_spec([10], ?RAND_CONTENT())
+            | file_tree_test_utils:gen_nested_tree_spec([10], ?RAND_CONTENT())
         ]
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -303,13 +303,13 @@ regular_file_by_view_test(TestSuiteCtx) ->
     FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
         TestSuiteCtx, ?FUNCTION_NAME
     ),
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
     XattrValue = 1,
     set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
 
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(
-        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        TestSuiteCtx, ViewName, view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     transfer_test_utils:await_view_query_result(
@@ -326,7 +326,7 @@ regular_file_by_view_test(TestSuiteCtx) ->
 files_matched_by_view_with_reduce_test(TestSuiteCtx) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-            children = transfer_test_utils:gen_nested_tree_spec([6], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec([6], ?RAND_CONTENT())
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -334,8 +334,8 @@ files_matched_by_view_with_reduce_test(TestSuiteCtx) ->
 
     % the map function emits the files having Xattr1 (keyed by its value) and
     % the reduce function filters the emissions down to the ones with Xattr2 = 1
-    XattrName1 = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
-    XattrName2 = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName1 = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName2 = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
 
     % File1: xattr1 = 1, xattr2 = 1 - transferred
     set_xattr(TestSuiteCtx, File1#object.guid, XattrName1, 1),
@@ -352,11 +352,11 @@ files_matched_by_view_with_reduce_test(TestSuiteCtx) ->
     set_xattr(TestSuiteCtx, File6#object.guid, XattrName1, 1),
     set_xattr(TestSuiteCtx, File6#object.guid, XattrName2, 1),
 
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(
         TestSuiteCtx, ViewName,
-        transfer_test_utils:gen_view_map_function(XattrName1, XattrName2),
-        transfer_test_utils:gen_view_reduce_function(1),
+        view_test_utils:gen_map_function(XattrName1, XattrName2),
+        view_test_utils:gen_reduce_function(1),
         [{group, 1}, {key, 1}]
     ),
     {ok, FileObjectId1} = file_id:guid_to_objectid(File1#object.guid),
@@ -374,7 +374,7 @@ files_matched_by_view_with_reduce_test(TestSuiteCtx) ->
 
 transfer_by_not_existing_view_test(TestSuiteCtx) ->
     FileObject = setup_single_file_for_view_test(TestSuiteCtx, ?FUNCTION_NAME),
-    NotExistingViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    NotExistingViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
 
     % the view existence is validated only by the REST/GS middleware layer
     % (covered by transfer_create_api tests) - a transfer of an unknown view
@@ -393,7 +393,7 @@ transfer_by_view_emitting_invalid_file_id_test(TestSuiteCtx = #transfer_test_sui
     FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
         TestSuiteCtx, ?FUNCTION_NAME
     ),
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
     XattrValue = 1,
     set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
 
@@ -408,7 +408,7 @@ transfer_by_view_emitting_invalid_file_id_test(TestSuiteCtx = #transfer_test_sui
             return null;
         }"
     >>,
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(TestSuiteCtx, ViewName, MapFunction, undefined, []),
     transfer_test_utils:await_view_query_result(
         TestSuiteCtx, ViewName, [{key, XattrValue}], [InvalidFileId]
@@ -447,7 +447,7 @@ transfer_by_view_emitting_not_existing_file_id_test(TestSuiteCtx = #transfer_tes
     FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
         TestSuiteCtx, ?FUNCTION_NAME
     ),
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
     XattrValue = 1,
     set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
 
@@ -463,7 +463,7 @@ transfer_by_view_emitting_not_existing_file_id_test(TestSuiteCtx = #transfer_tes
             return null;
         }"
     >>,
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(TestSuiteCtx, ViewName, MapFunction, undefined, []),
     transfer_test_utils:await_view_query_result(
         TestSuiteCtx, ViewName, [{key, XattrValue}], [NotExistingFileObjectId]
@@ -478,10 +478,10 @@ transfer_by_view_emitting_not_existing_file_id_test(TestSuiteCtx = #transfer_tes
 
 
 transfer_by_empty_view_test(TestSuiteCtx) ->
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(
-        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        TestSuiteCtx, ViewName, view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     transfer_test_utils:await_view_query_result(TestSuiteCtx, ViewName, [], []),
 
@@ -493,12 +493,12 @@ transfer_by_view_with_not_matching_key_test(TestSuiteCtx) ->
     FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
         TestSuiteCtx, ?FUNCTION_NAME
     ),
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
     set_xattr(TestSuiteCtx, FileGuid, XattrName, 1),
 
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(
-        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        TestSuiteCtx, ViewName, view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     transfer_test_utils:await_view_query_result(TestSuiteCtx, ViewName, [{key, 1}], [FileObjectId]),
@@ -520,15 +520,16 @@ hundred_files_by_view_with_batch_10_test(TestSuiteCtx) ->
 
 
 %% @private
+-spec hundred_files_by_view_test_base(transfer_test_utils:suite_ctx(), CaseName :: atom()) -> ok.
 hundred_files_by_view_test_base(TestSuiteCtx, CaseName) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, CaseName, #dir_spec{
-            children = transfer_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
-    XattrName = transfer_test_utils:rand_xattr_name(CaseName),
+    XattrName = file_test_utils:rand_xattr_name(CaseName),
     XattrValue = 1,
     FileObjectIds = lists_utils:pmap(fun(#object{guid = FileGuid}) ->
         set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
@@ -536,9 +537,9 @@ hundred_files_by_view_test_base(TestSuiteCtx, CaseName) ->
         FileObjectId
     end, FileObjects),
 
-    ViewName = transfer_test_utils:rand_view_name(CaseName),
+    ViewName = view_test_utils:rand_view_name(CaseName),
     transfer_test_utils:create_view(
-        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        TestSuiteCtx, ViewName, view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     transfer_test_utils:await_view_query_result(
         TestSuiteCtx, ViewName, [{key, XattrValue}], FileObjectIds
@@ -560,7 +561,7 @@ cancel_ongoing_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
     FilesCount = 10,
     FileContent = ?RAND_CONTENT(),
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([FilesCount], FileContent)
+        children = file_tree_test_utils:gen_nested_tree_spec([FilesCount], FileContent)
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
@@ -622,7 +623,7 @@ rerun_failed_dir_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
     % 2 directories with 3 files each
     FilesCount = 6,
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-        children = transfer_test_utils:gen_nested_tree_spec([2, 3], ?RAND_CONTENT())
+        children = file_tree_test_utils:gen_nested_tree_spec([2, 3], ?RAND_CONTENT())
     }),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
@@ -644,13 +645,13 @@ rerun_failed_view_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
     FileObject = #object{guid = FileGuid} = setup_single_file_for_view_test(
         TestSuiteCtx, ?FUNCTION_NAME
     ),
-    XattrName = transfer_test_utils:rand_xattr_name(?FUNCTION_NAME),
+    XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
     XattrValue = 1,
     set_xattr(TestSuiteCtx, FileGuid, XattrName, XattrValue),
 
-    ViewName = transfer_test_utils:rand_view_name(?FUNCTION_NAME),
+    ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     transfer_test_utils:create_view(
-        TestSuiteCtx, ViewName, transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        TestSuiteCtx, ViewName, view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     transfer_test_utils:await_view_query_result(
@@ -676,7 +677,7 @@ many_simultaneous_failed_transfers_test(TestSuiteCtx = #transfer_test_suite_ctx{
 }) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-            children = transfer_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -728,7 +729,7 @@ file_removed_during_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
     CreationSessionId = oct_background:get_user_session_id(UserSelector, CreationProviderSelector),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(
         CreationNode, CreationSessionId, ?FILE_REF(FileGuid)
-    ), ?ATTEMPTS),
+    ), ?TRANSFER_ATTEMPTS),
 
     % release the job - the removal must not derail the transfer: a file job
     % finding its file already gone is counted as processed but neither
@@ -773,6 +774,11 @@ file_removed_during_transfer_test(TestSuiteCtx = #transfer_test_suite_ctx{
 %% Schedules a transfer of a single file that fails whole (see the file
 %% processing failure mock in init_per_testcase), then reruns it as the
 %% given user and awaits the successful completion of the new transfer.
+-spec rerun_failed_file_transfer_test_base(
+    transfer_test_utils:suite_ctx(), CaseName :: atom(),
+    RerunningUserSelector :: oct_background:entity_selector()
+) ->
+    ok.
 rerun_failed_file_transfer_test_base(TestSuiteCtx = #transfer_test_suite_ctx{
     transfer_type = TransferType
 }, CaseName, RerunningUserSelector) ->
@@ -797,6 +803,11 @@ rerun_failed_file_transfer_test_base(TestSuiteCtx = #transfer_test_suite_ctx{
 %% @private
 %% Expected transfer state after every file job of the transfer has failed
 %% (see transfer_test_utils:mock_file_processing_failure/1).
+%% @private
+-spec build_failed_transfer_overrides(
+    transfer_test_utils:transfer_type(), FilesCount :: non_neg_integer()
+) ->
+    transfer_test_utils:expected_transfer().
 build_failed_transfer_overrides(replication, FilesCount) -> #{
     replication_status => ?FAILED_STATUS,
     failed_files => FilesCount,
@@ -825,6 +836,11 @@ build_failed_transfer_overrides(migration, FilesCount) -> #{
 %% @private
 %% Turns off the mocked file job failures, reruns the given failed transfer
 %% and awaits the successful completion of the new transfer created this way.
+-spec rerun_transfer_and_await_completed(
+    transfer_test_utils:suite_ctx(), RerunningUserSelector :: oct_background:entity_selector(),
+    transfer:id(), transfer_test_utils:file_tree_objects()
+) ->
+    ok.
 rerun_transfer_and_await_completed(TestSuiteCtx = #transfer_test_suite_ctx{
     other_provider_selector = OtherProviderSelector
 }, RerunningUserSelector, TransferId, TransferRootObjects) ->
@@ -847,6 +863,8 @@ rerun_transfer_and_await_completed(TestSuiteCtx = #transfer_test_suite_ctx{
 %% @private
 %% Creates the single-file tree most view test cases operate on, ensures
 %% the initial replicas and returns the file object.
+-spec setup_single_file_for_view_test(transfer_test_utils:suite_ctx(), CaseName :: atom()) ->
+    file_tree_test_utils:object().
 setup_single_file_for_view_test(TestSuiteCtx, CaseName) ->
     RootDir = #object{children = [FileObject]} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, CaseName,
@@ -859,6 +877,11 @@ setup_single_file_for_view_test(TestSuiteCtx, CaseName) ->
 %% @private
 %% Sets the xattr on the other provider - the one the views are evaluated
 %% on - so that view emissions do not wait for metadata dbsync.
+-spec set_xattr(
+    transfer_test_utils:suite_ctx(), file_id:file_guid(),
+    XattrName :: binary(), XattrValue :: term()
+) ->
+    ok.
 set_xattr(#transfer_test_suite_ctx{other_provider_selector = OtherProviderSelector}, FileGuid, XattrName, XattrValue) ->
     OtherNode = oct_background:get_random_provider_node(OtherProviderSelector),
     file_test_utils:set_xattr(OtherNode, FileGuid, XattrName, XattrValue).
@@ -866,6 +889,7 @@ set_xattr(#transfer_test_suite_ctx{other_provider_selector = OtherProviderSelect
 
 %% @private
 %% All nodes of both providers of the suite.
+-spec get_all_provider_nodes(transfer_test_utils:suite_ctx()) -> [node()].
 get_all_provider_nodes(#transfer_test_suite_ctx{
     creation_provider_selector = CreationProviderSelector,
     other_provider_selector = OtherProviderSelector
@@ -878,6 +902,7 @@ get_all_provider_nodes(#transfer_test_suite_ctx{
 %% Special init/end_per_testcase clauses chain to the default ones with
 %% ?DEFAULT_CASE(Case), which suffixes the case name with "_default" -
 %% strip it to recover the name the case's file trees are prefixed with.
+-spec strip_default_case_suffix(atom()) -> atom().
 strip_default_case_suffix(Case) ->
     CaseStr = atom_to_list(Case),
     case lists:suffix("_default", CaseStr) of

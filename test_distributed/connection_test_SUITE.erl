@@ -12,7 +12,6 @@
 -module(connection_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/common_messages.hrl").
@@ -112,6 +111,7 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 -define(CORRECT_TOKEN, <<"correct-token">>).
 -define(INCORRECT_TOKEN, <<"incorrect-token">>).
 
+-define(TIMEOUT, timer:minutes(1)).
 -define(ATTEMPTS, 60).
 
 

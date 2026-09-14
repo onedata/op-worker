@@ -12,7 +12,7 @@
 -module(qos_api_test_SUITE).
 -author("Michal Stanisz").
 
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -22,6 +22,54 @@
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
+
+%% Fixtures of the envup deployment this suite runs on.
+-define(SPACE_2, <<"space2">>).
+
+-define(USER_IN_SPACE_1, <<"user1">>).
+-define(USER_IN_SPACE_1_AUTH, ?USER(?USER_IN_SPACE_1)).
+-define(USER_IN_SPACE_KRK, <<"user1">>).
+-define(USER_IN_SPACE_KRK_AUTH, ?USER(?USER_IN_SPACE_KRK)).
+
+-define(USER_IN_SPACE_2, <<"user3">>).
+-define(USER_IN_SPACE_2_AUTH, ?USER(?USER_IN_SPACE_2)).
+-define(USER_IN_SPACE_KRK_PAR, <<"user3">>).
+-define(USER_IN_SPACE_KRK_PAR_AUTH, ?USER(?USER_IN_SPACE_KRK_PAR)).
+
+-define(USER_IN_BOTH_SPACES, <<"user2">>).
+-define(USER_IN_BOTH_SPACES_AUTH, ?USER(?USER_IN_BOTH_SPACES)).
+
+-define(SUPPORTED_CLIENTS_PER_NODE(__CONFIG), (fun() ->
+    [Provider1, Provider2] = ?config(op_worker_nodes, __CONFIG),
+    #{
+        Provider1 => [?USER_IN_SPACE_KRK_AUTH, ?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        Provider2 => [?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
+    }
+end)()).
+
+-define(CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(__CONFIG), #client_spec{
+    correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+    unauthorized = [?NOBODY],
+    forbidden_not_in_space = [?USER_IN_SPACE_1_AUTH],
+    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
+}).
+% Special case -> any user can make requests for publicly accessibly resources,
+% but if request is being made using credentials by user not supported on specific provider
+% ?ERR_UNAUTHORIZED(?ERR_USER_NOT_SUPPORTED) should be returned
+-define(CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS(__CONFIG), #client_spec{
+    correct = [?NOBODY, ?USER_IN_SPACE_KRK_AUTH, ?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+    unauthorized = [],
+    forbidden_not_in_space = [],
+    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
+}).
+
+-define(SESS_ID(__USER, __NODE, __CONFIG),
+    ?config({session_id, {__USER, ?GET_DOMAIN(__NODE)}}, __CONFIG)
+).
+-define(USER_IN_BOTH_SPACES_SESS_ID(__NODE, __CONFIG),
+    ?SESS_ID(?USER_IN_BOTH_SPACES, __NODE, __CONFIG)
+).
+
 
 -export([
     all/0,
@@ -121,8 +169,8 @@ create_qos_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(MemRef, {instance, create})
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     FileToShareGuid, ?SPACE_2, ShareId, CreateDataSpec
                 )
             )
@@ -243,8 +291,8 @@ get_qos_summary_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(MemRef, qos_summary)
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(Guid, ShareId, undefined)
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(Guid, ShareId, undefined)
             )
         }
     ])),
@@ -531,7 +579,7 @@ prepare_args_fun_rest(MemRef, {instance, Method}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos),
 
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #rest_args{
             method = Method,
             path = <<"qos_requirements/", Id/binary>>
@@ -543,7 +591,7 @@ prepare_args_fun_rest(MemRef, qos_summary) ->
         Guid = api_test_memory:get(MemRef, guid),
 
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ObjectId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ObjectId, Data),
         #rest_args{
             method = get,
             path = <<"data/", Id/binary, "/qos/summary">>
@@ -588,7 +636,7 @@ prepare_args_fun_gs(MemRef, {instance, create}) ->
 prepare_args_fun_gs(MemRef, {instance, Method}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #gs_args{
             operation = Method,
             gri = #gri{type = op_qos, id = Id, aspect = instance, scope = private}
@@ -598,7 +646,7 @@ prepare_args_fun_gs(MemRef, {instance, Method}) ->
 prepare_args_fun_gs(MemRef, qos_summary) ->
     fun(#api_test_ctx{data = Data}) ->
         Guid = api_test_memory:get(MemRef, guid),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(Guid, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(Guid, Data),
         #gs_args{
             operation = get,
             gri = #gri{type = op_file, id = Id, aspect = qos_summary, scope = private}
@@ -633,7 +681,7 @@ prepare_args_fun_gs(_MemRef, {qos_transfer_stats_collection, schema, Type}) ->
 prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, layout, Type}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
-        {Id, UpdatedData} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        {Id, UpdatedData} = api_data_spec_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #gs_args{
             operation = get,
             gri = #gri{type = op_qos, id = Id, aspect = {transfer_stats_collection, Type}, scope = private},
@@ -644,7 +692,7 @@ prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, layout, Type}) ->
 prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, slice, Type}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
-        {Id, UpdatedData} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        {Id, UpdatedData} = api_data_spec_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #gs_args{
             operation = get,
             gri = #gri{type = op_qos, id = Id, aspect = {transfer_stats_collection, Type}, scope = private},

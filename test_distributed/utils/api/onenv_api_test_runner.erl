@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -34,7 +34,7 @@
 -module(onenv_api_test_runner).
 -author("Bartosz Walkowicz").
 
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -1103,9 +1103,7 @@ random_share_rest_api_root(ProviderNodes) ->
 get_rest_api_root(?ONEZONE_TARGET_NODE) ->
     str_utils:format_bin("https://~ts/api/v3/onezone/shares/", [ozw_test_rpc:get_domain()]);
 get_rest_api_root(Node) ->
-    Port = api_test_utils:get_https_server_port_str(Node),
-    Domain = opw_test_rpc:get_provider_domain(Node),
-    str_utils:format_bin("https://~ts~ts/api/v3/oneprovider/", [Domain, Port]).
+    rest_test_utils:rest_api_root(Node).
 
 
 %% @private

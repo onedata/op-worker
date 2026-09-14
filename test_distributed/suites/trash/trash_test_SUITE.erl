@@ -12,9 +12,10 @@
 -module(trash_test_SUITE).
 -author("Jakub Kudzia").
 
--include("permissions_test.hrl").
+-include("authz/authz_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("distribution_assert.hrl").
+-include("file/distribution_assert.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -335,7 +336,7 @@ schedule_eviction_transfer_on_space_evicts_trash(_Config) ->
     ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size, Size]), FileGuid, ?ATTEMPTS),
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
     % as otherwise it will skip eviction.
-    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     ?assertEqual({ok, [[0, Size]]},
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(P1Node, FileGuid, P2Id), ?ATTEMPTS),
 
@@ -694,7 +695,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= deletion_lasting_for_4_days_should_succeed orelse

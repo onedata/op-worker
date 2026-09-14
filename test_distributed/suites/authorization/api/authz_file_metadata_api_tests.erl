@@ -12,7 +12,7 @@
 -module(authz_file_metadata_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+-include("authz/authz_api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
@@ -44,7 +44,7 @@ test_get_custom_metadata(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?read_metadata],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
@@ -76,7 +76,7 @@ test_set_custom_metadata(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?write_metadata]
         }],
@@ -101,7 +101,7 @@ test_remove_custom_metadata(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?write_metadata],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
@@ -132,7 +132,7 @@ test_get_xattr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?read_metadata],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
@@ -162,7 +162,7 @@ test_list_xattr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
@@ -188,7 +188,7 @@ test_set_xattr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?write_metadata]
         }],
@@ -212,7 +212,7 @@ test_remove_xattr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?write_metadata],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
@@ -241,7 +241,7 @@ test_get_file_distribution(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?read_metadata]
         }],
@@ -266,11 +266,11 @@ test_get_historical_dir_size_stats(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             required_perms = [?read_metadata],
             children = [
-                #ct_authz_file_spec{
+                #authz_file_spec{
                     name = <<"file1">>,
                     required_perms = []
                 }
@@ -300,7 +300,7 @@ test_get_file_storage_locations(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = [?read_metadata]
         }],

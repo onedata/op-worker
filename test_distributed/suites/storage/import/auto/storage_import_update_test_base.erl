@@ -28,7 +28,7 @@
 -module(storage_import_update_test_base).
 -author("Bartosz Walkowicz").
 
--include("storage_import_test.hrl").
+-include("storage/storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/data_access_control.hrl").
@@ -256,7 +256,7 @@ append_file_update_test(SuiteCtx) ->
         #{verify_dir_stats => true}
     ),
 
-    storage_file_setup_utils:write_file(
+    storage_file_tree_test_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId,
         byte_size(InitialContent), AppendedContent
     ),
@@ -287,14 +287,14 @@ append_file_not_changing_mtime_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
 
-    OldMtime = storage_file_setup_utils:get_mtime(
+    OldMtime = storage_file_tree_test_utils:get_mtime(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     ),
-    storage_file_setup_utils:write_file(
+    storage_file_tree_test_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId,
         byte_size(InitialContent), AppendedContent
     ),
-    storage_file_setup_utils:set_mtime(
+    storage_file_tree_test_utils:set_mtime(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, OldMtime
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -320,7 +320,7 @@ append_empty_file_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = <<>>}, SuiteCtx
     ),
 
-    storage_file_setup_utils:write_file(
+    storage_file_tree_test_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, AppendedContent
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -343,7 +343,7 @@ truncate_file_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
 
-    storage_file_setup_utils:truncate(
+    storage_file_tree_test_utils:truncate(
         ImportingProviderSelector, ImportedStorageId, StorageFileId,
         TruncatedSize, byte_size(InitialContent)
     ),
@@ -380,7 +380,7 @@ chmod_file_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName}, SuiteCtx
     ),
 
-    storage_file_setup_utils:chmod(ImportingProviderSelector, ImportedStorageId, StorageFileId, NewMode),
+    storage_file_tree_test_utils:chmod(ImportingProviderSelector, ImportedStorageId, StorageFileId, NewMode),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
@@ -429,7 +429,7 @@ chmod_file_update_in_batched_dir_test(SuiteCtx) ->
         <<"unmodified">> => 3
     }}),
 
-    storage_file_setup_utils:chmod(ImportingProviderSelector, ImportedStorageId, File1StorageFileId, NewMode),
+    storage_file_tree_test_utils:chmod(ImportingProviderSelector, ImportedStorageId, File1StorageFileId, NewMode),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     SpaceTestFilePath = filepath_utils:join([SpacePath, TestDirName, File1Name]),
@@ -468,7 +468,7 @@ move_file_update_test(SuiteCtx) ->
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_file_setup_utils:rename(
+    storage_file_tree_test_utils:rename(
         ImportingProviderSelector, ImportedStorageId, SrcStorageFileId, DstStorageFileId
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -506,7 +506,7 @@ copy_file_update_test(SuiteCtx) ->
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_file_setup_utils:create_file(ImportingProviderSelector, ImportedStorageId, DstStorageFileId, Content),
+    storage_file_tree_test_utils:create_file(ImportingProviderSelector, ImportedStorageId, DstStorageFileId, Content),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
@@ -544,7 +544,7 @@ change_file_content_constant_size_test(SuiteCtx) ->
     %% load-bearing - lets the mtime tick visibly past the initial scan's stat
     %% (test doc); do not remove
     timer:sleep(timer:seconds(2)),
-    storage_file_setup_utils:write_file(
+    storage_file_tree_test_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, ChangedContent
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -570,7 +570,7 @@ change_file_content_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
 
-    storage_file_setup_utils:write_file(
+    storage_file_tree_test_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, ChangedContent
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -614,7 +614,7 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
     %% above): the same-size overwrite stays detectable via mtime, while forcing
     %% the recorded mtime AND last_stat to that same value lands scan 2 exactly
     %% on the fast-path guard
-    FileMtime = storage_file_setup_utils:get_mtime(
+    FileMtime = storage_file_tree_test_utils:get_mtime(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     ),
     BoundaryTime = FileMtime + 1,
@@ -622,10 +622,10 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
         StorageFileId, SpaceId,
         fun(SSI) -> {ok, SSI#storage_sync_info{mtime = BoundaryTime, last_stat = BoundaryTime}} end
     )),
-    storage_file_setup_utils:write_file(
+    storage_file_tree_test_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, ChangedContent
     ),
-    storage_file_setup_utils:set_mtime(
+    storage_file_tree_test_utils:set_mtime(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, BoundaryTime
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -665,11 +665,11 @@ replace_file_with_dir_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
 
-    storage_file_setup_utils:delete_file(
+    storage_file_tree_test_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, byte_size(InitialContent)
     ),
-    storage_file_setup_utils:create_dir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:create_dir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, ChildStorageFileId, ChildContent
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -705,7 +705,7 @@ replace_file_with_dir_test(SuiteCtx) ->
     ?assertMatch(
         {ok, _},
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(NewSubDirGuid)),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ).
 
 
@@ -724,8 +724,8 @@ replace_empty_dir_with_file_test(SuiteCtx) ->
         ?FUNCTION_NAME, #dir_spec{name = DirName}, SuiteCtx
     ),
 
-    storage_file_setup_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, NewContent
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -762,11 +762,11 @@ replace_non_empty_dir_with_file_test(SuiteCtx) ->
         name = DirName, children = [#file_spec{name = ChildFileName, content = ChildContent}]
     }, SuiteCtx),
 
-    storage_file_setup_utils:delete_file(
+    storage_file_tree_test_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId, ChildStorageFileId, byte_size(ChildContent)
     ),
-    storage_file_setup_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, NewContent
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -836,17 +836,17 @@ replace_remotely_created_non_empty_dir_with_file_test(SuiteCtx) ->
     ),
     ?assertMatch(
         {ok, _},
-        storage_file_setup_utils:stat(ImportingProviderSelector, ImportedStorageId, ChildStorageFileId),
-        ?ATTEMPTS
+        storage_file_tree_test_utils:stat(ImportingProviderSelector, ImportedStorageId, ChildStorageFileId),
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
 
     %% replace the dir with a same-named regular file, directly on the storage
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_file_setup_utils:delete_file(
+    storage_file_tree_test_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId, ChildStorageFileId, byte_size(ChildContent)
     ),
-    storage_file_setup_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, NewContent
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -859,7 +859,7 @@ replace_remotely_created_non_empty_dir_with_file_test(SuiteCtx) ->
         ?assertMatch(
             {error, ?ENOENT},
             lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(Guid)),
-            ?ATTEMPTS
+            ?STORAGE_IMPORT_ATTEMPTS
         ),
         ?assertMatch(
             {error, ?ENOENT},
@@ -908,7 +908,7 @@ update_timestamps_file_import_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = Content}, SuiteCtx
     ),
 
-    storage_file_setup_utils:set_atime_and_mtime(
+    storage_file_tree_test_utils:set_atime_and_mtime(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, NewTimestamp, NewTimestamp
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -961,7 +961,7 @@ create_file_in_dir_update_test(SuiteCtx) ->
     %% own mtime, which must visibly advance; on s3 the children-attrs hash
     %% catches it regardless
     ?IF_POSIX(StorageType, storage_import_test_utils:ensure_mtime_progression(TestCaseCtx)),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, FileStorageFileId, Content
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -1047,7 +1047,7 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
     %% storage_sync_traverse:do_update_master_job/2 otherwise skips it) - force
     %% the mtime forward; on s3 detection stays enabled, so the hash catches it
     ?IF_POSIX(StorageType, storage_import_test_utils:ensure_mtime_progression(TestCaseCtx)),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, FileStorageFileId, Content
     ),
     ScanConfigOverrides = case StorageType of
@@ -1173,9 +1173,9 @@ update_nfs_acl_test(SuiteCtx) ->
         InitialAcl, User1FullName, User1Id
     ),
     ?assertEqual({ok, InitialAclJson},
-        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertEqual({ok, InitialAclJson},
-        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?STORAGE_IMPORT_ATTEMPTS),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
     %% change the storage's (mocked) ACL and let the next continuous scan re-apply it
@@ -1190,9 +1190,9 @@ update_nfs_acl_test(SuiteCtx) ->
         UpdatedAcl, User1FullName, User1Id
     ),
     ?assertEqual({ok, UpdatedAclJson},
-        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({error, ?EACCES},
-        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?STORAGE_IMPORT_ATTEMPTS),
 
     %% with sync_acl enabled the ACL is folded into the per-file attrs hash (see
     %% storage_import_hash:count_file_attrs_hash/2), so the ACL change surfaces
@@ -1251,7 +1251,7 @@ should_not_detect_timestamp_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = ?RAND_STR()}, SuiteCtx
     ),
 
-    storage_file_setup_utils:set_atime_and_mtime(
+    storage_file_tree_test_utils:set_atime_and_mtime(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, 1, 1
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2, #{
@@ -1297,7 +1297,7 @@ update_syncs_files_after_import_failed_test(SuiteCtx) ->
     SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     storage_import_test_utils:assert_monitoring_state_after_failed_import(TestCaseCtx),
 
@@ -1334,7 +1334,7 @@ update_syncs_files_after_previous_update_failed_test(SuiteCtx) ->
     } = storage_import_test_utils:setup_and_verify_initial_import(?FUNCTION_NAME, undefined, SuiteCtx),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, Content
     ),
     storage_import_test_utils:mock_import_file_error(SuiteCtx, FileName),
@@ -1343,7 +1343,7 @@ update_syncs_files_after_previous_update_failed_test(SuiteCtx) ->
     SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
     {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
@@ -1422,7 +1422,9 @@ should_not_import_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
         ImportingProviderCtx, SpaceFilePath, RecreatedContent
     ),
     %% the recreated file is LFM-created, the deleted-but-open one marker-guarded
-    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 0).
+    LfmCreatedCount = 1,
+    ReplicatedCount = 0,
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, LfmCreatedCount, ReplicatedCount).
 
 
 should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
@@ -1439,8 +1441,12 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
         suffixed_storage_file_id := SuffixedStorageFileId
     } = setup_recreated_file_with_suffix_on_storage(TestCaseCtx),
 
+    %% the recreated file is LFM-created, the deleted-but-open one marker-guarded
+    LfmCreatedCount = 1,
+    ReplicatedCount = 0,
+
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
-    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 0),
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, LfmCreatedCount, ReplicatedCount),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     ChangedContent = change_one_byte_of_storage_file(
@@ -1451,13 +1457,13 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
     %% the change made to the suffixed storage file is reflected in the
     %% recreated logical file, on both providers
     assert_file_content_by_guid(
-        ImportingProviderCtx, RecreatedFileGuid, ChangedContent, ?ATTEMPTS
+        ImportingProviderCtx, RecreatedFileGuid, ChangedContent, ?STORAGE_IMPORT_ATTEMPTS
     ),
     assert_file_content_by_guid(
         NonImportingProviderCtx, RecreatedFileGuid, ChangedContent,
         ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
     ),
-    assert_suffixed_storage_file_update_detected(TestCaseCtx, _LfmCreated = 1, _Replicated = 0).
+    assert_suffixed_storage_file_update_detected(TestCaseCtx, LfmCreatedCount, ReplicatedCount).
 
 
 should_not_import_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
@@ -1485,10 +1491,12 @@ should_not_import_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
     ?assertMatch({ok, [_, _]}, lfm_proxy:get_children(
         ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
     )),
-    assert_file_content_by_guid(ImportingProviderCtx, LocalFileGuid, LocalContent, ?ATTEMPTS),
-    assert_file_content_by_guid(ImportingProviderCtx, RemoteFileGuid, RemoteContent, ?ATTEMPTS),
+    assert_file_content_by_guid(ImportingProviderCtx, LocalFileGuid, LocalContent, ?STORAGE_IMPORT_ATTEMPTS),
+    assert_file_content_by_guid(ImportingProviderCtx, RemoteFileGuid, RemoteContent, ?STORAGE_IMPORT_ATTEMPTS),
     %% the local file is LFM-created, the remote one lands on storage as a replica
-    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 1).
+    LfmCreatedCount = 1,
+    ReplicatedCount = 1,
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, LfmCreatedCount, ReplicatedCount).
 
 
 should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
@@ -1505,8 +1513,12 @@ should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
         suffixed_storage_file_id := SuffixedStorageFileId
     } = setup_replicated_file_with_suffix_on_storage(TestCaseCtx),
 
+    %% the local file is LFM-created, the remote one lands on storage as a replica
+    LfmCreatedCount = 1,
+    ReplicatedCount = 1,
+
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
-    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, _LfmCreated = 1, _Replicated = 1),
+    assert_scan_recognized_suffixed_layout_as_known(TestCaseCtx, LfmCreatedCount, ReplicatedCount),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     ChangedContent = change_one_byte_of_storage_file(
@@ -1518,13 +1530,13 @@ should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
     %% created logical file - also back on its origin provider, whose replica
     %% is invalidated and re-fetched
     assert_file_content_by_guid(
-        ImportingProviderCtx, RemoteFileGuid, ChangedContent, ?ATTEMPTS
+        ImportingProviderCtx, RemoteFileGuid, ChangedContent, ?STORAGE_IMPORT_ATTEMPTS
     ),
     assert_file_content_by_guid(
         NonImportingProviderCtx, RemoteFileGuid, ChangedContent,
         ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
     ),
-    assert_suffixed_storage_file_update_detected(TestCaseCtx, _LfmCreated = 1, _Replicated = 1).
+    assert_suffixed_storage_file_update_detected(TestCaseCtx, LfmCreatedCount, ReplicatedCount).
 
 
 %% --- config ---
@@ -1649,7 +1661,7 @@ force_start_test(SuiteCtx) ->
     %% modified (the file itself would still be imported, via the
     %% children-attrs hash path); do not remove
     timer:sleep(timer:seconds(2)),
-    storage_file_setup_utils:create_file(
+    storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, Content
     ),
     storage_import_test_utils:force_start_auto_scan(TestCaseCtx),
@@ -1678,7 +1690,7 @@ force_start_test(SuiteCtx) ->
 force_stop_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
     %% [5, 5, 10] => 5 dirs x 5 subdirs x 10 files = 280 nodes
-    FileTreeSpec = storage_import_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR()),
+    FileTreeSpec = file_tree_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR()),
 
     %% set up before init_testcase, as the initial scan auto-runs on space setup
     mock_import_file_started_notification(SuiteCtx, self()),
@@ -1806,11 +1818,11 @@ file_with_protection_flags_should_not_be_updated_test_base(TestCaseName, SuiteCt
         ImportingProviderCtx, SpaceFilePath, ProtectionFlags
     ),
 
-    storage_file_setup_utils:write_file(
+    storage_file_tree_test_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId,
         byte_size(InitialContent), AppendedContent
     ),
-    ?IF_POSIX(StorageType, storage_file_setup_utils:chmod(
+    ?IF_POSIX(StorageType, storage_file_tree_test_utils:chmod(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, NewMode
     )),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -1901,7 +1913,7 @@ file_with_protection_flags_should_not_be_deleted_test_base(TestCaseName, SuiteCt
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_import_test_utils:delete_file_tree_from_storage(
+    storage_file_tree_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -1995,7 +2007,7 @@ empty_dir_with_protection_flags_should_not_be_updated_test_base(TestCaseName, Su
         ImportingProviderCtx, SpaceDirPath, ProtectionFlags
     ),
 
-    storage_file_setup_utils:chmod(
+    storage_file_tree_test_utils:chmod(
         ImportingProviderSelector, ImportedStorageId, StorageDirId, NewMode
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -2068,7 +2080,7 @@ empty_dir_with_protection_flags_should_not_be_deleted_test_base(TestCaseName, Su
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_import_test_utils:delete_file_tree_from_storage(
+    storage_file_tree_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -2165,14 +2177,14 @@ dir_and_its_child_with_protection_flags_should_not_be_updated_test_base(TestCase
         ImportingProviderCtx, SpaceDirPath, ProtectionFlags
     ),
 
-    storage_file_setup_utils:write_file(
+    storage_file_tree_test_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId,
         byte_size(InitialContent), AppendedContent
     ),
-    storage_file_setup_utils:chmod(
+    storage_file_tree_test_utils:chmod(
         ImportingProviderSelector, ImportedStorageId, StorageDirId, NewMode
     ),
-    storage_file_setup_utils:chmod(
+    storage_file_tree_test_utils:chmod(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, NewMode
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -2270,7 +2282,7 @@ dir_and_its_child_with_protection_flags_should_not_be_deleted_test_base(TestCase
     ),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_import_test_utils:delete_file_tree_from_storage(
+    storage_file_tree_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
@@ -2387,7 +2399,7 @@ should_not_reimport_leftover_entry_test_base(TestCaseName, SuiteCtx, EntryType) 
         ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
     ),
     EntryStorageFileId = filepath_utils:join([<<"/">>, EntryName]),
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, EntryStorageFileId
     )),
 
@@ -2467,7 +2479,7 @@ should_not_reimport_deleted_but_still_opened_file_test(SuiteCtx) ->
     ?assertMatch({ok, []}, lfm_proxy:get_children(
         ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
     )),
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     )),
 
@@ -2531,7 +2543,7 @@ should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test(Sui
 %% (files with their content intact) and must not materialize on the imported
 %% storage.
 -spec should_not_delete_remote_entries_test_base(
-    atom(), storage_import_test_utils:suite_ctx(), onenv_file_test_utils:object_spec()
+    atom(), storage_import_test_utils:suite_ctx(), file_tree_test_utils:object_spec()
 ) ->
     ok.
 should_not_delete_remote_entries_test_base(TestCaseName, SuiteCtx, RemoteFileTreeSpec) ->
@@ -2601,7 +2613,7 @@ should_not_sync_file_during_replication_test(SuiteCtx) ->
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(
             ImportingProviderNode, FileGuid, NonImportingProviderId
         ),
-        ?ATTEMPTS
+        ?STORAGE_IMPORT_ATTEMPTS
     ),
 
     %% slow rtransfer down so that the partially-replicated storage file is
@@ -2661,10 +2673,10 @@ should_not_invalidate_file_after_replication_test(SuiteCtx) ->
     %% by reading it there
     {ok, ReadHandle} = ?assertMatch({ok, _}, lfm_proxy:open(
         ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(FileGuid), read
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertEqual({ok, Content}, lfm_proxy:read(
         ImportingProviderNode, ReadHandle, 0, ContentSize
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
     ok = lfm_proxy:close(ImportingProviderNode, ReadHandle),
     file_test_utils:await_distribution(
         [ImportingProviderNode, NonImportingProviderNode], FileGuid, [
@@ -2763,12 +2775,12 @@ setup_recreated_file_with_suffix_on_storage(TestCaseCtx = #storage_import_test_c
     PlainStorageFileId = filepath_utils:join([<<"/">>, FileName]),
     RecreatedFileUuid = file_id:guid_to_uuid(RecreatedFileGuid),
     SuffixedStorageFileId = ?CONFLICTING_STORAGE_FILE_NAME(PlainStorageFileId, RecreatedFileUuid),
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, PlainStorageFileId
-    ), ?ATTEMPTS),
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ), ?STORAGE_IMPORT_ATTEMPTS),
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, SuffixedStorageFileId
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
 
     #{
         file_name => FileName,
@@ -2834,18 +2846,18 @@ setup_replicated_file_with_suffix_on_storage(TestCaseCtx = #storage_import_test_
     ), ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS),
     ?assertEqual({ok, RemoteContent}, lfm_proxy:read(
         ImportingProviderNode, ReadHandle, 0, byte_size(RemoteContent)
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
     ok = lfm_proxy:close(ImportingProviderNode, ReadHandle),
 
     PlainStorageFileId = filepath_utils:join([<<"/">>, FileName]),
     RemoteFileUuid = file_id:guid_to_uuid(RemoteFileGuid),
     SuffixedStorageFileId = ?CONFLICTING_STORAGE_FILE_NAME(PlainStorageFileId, RemoteFileUuid),
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, PlainStorageFileId
-    ), ?ATTEMPTS),
-    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+    ), ?STORAGE_IMPORT_ATTEMPTS),
+    ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, SuffixedStorageFileId
-    ), ?ATTEMPTS),
+    ), ?STORAGE_IMPORT_ATTEMPTS),
 
     #{
         file_name => FileName,
@@ -2886,7 +2898,7 @@ change_one_byte_of_storage_file(#storage_import_test_case_ctx{
 }, StorageFileId, CurrentContent) ->
     Offset = 4,
     ChangedByte = <<"-">>,
-    storage_file_setup_utils:write_file(
+    storage_file_tree_test_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, Offset, ChangedByte
     ),
     <<Prefix:Offset/binary, _:1/binary, Suffix/binary>> = CurrentContent,
@@ -3100,7 +3112,7 @@ assert_file_content_by_guid(#provider_ctx{
 %% content - read via the non-importing provider, where its data lives - is
 %% intact.
 -spec assert_remote_entries_not_affected_by_scan(
-    storage_import_test_utils:case_ctx(), onenv_file_test_utils:object()
+    storage_import_test_utils:case_ctx(), file_tree_test_utils:object()
 ) ->
     ok.
 assert_remote_entries_not_affected_by_scan(#storage_import_test_case_ctx{
@@ -3120,7 +3132,7 @@ assert_remote_entries_not_affected_by_scan(#storage_import_test_case_ctx{
 }, RemoteEntries) ->
     lists:foreach(fun({PathSegments, #object{type = Type, content = Content}}) ->
         %% the entry must not have materialized on the imported storage...
-        ?assertMatch({error, ?ENOENT}, storage_file_setup_utils:stat(
+        ?assertMatch({error, ?ENOENT}, storage_file_tree_test_utils:stat(
             ImportingProviderSelector, ImportedStorageId,
             filepath_utils:join([<<"/">> | PathSegments])
         )),

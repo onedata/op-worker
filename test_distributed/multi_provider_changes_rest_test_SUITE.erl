@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/common/handshake_messages.hrl").
--include("rest_test_utils.hrl").
+-include("api/rest_test_utils.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -632,8 +632,8 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
-            test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
-            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
+            test_utils:set_env(Worker, ?APP_NAME, public_block_size_threshold, 0),
+            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_threshold, 0)
         end, ?config(op_worker_nodes, NewConfig1)),
 
         application:start(ssl),

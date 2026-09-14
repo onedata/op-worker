@@ -652,6 +652,12 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                 end
         end
     catch
+        throw:?EROFS ->
+            % the blocks cannot be fetched onto a readonly storage - not a failure
+            % of this provider, but a request that another one has to serve
+            ?debug("Refused to fetch blocks of file ~tp onto a readonly storage",
+                [file_ctx:get_logical_guid_const(FileCtx)]),
+            {reply, {error, ?EROFS}, State0, ?DIE_AFTER};
         Class:Reason:Stacktrace ->
             ?error_exception("Unable to start transfer ~tp", [TransferId], Class, Reason, Stacktrace),
             {reply, {error, Reason}, State0, ?DIE_AFTER}
@@ -1373,11 +1379,13 @@ start_transfers(InitialBlocks, TransferId, State, Priority, MaxJobRestarts) ->
     end, 0, ProvidersAndBlocks),
 
     SpaceId = State#state.space_id,
-    assert_smaller_than_local_support_size(TotalSize, SpaceId),
-
     FileGuid = State#state.file_guid,
     DestStorageId = State#state.dest_storage_id,
     DestFileId = State#state.dest_file_id,
+
+    assert_smaller_than_local_support_size(TotalSize, SpaceId),
+    assert_dest_storage_not_readonly(TotalSize, DestStorageId, SpaceId),
+
     lists:flatmap(
         fun({ProviderId, Blocks, {SrcStorageId, SrcFileId}}) ->
             {ok, ProviderDomain} = provider_logic:get_domain(ProviderId),
@@ -1936,6 +1944,28 @@ assert_smaller_than_local_support_size(TotalSize, SpaceId) ->
     {ok, LocalSupportSize} = space_logic:get_support_size(SpaceId, oneprovider:get_id()),
     case TotalSize > LocalSupportSize of
         true -> throw(?ENOSPC);
+        false -> ok
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Rtransfer writes the fetched blocks to the destination storage straight
+%% through the helper, past the access type check that guards every operation
+%% going via the storage driver (see helpers_runner:run_and_handle_error/4).
+%% As this is the only place in which fetches are started, it is also the only
+%% place that can keep them off a readonly storage.
+%% A request that has nothing to fetch writes nothing, so it is left alone -
+%% that is what a read of a fully available replica boils down to.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_dest_storage_not_readonly(non_neg_integer(), storage:id(), od_space:id()) -> ok.
+assert_dest_storage_not_readonly(0, _DestStorageId, _SpaceId) ->
+    ok;
+assert_dest_storage_not_readonly(_TotalSize, DestStorageId, SpaceId) ->
+    case storage:is_storage_readonly(DestStorageId, SpaceId) of
+        true -> throw(?EROFS);
         false -> ok
     end.
 

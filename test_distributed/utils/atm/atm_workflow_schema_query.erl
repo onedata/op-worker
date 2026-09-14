@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2022-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -12,8 +12,8 @@
 -module(atm_workflow_schema_query).
 -author("Bartosz Walkowicz").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("atm/atm_test_schema.hrl").
--include("onenv_test_utils.hrl").
 
 -export([run/2]).
 

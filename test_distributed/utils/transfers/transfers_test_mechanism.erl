@@ -1,14 +1,15 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains implementation of generic mechanism for
-%%% tests of transfers.
-%%% It also contains implementation of test scenarios which are used to
-%%% compose test cases.
+%%% Generic mechanism for the (envup based) transfer test suites: sets up the
+%%% file tree declared in #transfer_test_spec{}, runs the declared scenario
+%%% and asserts the declared expectations. The scenarios themselves - the
+%%% building blocks test cases are composed of - are defined here as well and
+%%% referred to by name from the specs.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfers_test_mechanism).
@@ -18,8 +19,8 @@
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("transfers_test_mechanism.hrl").
--include("rest_test_utils.hrl").
+-include("transfers/transfers_test_mechanism.hrl").
+-include("api/rest_test_utils.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -35,29 +36,22 @@
 -export([
     % replication scenarios
     replicate_root_directory/2,
-    replicate_despite_protection_flags/2,
     replicate_each_file_separately/2,
 
     % replica eviction scenarios
     evict_root_directory/2,
-    evict_despite_protection_flags/2,
     evict_each_file_replica_separately/2,
 
     % migration scenarios
     migrate_root_directory/2,
-    migrate_despite_protection_flags/2,
     migrate_each_file_replica_separately/2
 ]).
 
--export([
-    move_transfer_ids_to_old_key/1,
-    get_transfer_ids/1
-]).
+-export([move_transfer_ids_to_old_key/1]).
 
-% functions exported to be called by rpc
+% functions executed by the worker pool via an MFA tuple
 -export([create_files_structure/11, create_file/7,
-    assert_file_visible/5, assert_file_distribution/6, prereplicate_file/6,
-    cast_files_prereplication/5, update_config/4]).
+    assert_file_visible/5, assert_file_distribution/6, prereplicate_file/6]).
 
 
 -define(UPDATE_TRANSFERS_KEY(__NodesTransferIdsAndFiles, __Config),
@@ -66,12 +60,19 @@
     end, __Config, [])
 ).
 
--define(PROTECTION_FLAGS, ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)).
+%% Legacy (envup) suites identify users by name, onenv ones by oct_background placeholder.
+-type user_selector() :: binary() | oct_background:entity_selector().
+-type guid_and_path() :: {file_id:file_guid(), file_meta:path()}.
+%% Number of subdirs and files to create on each subsequent level of the file tree.
+-type files_structure() :: [{DirsNum :: non_neg_integer(), FilesNum :: non_neg_integer()}].
+%% Single entry of the (deprecated) file distribution, as returned by the API.
+-type file_distribution() :: json_utils:json_map().
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+-spec run_test(test_config:config(), #transfer_test_spec{}) -> test_config:config() | no_return().
 run_test(Config, #transfer_test_spec{
     setup = Setup,
     scenario = Scenario,
@@ -112,6 +113,7 @@ run_test(Config, #transfer_test_spec{
 %%% Replication scenarios
 %%%===================================================================
 
+-spec replicate_root_directory(test_config:config(), #scenario{}) -> test_config:config().
 replicate_root_directory(Config, #scenario{
     user = User,
     type = Type,
@@ -128,28 +130,7 @@ replicate_root_directory(Config, #scenario{
     end, ReplicatingNodes),
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
-replicate_despite_protection_flags(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
-}) ->
-    {RootDirGuid, RootDirPath} = ?config(?ROOT_DIR_KEY, Config),
-    RootDirFileKey = file_key(RootDirGuid, RootDirPath, FileKeyType),
-
-    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        SessionId = ?DEFAULT_SESSION(TargetNode, Config),
-        lists:foreach(fun({DirGuid, _}) ->
-            ?assertMatch({ok, _}, opt_datasets:establish(TargetNode, SessionId, ?FILE_REF(DirGuid), ?PROTECTION_FLAGS))
-        end, ?config(?DIRS_KEY, Config)),
-
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, RootDirFileKey, Config, Type),
-        {TargetNode, Tid, RootDirGuid, RootDirPath}
-    end, ReplicatingNodes),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
+-spec replicate_each_file_separately(test_config:config(), #scenario{}) -> test_config:config().
 replicate_each_file_separately(Config, #scenario{
     user = User,
     type = Type,
@@ -173,6 +154,7 @@ replicate_each_file_separately(Config, #scenario{
 %%% Eviction scenarios
 %%%===================================================================
 
+-spec evict_root_directory(test_config:config(), #scenario{}) -> test_config:config().
 evict_root_directory(Config, #scenario{
     user = User,
     type = Type,
@@ -189,28 +171,8 @@ evict_root_directory(Config, #scenario{
     end, EvictingNodes),
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
-evict_despite_protection_flags(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    evicting_nodes = EvictingNodes
-}) ->
-    {RootDirGuid, RootDirPath} = ?config(?ROOT_DIR_KEY, Config),
-    RootDirFileKey = file_key(RootDirGuid, RootDirPath, FileKeyType),
-
-    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
-        SessionId = ?DEFAULT_SESSION(EvictingNode, Config),
-        lists:foreach(fun({DirGuid, _}) ->
-            ?assertMatch({ok, _}, opt_datasets:establish(EvictingNode, SessionId, ?FILE_REF(DirGuid), ?PROTECTION_FLAGS))
-        end, ?config(?DIRS_KEY, Config)),
-
-        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, RootDirFileKey, Config, Type),
-        {EvictingNode, Tid, RootDirGuid, RootDirPath}
-    end, EvictingNodes),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
+-spec evict_each_file_replica_separately(test_config:config(), #scenario{}) ->
+    test_config:config().
 evict_each_file_replica_separately(Config, #scenario{
     user = User,
     type = Type,
@@ -234,6 +196,7 @@ evict_each_file_replica_separately(Config, #scenario{
 %%% Migration scenarios
 %%%===================================================================
 
+-spec migrate_root_directory(test_config:config(), #scenario{}) -> test_config:config().
 migrate_root_directory(Config, #scenario{
     user = User,
     type = Type,
@@ -255,33 +218,8 @@ migrate_root_directory(Config, #scenario{
     end, ReplicatingNodes),
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
-migrate_despite_protection_flags(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes,
-    evicting_nodes = EvictingNodes
-}) ->
-    {RootDirGuid, RootDirPath} = ?config(?ROOT_DIR_KEY, Config),
-    RootDirFileKey = file_key(RootDirGuid, RootDirPath, FileKeyType),
-
-    NodesTransferIdsAndFiles = lists:flatmap(fun(ReplicatingNode) ->
-        SessionId = ?DEFAULT_SESSION(ReplicatingNode, Config),
-        lists:foreach(fun({DirGuid, _}) ->
-            ?assertMatch({ok, _}, opt_datasets:establish(ReplicatingNode, SessionId, ?FILE_REF(DirGuid), ?PROTECTION_FLAGS))
-        end, ?config(?DIRS_KEY, Config)),
-
-        lists:map(fun(EvictingNode) ->
-            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
-            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            {ok, Tid} = schedule_replica_migration(ScheduleNode, EvictingProviderId,
-                User, RootDirFileKey, Config, Type, ReplicatingProviderId),
-            {EvictingNode, Tid, RootDirGuid, RootDirPath}
-        end, EvictingNodes)
-    end, ReplicatingNodes),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
+-spec migrate_each_file_replica_separately(test_config:config(), #scenario{}) ->
+    test_config:config().
 migrate_each_file_replica_separately(Config, #scenario{
     user = User,
     type = Type,
@@ -310,11 +248,15 @@ migrate_each_file_replica_separately(Config, #scenario{
 %%% Internal functions
 %%%===================================================================
 
+%% @private
+-spec run_scenario(test_config:config(), undefined | #scenario{}) -> test_config:config().
 run_scenario(Config, undefined) ->
     Config;
 run_scenario(Config, Scenario = #scenario{function = ScenarioFunction}) ->
     ScenarioFunction(Config, Scenario).
 
+%% @private
+-spec setup_test(test_config:config(), undefined | #setup{}) -> test_config:config().
 setup_test(Config, undefined) ->
     Config;
 setup_test(Config, Setup = #setup{
@@ -330,6 +272,9 @@ setup_test(Config, Setup) ->
     assert_setup(Config2, Setup),
     Config2.
 
+%% @private
+-spec maybe_prereplicate_files(test_config:config(), #setup{}) ->
+    countdown_server:node_counters_data().
 maybe_prereplicate_files(Config, #setup{
     user = User,
     size = Size,
@@ -343,6 +288,9 @@ maybe_prereplicate_files(Config, #setup{
     end, #{}, ReplicateToNodes),
     countdown_server:await_all(NodesToCounterIds, Timetrap).
 
+%% @private
+-spec assert_expectations(test_config:config(), undefined | #expected{} | [#expected{}]) ->
+    ok | no_return().
 assert_expectations(_Config, undefined) ->
     ok;
 assert_expectations(Config, Expected = #expected{
@@ -406,6 +354,12 @@ assert_expectations(Config, ExpectedAlternatives) ->
     end.
 
 
+%% @private
+-spec assert_transfer(
+    test_config:config(), node(), #expected{}, transfer:id(),
+    file_id:file_guid(), file_meta:path(), TargetNode :: node()
+) ->
+    ok | no_return().
 assert_transfer(_Config, _Node, #expected{
     expected_transfer = undefined,
     attempts = _Attempts
@@ -417,6 +371,8 @@ assert_transfer(_Config, Node, #expected{
 }, TransferId, _FileGuid, _FilePath, _TargetNode) ->
     transfers_test_utils:assert_transfer_state(Node, TransferId, TransferAssertion, Attempts).
 
+%% @private
+-spec create_files(test_config:config(), #setup{}) -> test_config:config().
 create_files(Config, #setup{
     root_directory = {RootDirGuid, RootDirPath},
     files_structure = {pre_created, GuidsAndPaths}
@@ -465,6 +421,8 @@ create_files(Config, #setup{
         {?FILES_KEY, FilesGuidsAndPaths} | Config
     ].
 
+%% @private
+-spec assert_setup(test_config:config(), #setup{}) -> ok | test_config:config() | no_return().
 assert_setup(Config, #setup{
     assertion_nodes = []
 }) ->
@@ -480,6 +438,12 @@ assert_setup(Config, #setup{
     assert_files_distribution_on_all_nodes(Config, AssertionNodes, User,
         ExpectedDistribution, undefined, Attempts, Timetrap).
 
+%% @private
+-spec assert_files_visible_on_all_nodes(
+    test_config:config(), AssertionNodes :: [node()], user_selector(),
+    Attempts :: non_neg_integer(), Timetrap :: non_neg_integer()
+) ->
+    countdown_server:node_counters_data().
 assert_files_visible_on_all_nodes(Config, AssertionNodes, User, Attempts, Timetrap) ->
     NodesToCounterIds = lists:foldl(fun(AssertionNode, NodesToCounterIdsAcc) ->
         CounterId = cast_files_visible_assertion(Config, AssertionNode, User, Attempts),
@@ -487,6 +451,13 @@ assert_files_visible_on_all_nodes(Config, AssertionNodes, User, Attempts, Timetr
     end, #{}, AssertionNodes),
     countdown_server:await_all(NodesToCounterIds, Timetrap).
 
+%% @private
+-spec assert_files_distribution_on_all_nodes(
+    test_config:config(), AssertionNodes :: [node()], user_selector(),
+    undefined | [file_distribution()], undefined | [file_id:file_guid()],
+    Attempts :: non_neg_integer(), Timetrap :: non_neg_integer()
+) ->
+    ok | countdown_server:node_counters_data().
 assert_files_distribution_on_all_nodes(_Config, _AssertionNodes, _User, undefined, _AssertDistributionForFiles, _Attempts, _Timetrap) ->
     ok;
 assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDistribution, AssertDistributionForFiles, Attempts, Timetrap) ->
@@ -498,6 +469,11 @@ assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDis
     end, #{}, AssertionNodes),
     countdown_server:await_all(NodesToCounterIds, Timetrap).
 
+%% @private
+%% @doc Expands the expected distribution with an empty entry for every provider
+%% not mentioned in it and deduces the total blocks size from the expected blocks.
+-spec fill_expected_distribution(test_config:config(), [file_distribution()]) ->
+    [file_distribution()].
 fill_expected_distribution(Config, ExpectedDistribution) ->
     Workers = ?config(op_worker_nodes, Config),
     NotEmptyDistributionMap = lists:foldl(fun(Distribution, Acc) ->
@@ -520,6 +496,12 @@ fill_expected_distribution(Config, ExpectedDistribution) ->
         })
     end, Workers).
 
+%% @private
+-spec cast_files_distribution_assertion(
+    test_config:config(), node(), user_selector(), [file_distribution()],
+    undefined | [file_id:file_guid()], Attempts :: non_neg_integer()
+) ->
+    countdown_server:counter_id().
 cast_files_distribution_assertion(Config, Node, User, Expected, AssertDistributionForFiles, Attempts) ->
     FileGuidsAndPaths = ?config(?FILES_KEY, Config),
     FilesToPerformAssertion = case AssertDistributionForFiles of
@@ -539,6 +521,12 @@ cast_files_distribution_assertion(Config, Node, User, Expected, AssertDistributi
     end, FilesToPerformAssertion),
     CounterRef.
 
+%% @private
+-spec cast_files_prereplication(
+    test_config:config(), node(), user_selector(),
+    ExpectedSize :: non_neg_integer(), Attempts :: non_neg_integer()
+) ->
+    countdown_server:counter_id().
 cast_files_prereplication(Config, Node, User, ExpectedSize, Attempts) ->
     FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
     SessionId = ?USER_SESSION(Node, User, Config),
@@ -548,11 +536,22 @@ cast_files_prereplication(Config, Node, User, ExpectedSize, Attempts) ->
     end, FilesGuidsAndPaths),
     CounterRef.
 
+%% @private
+-spec cast_files_prereplication(
+    node(), session:id(), file_id:file_guid(), countdown_server:counter_id(),
+    ExpectedSize :: non_neg_integer(), Attempts :: non_neg_integer()
+) ->
+    ok.
 cast_files_prereplication(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts) ->
     worker_pool:cast(?WORKER_POOL, {?MODULE, prereplicate_file,
         [Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts]}
     ).
 
+-spec prereplicate_file(
+    node(), session:id(), file_id:file_guid(), countdown_server:counter_id(),
+    ExpectedSize :: non_neg_integer(), Attempts :: non_neg_integer()
+) ->
+    ok.
 prereplicate_file(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts) ->
     execute_in_worker(fun() ->
         ?assertMatch(ExpectedSize, begin
@@ -569,6 +568,11 @@ prereplicate_file(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts)
         countdown_server:decrease(Node, CounterRef, FileGuid)
     end).
 
+%% @private
+-spec cast_files_visible_assertion(
+    test_config:config(), node(), user_selector(), Attempts :: non_neg_integer()
+) ->
+    countdown_server:counter_id().
 cast_files_visible_assertion(Config, Node, User, Attempts) ->
     RootDirGuidAndPath = ?config(?ROOT_DIR_KEY, Config),
     FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
@@ -584,23 +588,45 @@ cast_files_visible_assertion(Config, Node, User, Attempts) ->
     end, GuidsAndPaths),
     CounterRef.
 
+%% @private
+-spec cast_file_visible_assertion(
+    node(), session:id(), file_id:file_guid(), countdown_server:counter_id(),
+    Attempts :: non_neg_integer()
+) ->
+    ok.
 cast_file_visible_assertion(Node, SessionId, FileGuid, CounterRef, Attempts) ->
     worker_pool:cast(?WORKER_POOL, {?MODULE, assert_file_visible,
         [Node, SessionId, FileGuid, CounterRef, Attempts]}
     ).
 
+%% @private
+-spec cast_file_distribution_assertion(
+    [file_distribution()], node(), session:id(), file_id:file_guid(),
+    countdown_server:counter_id(), Attempts :: non_neg_integer()
+) ->
+    ok.
 cast_file_distribution_assertion(Expected, Node, SessionId, FileGuid, CounterRef, Attempts) ->
     worker_pool:cast(?WORKER_POOL, {?MODULE, assert_file_distribution,
         [Expected, Node, SessionId, FileGuid, CounterRef, Attempts]}
     ).
 
 
+-spec assert_file_visible(
+    node(), session:id(), file_id:file_guid(), countdown_server:counter_id(),
+    Attempts :: non_neg_integer()
+) ->
+    ok.
 assert_file_visible(Node, SessId, FileGuid, CounterRef, Attempts) ->
     execute_in_worker(fun() ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid)), Attempts),
         countdown_server:decrease(Node, CounterRef, FileGuid)
     end).
 
+-spec assert_file_distribution(
+    [file_distribution()], node(), session:id(), file_id:file_guid(),
+    countdown_server:counter_id(), Attempts :: non_neg_integer()
+) ->
+    ok.
 assert_file_distribution(Expected, Node, SessId, FileGuid, CounterRef, Attempts) ->
     Expected2 = lists:sort(Expected),
     execute_in_worker(fun() ->
@@ -617,6 +643,11 @@ assert_file_distribution(Expected, Node, SessId, FileGuid, CounterRef, Attempts)
         countdown_server:decrease(Node, CounterRef, FileGuid)
     end).
 
+%% @private
+%% @doc Swallows any error so that a failed assertion does not produce an "ugly"
+%% worker pool error log - the countdown counter simply is not decreased, which
+%% surfaces as a timeout of the awaiting process.
+-spec execute_in_worker(fun(() -> term())) -> ok.
 execute_in_worker(Fun) ->
     try
         Fun()
@@ -627,6 +658,8 @@ execute_in_worker(Fun) ->
             ok
     end.
 
+%% @private
+-spec maybe_create_root_dir(node(), binary(), session:id(), od_space:id()) -> guid_and_path().
 maybe_create_root_dir(Node, RootDirectory, SessionId, SpaceId) ->
     case RootDirectory of
         <<"">> ->
@@ -637,13 +670,24 @@ maybe_create_root_dir(Node, RootDirectory, SessionId, SpaceId) ->
             {Guid, Path}
     end.
 
+%% @private
+-spec space_guid(od_space:id()) -> file_id:file_guid().
 space_guid(SpaceId) ->
     space_dir:guid(SpaceId).
 
+%% @private
+-spec validate_root_directory(undefined | file_meta:path()) -> ok | no_return().
 validate_root_directory(Path = <<"/", _>>) ->
     throw({absolute_root_path, Path});
 validate_root_directory(_) -> ok.
 
+-spec create_files_structure(
+    node(), session:id(), files_structure(), file_meta:mode(), Size :: non_neg_integer(),
+    RootDirPath :: file_meta:path(), FilesCounterRef :: countdown_server:counter_id(),
+    DirsCounterRef :: countdown_server:counter_id(), FilePrefix :: binary(),
+    DirPrefix :: binary(), Truncate :: boolean()
+) ->
+    ok.
 create_files_structure(_Scheduler, _SessionId, [], _Mode, _Size,
     _RootDirPath, _FilesCounterRef, _DirsCounterRef, _FilePrefix, _DirPrefix, _Truncate) ->
     ok;
@@ -655,10 +699,19 @@ create_files_structure(Scheduler, SessionId, [{SubDirs, SubFiles} | Rest], Mode,
     cast_subdirs_creation(Scheduler, SessionId, SubDirs, Rest, Mode, Size,
         RootDirPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix, Truncate).
 
+%% @private
+-spec create_dir(node(), session:id(), file_meta:path(), countdown_server:counter_id()) -> ok.
 create_dir(Node, SessionId, DirPath, CounterRef) ->
     {ok, DirGuid} = lfm_proxy:mkdir(Node, SessionId, DirPath),
     mark_dir_created(Node, DirGuid, DirPath, CounterRef).
 
+%% @private
+-spec cast_subfiles_creation(
+    node(), session:id(), SubfilesNum :: non_neg_integer(), file_meta:mode(),
+    Size :: non_neg_integer(), ParentPath :: file_meta:path(),
+    countdown_server:counter_id(), FilePrefix :: binary(), Truncate :: boolean()
+) ->
+    ok.
 cast_subfiles_creation(Node, SessionId, SubfilesNum, Mode, Size, ParentPath,
     FilesCounterRef, FilePrefix, Truncate) ->
     lists:foreach(fun(N) ->
@@ -666,6 +719,15 @@ cast_subfiles_creation(Node, SessionId, SubfilesNum, Mode, Size, ParentPath,
         cast_file_creation(Node, SessionId, FilePath, Mode, Size, FilesCounterRef, Truncate)
     end, lists:seq(1, SubfilesNum)).
 
+%% @private
+-spec cast_subdirs_creation(
+    node(), session:id(), SubDirsNum :: non_neg_integer(), files_structure(),
+    file_meta:mode(), Size :: non_neg_integer(), ParentPath :: file_meta:path(),
+    FilesCounterRef :: countdown_server:counter_id(),
+    DirsCounterRef :: countdown_server:counter_id(), FilePrefix :: binary(),
+    DirPrefix :: binary(), Truncate :: boolean()
+) ->
+    ok.
 cast_subdirs_creation(Node, SessionId, SubDirsNum, Structure, Mode, Size,
     ParentPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix, Truncate) ->
     lists:foreach(fun(N) ->
@@ -675,11 +737,22 @@ cast_subdirs_creation(Node, SessionId, SubDirsNum, Structure, Mode, Size,
             DirPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix, Truncate)
     end, lists:seq(1, SubDirsNum)).
 
+%% @private
+-spec cast_file_creation(
+    node(), session:id(), file_meta:path(), file_meta:mode(), Size :: non_neg_integer(),
+    countdown_server:counter_id(), Truncate :: boolean()
+) ->
+    ok.
 cast_file_creation(Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate) ->
     ok = worker_pool:cast(?WORKER_POOL, {?MODULE, create_file,
         [Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate]
     }).
 
+-spec create_file(
+    node(), session:id(), file_meta:path(), file_meta:mode(), Size :: non_neg_integer(),
+    countdown_server:counter_id(), Truncate :: boolean()
+) ->
+    ok.
 create_file(Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate) ->
     {ok, Guid} = lfm_proxy:create(Node, SessionId, FilePath, Mode),
     {ok, Handle} = lfm_proxy:open(Node, SessionId, ?FILE_REF(Guid), write),
@@ -692,12 +765,26 @@ create_file(Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate) ->
     ok = lfm_proxy:close(Node, Handle),
     mark_file_created(Node, Guid, FilePath, CounterRef).
 
+%% @private
+-spec mark_file_created(node(), file_id:file_guid(), file_meta:path(), countdown_server:counter_id()) ->
+    ok.
 mark_file_created(Node, FileGuid, FilePath, CounterRef) ->
     countdown_server:decrease(Node, CounterRef, {FileGuid, FilePath}).
 
+%% @private
+-spec mark_dir_created(node(), file_id:file_guid(), file_meta:path(), countdown_server:counter_id()) ->
+    ok.
 mark_dir_created(Node, DirGuid, DirPath, CounterRef) ->
     countdown_server:decrease(Node, CounterRef, {DirGuid, DirPath}).
 
+%% @private
+-spec cast_create_files_structure(
+    node(), session:id(), files_structure(), file_meta:mode(), Size :: non_neg_integer(),
+    ParentPath :: file_meta:path(), FilesCounterRef :: countdown_server:counter_id(),
+    DirsCounterRef :: countdown_server:counter_id(), FilePrefix :: binary(),
+    DirPrefix :: binary(), Truncate :: boolean()
+) ->
+    ok.
 cast_create_files_structure(Node, SessionId, Structure, Mode, Size, ParentPath,
     FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix, Truncate
 ) ->
@@ -705,9 +792,13 @@ cast_create_files_structure(Node, SessionId, Structure, Mode, Size, ParentPath,
         [Node, SessionId, Structure, Mode, Size, ParentPath, FilesCounterRef,
             DirsCounterRef, FilePrefix, DirPrefix, Truncate]}).
 
+%% @private
+-spec subfile_path(file_meta:path(), FilePrefix :: binary(), N :: pos_integer()) -> file_meta:path().
 subfile_path(ParentPath, FilePrefix, N) ->
     filename:join([ParentPath, <<FilePrefix/binary, (integer_to_binary(N))/binary>>]).
 
+%% @private
+-spec subdir_path(file_meta:path(), DirPrefix :: binary(), N :: pos_integer()) -> file_meta:path().
 subdir_path(ParentPath, DirPrefix, N) ->
     filename:join([ParentPath, <<DirPrefix/binary, (integer_to_binary(N))/binary>>]).
 
@@ -728,13 +819,18 @@ count_files_and_dirs(Structure) ->
     end, {0, 0, 1}, Structure),
     {DirsSum, FilesSum}.
 
+%% @private
+-spec ensure_verification_pool_started() -> {ok, pid()} | {error, term()}.
 ensure_verification_pool_started() ->
     {ok, _} = application:ensure_all_started(worker_pool),
     worker_pool:start_sup_pool(?WORKER_POOL, [{workers, 8}]).
 
+-spec move_transfer_ids_to_old_key(test_config:config()) -> test_config:config().
 move_transfer_ids_to_old_key(Config) ->
     map_config_key(?TRANSFERS_KEY, ?OLD_TRANSFERS_KEY, Config).
 
+%% @private
+-spec map_config_key(Key :: atom(), NewKey :: atom(), test_config:config()) -> test_config:config().
 map_config_key(Key0, NewKey, Config) ->
     lists:keymap(fun(Key) ->
         case Key of
@@ -743,9 +839,8 @@ map_config_key(Key0, NewKey, Config) ->
         end
     end, 1, Config).
 
-get_transfer_ids(Config) ->
-    [Tid || {_, Tid, _, _} <- ?config(?TRANSFERS_KEY, Config, [])].
-
+-spec update_config(Key :: atom(), fun((term()) -> term()), test_config:config(), DefaultValue :: term()) ->
+    test_config:config().
 update_config(Key, UpdateFun, Config, DefaultValue) ->
     case proplists:get_value(Key, Config, no_value) of
         no_value ->
@@ -754,14 +849,30 @@ update_config(Key, UpdateFun, Config, DefaultValue) ->
             lists:keyreplace(Key, 1, Config, {Key, UpdateFun(OldValue)})
     end.
 
+%% @private
+-spec schedule_file_replication(
+    ScheduleNode :: node(), od_provider:id(), user_selector(), lfm:file_key(),
+    test_config:config(), Type :: lfm | rest
+) ->
+    {ok, transfer:id()} | {error, term()}.
 schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
     schedule_file_replication_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
 schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, rest) ->
     schedule_file_replication_by_rest(ScheduleNode, ProviderId, User, FileKey, Config).
 
+%% @private
+-spec schedule_file_replication_by_lfm(
+    ScheduleNode :: node(), od_provider:id(), user_selector(), lfm:file_key(), test_config:config()
+) ->
+    no_return().
 schedule_file_replication_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config) ->
     erlang:error(not_implemented).
 
+%% @private
+-spec schedule_file_replication_by_rest(
+    node(), od_provider:id(), user_selector(), lfm:file_key(), test_config:config()
+) ->
+    {ok, transfer:id()} | {error, term()}.
 schedule_file_replication_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid), Config) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     schedule_transfer_by_rest(
@@ -780,14 +891,31 @@ schedule_file_replication_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid),
         Config
     ).
 
+%% @private
+-spec schedule_replica_eviction(
+    ScheduleNode :: node(), od_provider:id(), user_selector(), lfm:file_key(),
+    test_config:config(), Type :: lfm | rest
+) ->
+    {ok, transfer:id()} | {error, term()}.
 schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
     schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
 schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, rest) ->
     schedule_replica_eviction_by_rest(ScheduleNode, ProviderId, User, FileKey, Config, undefined).
 
+%% @private
+-spec schedule_replica_eviction_by_lfm(
+    ScheduleNode :: node(), od_provider:id(), user_selector(), lfm:file_key(), test_config:config()
+) ->
+    no_return().
 schedule_replica_eviction_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config) ->
     erlang:error(not_implemented).
 
+%% @private
+-spec schedule_replica_eviction_by_rest(
+    node(), od_provider:id(), user_selector(), lfm:file_key(), test_config:config(),
+    MigrationProviderId :: undefined | od_provider:id()
+) ->
+    {ok, transfer:id()} | {error, term()}.
 schedule_replica_eviction_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid), Config, MigrationProviderId) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     case MigrationProviderId of
@@ -828,14 +956,34 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid),
             )
     end.
 
+%% @private
+-spec schedule_replica_migration(
+    ScheduleNode :: node(), od_provider:id(), user_selector(), lfm:file_key(),
+    test_config:config(), Type :: lfm | rest, MigrationProviderId :: od_provider:id()
+) ->
+    {ok, transfer:id()} | {error, term()}.
 schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, lfm, MigrationProviderId) ->
     schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId);
 schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, rest, MigrationProviderId) ->
     schedule_replica_eviction_by_rest(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId).
 
+%% @private
+-spec schedule_replica_migration_by_lfm(
+    ScheduleNode :: node(), od_provider:id(), user_selector(), lfm:file_key(),
+    test_config:config(), MigrationProviderId :: od_provider:id()
+) ->
+    no_return().
 schedule_replica_migration_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config, _MigrationProviderId) ->
     erlang:error(not_implemented).
 
+%% @private
+%% @doc Before scheduling the transfer, verifies that it is forbidden for every
+%% proper subset of the required space privileges.
+-spec schedule_transfer_by_rest(
+    node(), od_space:id(), od_user:id(), RequiredPrivs :: [privileges:space_privilege()],
+    URL :: binary(), Method :: atom(), Body :: binary(), test_config:config()
+) ->
+    {ok, transfer:id()} | {error, term()} | no_return().
 schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, Body, Config) ->
     Headers = [?USER_TOKEN_HEADER(Config, UserId), {?HDR_CONTENT_TYPE, <<"application/json">>}],
     AllSpacePrivs = privileges:space_privileges(),
@@ -878,6 +1026,9 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, B
             )
     end.
 
+%% @private
+-spec get_privileges(test_config:config(), node(), od_space:id(), od_user:id()) ->
+    [privileges:space_privilege()].
 get_privileges(Config, Worker, SpaceId, UserId) ->
     case ?config(use_initializer, Config, true) of
         true ->
@@ -886,6 +1037,9 @@ get_privileges(Config, Worker, SpaceId, UserId) ->
             opt_spaces:get_privileges(Worker, SpaceId, UserId)
     end.
 
+%% @private
+-spec set_privileges(test_config:config(), od_space:id(), od_user:id(), [privileges:space_privilege()]) ->
+    ok.
 set_privileges(Config, SpaceId, UserId, SpacePrivs) ->
     case ?config(use_initializer, Config, true) of
         true ->
@@ -895,11 +1049,16 @@ set_privileges(Config, SpaceId, UserId, SpacePrivs) ->
             ozt_spaces:set_privileges(SpaceId, UserId, SpacePrivs)
     end.
 
+%% @private
+-spec file_key(file_id:file_guid(), file_meta:path(), guid | path) -> lfm:file_key().
 file_key(Guid, _Path, guid) ->
     ?FILE_REF(Guid);
 file_key(_Guid, Path, path) ->
     {path, Path}.
 
+%% @private
+%% @doc Returns all subsets of the given list.
+-spec combinations([X]) -> [[X]].
 combinations([]) ->
     [[]];
 combinations([Item]) ->

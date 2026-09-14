@@ -188,7 +188,6 @@ stages:
         - multi_provider_hardlinks
         - multi_provider_proxy
         - multi_provider_rest
-        - multi_provider_view_rest
         - multipart_upload
         - multiple_workflow_scheduling
 #        - node_failure # TODO VFS-11953
@@ -202,7 +201,6 @@ stages:
         - qos_replica_protection
         - qos_status
         - quota
-        - readonly_storage
         - rename
         - replica_deletion
         - replication
@@ -233,6 +231,7 @@ stages:
         - storage_import_race_posix
         - storage_import_race_s3
         - storage_monitoring
+        - storage_readonly
         - storage_req
         - storage_sync_links
         - storage_traverse
@@ -246,6 +245,7 @@ stages:
         - tree_traverse_listing
         - user_auth
         - view
+        - view_rest
         - webdav_token
         - workflow_scheduling
         - workflow_scheduling_cancellation_and_restart
@@ -882,25 +882,12 @@ authz_misc:
     - <<: *ct_logs
       name: ct_logs_authz_misc.tar.gz
 
-autocleaning: &ct-job
+autocleaning:
+  <<: *ct-onenv-job
   key: AUT
-  description: Autocleaning test
-  other: *common-opts
-  tasks:
-    - checkout: *fake-checkout
-    - script: *unpack
-    - script: *quarantine-hack-pull-surefire
-    - script:
-        <<: *run-script-working-dir
-        scripts:
-          - ./ct_run.py --suite ${bamboo.shortJobName}
-        description: Run CT
-  final-tasks: *final-tasks
   artifacts:
     - <<: *ct_logs
       name: ct_logs_autocleaning.tar.gz
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
 
 cdmi_single_provider:
   <<: *ct-onenv-job
@@ -916,12 +903,25 @@ cdmi_multi_provider:
     - <<: *ct_logs
       name: ct_logs_cdmi_multi_provider.tar.gz
 
-client_events:
-  <<: *ct-job
+client_events: &ct-job
   key: CLIEVE
+  description: Client events test
+  other: *common-opts
+  tasks:
+    - checkout: *fake-checkout
+    - script: *unpack
+    - script: *quarantine-hack-pull-surefire
+    - script:
+        <<: *run-script-working-dir
+        scripts:
+          - ./ct_run.py --suite ${bamboo.shortJobName}
+        description: Run CT
+  final-tasks: *final-tasks
   artifacts:
     - <<: *ct_logs
       name: ct_logs_client_events.tar.gz
+  requirements: *requirements
+  artifact-subscriptions: *op-worker
 
 client_events_user_root_dir:
   <<: *ct-onenv-job
@@ -1084,7 +1084,7 @@ file_links_reconciliation_traverse:
   requirements: *os-agent
 
 file_popularity:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: FPOP
   artifacts:
     - <<: *ct_logs
@@ -1468,14 +1468,6 @@ multi_provider_rest:
     - <<: *ct_logs
       name: ct_logs_multi_provider_rest.tar.gz
 
-multi_provider_view_rest:
-  <<: *ct-job
-  key: MULIDX
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_multi_provider_view_rest.tar.gz
-  requirements: *os-agent
-
 multipart_upload:
   <<: *ct-onenv-job
   key: MULUPL
@@ -1569,13 +1561,6 @@ quota:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_quota.tar.gz
-
-readonly_storage:
-  <<: *ct-job
-  key: ROST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_readonly_storage.tar.gz
 
 rename:
   <<: *ct-job
@@ -1692,14 +1677,14 @@ space_file_events_rest:
       name: ct_logs_space_file_events_rest.tar.gz
 
 storage_cleanup:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: STCL
   artifacts:
     - <<: *ct_logs
       name: ct_logs_storage_cleanup.tar.gz
 
 storage_files:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: STFILES
   artifacts:
     - <<: *ct_logs
@@ -1788,6 +1773,13 @@ storage_monitoring:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_storage_monitoring.tar.gz
+
+storage_readonly:
+  <<: *ct-onenv-job
+  key: ROST
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_readonly.tar.gz
 
 storage_req:
   <<: *ct-job
@@ -1879,6 +1871,13 @@ view:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_view.tar.gz
+
+view_rest:
+  <<: *ct-onenv-job
+  key: MULIDX
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_view_rest.tar.gz
 
 webdav_token:
   <<: *ct-job
@@ -2078,7 +2077,6 @@ Coverage report:
     - artifact: ct_logs_multi_provider_hardlinks.tar.gz
     - artifact: ct_logs_multi_provider_proxy.tar.gz
     - artifact: ct_logs_multi_provider_rest.tar.gz
-    - artifact: ct_logs_multi_provider_view_rest.tar.gz
     - artifact: ct_logs_multipart_upload.tar.gz
     - artifact: ct_logs_multiple_workflow_scheduling.tar.gz
 #    - artifact: ct_logs_node_failure.tar.gz # TODO VFS-11953
@@ -2092,7 +2090,6 @@ Coverage report:
     - artifact: ct_logs_qos_replica_protection.tar.gz
     - artifact: ct_logs_qos_status.tar.gz
     - artifact: ct_logs_quota.tar.gz
-    - artifact: ct_logs_readonly_storage.tar.gz
     - artifact: ct_logs_rename.tar.gz
     - artifact: ct_logs_replica_deletion.tar.gz
     - artifact: ct_logs_replication.tar.gz
@@ -2123,6 +2120,7 @@ Coverage report:
     - artifact: ct_logs_storage_import_race_posix.tar.gz
     - artifact: ct_logs_storage_import_race_s3.tar.gz
     - artifact: ct_logs_storage_monitoring.tar.gz
+    - artifact: ct_logs_storage_readonly.tar.gz
     - artifact: ct_logs_storage_req.tar.gz
     - artifact: ct_logs_storage_sync_links.tar.gz
     - artifact: ct_logs_storage_traverse.tar.gz
@@ -2136,6 +2134,7 @@ Coverage report:
     - artifact: ct_logs_tree_traverse_listing.tar.gz
     - artifact: ct_logs_user_auth.tar.gz
     - artifact: ct_logs_view.tar.gz
+    - artifact: ct_logs_view_rest.tar.gz
     - artifact: ct_logs_webdav_token.tar.gz
     - artifact: ct_logs_workflow_scheduling.tar.gz
     - artifact: ct_logs_workflow_scheduling_cancellation_and_restart.tar.gz

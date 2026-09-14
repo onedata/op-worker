@@ -12,7 +12,7 @@
 -module(atm_workflow_execution_crash_tests).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_execution_test.hrl").
+-include("atm/atm_workflow_execution_test.hrl").
 
 -export([
     crash_atm_workflow_execution_during_prepare_lane_callback/0,

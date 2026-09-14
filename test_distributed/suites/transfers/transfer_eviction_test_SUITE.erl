@@ -12,8 +12,8 @@
 -module(transfer_eviction_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("transfer_test.hrl").
--include("onenv_test_utils.hrl").
+-include("transfers/transfer_test.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/common_messages.hrl").
@@ -304,7 +304,7 @@ eviction_decreases_space_occupancy_test(_Config) ->
 
     % the shared space is used by the other test cases too - assert the
     % occupancy changes relative to the state before the initial replication
-    OccupancyBefore = transfer_test_utils:get_space_occupancy(OtherProviderSelector, SpaceId),
+    OccupancyBefore = opt_spaces:get_occupancy(OtherProviderSelector, SpaceId),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
     await_space_occupancy(OtherProviderSelector, SpaceId, OccupancyBefore + FileSize),
 
@@ -322,7 +322,7 @@ eviction_decreases_space_occupancy_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base],
+    ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base, permit_gate_test_utils],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [
@@ -379,9 +379,13 @@ end_per_testcase(Case, Config) ->
 
 
 %% @private
+-spec await_space_occupancy(
+    oct_background:entity_selector(), od_space:id(), ExpOccupancy :: non_neg_integer()
+) ->
+    ok | no_return().
 await_space_occupancy(ProviderSelector, SpaceId, ExpOccupancy) ->
     ?assertEqual(
         ExpOccupancy,
-        transfer_test_utils:get_space_occupancy(ProviderSelector, SpaceId),
-        ?ATTEMPTS
+        opt_spaces:get_occupancy(ProviderSelector, SpaceId),
+        ?TRANSFER_ATTEMPTS
     ).

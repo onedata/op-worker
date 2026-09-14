@@ -12,8 +12,8 @@
 -module(cdmi_multi_provider_test_SUITE).
 -author("Tomasz Lichon").
 
--include("cdmi_test.hrl").
--include("onenv_test_utils.hrl").
+-include("cdmi/cdmi_test.hrl").
+-include("file/file_tree_test.hrl").
 
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -424,7 +424,7 @@ init_per_suite(Config) ->
         onenv_scenario = "2op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
-            #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par_p,
+            #object{guid = DirGuid} = file_tree_test_utils:create_and_sync_file_tree(user2, space_krk_par_p,
                 #dir_spec{
                     name = DateString
                 }, krakow

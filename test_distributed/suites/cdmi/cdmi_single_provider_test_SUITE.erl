@@ -12,9 +12,9 @@
 -module(cdmi_single_provider_test_SUITE).
 -author("Tomasz Lichon").
 
--include("cdmi_test.hrl").
+-include("cdmi/cdmi_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -250,7 +250,7 @@ download_file_in_blocks_test(_Config) ->
     FilePath = filename:join([RootPath, <<"upload_file_in_blocks">>]),
     Data = crypto:strong_rand_bytes(200),
 
-    onenv_file_test_utils:create_and_sync_file_tree(
+    file_tree_test_utils:create_and_sync_file_tree(
         user2,
         node_cache:get(root_dir_guid),
         #file_spec{
@@ -268,8 +268,8 @@ download_file_in_blocks_test(_Config) ->
     ?assertEqual(Data, Response1),
     ?assertEqual(
         [
-            #chunk{offset = 0, size = 100},
-            #chunk{offset = 100, size = 100}
+            #cdmi_chunk{offset = 0, size = 100},
+            #cdmi_chunk{offset = 100, size = 100}
         ],
         get_read_chunks()
     ),
@@ -290,9 +290,9 @@ download_file_in_blocks_test(_Config) ->
 
     ?assertEqual(
         [
-            #chunk{offset = 33, size = 17},
-            #chunk{offset = 50, size = 50},
-            #chunk{offset = 100, size = 33}
+            #cdmi_chunk{offset = 33, size = 17},
+            #cdmi_chunk{offset = 50, size = 50},
+            #cdmi_chunk{offset = 100, size = 33}
         ],
         get_read_chunks()
     ).
@@ -485,7 +485,7 @@ init_per_suite(Config) ->
         onenv_scenario = "1op-2nodes",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
-            #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk,
+            #object{guid = DirGuid} = file_tree_test_utils:create_and_sync_file_tree(user2, space_krk,
                 #dir_spec{
                     name = DateString
                 }, krakow
@@ -516,7 +516,7 @@ init_per_testcase(download_file_in_blocks_test = Case, Config) ->
     test_utils:mock_new(Workers, [lfm], [passthrough]),
     test_utils:mock_expect(Workers, lfm, check_size_and_read, fun(FileHandle, Offset, ToRead) ->
         {ok, _, Data} = Res = meck:passthrough([FileHandle, Offset, ToRead]),
-        Self ! {read, #chunk{offset = Offset, size = byte_size(Data)}},
+        Self ! {read, #cdmi_chunk{offset = Offset, size = byte_size(Data)}},
         Res
     end),
     mock_storage_get_block_size(Workers),

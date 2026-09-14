@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Katarzyna Such
-%%% @copyright (C) 2024 ACK CYFRONET AGH
+%%% @copyright (C) 2024-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -13,27 +13,17 @@
 -module(opt_handles).
 -author("Katarzyna Such").
 
--include("onenv_test_utils.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
--export([get/3, get_metadata/3, get_public_handle_url/3]).
+-export([get_metadata/3, get_public_handle_url/3]).
 -export([create/4, create/6]).
--export([example_metadata_variant/2, expected_metadata_after_publication/2]).
 
 
 -define(DEFAULT_METADATA_SCHEMA, <<"oai_dc">>).
-
--define(EXAMPLE_METADATA1, <<
+-define(DEFAULT_METADATA, <<
     "<?xml version=\"1.0\" encoding=\"utf-8\"?>
     <metadata>",
     "    <dc:contributor>John Doe</dc:contributor>",
-    "</metadata>"
->>).
-
--define(EXAMPLE_METADATA2, <<
-    "<?xml version=\"1.0\" encoding=\"utf-8\"?>
-    <metadata>",
-    "    <dc:contributor>Jane Doe</dc:contributor>",
-    "    <dc:description>Lorem ipsum</dc:description>",
     "</metadata>"
 >>).
 
@@ -41,13 +31,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec get(oct_background:node_selector(), oct_background:entity_selector(), od_handle:id()) ->
-    {ok, od_handle:doc()} | errors:error().
-get(NodeSelector, UserSelector, HandleId) ->
-    SessId = oct_background:get_user_session_id(UserSelector, NodeSelector),
-    opw_test_rpc:call(NodeSelector, handle_logic, get_public_data, [SessId, HandleId]).
 
 
 -spec get_metadata(oct_background:node_selector(), oct_background:entity_selector(), od_handle:id()) ->
@@ -69,7 +52,7 @@ get_public_handle_url(NodeSelector, UserSelector, HandleId) ->
     od_share:id(), od_handle_service:id()
 ) -> od_handle:id().
 create(NodeSelector, UserSelector, ShareId, HServiceId) ->
-    create(NodeSelector, UserSelector, ShareId, HServiceId, ?DEFAULT_METADATA_SCHEMA, ?EXAMPLE_METADATA1).
+    create(NodeSelector, UserSelector, ShareId, HServiceId, ?DEFAULT_METADATA_SCHEMA, ?DEFAULT_METADATA).
 
 
 -spec create(
@@ -77,37 +60,22 @@ create(NodeSelector, UserSelector, ShareId, HServiceId) ->
     od_handle_service:id(), od_handle:metadata_schema(), od_handle:metadata()
 ) -> od_handle:id().
 create(NodeSelector, UserSelector, ShareId, HServiceId, MetadataSchema, MetadataString) ->
-    Node = oct_background:get_random_provider_node(NodeSelector),
     SessId = oct_background:get_user_session_id(UserSelector, NodeSelector),
-
-    {ok, HandleId} = ?rpc(Node, handle_logic:create(
+    {ok, HandleId} = opw_test_rpc:call(NodeSelector, handle_logic, create, [
         SessId, HServiceId, <<"Share">>, ShareId, MetadataSchema, MetadataString
-    )),
+    ]),
     HandleId.
 
 
--spec example_metadata_variant(od_handle:metadata_schema(), integer()) -> binary().
-example_metadata_variant(?DEFAULT_METADATA_SCHEMA, 1) ->
-    ?EXAMPLE_METADATA1;
-example_metadata_variant(?DEFAULT_METADATA_SCHEMA, 2) ->
-    ?EXAMPLE_METADATA2.
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 
--spec expected_metadata_after_publication(binary(), binary()) -> binary().
-expected_metadata_after_publication(?EXAMPLE_METADATA1, PublicHandle) ->
-    <<
-        "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n",
-        "<metadata>\n",
-        "    <dc:identifier>", PublicHandle/binary, "</dc:identifier>",
-        "    <dc:contributor>John Doe</dc:contributor>",
-        "</metadata>"
-    >>;
-expected_metadata_after_publication(?EXAMPLE_METADATA2, PublicHandle) ->
-    <<
-        "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n",
-        "<metadata>\n",
-        "    <dc:identifier>", PublicHandle/binary, "</dc:identifier>",
-        "    <dc:contributor>Jane Doe</dc:contributor>",
-        "    <dc:description>Lorem ipsum</dc:description>",
-        "</metadata>"
-    >>.
+%% @private
+-spec get(oct_background:node_selector(), oct_background:entity_selector(), od_handle:id()) ->
+    {ok, od_handle:doc()} | errors:error().
+get(NodeSelector, UserSelector, HandleId) ->
+    SessId = oct_background:get_user_session_id(UserSelector, NodeSelector),
+    opw_test_rpc:call(NodeSelector, handle_logic, get_public_data, [SessId, HandleId]).
+

@@ -13,7 +13,7 @@
 -module(storage_import_fs_links_posix_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("storage_import_test.hrl").
+-include("storage/storage_import_test.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 -export([
@@ -92,7 +92,7 @@ symlink_is_ignored_by_continuous_scan_test(_Config) -> ?run_test().
 
 init_per_suite(Config) ->
     ModulesToLoad = [
-        ?MODULE, sd_test_utils, storage_file_setup_utils,
+        ?MODULE, sd_test_utils, storage_file_tree_test_utils,
         storage_import_test_utils, storage_import_fs_links_test_base
     ],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
