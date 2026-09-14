@@ -304,7 +304,7 @@ propagate_finished_up(FileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid, 
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             ParentStatus = tree_traverse:report_child_processed(TaskId, SourceMasterUuid),
-            archivisation_logger:report_event("reported child processed to parent dir",
+            archivisation_logger:report_event("reported 'child processed' to parent dir",
                 ?autoformat(TaskId, FilePath, SourceMasterUuid, ParentStatus)),
             case ParentStatus of
                 ?SUBTREE_PROCESSED(NextSubtreeRoot, StartTimestamp) ->
