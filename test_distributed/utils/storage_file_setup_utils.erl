@@ -20,6 +20,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("kernel/include/file.hrl").
 
 %% API
@@ -328,13 +329,13 @@ set_atime_and_mtime_on_storage(StorageId, StorageFileId, Atime, Mtime) ->
 %% own and discard the mount point).
 -spec local_path(storage:id(), helpers:file_id()) -> file:filename_all().
 local_path(StorageId, StorageFileId) ->
-    Helper = storage:get_helper(StorageId),
-    MountPoint = maps:get(<<"mountPoint">>, helper:get_args(Helper)),
+    HelperSpec = storage:get_helper_spec(StorageId),
+    MountPoint = maps:get(<<"mountPoint">>, helper_spec:get_configuration(HelperSpec)),
     <<MountPoint/binary, StorageFileId/binary>>.
 
 
 %% @private
 -spec get_helper_handle(storage:id()) -> helpers:helper_handle().
 get_helper_handle(StorageId) ->
-    Helper = storage:get_helper(StorageId),
-    helpers:get_helper_handle(Helper, Helper#helper.admin_ctx).
+    HelperSpec = storage:get_helper_spec(StorageId),
+    helpers:get_helper_handle(HelperSpec, HelperSpec#helper_spec.credentials).

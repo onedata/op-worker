@@ -21,6 +21,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 
@@ -238,11 +239,11 @@ validate(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     storage_import:assert_imported_storage(StorageId),
 
     AutoDetectAttributes = maps:get(<<"autoDetectAttributes">>, Data, true),
-    Helper = storage:get_helper(StorageId),
-    StorageType= helper:get_name(Helper),
-    HelperArgs = Helper#helper.args,
+    HelperSpec = storage:get_helper_spec(StorageId),
+    StorageType= helper_spec:get_name(HelperSpec),
+    ConfigurationParams = HelperSpec#helper_spec.configuration,
     IsHttpWithoutEmulateRangeRead = StorageType =:= ?HTTP_HELPER_NAME
-        andalso maps:get(<<"emulateRangeRead">>, HelperArgs, <<"false">>) =:= <<"false">>,
+        andalso maps:get(<<"emulateRangeRead">>, ConfigurationParams, <<"false">>) =:= <<"false">>,
     case IsHttpWithoutEmulateRangeRead andalso AutoDetectAttributes == false of
         true ->
             % in case of the HTTP helper without range read emulation, we don't allow overriding
