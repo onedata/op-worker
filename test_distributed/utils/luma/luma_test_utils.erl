@@ -9,7 +9,7 @@
 %%% Helpers for LUMA test suites: running a test case against the matrix of
 %%% storage configurations defined in luma/luma_test_utils.hrl, setting up the
 %%% mocks those configurations require, calling the LUMA mapping API on a node
-%%% and building storage helper user contexts.
+%%% and building storage helper credentials.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_test_utils).
@@ -17,6 +17,7 @@
 
 -include("luma/luma_test_utils.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 -export([run_test_for_all_storage_configs/4, clear_luma_db_for_all_storages/1,
     mock_stat_on_space_mount_dir/1, setup_local_feed_luma/3, mock_storage_is_imported/1, change_admin_creds/1]).
@@ -25,11 +26,11 @@
 -export([map_to_storage_creds/4, map_to_storage_creds/5, map_to_display_creds/4,
     map_uid_to_onedata_user/4, map_acl_user_to_onedata_user/3, map_acl_group_to_onedata_group/3]).
 
--export([new_ceph_user_ctx/2, new_cephrados_user_ctx/2, new_posix_user_ctx/2,
-    new_s3_user_ctx/2, new_swift_user_ctx/3, new_glusterfs_user_ctx/2,
-    new_webdav_user_ctx/2, new_nulldevice_user_ctx/2]).
+-export([new_ceph_credentials/2, new_cephrados_credentials/2, new_posix_credentials/2,
+    new_s3_credentials/2, new_swift_credentials/3, new_glusterfs_credentials/2,
+    new_webdav_credentials/2, new_nulldevice_credentials/2]).
 
--type user_ctx() :: helper:user_ctx().
+-type credentials() :: helper_spec:credentials().
 
 %%%===================================================================
 %%% API functions
@@ -61,14 +62,13 @@ run_test(TestFun, Module, Config, StorageConfig) ->
     end.
 
 clear_luma_db_for_all_storages(Worker) ->
-    StorageIds = lists:usort(lists:map(fun(StorageLumaConfig) ->
-        Storage = maps:get(storage_record, StorageLumaConfig),
-        storage:get_id(Storage)
+    Storages = lists:usort(lists:map(fun(StorageLumaConfig) ->
+        maps:get(storage_record, StorageLumaConfig)
     end, ?ALL_STORAGE_CONFIGS )),
 
-    lists:foreach(fun(StorageId) ->
-        clear_luma_db(Worker, StorageId)
-    end, StorageIds).
+    lists:foreach(fun(Storage) ->
+        clear_luma_db(Worker, Storage)
+    end, Storages).
 
 mock_stat_on_space_mount_dir(Worker) ->
     ok = test_utils:mock_new(Worker, storage_file_ctx),
@@ -102,59 +102,59 @@ setup_local_feed_luma(Worker, Config, LocalFeedConfigFile) ->
     initializer:setup_luma_local_feed(Worker, Config, LocalFeedConfigFile).
 
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?POSIX_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_spec = #helper_spec{name = ?POSIX_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = new_posix_user_ctx(?UID1, ?ROOT_GID),
+    ChangedAdminCreds = new_posix_credentials(?UID1, ?ROOT_GID),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?POSIX_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_spec = ?POSIX_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?CEPH_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_spec = #helper_spec{name = ?CEPH_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = new_ceph_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
+    ChangedAdminCreds = new_ceph_credentials(<<"ADMIN1">>, <<"ADMIN_KEY">>),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?CEPH_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_spec = ?CEPH_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?S3_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_spec = #helper_spec{name = ?S3_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = new_s3_user_ctx(<<"ADMIN_ACCESS_KEY1">>, <<"ADMIN_SECRET_KEY">>),
+    ChangedAdminCreds = new_s3_credentials(<<"ADMIN_ACCESS_KEY1">>, <<"ADMIN_SECRET_KEY">>),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?S3_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_spec = ?S3_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?SWIFT_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_spec = #helper_spec{name = ?SWIFT_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = new_swift_user_ctx(<<"ADMIN1">>, <<"ADMIN_PASSWD">>, <<"PROJECT_NAME">>),
+    ChangedAdminCreds = new_swift_credentials(<<"ADMIN1">>, <<"ADMIN_PASSWD">>, <<"PROJECT_NAME">>),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?SWIFT_HELPER(ChangedAdminCreds)}}};
+        value = StorageConfig#storage_config{helper_spec = ?SWIFT_HELPER(ChangedAdminCreds)}}};
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?CEPHRADOS_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_spec = #helper_spec{name = ?CEPHRADOS_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = new_cephrados_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
+    ChangedAdminCreds = new_cephrados_credentials(<<"ADMIN1">>, <<"ADMIN_KEY">>),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?CEPHRADOS_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_spec = ?CEPHRADOS_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?GLUSTERFS_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_spec = #helper_spec{name = ?GLUSTERFS_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = new_glusterfs_user_ctx(1, 0),
+    ChangedAdminCreds = new_glusterfs_credentials(1, 0),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?GLUSTERFS_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_spec = ?GLUSTERFS_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?NULL_DEVICE_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_spec = #helper_spec{name = ?NULL_DEVICE_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
-    ChangedAdminCreds = new_nulldevice_user_ctx(1, 0),
+    ChangedAdminCreds = new_nulldevice_credentials(1, 0),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?NULLDEVICE_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_spec = ?NULLDEVICE_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?WEBDAV_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_spec = #helper_spec{name = ?WEBDAV_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
     ChangedAdminCreds = ?WEBDAV_BASIC_CREDENTIALS(<<"admin1:password">>),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?WEBDAV_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_spec = ?WEBDAV_HELPER(ChangedAdminCreds)}}
     }.
 
 %%%===================================================================
@@ -179,8 +179,8 @@ map_acl_user_to_onedata_user(Worker, AclUser, Storage) ->
 map_acl_group_to_onedata_group(Worker, AclGroup, Storage) ->
     rpc:call(Worker, luma, map_acl_group_to_onedata_group, [AclGroup, Storage]).
 
-clear_luma_db(Worker, StorageId) ->
-    ok = rpc:call(Worker, luma, clear_db, [StorageId]).
+clear_luma_db(Worker, Storage) ->
+    ok = rpc:call(Worker, luma_crud_api, clear_db, [Storage]).
 
 %%%===================================================================
 %%% Helpers API functions
@@ -191,8 +191,8 @@ clear_luma_db(Worker, StorageId) ->
 %% Constructs Ceph storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_ceph_user_ctx(binary(), binary()) -> user_ctx().
-new_ceph_user_ctx(Username, Key) ->
+-spec new_ceph_credentials(binary(), binary()) -> credentials().
+new_ceph_credentials(Username, Key) ->
     #{
         <<"username">> => Username,
         <<"key">> => Key
@@ -203,8 +203,8 @@ new_ceph_user_ctx(Username, Key) ->
 %% Constructs CephRados storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_cephrados_user_ctx(binary(), binary()) -> user_ctx().
-new_cephrados_user_ctx(Username, Key) ->
+-spec new_cephrados_credentials(binary(), binary()) -> credentials().
+new_cephrados_credentials(Username, Key) ->
     #{
         <<"username">> => Username,
         <<"key">> => Key
@@ -215,8 +215,8 @@ new_cephrados_user_ctx(Username, Key) ->
 %% Constructs POSIX storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_posix_user_ctx(integer(), integer()) -> user_ctx().
-new_posix_user_ctx(Uid, Gid) ->
+-spec new_posix_credentials(integer(), integer()) -> credentials().
+new_posix_credentials(Uid, Gid) ->
     #{
         <<"uid">> => integer_to_binary(Uid),
         <<"gid">> => integer_to_binary(Gid)
@@ -227,8 +227,8 @@ new_posix_user_ctx(Uid, Gid) ->
 %% Constructs S3 storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_s3_user_ctx(binary(), binary()) -> user_ctx().
-new_s3_user_ctx(AccessKey, SecretKey) ->
+-spec new_s3_credentials(binary(), binary()) -> credentials().
+new_s3_credentials(AccessKey, SecretKey) ->
     #{
         <<"accessKey">> => AccessKey,
         <<"secretKey">> => SecretKey
@@ -239,8 +239,8 @@ new_s3_user_ctx(AccessKey, SecretKey) ->
 %% Constructs Swift storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_swift_user_ctx(binary(), binary(), binary()) -> user_ctx().
-new_swift_user_ctx(Username, Password, ProjectName) ->
+-spec new_swift_credentials(binary(), binary(), binary()) -> credentials().
+new_swift_credentials(Username, Password, ProjectName) ->
     #{
         <<"username">> => Username,
         <<"password">> => Password,
@@ -252,8 +252,8 @@ new_swift_user_ctx(Username, Password, ProjectName) ->
 %% Constructs GlusterFS storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_glusterfs_user_ctx(integer(), integer()) -> user_ctx().
-new_glusterfs_user_ctx(Uid, Gid) ->
+-spec new_glusterfs_credentials(integer(), integer()) -> credentials().
+new_glusterfs_credentials(Uid, Gid) ->
     #{
         <<"uid">> => integer_to_binary(Uid),
         <<"gid">> => integer_to_binary(Gid)
@@ -264,12 +264,18 @@ new_glusterfs_user_ctx(Uid, Gid) ->
 %% Constructs WebDAV storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_webdav_user_ctx(binary(), binary()) -> user_ctx().
-new_webdav_user_ctx(CredentialsType = <<"none">>, _Credentials) ->
+-spec new_webdav_credentials(binary(), binary()) -> credentials().
+new_webdav_credentials(CredentialsType = <<"none">>, _Credentials) ->
     #{
         <<"credentialsType">> => CredentialsType
     };
-new_webdav_user_ctx(CredentialsType, Credentials) ->
+new_webdav_credentials(CredentialsType = <<"oauth2">>, Credentials) ->
+    #{
+        <<"credentialsType">> => CredentialsType,
+        <<"credentials">> => Credentials,
+        <<"oauth2IdP">> => ?OAUTH2_IDP
+    };
+new_webdav_credentials(CredentialsType, Credentials) ->
     #{
         <<"credentialsType">> => CredentialsType,
         <<"credentials">> => Credentials
@@ -280,8 +286,8 @@ new_webdav_user_ctx(CredentialsType, Credentials) ->
 %% Constructs Null Device storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_nulldevice_user_ctx(integer(), integer()) -> user_ctx().
-new_nulldevice_user_ctx(Uid, Gid) ->
+-spec new_nulldevice_credentials(integer(), integer()) -> credentials().
+new_nulldevice_credentials(Uid, Gid) ->
     #{
         <<"uid">> => integer_to_binary(Uid),
         <<"gid">> => integer_to_binary(Gid)

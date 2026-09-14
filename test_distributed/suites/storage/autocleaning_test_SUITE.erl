@@ -105,6 +105,12 @@ all() -> [
 -define(FLUSH_ATTEMPTS, 100).
 -define(FLUSH_ATTEMPT_INTERVAL_MILLIS, 100).
 
+% the file popularity view is traversed in batches of candidates, which none of the test
+% cases exceeds - except for the cancelled run, which is split into batches small enough
+% for some of them to be still unqueried when it is cancelled (see cancel_autocleaning_run/1)
+-define(VIEW_BATCH_SIZE, 1000).
+-define(CANCELLED_RUN_VIEW_BATCH_SIZE, 3).
+
 % Gate suspending the auto-cleaning traverse at a chosen candidate
 % (see mock_gated_candidate_processing/1)
 % gate suspending the auto-cleaning traverse (see permit_gate_test_utils)
@@ -748,7 +754,7 @@ autocleaning_should_not_evict_opened_file_replica(Config) ->
 
 cancel_autocleaning_run(Config) ->
     % the traverse is gated in init_per_testcase, so that the run is cancelled at a
-    % precisely chosen candidate
+    % precisely chosen candidate, and split into several view batches there
     #{
         krk_node := KrkNode, paris_node := ParisNode,
         krk_session_id := KrkSessId, paris_session_id := ParisSessId,
@@ -756,6 +762,13 @@ cancel_autocleaning_run(Config) ->
         space_id := SpaceId, space_guid := SpaceGuid
     } = describe_test_env(Config),
 
+    % Each view batch holds a master job of the traverse pool (autocleaning_master_jobs_num,
+    % 10 by default) until all its candidates are processed, while the next batch awaits
+    % a free one without having queried the view yet. Before the cancellation the view can
+    % thus be queried only by those 10 jobs plus one per batch completed with the granted
+    % permits, i.e. for (10 + EvictedBeforeCancelNum div BatchSize) * BatchSize candidates
+    % (BatchSize being ?CANCELLED_RUN_VIEW_BATCH_SIZE). FilesNum must exceed that for some
+    % batch to be queried only after the cancellation, and so cancelled as a whole.
     FilesNum = 50,
     % must leave enough candidates unprocessed for the run to be cancellable midway
     EvictedBeforeCancelNum = 10,
@@ -936,7 +949,7 @@ init_per_suite(Config) ->
             % (and does nothing) even while the check is disabled, so the value applies
             % from the very first tick after a case enables it.
             {autocleaning_periodic_spaces_check_interval, timer:seconds(1)},
-            {autocleaning_view_batch_size, 1000},
+            {autocleaning_view_batch_size, ?VIEW_BATCH_SIZE},
             {replica_deletion_max_parallel_requests, 1000},
             % ensure that all file blocks will be public
             {public_block_size_threshold, 0},
@@ -956,6 +969,8 @@ init_per_suite(Config) ->
                 % in any space, forever - its permits are exhausted and the test process it
                 % notifies is long dead (see mock_gated_candidate_processing/1)
                 unmock_gated_candidate_processing(KrkNode),
+                % a batch size left lowered would split the runs of all the other cases
+                ok = set_view_batch_size(KrkNode, ?VIEW_BATCH_SIZE),
                 % a periodic check left enabled would trigger runs the cases do not expect,
                 % which is what made this suite a coin flip before the env name was fixed
                 ok = disable_periodic_spaces_autocleaning_check(KrkNode)
@@ -979,6 +994,7 @@ init_per_suite(Config) ->
     }).
 
 end_per_suite(_Config) ->
+    test_utils:mock_unload(oct_background:get_provider_nodes(krakow), autocleaning_api),
     oct_background:end_per_suite().
 
 init_per_testcase(Case, Config) ->
@@ -986,6 +1002,7 @@ init_per_testcase(Case, Config) ->
     KrkNode = oct_background:get_random_provider_node(krakow),
     case Case of
         cancel_autocleaning_run ->
+            ok = set_view_batch_size(KrkNode, ?CANCELLED_RUN_VIEW_BATCH_SIZE),
             % suspends the run at a chosen candidate, so that it is guaranteed to still be
             % ongoing when the case cancels it
             mock_gated_candidate_processing(KrkNode);
@@ -1008,7 +1025,8 @@ end_per_testcase(Case, Config) ->
     lfm_proxy:teardown(Config),
     case Case of
         cancel_autocleaning_run ->
-            unmock_gated_candidate_processing(KrkNode);
+            unmock_gated_candidate_processing(KrkNode),
+            ok = set_view_batch_size(KrkNode, ?VIEW_BATCH_SIZE);
         periodical_autocleaning_should_evict_file_replica_when_it_is_replicated ->
             ok = disable_periodic_spaces_autocleaning_check(KrkNode);
         autocleaning_should_evict_file_when_it_is_old_enough ->
@@ -1073,6 +1091,11 @@ disable_periodic_spaces_autocleaning_check(Worker) ->
 -spec enable_periodic_spaces_autocleaning_check(node()) -> ok.
 enable_periodic_spaces_autocleaning_check(Worker) ->
     test_utils:set_env(Worker, ?APP_NAME, autocleaning_periodic_spaces_check_enabled, true).
+
+%% @private
+-spec set_view_batch_size(node(), pos_integer()) -> ok.
+set_view_batch_size(Worker, BatchSize) ->
+    test_utils:set_env(Worker, ?APP_NAME, autocleaning_view_batch_size, BatchSize).
 
 %% @private
 -spec write_file(
@@ -1212,9 +1235,10 @@ unmock_gated_candidate_processing(Node) ->
 %% @end
 -spec assert_autocleaning_check_triggered(node(), od_space:id()) -> ok | no_return().
 assert_autocleaning_check_triggered(Worker, SpaceId) ->
-    ?assertEqual(true, begin
-        rpc:call(Worker, meck, num_calls, [autocleaning_api, check, [SpaceId]]) >= 1
-    end, ?ATTEMPTS).
+    ?assertMatch(NumCalls when is_integer(NumCalls) andalso NumCalls >= 1, rpc:call(
+        Worker, meck, num_calls, [autocleaning_api, check, [SpaceId]]
+    ), ?ATTEMPTS),
+    ok.
 
 %% @private
 -spec configure_autocleaning(node(), od_space:id(), autocleaning:config()) ->

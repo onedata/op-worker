@@ -650,9 +650,9 @@ get_space_mount_point(Node, SpaceId) ->
 
 
 storage_mount_point(Node, StorageId) ->
-    Helper = opw_test_rpc:call(Node, storage, get_helper, [StorageId]),
-    HelperArgs = helper:get_args(Helper),
-    maps:get(<<"mountPoint">>, HelperArgs).
+    Helper = opw_test_rpc:call(Node, storage, get_helper_spec, [StorageId]),
+    ConfigurationParams = helper_spec:get_configuration(Helper),
+    maps:get(<<"mountPoint">>, ConfigurationParams).
 
 
 read_file(Node, FilePath) ->

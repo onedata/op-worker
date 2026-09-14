@@ -30,7 +30,7 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Reloads all helpers of given storage to ensure they use up-to-date
-%% args and ctx.
+%% configuration and credentials.
 %% @end
 %%--------------------------------------------------------------------
 -spec refresh_helpers_by_storage(storage:id()) -> ok.
@@ -41,7 +41,7 @@ refresh_helpers_by_storage(StorageId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Regenerates user context with up-to-date args for given storage
+%% Regenerates user credentials with up-to-date configuration for given storage
 %% and calls nif to update them in the existing helper.
 %% @end
 %%--------------------------------------------------------------------
@@ -52,14 +52,14 @@ refresh_handle_params(Handle, SessionId, SpaceId, StorageId) when is_binary(Stor
     refresh_handle_params(Handle, SessionId, SpaceId, Storage);
 refresh_handle_params(Handle, SessionId, SpaceId, Storage) ->
     % gather information
-    Helper = storage:get_helper(Storage),
+    HelperSpec = storage:get_helper_spec(Storage),
     {ok, UserId} = session:get_user_id(SessionId),
-    {ok, UserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
-    {ok, ArgsWithUserCtx} = helper:get_args_with_user_ctx(Helper, UserCtx),
-    ArgsWithUserCtxAndType = maps:put(<<"type">>, helper:get_name(Helper), ArgsWithUserCtx),
+    {ok, StorageCredentials} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
+    {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, StorageCredentials),
+    HelperParamsWithType = maps:put(<<"type">>, helper_spec:get_name(HelperSpec), HelperParams),
     % do the refresh
-    % @TODO VFS-11947 Propagate storage update errors to onepanel and roll back
-    helpers:refresh_params(Handle, ArgsWithUserCtxAndType).
+    % @TODO VFS-12931 Propagate storage update errors to onepanel and roll back
+    helpers:refresh_params(Handle, HelperParamsWithType).
 
 %%%===================================================================
 %%% RPC exports
@@ -79,6 +79,6 @@ local_refresh_helpers(StorageId) ->
         end, Sessions)
     catch Type:Error ->
         StorageName = storage:fetch_name_of_local_storage(StorageId),
-        ?error("Error updating active helper for storage ~tp with new args: ~tp:~tp",
+        ?error("Error updating active helper for storage ~tp with new params: ~tp:~tp",
             [StorageName, Type, Error])
     end.

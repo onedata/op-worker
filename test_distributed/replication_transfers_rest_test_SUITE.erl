@@ -23,12 +23,18 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
     file_replication_failures_should_fail_whole_transfer/1,
-    rtransfer_works_between_providers_with_different_ports/1
+    rtransfer_works_between_providers_with_different_ports/1,
+    regular_file_deleted_locally_during_replication/1,
+    regular_file_deleted_remotely_during_replication/1,
+    file_deleted_during_directory_replication/1
 ]).
 
 all() -> [
     % file_replication_failures_should_fail_whole_transfer, TODO uncomment after resolving VFS-4742
-    rtransfer_works_between_providers_with_different_ports
+    rtransfer_works_between_providers_with_different_ports,
+    regular_file_deleted_locally_during_replication,
+    regular_file_deleted_remotely_during_replication,
+    file_deleted_during_directory_replication
 ].
 
 %%%===================================================================
@@ -40,6 +46,15 @@ file_replication_failures_should_fail_whole_transfer(Config) ->
 
 rtransfer_works_between_providers_with_different_ports(Config) ->
     replication_transfers_test_base:rtransfer_works_between_providers_with_different_ports(Config, rest).
+
+regular_file_deleted_locally_during_replication(Config) ->
+    replication_transfers_test_base:regular_file_deleted_locally_during_replication(Config, rest, guid).
+
+regular_file_deleted_remotely_during_replication(Config) ->
+    replication_transfers_test_base:regular_file_deleted_remotely_during_replication(Config, rest, guid).
+
+file_deleted_during_directory_replication(Config) ->
+    replication_transfers_test_base:file_deleted_during_directory_replication(Config, rest, guid).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

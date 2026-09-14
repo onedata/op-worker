@@ -25,6 +25,7 @@
 -include("modules/datastore/transfer.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -534,13 +535,17 @@ replication_continues_on_modified_storage_test(_Config) ->
     {ok, StorageId} = opw_test_rpc:call(
         OtherProviderSelector, space_logic, get_local_supporting_storage, [SpaceId]
     ),
-    Helper = opw_test_rpc:call(OtherProviderSelector, storage, get_helper, [StorageId]),
-    HelperArgs = opw_test_rpc:call(OtherProviderSelector, helper, get_args, [Helper]),
-    OldTimeout = maps:get(
-        <<"timeout">>, HelperArgs, integer_to_binary(?DEFAULT_HELPER_TIMEOUT)
+    HelperSpec = opw_test_rpc:call(
+        OtherProviderSelector, storage, get_helper_spec, [StorageId]
     ),
-    ?assertEqual(ok, opw_test_rpc:call(OtherProviderSelector, storage, update_helper_args, [
-        StorageId, #{<<"timeout">> => <<"100000">>}
+    OldTimeout = opw_test_rpc:call(
+        OtherProviderSelector, helper_spec, get_effective_timeout, [HelperSpec]
+    ),
+    UpdateSpec = #storage_update_spec{
+        type = opw_test_rpc:call(OtherProviderSelector, helper_spec, get_name, [HelperSpec])
+    },
+    ?assertEqual(ok, opw_test_rpc:call(OtherProviderSelector, storage, update, [
+        StorageId, UpdateSpec#storage_update_spec{timeout = 100000}
     ])),
 
     % part of the tree must replicate with the modified params in force
@@ -553,8 +558,8 @@ replication_continues_on_modified_storage_test(_Config) ->
 
     % restore the original params mid-transfer (second helper reload - the
     % remaining files are deterministically still parked) and release the jobs
-    ?assertEqual(ok, opw_test_rpc:call(OtherProviderSelector, storage, update_helper_args, [
-        StorageId, #{<<"timeout">> => OldTimeout}
+    ?assertEqual(ok, opw_test_rpc:call(OtherProviderSelector, storage, update, [
+        StorageId, UpdateSpec#storage_update_spec{timeout = OldTimeout}
     ])),
     transfer_test_utils:grant_file_processing_permits(TestSuiteCtx, all),
 

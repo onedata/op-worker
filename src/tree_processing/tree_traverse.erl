@@ -426,6 +426,8 @@ do_dir_master_job(Job, TaskId, NewJobsPreprocessor, Sleep) ->
             {ok, #{slave_jobs => SlaveJobs, ChildrenMasterJobsKey => MasterJobs}};
         {error, ?EACCES, _Stacktrace} ->
             {ok, #{}}; % EACCES is expected error and can happen anytime, so error handling policy is not applied to it.
+        {error, ?ENOENT, _Stacktrace} ->
+            {ok, #{}}; % ENOENT can be returned when dir is deleted mid traverse.
         {error, Reason, Stacktrace} ->
             case {ListingErrorsHandlingPolicy, lists:member(Reason, ?LISTING_KNOWN_ERRORS)} of
                 {ignore_known, true} ->

@@ -315,4 +315,4 @@ cleanup_local_documents(SpaceId, StorageId) ->
     autocleaning_api:delete_config(SpaceId),
     storage_import:clean_up(SpaceId),
     space_quota:delete(SpaceId),
-    luma:clear_db(StorageId, SpaceId).
+    luma_crud_api:clear_db(StorageId, SpaceId).
