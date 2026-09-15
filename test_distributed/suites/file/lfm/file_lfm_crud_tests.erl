@@ -303,9 +303,8 @@ rdwr_opens_storage_file_once_test() ->
 
     % this is about the provider opening the storage file on behalf of the
     % client, which it does not do at all for a client doing direct io
-    file_lfm_test_utils:set_direct_io(SessId, false),
-    ok = test_utils:mock_new(Node, storage_driver, [passthrough]),
-    try
+    file_lfm_test_utils:with_server_side_io([SessId], fun() ->
+        ok = test_utils:mock_new(Node, storage_driver, [passthrough]),
         test_utils:mock_assert_num_calls(Node, storage_driver, open, 2, 0),
 
         {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), rdwr)),
@@ -320,13 +319,7 @@ rdwr_opens_storage_file_once_test() ->
         ?assertEqual(ok, lfm_proxy:close(Node, Handle)),
         % neither the reads nor the writes may have opened the storage file again
         test_utils:mock_assert_num_calls(Node, storage_driver, open, 2, 1)
-    after
-        % restore first - unlike the mock, which the suite also clears
-        % defensively, this would otherwise silently change the io path taken by
-        % every remaining test case sharing the session
-        file_lfm_test_utils:set_direct_io(SessId, true),
-        ok = test_utils:mock_unload(Node, [storage_driver])
-    end,
+    end),
 
     ok.
 
@@ -338,18 +331,25 @@ rdwr_after_storage_file_delete_test() ->
 
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
         Node, SessId, filename:join([RootDirPath, generator:gen_name()]))),
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), rdwr)),
     FileContent = <<"test_data">>,
 
-    % remove the file behind lfm's back, directly on the storage
-    FileCtx = rpc:call(Node, file_ctx, new_by_guid, [FileGuid]),
-    {SDHandle, _} = rpc:call(Node, storage_driver, new_handle, [SessId, FileCtx]),
-    ?assertEqual(ok, rpc:call(Node, storage_driver, unlink, [SDHandle, size(FileContent)])),
+    % the storage file must already be held open when it is removed - for a client
+    % doing direct io the provider would open it only upon the first write, find
+    % it missing and recreate it. For the same reason the case is not run on an
+    % object storage, where an open handle holds nothing on the storage at all.
+    file_lfm_test_utils:with_server_side_io([SessId], fun() ->
+        {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), rdwr)),
 
-    % the already open handle must still be usable
-    ?assertEqual({ok, 9}, lfm_proxy:write(Node, Handle, 0, FileContent)),
-    ?assertEqual({ok, FileContent}, lfm_proxy:read(Node, Handle, 0, size(FileContent))),
-    ?assertEqual(ok, lfm_proxy:close(Node, Handle)),
+        % remove the file behind lfm's back, directly on the storage
+        FileCtx = rpc:call(Node, file_ctx, new_by_guid, [FileGuid]),
+        {SDHandle, _} = rpc:call(Node, storage_driver, new_handle, [SessId, FileCtx]),
+        ?assertEqual(ok, rpc:call(Node, storage_driver, unlink, [SDHandle, size(FileContent)])),
+
+        % the already open handle must still be usable
+        ?assertEqual({ok, 9}, lfm_proxy:write(Node, Handle, 0, FileContent)),
+        ?assertEqual({ok, FileContent}, lfm_proxy:read(Node, Handle, 0, size(FileContent))),
+        ?assertEqual(ok, lfm_proxy:close(Node, Handle))
+    end),
 
     ok.
 

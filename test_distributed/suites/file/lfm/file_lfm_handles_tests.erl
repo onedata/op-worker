@@ -143,7 +143,7 @@ open_failure_test() ->
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
         Node, SessId, filename:join([RootDirPath, generator:gen_name()]))),
 
-    with_server_side_io([SessId], fun() ->
+    file_lfm_test_utils:with_server_side_io([SessId], fun() ->
         {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), rdwr)),
         ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(Node, Handle, 0, ?TEST_DATA)),
         ?assertEqual(ok, lfm_proxy:close(Node, Handle)),
@@ -170,7 +170,7 @@ create_and_open_failure_test() ->
     SessId = file_lfm_test_utils:get_session_id(?USER_SELECTOR),
     {RootDirGuid, RootDirPath} = file_lfm_test_utils:create_test_root_dir(Node, SessId),
 
-    with_server_side_io([SessId], fun() ->
+    file_lfm_test_utils:with_server_side_io([SessId], fun() ->
         OpenedFilesBefore = list_opened_files(Node),
         mock_failing_storage_open(Node),
 
@@ -204,7 +204,7 @@ open_failure_does_not_affect_other_session_test() ->
 
     % both sessions must have the provider do the io, so that the mocked storage
     % open is what the other session's open trips over
-    with_server_side_io([SessId, OtherSessId], fun() ->
+    file_lfm_test_utils:with_server_side_io([SessId, OtherSessId], fun() ->
         {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), rdwr)),
         ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(Node, Handle, 0, ?TEST_DATA)),
 
@@ -246,7 +246,7 @@ mv_between_spaces_failure_test() ->
     OtherSpaceName = oct_background:get_space_name(?OTHER_SPACE_SELECTOR),
     TargetPath = filename:join([<<"/">>, OtherSpaceName, generator:gen_name()]),
 
-    with_server_side_io([SessId], fun() ->
+    file_lfm_test_utils:with_server_side_io([SessId], fun() ->
         OpenedFilesBefore = list_opened_files(Node),
         mock_failing_storage_open(Node),
 
@@ -346,34 +346,6 @@ list_process_handles_test() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Runs Fun with the provider doing the io on behalf of the client rather than
-%% the client doing it directly - only then does the provider open the storage
-%% file when the file is opened, which is what the failing open is mocked into.
-%% Restores both the session and the storage driver afterwards, so that Fun is
-%% free to unload the mock itself midway.
-%% @end
-%%--------------------------------------------------------------------
--spec with_server_side_io([session:id()], fun(() -> term())) -> ok.
-with_server_side_io(SessIds, Fun) ->
-    SetDirectIo = fun(IsDirectIo) ->
-        lists:foreach(fun(SessId) ->
-            file_lfm_test_utils:set_direct_io(SessId, IsDirectIo)
-        end, SessIds)
-    end,
-
-    SetDirectIo(false),
-    try
-        Fun(),
-        ok
-    after
-        SetDirectIo(true),
-        ok = test_utils:mock_unload(file_lfm_test_utils:get_node(), [storage_driver])
-    end.
 
 
 %% @private

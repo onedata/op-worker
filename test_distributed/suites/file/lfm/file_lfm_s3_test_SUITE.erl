@@ -41,7 +41,6 @@
     create_and_unlink_test/1,
     basic_rdwr_test/1,
     rdwr_opens_storage_file_once_test/1,
-    rdwr_after_storage_file_delete_test/1,
     write_and_read_all_subranges_test/1,
     write_and_check_test/1,
     file_gap_test/1,
@@ -110,7 +109,6 @@ groups() -> [
         create_and_unlink_test,
         basic_rdwr_test,
         rdwr_opens_storage_file_once_test,
-        rdwr_after_storage_file_delete_test,
         write_and_read_all_subranges_test,
         write_and_check_test,
         file_gap_test,
@@ -230,10 +228,6 @@ basic_rdwr_test(_Config) ->
 
 
 rdwr_opens_storage_file_once_test(_Config) ->
-    ?RUN_CRUD_TEST().
-
-
-rdwr_after_storage_file_delete_test(_Config) ->
     ?RUN_CRUD_TEST().
 
 

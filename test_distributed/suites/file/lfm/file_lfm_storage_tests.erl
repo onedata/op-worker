@@ -118,25 +118,26 @@ recreate_missing_storage_file_on_open_test() ->
     SessId = file_lfm_test_utils:get_session_id(?USER_SELECTOR),
     {RootDirGuid, _RootDirPath} = file_lfm_test_utils:create_test_root_dir(Node, SessId),
 
-    % with the storage driver stubbed out, only the metadata of the file is written
-    ok = test_utils:mock_new(Node, storage_driver),
-    FileGuid = try
+    % the provider must open the storage file as soon as the file is opened - for a
+    % client doing direct io it would do so only upon the first read, which is
+    % where the missing storage file would get recreated instead
+    file_lfm_test_utils:with_server_side_io([SessId], fun() ->
+        % with the storage driver stubbed out, only the metadata of the file is written
+        ok = test_utils:mock_new(Node, storage_driver),
         ok = test_utils:mock_expect(Node, storage_driver, create, fun(_SDHandle, _Mode) -> ok end),
         ok = test_utils:mock_expect(Node, storage_driver, open, fun(SDHandle, _Flag) -> {ok, SDHandle} end),
         ok = test_utils:mock_expect(Node, storage_driver, release, fun(_SDHandle) -> ok end),
 
-        {ok, {Guid, Handle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        {ok, {FileGuid, Handle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
             Node, SessId, RootDirGuid, generator:gen_name(), undefined)),
         ?assertEqual(ok, lfm_proxy:close(Node, Handle)),
-        Guid
-    after
-        ok = test_utils:mock_unload(Node, [storage_driver])
-    end,
+        ok = test_utils:mock_unload(Node, [storage_driver]),
 
-    % opening the file must recreate the missing storage file rather than fail
-    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), read)),
-    ?assertEqual({ok, <<>>}, lfm_proxy:read(Node, Handle2, 0, 10)),
-    ?assertEqual(ok, lfm_proxy:close(Node, Handle2)),
+        % opening the file must recreate the missing storage file rather than fail
+        {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), read)),
+        ?assertEqual({ok, <<>>}, lfm_proxy:read(Node, Handle2, 0, 10)),
+        ?assertEqual(ok, lfm_proxy:close(Node, Handle2))
+    end),
 
     ok.
 

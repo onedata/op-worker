@@ -23,7 +23,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
--export([get_node/0, get_session_id/1, set_direct_io/2]).
+-export([get_node/0, get_session_id/1, set_direct_io/2, with_server_side_io/2]).
 -export([get_space_id/0, get_space_dir_guid/0, build_space_path/0, build_space_path/1]).
 -export([create_test_root_dir/2]).
 -export([ensure_storage_driver_unmocked/0, ensure_direct_io/0]).
@@ -60,6 +60,32 @@ get_session_id(UserSelector) ->
 -spec set_direct_io(session:id(), boolean()) -> ok.
 set_direct_io(SessId, IsDirectIo) ->
     ?assertEqual(ok, rpc:call(get_node(), session, set_direct_io, [SessId, get_space_id(), IsDirectIo])).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Runs Fun with the provider doing the io on behalf of the given sessions rather
+%% than their clients doing it directly - only then does the provider open the
+%% storage file as soon as the file is opened, which is what a test of that
+%% storage open, or of what happens to the storage file while it is held open,
+%% relies on. Restores both the sessions and the storage driver afterwards, so
+%% that Fun is free to mock the latter and to unload the mock itself midway.
+%% @end
+%%--------------------------------------------------------------------
+-spec with_server_side_io([session:id()], fun(() -> term())) -> ok.
+with_server_side_io(SessIds, Fun) ->
+    SetDirectIo = fun(IsDirectIo) ->
+        lists:foreach(fun(SessId) -> set_direct_io(SessId, IsDirectIo) end, SessIds)
+    end,
+
+    SetDirectIo(false),
+    try
+        Fun(),
+        ok
+    after
+        SetDirectIo(true),
+        ensure_storage_driver_unmocked()
+    end.
 
 
 -spec get_space_id() -> od_space:id().
@@ -114,10 +140,10 @@ ensure_storage_driver_unmocked() ->
 %% @doc
 %% Counterpart of the above for the tests that need the provider to do the io -
 %% they turn direct io off for the duration of a single case and turn it back on
-%% themselves. Left off, it would silently move every later case onto the other
-%% io path. Sessions do not outlive a run (their nonce is drawn anew per
-%% oct_background:init_per_suite), so unlike a mock this needs no defence at the
-%% suite level - only between the test cases of one run.
+%% themselves (see with_server_side_io/2). Left off, it would silently move every
+%% later case onto the other io path. Sessions do not outlive a run (their nonce
+%% is drawn anew per oct_background:init_per_suite), so unlike a mock this needs
+%% no defence at the suite level - only between the test cases of one run.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_direct_io() -> ok.
