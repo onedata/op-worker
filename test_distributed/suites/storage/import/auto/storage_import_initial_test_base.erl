@@ -13,6 +13,11 @@
 -module(storage_import_initial_test_base).
 -author("Katarzyna Such").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("storage/storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").

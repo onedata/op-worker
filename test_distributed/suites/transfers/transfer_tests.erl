@@ -6,12 +6,29 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module contains the base test functions common to all transfer
-%%% types (replication, replica eviction and replica migration).
+%%% Bodies of the test cases common to all transfer types (replication,
+%%% replica eviction and replica migration), together with the per-test-case
+%%% setup and teardown they share. Each transfer type has its own suite,
+%%% which declares the case list and delegates here passing its
+%%% #transfer_test_suite_ctx{}.
+%%%
+%%% Everything this module needs about the deployment - the transfer type,
+%%% the space, the user and the two providers - comes from that ctx, so it
+%%% assumes no scenario of its own and works for any of them.
+%%%
+%%% Case names here are noun phrases naming the subject of the transfer
+%%% (empty_dir_test, big_file_test, many_files_by_view_test). The predicate
+%%% deliberately stays out of them: it is the transfer type, which differs
+%%% per consuming suite and is stated by the suite name.
 %%% @end
 %%%-------------------------------------------------------------------
--module(transfer_common_test_base).
+-module(transfer_tests).
 -author("Bartosz Walkowicz").
+
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
 
 -include("transfers/transfer_test.hrl").
 -include("file/file_tree_test.hrl").
@@ -35,8 +52,8 @@
     file_in_directory_test/1,
     big_file_test/1,
 
-    hundred_files_in_one_transfer_test/1,
-    hundred_files_in_separate_transfers_test/1,
+    many_files_in_one_transfer_test/1,
+    many_files_in_separate_transfers_test/1,
 
     transfer_despite_protection_flags_test/1,
 
@@ -47,17 +64,17 @@
     transfer_by_view_emitting_not_existing_file_id_test/1,
     transfer_by_empty_view_test/1,
     transfer_by_view_with_not_matching_key_test/1,
-    hundred_files_by_view_test/1,
-    hundred_files_by_view_with_batch_10_test/1,
+    many_files_by_view_test/1,
+    many_files_by_view_with_batch_10_test/1,
 
     cancel_ongoing_transfer_test/1,
+    file_removed_during_transfer_test/1,
+
     rerun_failed_file_transfer_test/1,
     rerun_failed_file_transfer_by_other_user_test/1,
     rerun_failed_dir_transfer_test/1,
     rerun_failed_view_transfer_test/1,
-
-    many_simultaneous_failed_transfers_test/1,
-    file_removed_during_transfer_test/1
+    many_simultaneous_failed_transfers_test/1
 ]).
 
 -define(BIG_FILE_CHUNK_SIZE, 33554432).  % 32 MiB
@@ -74,7 +91,7 @@
 % cleanup) FIRST and only then applies its mocks or env tweaks - if the
 % cleanup crashes, ct skips the case WITHOUT running end_per_testcase, so
 % anything installed beforehand would leak into all subsequent cases
-init_per_testcase(Case = hundred_files_by_view_with_batch_10_test, TestSuiteCtx, Config) ->
+init_per_testcase(Case = many_files_by_view_with_batch_10_test, TestSuiteCtx, Config) ->
     NewConfig = init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config),
 
     Nodes = get_all_provider_nodes(TestSuiteCtx),
@@ -117,7 +134,7 @@ init_per_testcase(Case, TestSuiteCtx, Config) ->
     NewConfig.
 
 
-end_per_testcase(Case = hundred_files_by_view_with_batch_10_test, TestSuiteCtx, Config) ->
+end_per_testcase(Case = many_files_by_view_with_batch_10_test, TestSuiteCtx, Config) ->
     Nodes = get_all_provider_nodes(TestSuiteCtx),
     DefaultBatchSize = ?config(transfer_traverse_list_batch_size, Config),
     test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, DefaultBatchSize),
@@ -242,7 +259,7 @@ big_file_test(TestSuiteCtx = #transfer_test_suite_ctx{
     ).
 
 
-hundred_files_in_one_transfer_test(TestSuiteCtx) ->
+many_files_in_one_transfer_test(TestSuiteCtx) ->
     % 10 directories with 10 files each
     RootDir = transfer_test_utils:create_file_tree(TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
         children = file_tree_test_utils:gen_nested_tree_spec([10, 10], ?RAND_CONTENT())
@@ -257,10 +274,12 @@ hundred_files_in_one_transfer_test(TestSuiteCtx) ->
     transfer_test_utils:assert_distribution(TestSuiteCtx, RootDir).
 
 
-hundred_files_in_separate_transfers_test(TestSuiteCtx) ->
+many_files_in_separate_transfers_test(TestSuiteCtx) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-            children = file_tree_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec(
+                [?MANY_TRANSFERS_COUNT], ?RAND_CONTENT()
+            )
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -508,23 +527,25 @@ transfer_by_view_with_not_matching_key_test(TestSuiteCtx) ->
     transfer_test_utils:assert_initial_distribution(TestSuiteCtx, [FileObject]).
 
 
-hundred_files_by_view_test(TestSuiteCtx) ->
-    hundred_files_by_view_test_base(TestSuiteCtx, ?FUNCTION_NAME).
+many_files_by_view_test(TestSuiteCtx) ->
+    many_files_by_view_test_base(TestSuiteCtx, ?FUNCTION_NAME).
 
 
-hundred_files_by_view_with_batch_10_test(TestSuiteCtx) ->
+many_files_by_view_with_batch_10_test(TestSuiteCtx) ->
     % transfer_traverse_list_batch_size is lowered to 10 in init_per_testcase,
     % exercising the multi-batch view traverse (the default of 1000 lists the
-    % whole hundred-file view in one batch)
-    hundred_files_by_view_test_base(TestSuiteCtx, ?FUNCTION_NAME).
+    % whole view in one batch)
+    many_files_by_view_test_base(TestSuiteCtx, ?FUNCTION_NAME).
 
 
 %% @private
--spec hundred_files_by_view_test_base(transfer_test_utils:suite_ctx(), CaseName :: atom()) -> ok.
-hundred_files_by_view_test_base(TestSuiteCtx, CaseName) ->
+-spec many_files_by_view_test_base(transfer_test_utils:suite_ctx(), CaseName :: atom()) -> ok.
+many_files_by_view_test_base(TestSuiteCtx, CaseName) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, CaseName, #dir_spec{
-            children = file_tree_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec(
+                [?MANY_FILES_COUNT], ?RAND_CONTENT()
+            )
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
@@ -677,14 +698,16 @@ many_simultaneous_failed_transfers_test(TestSuiteCtx = #transfer_test_suite_ctx{
 }) ->
     RootDir = #object{children = FileObjects} = transfer_test_utils:create_file_tree(
         TestSuiteCtx, ?FUNCTION_NAME, #dir_spec{
-            children = file_tree_test_utils:gen_nested_tree_spec([100], ?RAND_CONTENT())
+            children = file_tree_test_utils:gen_nested_tree_spec(
+                [?MANY_TRANSFERS_COUNT], ?RAND_CONTENT()
+            )
         }
     ),
     transfer_test_utils:ensure_initial_replicas(TestSuiteCtx, RootDir),
 
     % every transfer file job fails (mocked in init_per_testcase) - each of
-    % the hundred simultaneously scheduled transfers must fail on its own,
-    % leaving the file distributions untouched
+    % the simultaneously scheduled transfers must fail on its own, leaving
+    % the file distributions untouched
     TransferIdsAndFiles = lists_utils:pmap(fun(FileObject) ->
         {transfer_test_utils:schedule_transfer(TestSuiteCtx, FileObject), FileObject}
     end, FileObjects),

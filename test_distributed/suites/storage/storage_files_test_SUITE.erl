@@ -929,11 +929,7 @@ create_posix_storage(Provider, LumaFeed, Imported) ->
 create_s3_storage(LumaFeed) ->
     space_setup_utils:create_storage(krakow, #s3_storage_params{
         storage_path_type = <<"flat">>,
-        hostname = <<
-            "volume-s3.dev-volume-s3-",
-            (atom_to_binary(oct_background:to_entity_placeholder(krakow)))/binary,
-            ".default:9000"
-        >>,
+        hostname = space_setup_utils:build_s3_hostname(krakow),
         bucket_name = ?RAND_STR(15),
         luma_feed = LumaFeed
     }).

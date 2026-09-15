@@ -29,6 +29,7 @@
 -export([
     init/5,
     expect/2,
+    matches_with_backend/1,
     assert_matches_with_backend/1, assert_matches_with_backend/2,
     assert_deleted/1
 ]).
@@ -228,8 +229,11 @@ expect(ExpStateCtx0, {task, AtmTaskExecutionIdOrSelector, items_scheduled, ItemC
         fun expect_task_transitioned_to_active_status_if_was_in_pending_status/2,
         fun expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status/2
     ]),
+    % NOTE: 'stopping' task also counts - the backend registers every batch that
+    % was dispatched before the task's own status changed, and such batch is
+    % reported to the test only after it has already been registered
     case get_task_status(AtmTaskExecutionId, ExpStateCtx1) of
-        <<"active">> ->
+        Status when Status =:= <<"active">>; Status =:= <<"stopping">> ->
             ExpAtmTaskExecutionStateDiff = fun(AtmTaskExecution = #{<<"itemsInProcessing">> := IIP}) ->
                 AtmTaskExecution#{<<"itemsInProcessing">> => IIP + ItemCount}
             end,
@@ -449,6 +453,18 @@ expect(ExpStateCtx, Expectations) when is_list(Expectations) ->
     end, ExpStateCtx, Expectations).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Tells whether the expectations match the data stored in op without reporting
+%% any mismatch found - suitable for callers that treat a mismatch as a state
+%% that may still resolve itself rather than an immediate failure.
+%% @end
+%%--------------------------------------------------------------------
+-spec matches_with_backend(ctx()) -> boolean().
+matches_with_backend(ExpStateCtx) ->
+    assert_matches_with_backend_internal(ExpStateCtx, fun(_, _) -> ok end).
+
+
 -spec assert_matches_with_backend(ctx()) -> boolean().
 assert_matches_with_backend(ExpStateCtx) ->
     assert_matches_with_backend(ExpStateCtx, 0).
@@ -459,7 +475,7 @@ assert_matches_with_backend(ExpStateCtx, 0) ->
     assert_matches_with_backend_internal(ExpStateCtx, fun ct:pal/2);
 
 assert_matches_with_backend(ExpStateCtx, Retries) ->
-    case assert_matches_with_backend_internal(ExpStateCtx, fun(_, _) -> ok end) of
+    case matches_with_backend(ExpStateCtx) of
         true ->
             true;
         false ->
@@ -737,10 +753,22 @@ expect_current_lane_run_started_preparing(ExpStateCtx0, AtmLaneRunSelector) ->
     ExpStateCtx1 = update_exp_lane_run_state(ExpStateCtx0, AtmLaneRunSelector, #{
         <<"status">> => <<"preparing">>}
     ),
-    update_exp_workflow_execution_state(ExpStateCtx1, #{
-        <<"status">> => <<"active">>,
-        <<"startTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx1))
-    }).
+    % 'startTime' is stamped by the backend once, when the execution enters the ongoing
+    % phase (@see atm_workflow_execution_status:set_times_on_phase_transition/1), and
+    % every following lane run only finds it already set. Restamping it here would pit
+    % a validator built around the current time against a timestamp from the beginning
+    % of the execution - a mismatch as soon as the two drift apart far enough.
+    update_exp_workflow_execution_state(ExpStateCtx1, fun
+        (ExpAtmWorkflowExecutionState = #{<<"startTime">> := 0}) ->
+            ExpAtmWorkflowExecutionState#{
+                <<"status">> => <<"active">>,
+                <<"startTime">> => build_timestamp_field_validator(get_timestamp_seconds(
+                    ExpStateCtx1
+                ))
+            };
+        (ExpAtmWorkflowExecutionState) ->
+            ExpAtmWorkflowExecutionState#{<<"status">> => <<"active">>}
+    end).
 
 
 %% @private

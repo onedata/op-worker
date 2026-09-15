@@ -12,6 +12,11 @@
 -module(atm_workflow_execution_pause_tests).
 -author("Bartosz Walkowicz").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("atm/atm_workflow_execution_test.hrl").
 -include("atm/atm_test_schema_drafts.hrl").
 -include("modules/automation/atm_execution.hrl").
@@ -206,12 +211,14 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                         defer_after = {prepare_lane, after_step, {2, 1}}
                     },
                     run_task_for_item = #atm_step_mock_spec{
-                        % Delay execution of last batch to ensure it happens after execution is paused
-                        strategy = fun(#atm_mock_call_ctx{call_args = [_, _, _, _, ItemBatch]}) ->
+                        % Hold back the dispatch of the last batch until the execution has been
+                        % paused, so that its items are certain to be rejected and, consequently,
+                        % not all items end up processed
+                        defer_after = fun(#atm_mock_call_ctx{call_args = [_, _, _, _, ItemBatch]}) ->
                             Values = atm_workflow_execution_test_utils:get_values_batch(ItemBatch),
                             case lists:member(ItemCount, Values) of
-                                true -> {passthrough_with_delay, timer:seconds(2)};
-                                false -> passthrough
+                                true -> {process_task_result_for_item, before_step, {1, 1}};
+                                false -> undefined
                             end
                         end
                     },

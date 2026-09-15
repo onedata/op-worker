@@ -176,17 +176,21 @@ mv_and_sync_file(UserSelector, FileSelector, DstPath) ->
 rm_and_sync_file(UserSelector, FileSelector) ->
     UserId = oct_background:get_user_id(UserSelector),
     {FileGuid, SpaceId} = resolve_file(FileSelector),
-    [RmProvider | RestProviders] = lists_utils:shuffle(oct_background:get_space_supporting_providers(
+    Providers = [RmProvider | _] = lists_utils:shuffle(oct_background:get_space_supporting_providers(
         SpaceId
     )),
 
     rm_file(UserId, FileGuid, RmProvider),
 
+    % NOTE: the removing provider is awaited as well - deletion is finalized
+    % asynchronously, so the file may still be resolvable there right after
+    % the call returns (with only one provider supporting the space this would
+    % otherwise mean no waiting at all)
     lists:foreach(fun(Provider) ->
         Node = oct_background:get_random_provider_node(Provider),
         UserSessId = oct_background:get_user_session_id(UserId, Provider),
         ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS)
-    end, RestProviders).
+    end, Providers).
 
 
 -spec get_object_attributes(oct_background:entity_selector(), session:id(), file_id:file_guid()) ->

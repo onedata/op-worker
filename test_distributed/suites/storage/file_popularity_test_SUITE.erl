@@ -6,8 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module contains tests of file_popularity_view. The view is queried
-%%% using the view_traverse mechanism.
+%%% This module contains tests of file popularity tracking - both the
+%%% file_popularity document maintained per file and the file_popularity_view
+%%% built upon it. The view is queried using the view_traverse mechanism.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_popularity_test_SUITE).
@@ -16,6 +17,7 @@
 -behaviour(view_traverse).
 
 -include("env/space_setup_utils.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/file_popularity/file_popularity_view.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -31,6 +33,10 @@
     init_per_testcase/2, end_per_testcase/2
 ]).
 -export([
+    never_opened_file_should_not_have_popularity_doc/1,
+    opening_file_should_increase_file_popularity/1,
+    file_popularity_should_have_correct_file_size/1,
+
     query_should_return_error_when_file_popularity_is_disabled/1,
     query_should_return_empty_list_when_file_popularity_is_enabled/1,
     query_should_return_empty_list_when_file_has_not_been_opened/1,
@@ -58,6 +64,10 @@
 -export([start_collector/1, collector_loop/1]).
 
 all() -> [
+    never_opened_file_should_not_have_popularity_doc,
+    opening_file_should_increase_file_popularity,
+    file_popularity_should_have_correct_file_size,
+
     query_should_return_error_when_file_popularity_is_disabled,
     query_should_return_empty_list_when_file_popularity_is_enabled,
     query_should_return_empty_list_when_file_has_not_been_opened,
@@ -81,6 +91,12 @@ all() -> [
 
 -define(ATTEMPTS, 10).
 
+% sizes of the histograms kept in the file_popularity document, mirroring the
+% ones defined in the file_popularity module
+-define(HOUR_HISTOGRAM_SIZE, 24).
+-define(DAY_HISTOGRAM_SIZE, 30).
+-define(MONTH_HISTOGRAM_SIZE, 12).
+
 % name for process responsible for collecting traverse results
 -define(COLLECTOR, collector).
 
@@ -92,6 +108,7 @@ all() -> [
 % testcases for which the cluster clock is frozen so that popularity timestamps
 % change only via the explicit warps the case makes
 -define(FROZEN_TIME_CASES, [
+    opening_file_should_increase_file_popularity,
     avg_open_count_per_day_parameter_should_be_bounded_by_100_by_default,
     query_should_return_files_sorted_by_increasing_avg_open_count_per_day,
     query_should_return_files_sorted_by_increasing_last_open_timestamp,
@@ -102,7 +119,61 @@ all() -> [
 ]).
 
 %%%===================================================================
-%%% Test functions
+%%% Test functions concerning the file_popularity document
+%%%===================================================================
+
+never_opened_file_should_not_have_popularity_doc(Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+    SessId = oct_background:get_user_session_id(user1, krakow),
+    SpaceId = ?SPACE_ID(Config),
+    ok = enable_file_popularity(Node, SpaceId),
+
+    {ok, Guid} = create_file(Node, SessId, SpaceId, <<"file">>),
+
+    % the document is created lazily, upon the first open of the file
+    ?assertEqual({error, not_found}, get_popularity(Node, Guid)).
+
+opening_file_should_increase_file_popularity(Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+    SessId = oct_background:get_user_session_id(user1, krakow),
+    SpaceId = ?SPACE_ID(Config),
+    ok = enable_file_popularity(Node, SpaceId),
+    FrozenTimestamp = time_test_utils:get_frozen_time_hours(),
+    {ok, Guid} = create_file(Node, SessId, SpaceId, <<"file">>),
+
+    open_and_close_file(Node, SessId, Guid),
+
+    ?assertEqual(
+        {ok, expected_popularity(Guid, SpaceId, FrozenTimestamp, 1)},
+        get_popularity(Node, Guid)
+    ),
+
+    % as the time is frozen, all the opens fall into the newest slot of every histogram
+    open_and_close_file(Node, SessId, Guid, 23),
+
+    ?assertEqual(
+        {ok, expected_popularity(Guid, SpaceId, FrozenTimestamp, 24)},
+        get_popularity(Node, Guid)
+    ).
+
+file_popularity_should_have_correct_file_size(Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+    SessId = oct_background:get_user_session_id(user1, krakow),
+    SpaceId = ?SPACE_ID(Config),
+    ok = enable_file_popularity(Node, SpaceId),
+    {ok, Guid} = create_file(Node, SessId, SpaceId, <<"file">>),
+
+    write_to_file(Node, SessId, Guid, 0, <<"01234">>),
+    ?assertMatch({ok, #file_popularity{size = 5}}, get_popularity(Node, Guid)),
+
+    write_to_file(Node, SessId, Guid, 5, <<"01234">>),
+    ?assertMatch({ok, #file_popularity{size = 10}}, get_popularity(Node, Guid)),
+
+    ok = lfm_proxy:truncate(Node, SessId, ?FILE_REF(Guid), 1),
+    ?assertMatch({ok, #file_popularity{size = 1}}, get_popularity(Node, Guid)).
+
+%%%===================================================================
+%%% Test functions concerning the file_popularity view
 %%%===================================================================
 
 query_should_return_error_when_file_popularity_is_disabled(Config) ->
@@ -535,6 +606,51 @@ configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCount
         avg_open_count_per_day_weight => AvgOpenCountPerDayWeight,
         max_avg_open_count_per_day => MaxAvgOpenCountPerDay
     })]).
+
+%% @private
+-spec write_to_file(node(), session:id(), file_id:file_guid(), non_neg_integer(), binary()) -> ok.
+write_to_file(Worker, SessId, Guid, Offset, Data) ->
+    {ok, H} = lfm_proxy:open(Worker, SessId, ?FILE_REF(Guid), write),
+    ?assertEqual({ok, byte_size(Data)}, lfm_proxy:write(Worker, H, Offset, Data)),
+    ok = lfm_proxy:close(Worker, H).
+
+%% @private
+-spec get_popularity(node(), file_id:file_guid()) -> {ok, file_popularity:record()} | {error, term()}.
+get_popularity(Worker, Guid) ->
+    case rpc:call(Worker, file_popularity, get, [file_id:guid_to_uuid(Guid)]) of
+        {ok, #document{value = FilePopularity}} -> {ok, FilePopularity};
+        {error, _} = Error -> Error
+    end.
+
+%% @private
+%% @doc
+%% Builds the file_popularity record expected for an empty file that has been
+%% opened OpenCount times, all the opens falling into the newest slot of every
+%% histogram - which holds as long as the cluster clock stays frozen.
+%% @end
+-spec expected_popularity(
+    file_id:file_guid(), od_space:id(), time:hours(), OpenCount :: non_neg_integer()
+) ->
+    file_popularity:record().
+expected_popularity(Guid, SpaceId, LastOpen, OpenCount) ->
+    #file_popularity{
+        file_uuid = file_id:guid_to_uuid(Guid),
+        space_id = SpaceId,
+        size = 0,
+        open_count = OpenCount,
+        last_open = LastOpen,
+        hr_hist = newest_slot_histogram(OpenCount, ?HOUR_HISTOGRAM_SIZE),
+        dy_hist = newest_slot_histogram(OpenCount, ?DAY_HISTOGRAM_SIZE),
+        mth_hist = newest_slot_histogram(OpenCount, ?MONTH_HISTOGRAM_SIZE),
+        hr_mov_avg = OpenCount / ?HOUR_HISTOGRAM_SIZE,
+        dy_mov_avg = OpenCount / ?DAY_HISTOGRAM_SIZE,
+        mth_mov_avg = OpenCount / ?MONTH_HISTOGRAM_SIZE
+    }.
+
+%% @private
+-spec newest_slot_histogram(non_neg_integer(), pos_integer()) -> [non_neg_integer()].
+newest_slot_histogram(Value, Size) ->
+    [Value | lists:duplicate(Size - 1, 0)].
 
 %% @private
 -spec open_and_close_file(node(), session:id(), file_id:file_guid(), Times :: non_neg_integer()) -> ok.

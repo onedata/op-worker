@@ -32,7 +32,7 @@
 
     read_file/2, read_file_info/2, list_dir/2,
     space_path/2, file_path/3,
-    get_supporting_storage_id/2, storage_mount_point/2,
+    get_supporting_storage_id/2, get_storage_file_id/2, storage_mount_point/2,
 
     ensure_file_created_on_storage/2,
     ensure_dir_created_on_storage/2,
@@ -143,6 +143,23 @@ get_space_mount_point(Worker, SpaceId) ->
 -spec get_supporting_storage_id(node(), od_space:id()) -> {ok, storage:id()} | {error, term()}.
 get_supporting_storage_id(Worker, SpaceId) ->
     rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Id under which the given file is kept on the storage supporting its space.
+%% Unlike the path of a file in a space, this depends on the storage: a canonical
+%% one mirrors the path, while a flat one derives the id from the file uuid (see
+%% storage_file_id). Resolve it while the file still exists - the id outlives the
+%% file, which is what lets a test check what became of the storage file after
+%% the file itself was deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_file_id(node(), file_id:file_guid()) -> helpers:file_id().
+get_storage_file_id(Worker, FileGuid) ->
+    FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [FileGuid]),
+    {StorageFileId, _} = rpc:call(Worker, file_ctx, get_storage_file_id, [FileCtx]),
+    StorageFileId.
 
 
 %% @private

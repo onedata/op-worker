@@ -55,7 +55,9 @@
 -record(atm_step_mock_spec, {
     % can be used to block atm execution process until other step phase is executed
     % and as such enforce specific order of events in parallel execution environment
-    defer_after = undefined :: undefined | atm_workflow_execution_test_runner:step_phase_selector(),
+    % (may be specified as a function to defer only some of the step's calls - e.g.
+    % the dispatch of a specific item batch)
+    defer_after = undefined :: atm_workflow_execution_test_runner:defer_after_spec(),
 
     before_step_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook(),
     before_step_exp_state_diff = default ::

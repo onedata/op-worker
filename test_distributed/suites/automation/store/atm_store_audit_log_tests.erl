@@ -6,11 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of automation audit_log store.
+%%% Bodies of the automation audit log store test cases, run by
+%%% 'atm_store_test_SUITE'.
+%%%
+%%% Supplies this store's parametrisation of the contract shared with the
+%%% other infinite-log backed stores, which is asserted in
+%%% 'atm_store_infinite_log_based_tests', and holds the audit-log specific
+%%% cases: browsing by timestamp, log expiration and severity filtering.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_audit_log_store_test_SUITE).
+-module(atm_store_audit_log_tests).
 -author("Lukasz Opiola").
+
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -21,45 +32,17 @@
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 
-%% exported for CT
+%% test cases
 -export([
-    groups/0, all/0,
-    init_per_suite/1, end_per_suite/1,
-    init_per_group/2, end_per_group/2,
-    init_per_testcase/2, end_per_testcase/2
+    create_test/0,
+    update_content_test/0,
+    iterator_test/0,
+    browse_by_index_test/0,
+    browse_by_offset_test/0,
+    browse_by_timestamp_test/0,
+    expiration_test/0,
+    logging_level_test/0
 ]).
-
-%% tests
--export([
-    create_test/1,
-    update_content_test/1,
-    iterator_test/1,
-    browse_by_index_test/1,
-    browse_by_offset_test/1,
-    browse_by_timestamp_test/1,
-    expiration_test/1,
-    logging_level_test/1
-]).
-
-groups() -> [
-    {infinite_log_based_stores_common_tests, [parallel], [
-        create_test,
-        update_content_test,
-        iterator_test,
-        browse_by_index_test,
-        browse_by_offset_test
-    ]},
-    {audit_log_specific_tests, [sequential], [
-        browse_by_timestamp_test,
-        expiration_test,
-        logging_level_test
-    ]}
-].
-
-all() -> [
-    {group, infinite_log_based_stores_common_tests},
-    {group, audit_log_specific_tests}
-].
 
 -define(PROVIDER_SELECTOR, krakow).
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
@@ -71,16 +54,16 @@ all() -> [
 %%%===================================================================
 
 
-create_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:create_test_base(#{
+create_test() ->
+    atm_store_infinite_log_based_tests:create_test_base(#{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1
     }).
 
 
-update_content_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:update_content_test_base(#{
+update_content_test() ->
+    atm_store_infinite_log_based_tests:update_content_test_base(#{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
@@ -90,8 +73,8 @@ update_content_test(_Config) ->
     }).
 
 
-iterator_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:iterator_test_base(#{
+iterator_test() ->
+    atm_store_infinite_log_based_tests:iterator_test_base(#{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
@@ -100,8 +83,8 @@ iterator_test(_Config) ->
     }).
 
 
-browse_by_index_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:browse_content_test_base(index, #{
+browse_by_index_test() ->
+    atm_store_infinite_log_based_tests:browse_content_test_base(index, #{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
@@ -112,8 +95,8 @@ browse_by_index_test(_Config) ->
     }).
 
 
-browse_by_offset_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:browse_content_test_base(offset, #{
+browse_by_offset_test() ->
+    atm_store_infinite_log_based_tests:browse_content_test_base(offset, #{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
@@ -124,7 +107,7 @@ browse_by_offset_test(_Config) ->
     }).
 
 
-browse_by_timestamp_test(_Config) ->
+browse_by_timestamp_test() ->
     ok = time_test_utils:set_current_time_millis(123),
 
     AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
@@ -189,7 +172,7 @@ browse_by_timestamp_test(_Config) ->
     end, lists:seq(1, 8)).
 
 
-expiration_test(_Config) ->
+expiration_test() ->
     ok = time_test_utils:set_current_time_millis(123),
 
     AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
@@ -226,7 +209,7 @@ expiration_test(_Config) ->
     ?assertMatch(#atm_audit_log_store_content_browse_result{}, CallBrowseContent()).
 
 
-logging_level_test(_Config) ->
+logging_level_test() ->
     ok = time_test_utils:set_current_time_millis(123),
     Timestamp = time_test_utils:get_frozen_time_millis(),
 
@@ -433,44 +416,3 @@ build_content_browse_result(Entries, IsLast) ->
         end, Entries),
         <<"isLast">> => IsLast
     }}.
-
-
-%===================================================================
-% SetUp and TearDown functions
-%===================================================================
-
-
-init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE | atm_infinite_log_based_stores_test_base:modules_to_load()],
-    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
-        onenv_scenario = "1op",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
-    }).
-
-
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
-
-
-init_per_group(infinite_log_based_stores_common_tests, Config) ->
-    atm_infinite_log_based_stores_test_base:init_per_group(Config);
-init_per_group(audit_log_specific_tests, Config) ->
-    time_test_utils:freeze_time(Config),
-    Config.
-
-
-end_per_group(infinite_log_based_stores_common_tests, Config) ->
-    atm_infinite_log_based_stores_test_base:end_per_group(Config);
-end_per_group(audit_log_specific_tests, Config) ->
-    time_test_utils:unfreeze_time(Config).
-
-
-init_per_testcase(browse_by_timestamp_test, Config) ->
-    ct:timetrap({minutes, 5}),
-    Config;
-init_per_testcase(_Case, Config) ->
-    Config.
-
-
-end_per_testcase(_Case, _Config) ->
-    ok.

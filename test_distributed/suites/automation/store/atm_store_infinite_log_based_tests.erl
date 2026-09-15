@@ -9,8 +9,13 @@
 %%% This module provides base for testing automation stores based on infinite log.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_infinite_log_based_stores_test_base).
+-module(atm_store_infinite_log_based_tests).
 -author("Bartosz Walkowicz").
+
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -19,11 +24,6 @@
 
 
 %% API
--export([
-    modules_to_load/0,
-    init_per_group/1,
-    end_per_group/1
-]).
 -export([
     create_test_base/1,
     update_content_test_base/1,
@@ -114,19 +114,6 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-
-modules_to_load() ->
-    [?MODULE, atm_store_test_utils].
-
-
-init_per_group(Config) ->
-    time_test_utils:freeze_time(Config),
-    Config.
-
-
-end_per_group(Config) ->
-    time_test_utils:unfreeze_time(Config).
 
 
 -spec create_test_base(#{

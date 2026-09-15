@@ -11,6 +11,11 @@
 -module(events_reliability_test_base).
 -author("Bartosz Walkowicz").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("global_definitions.hrl").
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/common_messages.hrl").

@@ -41,6 +41,7 @@
 
 %% API
 -export([create_storage/2, delete_storage/2, set_up_space/1]).
+-export([build_s3_hostname/1]).
 -export([clean_up_after_previous_run/2]).
 -export([mock_existence_of_unhealthy_storage/1]).
 
@@ -129,6 +130,24 @@ create_storage(Provider, #http_storage_params{
 -spec delete_storage(oct_background:node_selector(), storage:id()) -> ok.
 delete_storage(ProviderSelector, StorageId) ->
     ?assertEqual(ok, opw_test_rpc:call(ProviderSelector, storage, delete, [StorageId]), ?STORAGE_DELETE_ATTEMPTS).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Hostname under which the s3 volume deployed for the given provider is reachable
+%% from within the cluster - both as the hostname of an s3 storage and for talking
+%% to the volume directly, e.g. to create a bucket. The structure results from the
+%% onenv charts, which deploy one such volume per provider in a scenario declaring
+%% the s3 storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec build_s3_hostname(oct_background:entity_selector()) -> binary().
+build_s3_hostname(ProviderSelector) ->
+    <<
+        "volume-s3.dev-volume-s3-",
+        (atom_to_binary(oct_background:to_entity_placeholder(ProviderSelector)))/binary,
+        ".default:9000"
+    >>.
 
 
 -spec set_up_space(space_spec()) -> oct_background:entity_id().
@@ -347,13 +366,6 @@ s3_authorization(Hostname, AmzContent, DateTime, BucketName, SecretKey, AccessKe
         "AWS4-HMAC-SHA256 Credential=~ts/~ts, SignedHeaders=~ts, Signature=~ts",
         [AccessKey, CredentialScope, SignedHeaders, Signature]
     ).
-
-
-%% @private
--spec build_s3_hostname(oct_background:entity_selector()) -> string().
-build_s3_hostname(ProviderSelector) ->
-    %% hostname structure results from onenv charts
-    "volume-s3.dev-volume-s3-" ++ atom_to_list(oct_background:to_entity_placeholder(ProviderSelector)) ++ ":9000".
 
 
 %% @private

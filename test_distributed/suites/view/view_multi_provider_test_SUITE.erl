@@ -13,17 +13,23 @@
 %%%
 %%% A view is defined per space; its definition is dbsync-synced to every
 %%% supporting provider, but evaluated (and hence queryable) only on the
-%%% providers listed in the definition. All the test cases therefore
-%%% exercise the API on more than one provider - the suite runs on three,
-%%% which is the minimum for the view name to be ambiguous on a provider
-%%% holding none of the conflicting definitions itself.
+%%% providers listed in the definition. Almost every case therefore exercises
+%%% the API on more than one provider - the suite runs on three, which is the
+%%% minimum for the view name to be ambiguous on a provider holding none of the
+%%% conflicting definitions itself. The few cases that would do with one
+%%% provider ride along rather than pay a second deployment.
 %%%
 %%% The view evaluation semantics (what a map/reduce function emits for
-%%% which document type) are covered by view_test_SUITE, which drives the
-%%% internal API directly.
+%%% which document type) are covered by view_single_provider_test_SUITE, which
+%%% drives the internal API directly.
+%%%
+%%% All the cases share one space supported by all three providers, plus one
+%%% supported by a single provider for the case checking how the other two
+%%% react to a space they do not support. Each case starts from a space wiped
+%%% of files and views, with the client's space privileges restored.
 %%% @end
 %%%-------------------------------------------------------------------
--module(view_rest_test_SUITE).
+-module(view_multi_provider_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("view/view_test.hrl").
@@ -45,43 +51,43 @@
 ]).
 
 -export([
-    create_get_update_delete_view/1,
-    creating_view_with_invalid_params_should_fail/1,
-    updating_view_with_invalid_params_should_fail/1,
-    overwriting_view_should_fail/1,
-    create_get_delete_reduce_fun/1,
-    getting_nonexistent_view_should_fail/1,
-    getting_view_of_space_unsupported_by_provider_should_fail/1,
-    list_views/1,
-    query_view/1,
-    querying_view_with_invalid_params_should_fail/1,
-    create_spatial_view/1,
-    query_spatial_view/1,
-    querying_spatial_view_with_wrong_function_should_fail/1,
-    query_file_popularity_view/1,
-    querying_spatial_view_requires_spatial_flag/1,
-    removing_files_should_remove_them_from_view_results/1,
-    create_duplicated_views_on_remote_providers/1
+    view_definition_crud_propagates_to_all_providers_test/1,
+    view_creation_with_invalid_params_fails_test/1,
+    view_update_with_invalid_params_fails_test/1,
+    view_creation_under_existing_name_fails_test/1,
+    reduce_function_crud_propagates_to_all_providers_test/1,
+    view_fetch_by_nonexistent_name_fails_test/1,
+    view_fetch_on_provider_not_supporting_space_fails_test/1,
+    views_are_listed_in_chunks_on_all_providers_test/1,
+    view_is_queryable_only_on_its_evaluating_providers_test/1,
+    view_query_with_invalid_params_fails_test/1,
+    spatial_view_definition_propagates_to_all_providers_test/1,
+    spatial_view_query_returns_files_in_range_test/1,
+    spatial_view_query_with_non_geometry_key_fails_test/1,
+    builtin_file_popularity_view_is_queryable_test/1,
+    spatial_view_query_requires_spatial_flag_test/1,
+    removed_files_disappear_from_view_results_test/1,
+    views_of_same_name_are_told_apart_by_provider_prefix_test/1
 ]).
 
 all() -> [
-    create_get_update_delete_view,
-    creating_view_with_invalid_params_should_fail,
-    updating_view_with_invalid_params_should_fail,
-    overwriting_view_should_fail,
-    create_get_delete_reduce_fun,
-    getting_nonexistent_view_should_fail,
-    getting_view_of_space_unsupported_by_provider_should_fail,
-    list_views,
-    query_view,
-    querying_view_with_invalid_params_should_fail,
-    create_spatial_view,
-    query_spatial_view,
-    querying_spatial_view_with_wrong_function_should_fail,
-    query_file_popularity_view,
-    querying_spatial_view_requires_spatial_flag,
-    removing_files_should_remove_them_from_view_results,
-    create_duplicated_views_on_remote_providers
+    view_definition_crud_propagates_to_all_providers_test,
+    view_creation_with_invalid_params_fails_test,
+    view_update_with_invalid_params_fails_test,
+    view_creation_under_existing_name_fails_test,
+    reduce_function_crud_propagates_to_all_providers_test,
+    view_fetch_by_nonexistent_name_fails_test,
+    view_fetch_on_provider_not_supporting_space_fails_test,
+    views_are_listed_in_chunks_on_all_providers_test,
+    view_is_queryable_only_on_its_evaluating_providers_test,
+    view_query_with_invalid_params_fails_test,
+    spatial_view_definition_propagates_to_all_providers_test,
+    spatial_view_query_returns_files_in_range_test,
+    spatial_view_query_with_non_geometry_key_fails_test,
+    builtin_file_popularity_view_is_queryable_test,
+    spatial_view_query_requires_spatial_flag_test,
+    removed_files_disappear_from_view_results_test,
+    views_of_same_name_are_told_apart_by_provider_prefix_test
 ].
 
 
@@ -127,7 +133,7 @@ all() -> [
 %%%===================================================================
 
 
-create_get_update_delete_view(_Config) ->
+view_definition_crud_propagates_to_all_providers_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     P1Id = oct_background:get_provider_id(?P1),
     P2Id = oct_background:get_provider_id(?P2),
@@ -230,7 +236,7 @@ create_get_update_delete_view(_Config) ->
     assert_views_listed_on_all_providers(SpaceId, []).
 
 
-creating_view_with_invalid_params_should_fail(_Config) ->
+view_creation_with_invalid_params_fails_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     MapFunction = gen_map_function(?FUNCTION_NAME),
@@ -245,7 +251,7 @@ creating_view_with_invalid_params_should_fail(_Config) ->
     end, invalid_view_definition_params(SpaceId)).
 
 
-updating_view_with_invalid_params_should_fail(_Config) ->
+view_update_with_invalid_params_fails_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     MapFunction = gen_map_function(?FUNCTION_NAME),
@@ -272,7 +278,7 @@ updating_view_with_invalid_params_should_fail(_Config) ->
     end, invalid_view_definition_params(SpaceId)).
 
 
-overwriting_view_should_fail(_Config) ->
+view_creation_under_existing_name_fails_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     P2Id = oct_background:get_provider_id(?P2),
 
@@ -314,7 +320,7 @@ overwriting_view_should_fail(_Config) ->
     assert_views_listed_on_all_providers(SpaceId, []).
 
 
-create_get_delete_reduce_fun(_Config) ->
+reduce_function_crud_propagates_to_all_providers_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     P1Id = oct_background:get_provider_id(?P1),
 
@@ -373,7 +379,7 @@ create_get_delete_reduce_fun(_Config) ->
     assert_views_listed_on_all_providers(SpaceId, []).
 
 
-getting_nonexistent_view_should_fail(_Config) ->
+view_fetch_by_nonexistent_name_fails_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
@@ -383,7 +389,7 @@ getting_nonexistent_view_should_fail(_Config) ->
     end, ?ALL_PROVIDERS).
 
 
-getting_view_of_space_unsupported_by_provider_should_fail(_Config) ->
+view_fetch_on_provider_not_supporting_space_fails_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SINGLE_PROVIDER_SPACE_SELECTOR),
     ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     MapFunction = gen_map_function(?FUNCTION_NAME),
@@ -418,7 +424,7 @@ getting_view_of_space_unsupported_by_provider_should_fail(_Config) ->
     end, ?ALL_PROVIDERS -- [?P1]).
 
 
-list_views(_Config) ->
+views_are_listed_in_chunks_on_all_providers_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     ViewNum = 20,
     ChunkSize = rand:uniform(ViewNum),
@@ -454,7 +460,7 @@ list_views(_Config) ->
     end, ?ALL_PROVIDERS).
 
 
-query_view(_Config) ->
+view_is_queryable_only_on_its_evaluating_providers_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     P1Id = oct_background:get_provider_id(?P1),
     P2Id = oct_background:get_provider_id(?P2),
@@ -502,7 +508,7 @@ query_view(_Config) ->
     ?assertEqual(ErrorForbidden, query_emitted_values(?P2, SpaceId, ViewName, #{}), ?ATTEMPTS).
 
 
-querying_view_with_invalid_params_should_fail(_Config) ->
+view_query_with_invalid_params_fails_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     P1Id = oct_background:get_provider_id(?P1),
     P2Id = oct_background:get_provider_id(?P2),
@@ -559,7 +565,7 @@ querying_view_with_invalid_params_should_fail(_Config) ->
     ]).
 
 
-create_spatial_view(_Config) ->
+spatial_view_definition_propagates_to_all_providers_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     MapFunction = view_test_utils:gen_spatial_map_function(
@@ -579,7 +585,7 @@ create_spatial_view(_Config) ->
     }).
 
 
-query_spatial_view(_Config) ->
+spatial_view_query_returns_files_in_range_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     LocationKey = ?JSON_METADATA_LOCATION_KEY(?FUNCTION_NAME),
@@ -613,7 +619,7 @@ query_spatial_view(_Config) ->
     end, ?ALL_PROVIDERS).
 
 
-querying_spatial_view_with_wrong_function_should_fail(_Config) ->
+spatial_view_query_with_non_geometry_key_fails_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     LocationKey = ?JSON_METADATA_LOCATION_KEY(?FUNCTION_NAME),
@@ -643,7 +649,7 @@ querying_spatial_view_with_wrong_function_should_fail(_Config) ->
     end, ?ALL_PROVIDERS).
 
 
-query_file_popularity_view(_Config) ->
+builtin_file_popularity_view_is_queryable_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     ?assertMatch({ok, _}, query_view_via_rest(?P1, SpaceId, <<"file-popularity">>, #{
         spatial => false,
@@ -651,7 +657,7 @@ query_file_popularity_view(_Config) ->
     })).
 
 
-querying_spatial_view_requires_spatial_flag(_Config) ->
+spatial_view_query_requires_spatial_flag_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
 
@@ -665,7 +671,7 @@ querying_spatial_view_requires_spatial_flag(_Config) ->
     ?assertMatch({ok, _}, query_view_via_rest(?P1, SpaceId, ViewName, #{spatial => true})).
 
 
-removing_files_should_remove_them_from_view_results(_Config) ->
+removed_files_disappear_from_view_results_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     ViewName = view_test_utils:rand_view_name(?FUNCTION_NAME),
     XattrName = file_test_utils:rand_xattr_name(?FUNCTION_NAME),
@@ -684,7 +690,7 @@ removing_files_should_remove_them_from_view_results(_Config) ->
     ?assertEqual([], query_emitted_values(?P2, SpaceId, ViewName, #{}), ?VIEW_SYNC_ATTEMPTS).
 
 
-create_duplicated_views_on_remote_providers(_Config) ->
+views_of_same_name_are_told_apart_by_provider_prefix_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     P1Id = oct_background:get_provider_id(?P1),
     P2Id = oct_background:get_provider_id(?P2),
@@ -852,7 +858,7 @@ init_per_testcase(Case, Config) ->
     ),
 
     case Case of
-        query_file_popularity_view -> set_file_popularity_enabled(true);
+        builtin_file_popularity_view_is_queryable_test -> set_file_popularity_enabled(true);
         _ -> ok
     end,
     NewConfig.
@@ -860,7 +866,7 @@ init_per_testcase(Case, Config) ->
 
 end_per_testcase(Case, Config) ->
     case Case of
-        query_file_popularity_view -> set_file_popularity_enabled(false);
+        builtin_file_popularity_view_is_queryable_test -> set_file_popularity_enabled(false);
         _ -> ok
     end,
     lfm_proxy:teardown(Config).

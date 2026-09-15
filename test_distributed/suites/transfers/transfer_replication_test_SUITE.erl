@@ -6,7 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module tests replication transfers.
+%%% This module tests replication transfers. The cases shared by all transfer
+%%% types live in transfer_tests and are run here against a replication ctx;
+%%% the ones defined below are those specific to replication (no-op
+%%% replications, space capacity limits, invalid targets, resilience).
+%%%
+%%% Deliberately not covered here: the transfer REST/GraphSync API and its
+%%% authorization (api_transfer_test_SUITE), and transfers surviving a
+%%% provider restart (transfer_restarts_test_SUITE).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer_replication_test_SUITE).
@@ -23,28 +30,24 @@
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 -export([
-    all/0,
+    all/0, groups/0,
     init_per_suite/1, end_per_suite/1,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
 %% tests
 -export([
-    %% --- basic shapes ---
     empty_dir_test/1,
     tree_of_empty_dirs_test/1,
     regular_file_test/1,
     file_in_directory_test/1,
     big_file_test/1,
 
-    %% --- scale ---
-    hundred_files_in_one_transfer_test/1,
-    hundred_files_in_separate_transfers_test/1,
+    many_files_in_one_transfer_test/1,
+    many_files_in_separate_transfers_test/1,
 
-    %% --- protection flags ---
     transfer_despite_protection_flags_test/1,
 
-    %% --- transfers by view ---
     regular_file_by_view_test/1,
     files_matched_by_view_with_reduce_test/1,
     transfer_by_not_existing_view_test/1,
@@ -52,95 +55,103 @@
     transfer_by_view_emitting_not_existing_file_id_test/1,
     transfer_by_empty_view_test/1,
     transfer_by_view_with_not_matching_key_test/1,
-    hundred_files_by_view_test/1,
-    hundred_files_by_view_with_batch_10_test/1,
+    many_files_by_view_test/1,
+    many_files_by_view_with_batch_10_test/1,
     replication_by_view_emitting_multiple_keys_test/1,
 
-    %% --- transfer lifecycle ---
     cancel_ongoing_transfer_test/1,
+    file_removed_during_transfer_test/1,
+
     rerun_failed_file_transfer_test/1,
     rerun_failed_file_transfer_by_other_user_test/1,
     rerun_failed_dir_transfer_test/1,
     rerun_failed_view_transfer_test/1,
-
-    %% --- failures and races ---
     many_simultaneous_failed_transfers_test/1,
-    file_removed_during_transfer_test/1,
 
-    %% --- no-op replications ---
     replication_to_source_provider_test/1,
     replication_of_already_replicated_file_test/1,
     replication_of_not_synced_file_test/1,
 
-    %% --- space capacity limits ---
     replication_with_exactly_enough_space_test/1,
     replication_into_full_space_test/1,
 
-    %% --- invalid providers ---
     replication_to_missing_provider_test/1,
     replication_to_not_supporting_provider_test/1,
     replication_scheduled_on_not_supporting_provider_test/1,
 
-    %% --- resilience ---
     replication_continues_on_modified_storage_test/1,
     warp_time_during_replication_test/1
 ]).
 
+groups() -> [
+    {file_tree_shape_tests, [], [
+        empty_dir_test,
+        tree_of_empty_dirs_test,
+        regular_file_test,
+        file_in_directory_test,
+        big_file_test
+    ]},
+    {scale_tests, [], [
+        many_files_in_one_transfer_test,
+        many_files_in_separate_transfers_test
+    ]},
+    {protection_flag_tests, [], [
+        transfer_despite_protection_flags_test
+    ]},
+    {view_transfer_tests, [], [
+        regular_file_by_view_test,
+        files_matched_by_view_with_reduce_test,
+        transfer_by_not_existing_view_test,
+        transfer_by_view_emitting_invalid_file_id_test,
+        transfer_by_view_emitting_not_existing_file_id_test,
+        transfer_by_empty_view_test,
+        transfer_by_view_with_not_matching_key_test,
+        many_files_by_view_test,
+        many_files_by_view_with_batch_10_test,
+        replication_by_view_emitting_multiple_keys_test
+    ]},
+    {interrupted_transfer_tests, [], [
+        cancel_ongoing_transfer_test,
+        file_removed_during_transfer_test
+    ]},
+    {failed_transfer_tests, [], [
+        rerun_failed_file_transfer_test,
+        rerun_failed_file_transfer_by_other_user_test,
+        rerun_failed_dir_transfer_test,
+        rerun_failed_view_transfer_test,
+        many_simultaneous_failed_transfers_test
+    ]},
+    {no_op_replication_tests, [], [
+        replication_to_source_provider_test,
+        replication_of_already_replicated_file_test,
+        replication_of_not_synced_file_test
+    ]},
+    {space_capacity_limit_tests, [], [
+        replication_with_exactly_enough_space_test,
+        replication_into_full_space_test
+    ]},
+    {invalid_provider_tests, [], [
+        replication_to_missing_provider_test,
+        replication_to_not_supporting_provider_test,
+        replication_scheduled_on_not_supporting_provider_test
+    ]},
+    {resilience_tests, [], [
+        replication_continues_on_modified_storage_test,
+        warp_time_during_replication_test
+    ]}
+].
+
 all() -> [
-    %% --- basic shapes ---
-    empty_dir_test,
-    tree_of_empty_dirs_test,
-    regular_file_test,
-    file_in_directory_test,
-    big_file_test,
-
-    %% --- scale ---
-    hundred_files_in_one_transfer_test,
-    hundred_files_in_separate_transfers_test,
-
-    %% --- protection flags ---
-    transfer_despite_protection_flags_test,
-
-    %% --- transfers by view ---
-    regular_file_by_view_test,
-    files_matched_by_view_with_reduce_test,
-    transfer_by_not_existing_view_test,
-    transfer_by_view_emitting_invalid_file_id_test,
-    transfer_by_view_emitting_not_existing_file_id_test,
-    transfer_by_empty_view_test,
-    transfer_by_view_with_not_matching_key_test,
-    hundred_files_by_view_test,
-    hundred_files_by_view_with_batch_10_test,
-    replication_by_view_emitting_multiple_keys_test,
-
-    %% --- transfer lifecycle ---
-    cancel_ongoing_transfer_test,
-    rerun_failed_file_transfer_test,
-    rerun_failed_file_transfer_by_other_user_test,
-    rerun_failed_dir_transfer_test,
-    rerun_failed_view_transfer_test,
-
-    %% --- failures and races ---
-    many_simultaneous_failed_transfers_test,
-    file_removed_during_transfer_test,
-
-    %% --- no-op replications ---
-    replication_to_source_provider_test,
-    replication_of_already_replicated_file_test,
-    replication_of_not_synced_file_test,
-
-    %% --- space capacity limits ---
-    replication_with_exactly_enough_space_test,
-    replication_into_full_space_test,
-
-    %% --- invalid providers ---
-    replication_to_missing_provider_test,
-    replication_to_not_supporting_provider_test,
-    replication_scheduled_on_not_supporting_provider_test,
-
-    %% --- resilience ---
-    replication_continues_on_modified_storage_test,
-    warp_time_during_replication_test
+    {group, file_tree_shape_tests},
+    {group, scale_tests},
+    {group, protection_flag_tests},
+    {group, view_transfer_tests},
+    {group, interrupted_transfer_tests},
+    {group, failed_transfer_tests},
+    {group, no_op_replication_tests},
+    {group, space_capacity_limit_tests},
+    {group, invalid_provider_tests},
+    {group, resilience_tests}
 ].
 
 -define(SUITE_CTX, #transfer_test_suite_ctx{
@@ -150,7 +161,7 @@ all() -> [
     creation_provider_selector = krakow,
     other_provider_selector = paris
 }).
--define(run_test(), transfer_common_test_base:?FUNCTION_NAME(?SUITE_CTX)).
+-define(run_test(), transfer_tests:?FUNCTION_NAME(?SUITE_CTX)).
 
 -define(MISSING_PROVIDER_ID, <<"missing_provider_id">>).
 % space of the "2op" scenario supported only by the creation provider (krakow)
@@ -179,7 +190,7 @@ all() -> [
 %%%===================================================================
 
 
-%% --- basic shapes ---
+%% --- file tree shapes ---
 
 
 empty_dir_test(_Config) -> ?run_test().
@@ -192,8 +203,8 @@ big_file_test(_Config) -> ?run_test().
 %% --- scale ---
 
 
-hundred_files_in_one_transfer_test(_Config) -> ?run_test().
-hundred_files_in_separate_transfers_test(_Config) -> ?run_test().
+many_files_in_one_transfer_test(_Config) -> ?run_test().
+many_files_in_separate_transfers_test(_Config) -> ?run_test().
 
 
 %% --- protection flags ---
@@ -212,8 +223,8 @@ transfer_by_view_emitting_invalid_file_id_test(_Config) -> ?run_test().
 transfer_by_view_emitting_not_existing_file_id_test(_Config) -> ?run_test().
 transfer_by_empty_view_test(_Config) -> ?run_test().
 transfer_by_view_with_not_matching_key_test(_Config) -> ?run_test().
-hundred_files_by_view_test(_Config) -> ?run_test().
-hundred_files_by_view_with_batch_10_test(_Config) -> ?run_test().
+many_files_by_view_test(_Config) -> ?run_test().
+many_files_by_view_with_batch_10_test(_Config) -> ?run_test().
 
 
 replication_by_view_emitting_multiple_keys_test(_Config) ->
@@ -265,21 +276,21 @@ replication_by_view_emitting_multiple_keys_test(_Config) ->
     transfer_test_utils:assert_distribution(TestSuiteCtx, [FileObject]).
 
 
-%% --- transfer lifecycle ---
+%% --- interrupted transfers ---
 
 
 cancel_ongoing_transfer_test(_Config) -> ?run_test().
+file_removed_during_transfer_test(_Config) -> ?run_test().
+
+
+%% --- failed transfers ---
+
+
 rerun_failed_file_transfer_test(_Config) -> ?run_test().
 rerun_failed_file_transfer_by_other_user_test(_Config) -> ?run_test().
 rerun_failed_dir_transfer_test(_Config) -> ?run_test().
 rerun_failed_view_transfer_test(_Config) -> ?run_test().
-
-
-%% --- failures and races ---
-
-
 many_simultaneous_failed_transfers_test(_Config) -> ?run_test().
-file_removed_during_transfer_test(_Config) -> ?run_test().
 
 
 %% --- no-op replications ---
@@ -654,7 +665,7 @@ warp_time_during_replication_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, transfer_test_utils, transfer_common_test_base, permit_gate_test_utils],
+    ModulesToLoad = [?MODULE, transfer_test_utils, transfer_tests, permit_gate_test_utils],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [
@@ -739,7 +750,7 @@ init_per_testcase(Case = warp_time_during_replication_test, Config) ->
     NewConfig;
 
 init_per_testcase(_Case, Config) ->
-    transfer_common_test_base:init_per_testcase(_Case, ?SUITE_CTX, Config).
+    transfer_tests:init_per_testcase(_Case, ?SUITE_CTX, Config).
 
 
 end_per_testcase(Case = replication_of_not_synced_file_test, Config) ->
@@ -772,7 +783,7 @@ end_per_testcase(Case = warp_time_during_replication_test, Config) ->
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
-    transfer_common_test_base:end_per_testcase(_Case, ?SUITE_CTX, Config).
+    transfer_tests:end_per_testcase(_Case, ?SUITE_CTX, Config).
 
 
 %%%===================================================================

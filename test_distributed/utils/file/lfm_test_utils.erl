@@ -7,13 +7,17 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Operations on files through lfm_proxy, taking an explicit node and session
-%%% id. Three groups of them:
+%%% id. Four groups of them:
 %%%  * creating and reading single files, addressed by PATH - including
 %%%    create_file/4,5, which makes either a regular file or a directory,
 %%%    depending on the file_type() given as its FIRST argument (that is what
 %%%    the API test suites parametrize their cases with);
 %%%  * creating a whole tree from branching counts - create_files_tree/4,5
 %%%    takes [{DirsPerLevel, FilesPerLevel}] rather than a declarative spec;
+%%%  * listing a tree recursively - get_files_recursively/4 boils the listed
+%%%    attributes down to {Guid, Path} pairs, and
+%%%    assert_recursive_listing_from_each_start_after/4,5 replays the listing
+%%%    from every possible start_after_path to check pagination against it;
 %%%  * emptying a space: clean_space/3,4 removes everything (including the trash
 %%%    and archives directories) and asserts the space is empty afterwards -
 %%%    this is what most suites actually use this module for.
@@ -41,6 +45,8 @@
 -export([create_file/4, create_file/5, write_file/4, write_file/5, create_and_write_file/6, read_file/4]).
 -export([create_files_tree/4, create_files_tree/5]).
 -export([get_xattrs/3]).
+-export([get_files_recursively/4, assert_recursive_listing_from_each_start_after/4,
+    assert_recursive_listing_from_each_start_after/5]).
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils (see the note there)
@@ -147,6 +153,54 @@ get_xattrs(Worker, SessId, FileGuid) ->
         {ok, #xattr{value = Value}} = lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(FileGuid), Xattr),
         Value
     end, Xattrs).
+
+
+-spec get_files_recursively(node(), session:id(), lfm:file_key(), dir_req:recursive_listing_opts()) ->
+    {ok, [{file_id:file_guid(), file_meta:path()}], [file_meta:path()],
+        recursive_listing:pagination_token()} | lfm:error_reply().
+get_files_recursively(Worker, SessId, FileKey, Options) ->
+    case lfm_proxy:get_files_recursively(Worker, SessId, FileKey, Options, [guid, path]) of
+        {ok, Res, InaccessiblePaths, Token} ->
+            {ok, lists:map(fun(#file_attr{guid = Guid, path = Path}) -> {Guid, Path} end, Res),
+                InaccessiblePaths, Token};
+        Other ->
+            Other
+    end.
+
+
+-spec assert_recursive_listing_from_each_start_after(node(), session:id(), file_id:file_guid(),
+    [{file_id:file_guid(), file_meta:path()}]) -> ok.
+assert_recursive_listing_from_each_start_after(Worker, SessId, RootDirGuid, AllExpectedFiles) ->
+    assert_recursive_listing_from_each_start_after(Worker, SessId, RootDirGuid, <<>>, AllExpectedFiles).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists the tree rooted at RootDirGuid recursively and then repeats the listing
+%% using each of the listed files as start_after_path, asserting that what
+%% follows it is returned - both when asking for the whole tail and for a single
+%% entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_recursive_listing_from_each_start_after(node(), session:id(), file_id:file_guid(),
+    file_meta:path(), [{file_id:file_guid(), file_meta:path()}]) -> ok.
+assert_recursive_listing_from_each_start_after(Worker, SessId, RootDirGuid, Prefix, AllExpectedFiles) ->
+    ?assertMatch({ok, AllExpectedFiles, _, _}, get_files_recursively(Worker, SessId, ?FILE_REF(RootDirGuid),
+        #{limit => length(AllExpectedFiles), prefix => Prefix})),
+    lists:foreach(fun(Num) ->
+        {_, StartAfter} = lists:nth(Num, AllExpectedFiles),
+        ExpectedTail = lists:nthtail(Num, AllExpectedFiles),
+        ExpectedSingleFileListingRes = case ExpectedTail of
+            [File | _] -> [File];
+            [] -> []
+        end,
+        ?assertMatch({ok, ExpectedTail, _, _},
+            get_files_recursively(Worker, SessId, ?FILE_REF(RootDirGuid),
+                #{start_after_path => StartAfter, limit => length(AllExpectedFiles), prefix => Prefix})),
+        ?assertMatch({ok, ExpectedSingleFileListingRes, _, _},
+            get_files_recursively(Worker, SessId, ?FILE_REF(RootDirGuid),
+                #{start_after_path => StartAfter, limit => 1, prefix => Prefix}))
+    end, lists:seq(1, length(AllExpectedFiles))).
 
 
 clean_space(Workers, SpaceId, Attempts) ->

@@ -8,13 +8,18 @@
 %%% @doc
 %%% This module implements 'atm_openfaas_task_executor' mock for use in CT tests.
 %%%
-%%% NOTE: to save and later use additional contextual data available only at
-%%% executor creation the original executor model/record is also substituted.
-%%% This in turn causes following:
-%%% 1. mocked record must have the same name as original one as polymorphism
-%%%    implemented in atm is based on record name.
-%%% 2. not only required subset but all 'atm_openfaas_task_executor' functions
-%%%    must be mocked to be able to operate on substituted record.
+%%% The original executor record is left intact - only those callbacks that would
+%%% reach out to the (nonexistent in tests) OpenFaaS service are substituted. Any
+%%% contextual data needed by the mocked callbacks but available only at executor
+%%% creation is kept in node cache under the executor's pod status registry id
+%%% (the only field of the original record that is unique per executor, survives
+%%% persistence and is accessible from the outside).
+%%%
+%%% NOTE: substituting the record itself must be avoided - it would force mocking
+%%% of the persistence callbacks ('db_encode'/'db_decode') of a record nested in
+%%% the 'atm_task_execution' model. Such mocks can not be safely unloaded (docs
+%%% not yet flushed would then be encoded by the original callbacks, which freezes
+%%% op-worker), meaning the deployment could never be restored to its original state.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_task_executor_mock).
@@ -29,16 +34,8 @@
 
 %% API
 -export([init/2, teardown/1]).
+-export([mock_openfaas_health_check/1, unmock_openfaas_health_check/1]).
 -export([mock_lane_initiation_result/4]).
-
-
--record(atm_openfaas_task_executor, {
-    node_cache_key :: binary(),
-    workflow_execution_id :: atm_workflow_execution:id(),
-    lane_index :: atm_lane_execution:index(),
-    operation_spec :: atm_openfaas_operation_spec:record()
-}).
--type record() :: #atm_openfaas_task_executor{}.
 
 
 -define(OPENFAAS_FEED_CONN_SECRET, <<"884d387220ec1359e3199361dd45d328779efc9a">>).
@@ -48,6 +45,10 @@
 
 -define(MOCKED_LANE_INITIATION_RESULT_KEY(__ATM_WORKFLOW_EXECUTION_ID, __ATM_LANE_INDEX),
     {mocked_lane_initiation_result_key, __ATM_WORKFLOW_EXECUTION_ID, __ATM_LANE_INDEX}
+).
+
+-define(EXECUTOR_CTX_KEY(__ATM_TASK_EXECUTOR),
+    {mocked_atm_openfaas_task_executor_ctx, ?MOCKED_MODULE:get_pod_status_registry_id(__ATM_TASK_EXECUTOR)}
 ).
 
 
@@ -70,38 +71,55 @@ init(ProviderSelectors, ModuleWithOpenfaasDockerMock) ->
         )
     end, Workers),
 
-    % 'atm_task_execution' is mocked to be kept in memory only. This is necessary as
-    % mocking of 'atm_openfaas_task_executor' makes it unable to dump docs containing
-    % it ('atm_task_execution' is such model) to database when shutting down provider
-    % (encoding/decoding mocks are removed automatically while some docs may not have
-    % been flushed yet) which effectively freezes op-worker.
-    test_utils:mock_new(Workers, atm_task_execution, [passthrough, no_history]),
-    test_utils:mock_expect(Workers, atm_task_execution, get_ctx, fun() ->
-        #{model => atm_task_execution, disc_driver => undefined}
-    end),
+    mock_openfaas_health_check(ProviderSelectors),
 
-    test_utils:mock_new(Workers, [?MOCKED_MODULE, atm_openfaas_monitor], [passthrough, no_history]),
+    test_utils:mock_new(Workers, ?MOCKED_MODULE, [passthrough, no_history]),
 
-    mock_assert_openfaas_healthy(Workers),
-
-    mock_create(Workers),
+    % NOTE: 'create' is deliberately left unmocked - with the health check mocked
+    % it does not reach out to OpenFaaS and builds a genuine executor record
     mock_initiate(Workers),
     mock_abort(Workers),
     mock_teardown(Workers),
     mock_delete(Workers),
-    mock_is_in_readonly_mode(Workers),
-    mock_run(Workers, ModuleWithOpenfaasDockerMock),
-
-    mock_version(Workers),
-    mock_db_encode(Workers),
-    mock_db_decode(Workers).
+    mock_run(Workers, ModuleWithOpenfaasDockerMock).
 
 
 -spec teardown(oct_background:entity_selector() | [oct_background:entity_selector()]) ->
     ok.
 teardown(ProviderSelectors) ->
     Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
-    test_utils:mock_unload(Workers, [?MOCKED_MODULE, atm_openfaas_monitor]).
+    test_utils:mock_unload(Workers, ?MOCKED_MODULE),
+    unmock_openfaas_health_check(ProviderSelectors).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Makes the provider consider OpenFaaS service always available.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_openfaas_health_check(
+    oct_background:entity_selector() | [oct_background:entity_selector()]
+) ->
+    ok.
+mock_openfaas_health_check(ProviderSelectors) ->
+    Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
+    test_utils:mock_new(Workers, atm_openfaas_monitor, [passthrough, no_history]),
+    test_utils:mock_expect(Workers, atm_openfaas_monitor, assert_openfaas_healthy, fun() -> ok end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Restores the genuine OpenFaaS availability check (which, with no OpenFaaS
+%% service deployed alongside the provider, reports it as not configured).
+%% @end
+%%--------------------------------------------------------------------
+-spec unmock_openfaas_health_check(
+    oct_background:entity_selector() | [oct_background:entity_selector()]
+) ->
+    ok.
+unmock_openfaas_health_check(ProviderSelectors) ->
+    Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
+    test_utils:mock_unload(Workers, atm_openfaas_monitor).
 
 
 -spec mock_lane_initiation_result(
@@ -132,54 +150,32 @@ get_nodes(ProviderSelectors) ->
 
 
 %% @private
--spec mock_assert_openfaas_healthy([node()]) -> ok.
-mock_assert_openfaas_healthy(Workers) ->
-    MockFun = fun() -> ok end,
-    test_utils:mock_expect(Workers, atm_openfaas_monitor, assert_openfaas_healthy, MockFun).
-
-
-%% @private
--spec mock_create([node()]) -> ok.
-mock_create(Workers) ->
-    MockFun = fun(#atm_task_executor_creation_args{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        lane_execution_index = AtmLaneIndex,
-        lambda_revision = AtmLambdaRevision
-    }) ->
-        AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
-            AtmWorkflowExecutionCtx
-        ),
-
-        #atm_openfaas_task_executor{
-            node_cache_key = ?RAND_STR(),
-            workflow_execution_id = AtmWorkflowExecutionId,
-            lane_index = AtmLaneIndex,
-            operation_spec = AtmLambdaRevision#atm_lambda_revision.operation_spec
-        }
-    end,
-    test_utils:mock_expect(Workers, ?MOCKED_MODULE, create, MockFun).
-
-
-%% @private
 -spec mock_initiate([node()]) -> ok.
 mock_initiate(Workers) ->
     MockFun = fun(
         #atm_task_executor_initiation_ctx{
             workflow_execution_ctx = AtmWorkflowExecutionCtx,
             task_execution_id = AtmTaskExecutionId,
+            lambda_revision = AtmLambdaRevision,
             uncorrelated_results = AtmTaskExecutionUncorrelatedResultNames
         },
         AtmTaskExecutor
     ) ->
-        save_task_execution_uncorrelated_result_names(
-            AtmTaskExecutionUncorrelatedResultNames,
-            AtmTaskExecutor
-        ),
+        {ok, #document{value = #atm_task_execution{
+            lane_index = AtmLaneIndex
+        }}} = atm_task_execution:get(AtmTaskExecutionId),
+
+        % executor ctx is built anew on each initiation - beside the original one
+        % it also happens when resuming an execution, including after provider
+        % restart, which leaves the node cache empty
+        node_cache:put(?EXECUTOR_CTX_KEY(AtmTaskExecutor), #{
+            operation_spec => AtmLambdaRevision#atm_lambda_revision.operation_spec,
+            task_execution_uncorrelated_result_names => AtmTaskExecutionUncorrelatedResultNames
+        }),
 
         AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
             AtmWorkflowExecutionCtx
         ),
-        AtmLaneIndex = AtmTaskExecutor#atm_openfaas_task_executor.lane_index,
 
         case node_cache:get(
             ?MOCKED_LANE_INITIATION_RESULT_KEY(AtmWorkflowExecutionId, AtmLaneIndex),
@@ -248,31 +244,23 @@ mock_teardown(Workers) ->
 
 
 %% @private
--spec mock_delete(record()) -> ok.
+-spec mock_delete([node()]) -> ok.
 mock_delete(Workers) ->
-    MockFun = fun(_AtmTaskExecutor) -> ok end,
-    test_utils:mock_expect(Workers, ?MOCKED_MODULE, delete, MockFun).
-
-
-%% @private
--spec mock_is_in_readonly_mode([node()]) -> ok.
-mock_is_in_readonly_mode(Workers) ->
-    MockFun = fun(#atm_openfaas_task_executor{
-        operation_spec = #atm_openfaas_operation_spec{
-            docker_execution_options = #atm_docker_execution_options{readonly = Readonly}
-        }
-    }) ->
-        Readonly
+    MockFun = fun(AtmTaskExecutor) ->
+        node_cache:clear(?EXECUTOR_CTX_KEY(AtmTaskExecutor)),
+        meck:passthrough([AtmTaskExecutor])
     end,
-    test_utils:mock_expect(Workers, ?MOCKED_MODULE, is_in_readonly_mode, MockFun).
+    test_utils:mock_expect(Workers, ?MOCKED_MODULE, delete, MockFun).
 
 
 %% @private
 -spec mock_run([node()], module()) -> ok.
 mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
-    MockFun = fun(AtmRunJobBatchCtx, AtmLambdaInput, AtmTaskExecutor = #atm_openfaas_task_executor{
-        operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
-    }) ->
+    MockFun = fun(AtmRunJobBatchCtx, AtmLambdaInput, AtmTaskExecutor) ->
+        #{operation_spec := #atm_openfaas_operation_spec{docker_image = DockerImage}} = node_cache:get(
+            ?EXECUTOR_CTX_KEY(AtmTaskExecutor)
+        ),
+
         spawn(fun() ->
             Output = try
                 AtmJobInputData = prepare_job_input_data(AtmRunJobBatchCtx, AtmLambdaInput),
@@ -328,7 +316,10 @@ prepare_job_input_data(AtmRunJobBatchCtx, #atm_lambda_input{
 
 
 %% @private
--spec process_task_uncorrelated_results(record(), atm_task_executor:job_batch_result()) ->
+-spec process_task_uncorrelated_results(
+    atm_task_executor:record(),
+    atm_task_executor:job_batch_result()
+) ->
     json_utils:json_map().
 process_task_uncorrelated_results(AtmTaskExecutor, AtmTaskOutputData) ->
     case get_task_execution_uncorrelated_result_names(AtmTaskExecutor) of
@@ -368,80 +359,32 @@ build_job_callback_url(#atm_lambda_input{
 
 
 %% @private
--spec mock_version([node()]) -> ok.
-mock_version(Workers) ->
-    MockFun = fun() -> 1 end,
-    test_utils:mock_expect(Workers, ?MOCKED_MODULE, version, MockFun).
+-spec get_task_execution_uncorrelated_result_names(atm_task_executor:record()) ->
+    [automation:name()].
+get_task_execution_uncorrelated_result_names(AtmTaskExecutor) ->
+    #{task_execution_uncorrelated_result_names := AtmTaskExecutionUncorrelatedResultNames} =
+        node_cache:get(?EXECUTOR_CTX_KEY(AtmTaskExecutor)),
+    AtmTaskExecutionUncorrelatedResultNames.
 
 
 %% @private
--spec mock_db_encode([node()]) -> ok.
-mock_db_encode(Workers) ->
-    MockFun = fun(#atm_openfaas_task_executor{
-        node_cache_key = NodeCacheKey,
-        workflow_execution_id = AtmWorkflowExecutionId,
-        lane_index = AtmLaneIndex,
-        operation_spec = OperationSpec
-    }, NestedRecordEncoder) ->
-        #{
-            <<"nodeCacheKey">> => NodeCacheKey,
-            <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
-            <<"atmLaneIndex">> => AtmLaneIndex,
-            <<"operationSpec">> => NestedRecordEncoder(OperationSpec, atm_openfaas_operation_spec)
-        }
-    end,
-    test_utils:mock_expect(Workers, ?MOCKED_MODULE, db_encode, MockFun).
-
-
-%% @private
--spec mock_db_decode([node()]) -> ok.
-mock_db_decode(Workers) ->
-    MockFun = fun(#{
-        <<"nodeCacheKey">> := NodeCacheKey,
-        <<"atmWorkflowExecutionId">> := AtmWorkflowExecutionId,
-        <<"atmLaneIndex">> := AtmLaneIndex,
-        <<"operationSpec">> := OperationSpecJson
-    }, NestedRecordDecoder) ->
-        #atm_openfaas_task_executor{
-            node_cache_key = NodeCacheKey,
-            workflow_execution_id = AtmWorkflowExecutionId,
-            lane_index = AtmLaneIndex,
-            operation_spec = NestedRecordDecoder(OperationSpecJson, atm_openfaas_operation_spec)
-        }
-    end,
-    test_utils:mock_expect(Workers, ?MOCKED_MODULE, db_decode, MockFun).
-
-
-%% @private
--spec save_task_execution_uncorrelated_result_names([automation:name()], record()) ->
+-spec save_result_streamer_ref(test_websocket_client:client_ref(), atm_task_executor:record()) ->
     ok.
-save_task_execution_uncorrelated_result_names(
-    AtmTaskExecutionUncorrelatedResultNames,
-    #atm_openfaas_task_executor{node_cache_key = NodeCacheKey}
-) ->
-    node_cache:put(
-        {NodeCacheKey, task_execution_uncorrelated_result_names},
-        AtmTaskExecutionUncorrelatedResultNames
-    ).
+save_result_streamer_ref(ResultStreamerRef, AtmTaskExecutor) ->
+    extend_executor_ctx(AtmTaskExecutor, #{result_streamer_ref => ResultStreamerRef}).
 
 
 %% @private
--spec get_task_execution_uncorrelated_result_names(record()) -> [automation:name()].
-get_task_execution_uncorrelated_result_names(#atm_openfaas_task_executor{
-    node_cache_key = NodeCacheKey
-}) ->
-    node_cache:get({NodeCacheKey, task_execution_uncorrelated_result_names}).
+-spec get_result_streamer_ref(atm_task_executor:record()) -> test_websocket_client:client_ref().
+get_result_streamer_ref(AtmTaskExecutor) ->
+    #{result_streamer_ref := ResultStreamerRef} = node_cache:get(?EXECUTOR_CTX_KEY(AtmTaskExecutor)),
+    ResultStreamerRef.
 
 
 %% @private
--spec save_result_streamer_ref(test_websocket_client:client_ref(), record()) -> ok.
-save_result_streamer_ref(ResultStreamerRef, #atm_openfaas_task_executor{
-    node_cache_key = NodeCacheKey
-}) ->
-    node_cache:put({NodeCacheKey, result_streamer_ref}, ResultStreamerRef).
-
-
-%% @private
--spec get_result_streamer_ref(record()) -> test_websocket_client:client_ref().
-get_result_streamer_ref(#atm_openfaas_task_executor{node_cache_key = NodeCacheKey}) ->
-    node_cache:get({NodeCacheKey, result_streamer_ref}).
+-spec extend_executor_ctx(atm_task_executor:record(), map()) -> ok.
+extend_executor_ctx(AtmTaskExecutor, Diff) ->
+    {ok, _} = node_cache:update(?EXECUTOR_CTX_KEY(AtmTaskExecutor), fun(ExecutorCtx) ->
+        {ok, maps:merge(ExecutorCtx, Diff), infinity}
+    end),
+    ok.

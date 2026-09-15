@@ -6,11 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of automation single value store.
+%%% Bodies of the automation single value store test cases, run by
+%%% 'atm_store_test_SUITE'.
+%%%
+%%% Supplies this store's parametrisation of the contract shared with the
+%%% other singleton-content stores, which is asserted in
+%%% 'atm_store_singleton_content_based_tests', and holds the single-value
+%%% specific case: iteration over the one held item.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_single_value_store_test_SUITE).
+-module(atm_store_single_value_tests).
 -author("Michal Stanisz").
+
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -18,37 +29,13 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
-%% exported for CT
+%% test cases
 -export([
-    groups/0, all/0,
-    init_per_suite/1, end_per_suite/1,
-    init_per_group/2, end_per_group/2,
-    init_per_testcase/2, end_per_testcase/2
+    create_test/0,
+    update_content_test/0,
+    iterator_test/0,
+    browse_content_test/0
 ]).
-
-%% tests
--export([
-    create_test/1,
-    update_content_test/1,
-    iterator_test/1,
-    browse_content_test/1
-]).
-
-groups() -> [
-    {singular_item_based_stores_common_tests, [parallel], [
-        create_test,
-        update_content_test,
-        browse_content_test
-    ]},
-    {single_value_store_specific_tests, [parallel], [
-        iterator_test
-    ]}
-].
-
-all() -> [
-    {group, singular_item_based_stores_common_tests},
-    {group, single_value_store_specific_tests}
-].
 
 
 -define(PROVIDER_SELECTOR, krakow).
@@ -61,15 +48,15 @@ all() -> [
 %%%===================================================================
 
 
-create_test(_Config) ->
-    atm_singleton_content_based_stores_test_base:create_test_base(
+create_test() ->
+    atm_store_singleton_content_based_tests:create_test_base(
         example_configs(),
         fun get_item_data_spec/1
     ).
 
 
-update_content_test(_Config) ->
-    atm_singleton_content_based_stores_test_base:update_content_test_base(
+update_content_test() ->
+    atm_store_singleton_content_based_tests:update_content_test_base(
         example_configs(),
         fun get_item_data_spec/1,
         #atm_single_value_store_content_update_options{},
@@ -77,8 +64,8 @@ update_content_test(_Config) ->
     ).
 
 
-browse_content_test(_Config) ->
-    atm_singleton_content_based_stores_test_base:browse_content_test_base(
+browse_content_test() ->
+    atm_store_singleton_content_based_tests:browse_content_test_base(
         example_configs(),
         fun get_item_data_spec/1,
         #atm_single_value_store_content_browse_options{},
@@ -87,7 +74,7 @@ browse_content_test(_Config) ->
     ).
 
 
-iterator_test(_Config) ->
+iterator_test() ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
@@ -219,42 +206,3 @@ browse_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     catch throw:?ERR_ATM_STORE_CONTENT_NOT_SET(_) ->
         undefined
     end.
-
-
-%===================================================================
-% SetUp and TearDown functions
-%===================================================================
-
-
-init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE | atm_singleton_content_based_stores_test_base:modules_to_load()],
-    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
-        onenv_scenario = "1op",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
-    }).
-
-
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
-
-
-init_per_group(singular_item_based_stores_common_tests, Config) ->
-    atm_singleton_content_based_stores_test_base:init_per_group(Config);
-init_per_group(single_value_store_specific_tests, Config) ->
-    time_test_utils:freeze_time(Config),
-    Config.
-
-
-end_per_group(singular_item_based_stores_common_tests, Config) ->
-    atm_singleton_content_based_stores_test_base:end_per_group(Config);
-end_per_group(single_value_store_specific_tests, Config) ->
-    time_test_utils:unfreeze_time(Config).
-
-
-init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
-    Config.
-
-
-end_per_testcase(_Case, _Config) ->
-    ok.

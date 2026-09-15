@@ -28,6 +28,11 @@
 -module(storage_import_update_test_base).
 -author("Bartosz Walkowicz").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("storage/storage_import_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
@@ -1454,6 +1459,11 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
 
+    %% asserted before the content, as it pins down the scan's own verdict:
+    %% were the change to go unnoticed, the content assertions below would
+    %% merely time out somewhere downstream of the actual cause
+    assert_suffixed_storage_file_update_detected(TestCaseCtx, LfmCreatedCount, ReplicatedCount),
+
     %% the change made to the suffixed storage file is reflected in the
     %% recreated logical file, on both providers
     assert_file_content_by_guid(
@@ -1462,8 +1472,7 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
     assert_file_content_by_guid(
         NonImportingProviderCtx, RecreatedFileGuid, ChangedContent,
         ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
-    ),
-    assert_suffixed_storage_file_update_detected(TestCaseCtx, LfmCreatedCount, ReplicatedCount).
+    ).
 
 
 should_not_import_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
@@ -1526,6 +1535,12 @@ should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
 
+    %% asserted before the content, as it pins down the scan's own verdict: an
+    %% unnoticed change leaves the origin provider's replica valid, so the
+    %% assertion below would merely burn its whole propagation budget serving
+    %% the stale content
+    assert_suffixed_storage_file_update_detected(TestCaseCtx, LfmCreatedCount, ReplicatedCount),
+
     %% the change made to the suffixed replica is reflected in the remotely
     %% created logical file - also back on its origin provider, whose replica
     %% is invalidated and re-fetched
@@ -1535,8 +1550,7 @@ should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
     assert_file_content_by_guid(
         NonImportingProviderCtx, RemoteFileGuid, ChangedContent,
         ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
-    ),
-    assert_suffixed_storage_file_update_detected(TestCaseCtx, LfmCreatedCount, ReplicatedCount).
+    ).
 
 
 %% --- config ---

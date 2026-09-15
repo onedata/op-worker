@@ -438,10 +438,10 @@ all() -> [
     {group, repeat_tests},
     {group, resume_tests},
     {group, force_continue_tests},
-    {group, gc_tests}
+    {group, gc_tests},
 
-    % TODO VFS-10266 Uncomment after implementing onedata/internal task executor
-%%    {group, restarts_tests}
+    % NOTE: must be run last - this group restarts op_worker
+    {group, restarts_tests}
 ].
 
 
@@ -1030,7 +1030,11 @@ init_per_suite(Config) ->
                 {atm_workflow_job_timeout_check_period_sec, 1},
                 {atm_suspended_workflow_executions_expiration_sec, 0},
                 {atm_ended_workflow_executions_expiration_sec, 0},
-                {atm_workflow_executions_graceful_stop_timeout_sec, 3}
+                {atm_workflow_executions_graceful_stop_timeout_sec, 3},
+                % 'restarts_tests' must get the openfaas mocks back onto the node
+                % it restarted before the restart procedure starts running tasks
+                % there, and the countdown begins already at op_worker boot
+                {atm_workflow_executions_restart_retry_delay, 60000}
             ]}],
             posthook = fun(NewConfig) ->
                 atm_test_inventory:set_up(?ATM_PROVIDER_SELECTOR, user1),
@@ -1040,6 +1044,15 @@ init_per_suite(Config) ->
                     ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
                     | privileges:space_member()
                 ]),
+                % mocks are set up once for the entire suite - they are inert for
+                % workflow executions not scheduled by the test runner, so even the
+                % testcases that do not use it can be run with them in place
+                atm_workflow_execution_test_runner:init(?ATM_PROVIDER_SELECTOR),
+                % executions left by the previous run (kept back then for inspection)
+                % are removed only now, when their examination time is definitely over
+                atm_workflow_execution_test_runner:clean_up_leftover_workflow_executions(
+                    ?ATM_PROVIDER_SELECTOR, stop_and_discard
+                ),
                 NewConfig
             end
         }
@@ -1047,34 +1060,9 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
+    atm_workflow_execution_test_runner:teardown(?ATM_PROVIDER_SELECTOR),
     oct_background:end_per_suite().
 
-
-init_per_group(scheduling_non_executable_workflow_schema_tests, Config) ->
-    Config;
-
-init_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Config) ->
-    atm_openfaas_task_executor_mock:init(?ATM_PROVIDER_SELECTOR, atm_openfaas_docker_mock),
-    Config;
-
-init_per_group(TestGroup, Config) when
-    TestGroup =:= preparation_tests;
-    TestGroup =:= failure_tests;
-    TestGroup =:= cancel_tests;
-    TestGroup =:= pause_tests;
-    TestGroup =:= interrupt_tests;
-    TestGroup =:= crash_tests;
-    TestGroup =:= stopping_tests;
-    TestGroup =:= finish_tests;
-    TestGroup =:= iteration_tests;
-    TestGroup =:= mapping_tests;
-    TestGroup =:= repeat_tests;
-    TestGroup =:= resume_tests;
-    TestGroup =:= force_continue_tests;
-    TestGroup =:= restarts_tests
-->
-    atm_workflow_execution_test_runner:init(?ATM_PROVIDER_SELECTOR),
-    Config;
 
 init_per_group(gc_tests, Config0) ->
     Config1 = lists:foldl(fun(EnvVar, ConfigAcc) ->
@@ -1082,35 +1070,11 @@ init_per_group(gc_tests, Config0) ->
     end, Config0, ?GC_RELATED_ENV_VARS),
 
     time_test_utils:freeze_time(Config1),
-    atm_workflow_execution_test_runner:init(?ATM_PROVIDER_SELECTOR),
-    Config1.
+    Config1;
 
+init_per_group(_TestGroup, Config) ->
+    Config.
 
-end_per_group(scheduling_non_executable_workflow_schema_tests, Config) ->
-    Config;
-
-end_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Config) ->
-    atm_openfaas_task_executor_mock:teardown(?ATM_PROVIDER_SELECTOR),
-    Config;
-
-end_per_group(TestGroup, Config) when
-    TestGroup =:= preparation_tests;
-    TestGroup =:= failure_tests;
-    TestGroup =:= cancel_tests;
-    TestGroup =:= pause_tests;
-    TestGroup =:= interrupt_tests;
-    TestGroup =:= crash_tests;
-    TestGroup =:= stopping_tests;
-    TestGroup =:= finish_tests;
-    TestGroup =:= iteration_tests;
-    TestGroup =:= mapping_tests;
-    TestGroup =:= repeat_tests;
-    TestGroup =:= resume_tests;
-    TestGroup =:= force_continue_tests;
-    TestGroup =:= restarts_tests
-->
-    atm_workflow_execution_test_runner:teardown(?ATM_PROVIDER_SELECTOR),
-    Config;
 
 end_per_group(gc_tests, Config) ->
     % Reset atm gc env as it may have been tampered by gc tests
@@ -1118,14 +1082,53 @@ end_per_group(gc_tests, Config) ->
         ?rpc(?ATM_PROVIDER_SELECTOR, op_worker:set_env(EnvVar, ?config(EnvVar, Config)))
     end, ?GC_RELATED_ENV_VARS),
 
-    atm_workflow_execution_test_runner:teardown(?ATM_PROVIDER_SELECTOR),
     time_test_utils:unfreeze_time(Config),
+    Config;
+
+end_per_group(_TestGroup, Config) ->
     Config.
 
+
+init_per_testcase(restart_op_worker_after_graceful_stop, Config) ->
+    % This testcase awaits the graceful stop procedure (bounded by its backoff
+    % rather than by 'atm_workflow_executions_graceful_stop_timeout_sec'), then a
+    % full op_worker restart, and finally the restart procedure delayed by
+    % 'atm_workflow_executions_restart_retry_delay' - none of which fits the
+    % backstop given to the remaining testcases
+    ct:timetrap({minutes, 15}),
+    Config;
+
+init_per_testcase(Case = schedule_atm_workflow_with_openfaas_not_configured, Config) ->
+    % the very point of this testcase is OpenFaaS service being unavailable
+    atm_openfaas_task_executor_mock:unmock_openfaas_health_check(?ATM_PROVIDER_SELECTOR),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
+    % NOTE: this is merely a backstop against a hung testcase blocking the entire
+    % job - not a time budget. The slowest testcase measured takes ~40 sec, but a
+    % failing one may legitimately need much longer before it gets to report what
+    % went wrong (@see atm_workflow_execution_test_runner - awaiting the exp state
+    % and the backend to converge alone is given 45 sec). Hence the wide margin -
+    % cutting the timetrap any closer would trade diagnostics for a bare
+    % 'timetrap_timeout'.
+    ct:timetrap({minutes, 3}),
     Config.
 
 
+end_per_testcase(Case = restart_op_worker_after_graceful_stop, Config) ->
+    % must run before the leftovers are dealt with - they can not be stopped while
+    % op_worker is down, nor while their jobs are exempted from timeouts
+    atm_workflow_execution_restart_tests:clean_up(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case = schedule_atm_workflow_with_openfaas_not_configured, Config) ->
+    atm_openfaas_task_executor_mock:mock_openfaas_health_check(?ATM_PROVIDER_SELECTOR),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
 end_per_testcase(_Case, _Config) ->
-    ok.
+    % NOTE: leftovers are merely stopped, never discarded - discarding would go
+    % through the entire phase trees and as such destroy also what a testcase
+    % that failed earlier during this very run left behind for inspection
+    atm_workflow_execution_test_runner:clean_up_leftover_workflow_executions(
+        ?ATM_PROVIDER_SELECTOR, stop
+    ).

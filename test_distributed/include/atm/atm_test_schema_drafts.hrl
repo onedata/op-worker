@@ -35,7 +35,27 @@
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4, <<"test/failing_echo_measurements_4">>).
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG, <<"signal: illegal instruction (core dumped)\n">>).
 
+% Sleeps, reporting a heartbeat only at the very beginning - as such it stops
+% responding and is bound to be timed out under a short 'atm_workflow_job_timeout_sec'.
+% NOTE: the silence must dwarf the timeout rather than merely outlast it. A result
+% reaching op before its job was registered in the workflow engine is taken as a
+% raced one and processed as any other - the job never gets a keepalive timer and
+% can not be timed out at all. Registration happens only after the mocked
+% 'run_task_for_item' step returns, and the test runner may hold that step back for
+% seconds on end, so the answer has to stay far out of reach for that whole time.
+% Being generous costs nothing - the job is killed by the timeout long before the
+% sleep ends, and the lambda is left talking to itself.
 -define(ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, <<"test/echo_with_sleep">>).
+-define(ECHO_WITH_SLEEP_SILENCE_SEC, 60).
+% Keeps reporting heartbeats and answers only once its workflow execution has been
+% asked to stop - a job that runs for as long as there is any point in running it,
+% rather than one that hangs. Its execution lasts exactly as long as the test needs
+% it to, with no sleep long enough to cover the slowest run to guess at.
+-define(ECHO_UNTIL_STOPPING_DOCKER_IMAGE_ID, <<"test/echo_until_stopping">>).
+% Must stay well below the 'atm_workflow_job_timeout_sec' of any suite using the
+% above image - that is the keepalive timeout the heartbeats are there to reset
+-define(ECHO_HEARTBEAT_INTERVAL_MILLIS, 200).
+
 -define(ECHO_WITH_PAUSE_DOCKER_IMAGE_ID, <<"test/echo_with_pause">>).
 
 -define(ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, <<"test/echo_with_exception_on_even_numbers">>).

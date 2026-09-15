@@ -6,11 +6,23 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of automation tree forest store.
+%%% Bodies of the automation tree forest store test cases, run by
+%%% 'atm_store_test_SUITE'.
+%%%
+%%% Supplies this store's parametrisation of the contract shared with the
+%%% other infinite-log backed stores, which is asserted in
+%%% 'atm_store_infinite_log_based_tests', and holds the tree-forest specific
+%%% cases: iteration over file and dataset forests, including restarts,
+%%% deleted roots and missing permissions.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_tree_forest_store_test_SUITE).
+-module(atm_store_tree_forest_tests).
 -author("Michal Stanisz").
+
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
 
 -include("atm/atm_test_schema_drafts.hrl").
 -include("modules/automation/atm_execution.hrl").
@@ -25,60 +37,26 @@
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 
-%% exported for CT
+%% test cases
 -export([
-    groups/0, all/0,
-    init_per_suite/1, end_per_suite/1,
-    init_per_group/2, end_per_group/2,
-    init_per_testcase/2, end_per_testcase/2
+    % infinite_log_based_tests
+    create_test/0,
+    update_content_test/0,
+    browse_content_by_index_test/0,
+    browse_content_by_offset_test/0,
+
+    % tree_forest_specific_tests
+    iterate_files_test/0,
+    iterate_files_small_batch_test/0,
+    iterate_datasets_test/0,
+    iterate_datasets_small_batch_test/0,
+    restart_iteration_test/0,
+    restart_partial_iteration_test/0,
+    iteration_with_deleted_root_test/0,
+    iteration_after_restart_with_deleted_root_test/0,
+    iteration_after_restart_with_new_dirs_root_test/0,
+    iteration_without_permission_test/0
 ]).
-
-%% tests
--export([
-    % infinite_log_based_stores_common_tests
-    create_test/1,
-    update_content_test/1,
-    browse_content_by_index_test/1,
-    browse_content_by_offset_test/1,
-
-    % tree_forest_store_specific_tests
-    iterate_files_test/1,
-    iterate_files_small_batch_test/1,
-    iterate_datasets_test/1,
-    iterate_datasets_small_batch_test/1,
-    restart_iteration_test/1,
-    restart_partial_iteration_test/1,
-    iteration_with_deleted_root/1,
-    iteration_after_restart_with_deleted_root/1,
-    iteration_after_restart_with_new_dirs_root/1,
-    iteration_without_permission/1
-]).
-
-groups() -> [
-    {infinite_log_based_stores_common_tests, [parallel], [
-        create_test,
-        update_content_test,
-        browse_content_by_index_test,
-        browse_content_by_offset_test
-    ]},
-    {tree_forest_store_specific_tests, [parallel], [
-        iterate_files_test,
-        iterate_files_small_batch_test,
-        iterate_datasets_test,
-        iterate_datasets_small_batch_test,
-        restart_iteration_test,
-        restart_partial_iteration_test,
-        iteration_with_deleted_root,
-        iteration_after_restart_with_deleted_root,
-        iteration_after_restart_with_new_dirs_root,
-        iteration_without_permission
-    ]}
-].
-
-all() -> [
-    {group, infinite_log_based_stores_common_tests},
-    {group, tree_forest_store_specific_tests}
-].
 
 
 -define(PROVIDER_SELECTOR, krakow).
@@ -92,16 +70,16 @@ all() -> [
 %%%===================================================================
 
 
-create_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:create_test_base(#{
+create_test() ->
+    atm_store_infinite_log_based_tests:create_test_base(#{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1
     }).
 
 
-update_content_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:update_content_test_base(#{
+update_content_test() ->
+    atm_store_infinite_log_based_tests:update_content_test_base(#{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
@@ -111,8 +89,8 @@ update_content_test(_Config) ->
     }).
 
 
-browse_content_by_index_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:browse_content_test_base(index, #{
+browse_content_by_index_test() ->
+    atm_store_infinite_log_based_tests:browse_content_test_base(index, #{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
@@ -123,8 +101,8 @@ browse_content_by_index_test(_Config) ->
     }).
 
 
-browse_content_by_offset_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:browse_content_test_base(offset, #{
+browse_content_by_offset_test() ->
+    atm_store_infinite_log_based_tests:browse_content_test_base(offset, #{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
@@ -135,27 +113,27 @@ browse_content_by_offset_test(_Config) ->
     }).
 
 
-iterate_files_test(_Config) ->
+iterate_files_test() ->
     Depth = 6,
     iterate_test_base(rand:uniform(100) + 100, Depth, atm_file_type).
 
 
-iterate_files_small_batch_test(_Config) ->
+iterate_files_small_batch_test() ->
     Depth = 3,
     iterate_test_base(1, Depth, atm_file_type).
 
 
-iterate_datasets_test(_Config) ->
+iterate_datasets_test() ->
     Depth = 4,
     iterate_test_base(rand:uniform(100) + 100, Depth, atm_dataset_type).
 
 
-iterate_datasets_small_batch_test(_Config) ->
+iterate_datasets_small_batch_test() ->
     Depth = 3,
     iterate_test_base(1, Depth, atm_dataset_type).
 
 
-restart_iteration_test(_Config) ->
+restart_iteration_test() ->
     {AtmWorkflowExecutionEnv, AtmSerialIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, 3, 2, atm_file_type),
     
     IteratorsAndResults = check_iterator_listing(
@@ -167,7 +145,7 @@ restart_iteration_test(_Config) ->
     end, IteratorsAndResults).
 
 
-restart_partial_iteration_test(_Config) ->
+restart_partial_iteration_test() ->
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, FileList} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
     {ok, Res0, AtmStoreIterator1} = ?assertMatch({ok, _, _}, iterator_get_next(AtmWorkflowExecutionEnv, AtmStoreIterator0)),
     {ok, _, _} = ?assertMatch({ok, _, _}, iterator_get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1)),
@@ -178,7 +156,7 @@ restart_partial_iteration_test(_Config) ->
     ?assertMatch(stop, iterator_get_next(AtmWorkflowExecutionEnv, AtmStoreIterator3)).
 
 
-iteration_with_deleted_root(_Config) ->
+iteration_with_deleted_root_test() ->
     Node = oct_background:get_random_provider_node(krakow),
     User1Session = oct_background:get_user_session_id(user1, krakow),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, _Expected} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
@@ -191,7 +169,7 @@ iteration_with_deleted_root(_Config) ->
     check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedFiles0, return_none, atm_file_type).
 
 
-iteration_after_restart_with_deleted_root(_Config) ->
+iteration_after_restart_with_deleted_root_test() ->
     Node = oct_background:get_random_provider_node(krakow),
     User1Session = oct_background:get_user_session_id(user1, krakow),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
@@ -204,7 +182,7 @@ iteration_after_restart_with_deleted_root(_Config) ->
     check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedAfter, return_none, atm_file_type).
 
 
-iteration_after_restart_with_new_dirs_root(_Config) ->
+iteration_after_restart_with_new_dirs_root_test() ->
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
     
     check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore, return_iterators, atm_file_type),
@@ -227,7 +205,7 @@ iteration_after_restart_with_new_dirs_root(_Config) ->
     check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore ++ AddedIds, return_none, atm_file_type).
     
 
-iteration_without_permission(_Config) ->
+iteration_without_permission_test() ->
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, _Expected} = create_iteration_test_env(krakow, 50, 1, atm_file_type, user2),
     RegFiles = maps:fold(
         fun (K, {?REGULAR_FILE_TYPE, _}, Acc) -> [K | Acc];
@@ -468,43 +446,3 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
 %% @private
 iterator_get_next(AtmWorkflowExecutionEnv, Iterator) ->
     atm_store_test_utils:iterator_get_next(?PROVIDER_SELECTOR, AtmWorkflowExecutionEnv, Iterator).
-
-
-%%%===================================================================
-%%% SetUp and TearDown functions
-%%%===================================================================
-
-
-init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE | atm_infinite_log_based_stores_test_base:modules_to_load()],
-    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
-        onenv_scenario = "1op",
-        envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60}
-        ]}]
-    }).
-
-
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
-
-
-init_per_group(infinite_log_based_stores_common_tests, Config) ->
-    atm_infinite_log_based_stores_test_base:init_per_group(Config);
-init_per_group(tree_forest_store_specific_tests, Config) ->
-    lfm_proxy:init(Config, false).
-
-
-end_per_group(infinite_log_based_stores_common_tests, Config) ->
-    atm_infinite_log_based_stores_test_base:end_per_group(Config);
-end_per_group(tree_forest_store_specific_tests, Config) ->
-    lfm_proxy:teardown(Config).
-
-
-init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
-    Config.
-
-
-end_per_testcase(_Case, _Config) ->
-    ok.

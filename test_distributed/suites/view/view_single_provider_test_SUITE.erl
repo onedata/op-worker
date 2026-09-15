@@ -5,10 +5,26 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Basic tests of couchbase views.
+%%% Tests of how a view is evaluated - what a map function is handed for each
+%%% document type flowing through the space, and how a function that throws or
+%%% emits a malformed key is treated. None of that depends on more than one
+%%% provider holding the definition, so the suite runs on a single one and
+%%% drives the internal view API directly, bypassing REST.
+%%%
+%%% The API through which views are actually managed - its parameter
+%%% sanitization and privilege checks, and the way a definition is propagated to
+%%% and told apart on the providers supporting the space - is covered by
+%%% view_multi_provider_test_SUITE.
+%%%
+%%% All the cases share one space and none of them cleans up after itself. The
+%%% ones asserting the exact set of documents of a given type therefore need a
+%%% space no earlier run has left a file or an xattr in - the suite is written
+%%% for the fresh deployment CI gives it and will not survive a rerun against a
+%%% reused one. The views themselves never collide, as each is named after the
+%%% case that creates it.
 %%% @end
 %%%-------------------------------------------------------------------
--module(view_test_SUITE).
+-module(view_single_provider_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("modules/dataset/archivisation_tree.hrl").
@@ -30,39 +46,39 @@
 
 %% tests
 -export([
-    create_and_delete_simple_view_test/1,
-    query_simple_empty_view_test/1,
-    query_view_using_file_meta/1,
-    query_view_using_times/1,
-    query_view_using_custom_metadata_when_xattr_is_not_set/1,
-    query_view_using_custom_metadata/1,
-    query_view_using_file_popularity/1,
-    query_view_and_emit_ctx/1,
-    wrong_map_function/1,
-    emitting_null_key_in_map_function_should_return_empty_result/1,
-    spatial_function_returning_null_in_key_should_return_empty_result/1,
-    spatial_function_returning_null_in_array_key_should_return_empty_result/1,
-    spatial_function_returning_null_in_range_key_should_return_empty_result/1,
-    spatial_function_returning_integer_key_should_return_error/1,
-    spatial_function_returning_string_key_should_return_error/1
+    created_view_is_listed_until_deleted_test/1,
+    map_function_emitting_nothing_yields_empty_view_test/1,
+    map_function_receives_file_meta_documents_test/1,
+    map_function_receives_times_documents_test/1,
+    map_function_receives_no_custom_metadata_without_xattrs_test/1,
+    map_function_receives_custom_metadata_documents_test/1,
+    map_function_receives_file_popularity_documents_test/1,
+    emitted_ctx_carries_provider_id_test/1,
+    throwing_map_function_yields_empty_view_test/1,
+    map_function_emitting_null_key_yields_empty_view_test/1,
+    spatial_function_emitting_null_key_yields_empty_view_test/1,
+    spatial_function_emitting_null_in_array_key_yields_empty_view_test/1,
+    spatial_function_emitting_null_in_range_key_yields_empty_view_test/1,
+    spatial_function_emitting_integer_key_fails_the_query_test/1,
+    spatial_function_emitting_string_key_fails_the_query_test/1
 ]).
 
 all() -> [
-    create_and_delete_simple_view_test,
-    query_simple_empty_view_test,
-    query_view_using_file_meta,
-    query_view_using_times,
-    query_view_using_custom_metadata_when_xattr_is_not_set,
-    query_view_using_custom_metadata,
-    query_view_using_file_popularity,
-    query_view_and_emit_ctx,
-    wrong_map_function,
-    emitting_null_key_in_map_function_should_return_empty_result,
-    spatial_function_returning_null_in_key_should_return_empty_result,
-    spatial_function_returning_null_in_array_key_should_return_empty_result,
-    spatial_function_returning_null_in_range_key_should_return_empty_result,
-    spatial_function_returning_integer_key_should_return_error,
-    spatial_function_returning_string_key_should_return_error
+    created_view_is_listed_until_deleted_test,
+    map_function_emitting_nothing_yields_empty_view_test,
+    map_function_receives_file_meta_documents_test,
+    map_function_receives_times_documents_test,
+    map_function_receives_no_custom_metadata_without_xattrs_test,
+    map_function_receives_custom_metadata_documents_test,
+    map_function_receives_file_popularity_documents_test,
+    emitted_ctx_carries_provider_id_test,
+    throwing_map_function_yields_empty_view_test,
+    map_function_emitting_null_key_yields_empty_view_test,
+    spatial_function_emitting_null_key_yields_empty_view_test,
+    spatial_function_emitting_null_in_array_key_yields_empty_view_test,
+    spatial_function_emitting_null_in_range_key_yields_empty_view_test,
+    spatial_function_emitting_integer_key_fails_the_query_test,
+    spatial_function_emitting_string_key_fails_the_query_test
 ].
 
 
@@ -103,7 +119,7 @@ end).
 %%%===================================================================
 
 
-create_and_delete_simple_view_test(_Config) ->
+created_view_is_listed_until_deleted_test(_Config) ->
     ViewName = ?view_name,
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -118,7 +134,7 @@ create_and_delete_simple_view_test(_Config) ->
     ?assertMatch({ok, []}, list_views()).
 
 
-query_simple_empty_view_test(_Config) ->
+map_function_emitting_nothing_yields_empty_view_test(_Config) ->
     ViewName = ?view_name,
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -130,7 +146,7 @@ query_simple_empty_view_test(_Config) ->
     ?assertQuery([], ViewName, [{stale, false}]).
 
 
-query_view_using_file_meta(_Config) ->
+map_function_receives_file_meta_documents_test(_Config) ->
     ProviderId = oct_background:get_provider_id(krakow),
 
     SpaceId = oct_background:get_space_id(space_krk),
@@ -235,7 +251,7 @@ query_view_using_file_meta(_Config) ->
     ], ViewName, [{stale, false}]).
 
 
-query_view_using_times(_Config) ->
+map_function_receives_times_documents_test(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk),
     SpaceDirGuid = space_dir:guid(SpaceId),
     {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
@@ -314,10 +330,10 @@ query_view_using_times(_Config) ->
     ], ViewName, [{stale, false}]).
 
 
-query_view_using_custom_metadata_when_xattr_is_not_set(_Config) ->
+map_function_receives_no_custom_metadata_without_xattrs_test(_Config) ->
     ViewName = ?view_name,
     SimpleMapFunction = <<"
-        function(id, file_meta, times, custom_metadata, file_popularity, ctx) {
+        function(id, type, meta, ctx) {
             if(type == 'custom_metadata')
                 return [id, meta];
         }
@@ -327,7 +343,7 @@ query_view_using_custom_metadata_when_xattr_is_not_set(_Config) ->
     ?assertQuery([], ViewName, [{stale, false}]).
 
 
-query_view_using_custom_metadata(_Config) ->
+map_function_receives_custom_metadata_documents_test(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk),
     SessionId = oct_background:get_user_session_id(user1, krakow),
     SpaceDirGuid = space_dir:guid(SpaceId),
@@ -364,7 +380,7 @@ query_view_using_custom_metadata(_Config) ->
     }], ViewName, [{stale, false}]).
 
 
-query_view_using_file_popularity(_Config) ->
+map_function_receives_file_popularity_documents_test(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk),
     SpaceName = oct_background:get_space_name(space_krk),
     SessionId = oct_background:get_user_session_id(user1, krakow),
@@ -412,7 +428,7 @@ query_view_using_file_popularity(_Config) ->
     }], ViewName, [{stale, false}]).
 
 
-query_view_and_emit_ctx(_Config) ->
+emitted_ctx_carries_provider_id_test(_Config) ->
     ProviderId = oct_background:get_provider_id(krakow),
 
     SpaceId = oct_background:get_space_id(space_krk),
@@ -437,7 +453,7 @@ query_view_and_emit_ctx(_Config) ->
     }], ViewName, [{stale, false}, {key, SpaceObjectId}]).
 
 
-wrong_map_function(_Config) ->
+throwing_map_function_yields_empty_view_test(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk),
     SpaceDirGuid = space_dir:guid(SpaceId),
     {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
@@ -453,7 +469,7 @@ wrong_map_function(_Config) ->
     ?assertQuery([], ViewName, [{stale, false}, {key, SpaceObjectId}]).
 
 
-emitting_null_key_in_map_function_should_return_empty_result(_Config) ->
+map_function_emitting_null_key_yields_empty_view_test(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk),
     SpaceDirGuid = space_dir:guid(SpaceId),
     {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
@@ -469,7 +485,7 @@ emitting_null_key_in_map_function_should_return_empty_result(_Config) ->
     ?assertQuery([], ViewName, [{stale, false}, {key, SpaceObjectId}]).
 
 
-spatial_function_returning_null_in_key_should_return_empty_result(_Config) ->
+spatial_function_emitting_null_key_yields_empty_view_test(_Config) ->
     ViewName = ?view_name,
     SpatialFunction = <<"
         function(_, _, _, _) {
@@ -481,7 +497,7 @@ spatial_function_returning_null_in_key_should_return_empty_result(_Config) ->
     ?assertQuery([], ViewName, [{stale, false}, {spatial, true}]).
 
 
-spatial_function_returning_null_in_array_key_should_return_empty_result(_Config) ->
+spatial_function_emitting_null_in_array_key_yields_empty_view_test(_Config) ->
     ViewName = ?view_name,
     SpatialFunction = <<"
         function(_, _, _, _) {
@@ -493,7 +509,7 @@ spatial_function_returning_null_in_array_key_should_return_empty_result(_Config)
     ?assertQuery([], ViewName, [{stale, false}, {spatial, true}]).
 
 
-spatial_function_returning_null_in_range_key_should_return_empty_result(_Config) ->
+spatial_function_emitting_null_in_range_key_yields_empty_view_test(_Config) ->
     ViewName = ?view_name,
     SpatialFunction = <<"
         function(_, _, _, _) {
@@ -505,7 +521,7 @@ spatial_function_returning_null_in_range_key_should_return_empty_result(_Config)
     ?assertQuery([], ViewName, [{stale, false}, {spatial, true}]).
 
 
-spatial_function_returning_integer_key_should_return_error(_Config) ->
+spatial_function_emitting_integer_key_fails_the_query_test(_Config) ->
     ViewName = ?view_name,
     SpatialFunction = <<"
         function(_, _, _, _) {
@@ -520,7 +536,7 @@ spatial_function_returning_integer_key_should_return_error(_Config) ->
     ).
 
 
-spatial_function_returning_string_key_should_return_error(_Config) ->
+spatial_function_emitting_string_key_fails_the_query_test(_Config) ->
     ViewName = ?view_name,
     SpatialFunction = <<"
         function(_, _, _, _) {

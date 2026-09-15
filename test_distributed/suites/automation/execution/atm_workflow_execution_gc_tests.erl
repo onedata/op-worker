@@ -12,6 +12,11 @@
 -module(atm_workflow_execution_gc_tests).
 -author("Bartosz Walkowicz").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("atm/atm_workflow_execution_test.hrl").
 -include("modules/automation/atm_execution.hrl").
 
@@ -22,6 +27,11 @@
 
 
 -define(ITERATED_STORE_SCHEMA_ID, <<"iterated_store_id">>).
+
+% All executions are scheduled at once and kept alive until gc collects them,
+% so this number is a compromise between the load put on gc and the memory
+% pressure put on the provider node.
+-define(MASSIVE_GC_ATM_WORKFLOW_EXECUTION_NUM, 200).
 
 -define(ATM_WORKFLOW_SCHEMA_DRAFT(__TESTCASE, __LAMBDAS), #atm_workflow_schema_dump_draft{
     name = str_utils:to_binary(__TESTCASE),
@@ -163,10 +173,14 @@ massive_garbage_collect_atm_workflow_executions() ->
         await_workflow_execution_status(ExecutionId, StoppedStatus),
 
         ExpState = expect_workflow_execution(StoppedStatus, ExecutionId, SchemaRevision),
-        ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState)),
+        % NOTE: retries are needed as the execution enters the phase links tree only
+        % after its status has been changed (@see atm_workflow_execution_status:handle_stopped/1)
+        ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(
+            ExpState, ?ATTEMPTS
+        )),
 
         {StoppedStatus, ExpState}
-    end, lists:seq(1, 500)),
+    end, lists:seq(1, ?MASSIVE_GC_ATM_WORKFLOW_EXECUTION_NUM)),
 
     {ExpPausedStates, ExpFinishedStates} = lists:foldl(fun
         ({paused, ExpState}, {Acc1, Acc2}) ->
@@ -365,7 +379,9 @@ run_gc() ->
     ok.
 assert_all_match_with_backend(ExpAtmWorkflowExecutionStates) ->
     lists_utils:pforeach(fun(ExpAtmWorkflowExecutionState) ->
-        ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpAtmWorkflowExecutionState))
+        ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(
+            ExpAtmWorkflowExecutionState, ?ATTEMPTS
+        ))
     end, ExpAtmWorkflowExecutionStates).
 
 
