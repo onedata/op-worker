@@ -505,8 +505,8 @@ upgrade_from_21_02_8_luma(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     UserId = <<"user_id">>,
 
-    % storages and LUMA entries as left by 21.02.8 - upgrading a storage record from version 3 sets its
-    % luma_generation to 0, which keeps the LUMA doc ids and links forest keys of 21.02.8 valid
+    % storages and LUMA entries as left by 21.02.8 - upgrading a storage record from version 3 leaves its
+    % luma_db_namespace undefined, which keeps the LUMA doc ids and links forest keys of 21.02.8 valid
     create_storage_configs_in_version_3(Worker, [
         {luma_storage_id(Feed, Helper), {storage_config, helper_21_02_8(Helper), {luma_config, Feed, undefined, undefined}}}
         || Feed <- [?AUTO_FEED, ?LOCAL_FEED], Helper <- ?HELPERS_21_02_8

@@ -28,7 +28,12 @@
 
 %% API
 -export([create/2, create/3, get/1, update/2, exists/1, delete/1]).
--export([get_id/1, get_helper_spec/1, get_luma_feed/1, get_luma_config/1, get_luma_generation/1]).
+-export([get_id/1, get_helper_spec/1, get_luma_feed/1, get_luma_config/1, get_luma_db_namespace/1]).
+-export([
+    get_stale_luma_db_namespaces/1,
+    with_luma_db_namespace/2,
+    forget_stale_luma_db_namespace/2
+]).
 
 -export([update_helper_spec/2, set_luma_config/2]).
 
@@ -75,7 +80,10 @@ create(StorageId, HelperSpec, LumaConfig) ->
     create(StorageId, #storage_config{
         helper_spec = HelperSpec,
         luma_config = utils:ensure_defined(LumaConfig, luma_config:new(?AUTO_FEED)),
-        luma_generation = 0
+        % a namespace is drawn only once the LUMA config actually changes - until
+        % then the storage shares the unnamespaced keyspace with legacy storages
+        luma_db_namespace = undefined,
+        stale_luma_db_namespaces = []
     }).
 
 
@@ -140,16 +148,59 @@ get_luma_config(StorageId) ->
     get_luma_config(StorageDoc).
 
 
--spec get_luma_generation(storage:id() | doc() | record()) -> non_neg_integer().
-get_luma_generation(#document{value = StorageConfig = #storage_config{}}) ->
-    get_luma_generation(StorageConfig);
+-spec get_luma_db_namespace(storage:id() | doc() | record()) -> undefined | luma_db:namespace().
+get_luma_db_namespace(#document{value = StorageConfig = #storage_config{}}) ->
+    get_luma_db_namespace(StorageConfig);
 
-get_luma_generation(#storage_config{luma_generation = Generation}) ->
-    Generation;
+get_luma_db_namespace(#storage_config{luma_db_namespace = Namespace}) ->
+    Namespace;
 
-get_luma_generation(StorageId) ->
+get_luma_db_namespace(StorageId) ->
     {ok, StorageDoc} = get(StorageId),
-    get_luma_generation(StorageDoc).
+    get_luma_db_namespace(StorageDoc).
+
+
+-spec get_stale_luma_db_namespaces(storage:id() | doc() | record()) ->
+    [undefined | luma_db:namespace()].
+get_stale_luma_db_namespaces(#document{value = StorageConfig = #storage_config{}}) ->
+    get_stale_luma_db_namespaces(StorageConfig);
+
+get_stale_luma_db_namespaces(#storage_config{stale_luma_db_namespaces = Namespaces}) ->
+    Namespaces;
+
+get_stale_luma_db_namespaces(StorageId) ->
+    {ok, StorageDoc} = get(StorageId),
+    get_stale_luma_db_namespaces(StorageDoc).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the storage config as it would look addressing a different LUMA DB
+%% namespace. Nothing is written - this only builds the value that the LUMA DB
+%% API derives the namespace from, so that entries outside the storage's current
+%% namespace can be reached at all (see luma_crud_api).
+%% @end
+%%--------------------------------------------------------------------
+-spec with_luma_db_namespace(doc(), undefined | luma_db:namespace()) -> doc().
+with_luma_db_namespace(#document{value = StorageConfig} = StorageConfigDoc, Namespace) ->
+    StorageConfigDoc#document{
+        value = StorageConfig#storage_config{luma_db_namespace = Namespace}
+    }.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Drops a namespace from the list of those awaiting cleanup, to be called once
+%% its entries are gone. Applied as a diff rather than a blind write, so that it
+%% cannot clobber a namespace marked stale by a concurrent storage update.
+%% @end
+%%--------------------------------------------------------------------
+-spec forget_stale_luma_db_namespace(storage:id(), undefined | luma_db:namespace()) ->
+    ok | {error, term()}.
+forget_stale_luma_db_namespace(StorageId, Namespace) ->
+    ?extract_ok(update(StorageId, fun(#storage_config{stale_luma_db_namespaces = Stale} = StorageConfig) ->
+        {ok, StorageConfig#storage_config{stale_luma_db_namespaces = Stale -- [Namespace]}}
+    end)).
 
 
 -spec update_helper_spec(
@@ -292,7 +343,9 @@ get_record_struct(4) ->
             {url, string},
             {api_key, string}
         ]}},
-        {luma_generation, integer}  % new field
+        % new fields; 'undefined' stands for the original, unnamespaced keyspace
+        {luma_db_namespace, string},
+        {stale_luma_db_namespaces, [string]}
     ]}.
 
 
@@ -350,4 +403,6 @@ upgrade_record(3, {?MODULE, Helper, LumaConfig}) ->
         configuration = RemainingConfigurationParams,
         credentials = CredentialsParams
     },
-    {4, {?MODULE, HelperSpec, LumaConfig, 0}}.
+    % the storage keeps the unnamespaced keyspace, which leaves the LUMA DB doc
+    % ids and link forest keys written so far valid - no LUMA migration needed
+    {4, {?MODULE, HelperSpec, LumaConfig, undefined, []}}.

@@ -27,7 +27,9 @@
 
 -export([
     clear_db/1,
-    clear_db/2,
+    clear_db_with_stale_namespaces/1,
+    clear_stale_db_namespace/2,
+    clear_space_entries/2,
 
     storage_users_store/3,
     storage_users_get_and_describe/2,
@@ -60,36 +62,70 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes every entry a storage maps through, i.e. those in its current LUMA DB
+%% namespace. Entries in namespaces it has already left behind are none of the
+%% caller's concern - luma_db_garbage_collector deletes those.
+%% @end
+%%--------------------------------------------------------------------
 -spec clear_db(storage:id() | storage:data() | storage_config:doc()) -> ok.
 clear_db(StorageIdOrData) ->
     StorageData = ensure_storage_data(StorageIdOrData),
-    StorageId = storage:get_id(StorageData),
-    LumaGeneration = storage:get_luma_generation(StorageData),
+    clear_all_tables(StorageData),
+    emit_helper_params_changed_event(StorageData).
 
-    ?info("Clearing LUMA DB tables for storage '~ts' (generation: ~B)", [StorageId, LumaGeneration]),
 
-    Tables = [
-        {luma_storage_users, fun luma_storage_users:clear_all/1},
-        {luma_spaces_display_defaults, fun luma_spaces_display_defaults:clear_all/1},
-        {luma_spaces_posix_storage_defaults, fun luma_spaces_posix_storage_defaults:clear_all/1},
-        {luma_onedata_users, fun luma_onedata_users:clear_all/1},
-        {luma_onedata_groups, fun luma_onedata_groups:clear_all/1}
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes every entry of a storage, in its current LUMA DB namespace and in all
+%% the stale ones - for a storage that is going away. The garbage collector
+%% reaches stale namespaces through the storage config, so once that document is
+%% gone they can no longer be found; this is the last chance to delete them.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_db_with_stale_namespaces(storage:id() | storage:data() | storage_config:doc()) -> ok.
+clear_db_with_stale_namespaces(StorageIdOrData) ->
+    StorageData = ensure_storage_data(StorageIdOrData),
+    Namespaces = [
+        storage:get_luma_db_namespace(StorageData)
+        | storage:get_stale_luma_db_namespaces(StorageData)
     ],
-    lists:foreach(fun({TableName, ClearFun}) ->
-        ?info("Clearing LUMA table '~ts'", [TableName]),
-        ClearFun(StorageData)
-    end, Tables),
+    lists:foreach(fun(Namespace) ->
+        clear_all_tables(StorageData, Namespace)
+    end, Namespaces),
 
-    % NOTE: when clearing the dead generation after a LUMA config change, the
-    % event has already been emitted for that change (see storage_updater) - a
-    % duplicate only makes the clients re-fetch twice
-    emit_helper_params_changed_event(StorageData),
-
-    ?info("Successfully cleared LUMA DB").
+    emit_helper_params_changed_event(StorageData).
 
 
--spec clear_db(storage:id() | storage:data(), od_space:id()) -> ok | {error, term()}.
-clear_db(StorageIdOrData, SpaceId) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes the entries a storage left behind in one of its stale LUMA DB
+%% namespaces - see luma_db and luma_db_garbage_collector.
+%%
+%% No event is emitted: a stale namespace backs no lookup, so its entries going
+%% away changes nothing for the clients, and the event for the change that made
+%% it stale has already been emitted (see storage_updater).
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_stale_db_namespace(
+    storage:id() | storage:data() | storage_config:doc(),
+    undefined | luma_db:namespace()
+) ->
+    ok.
+clear_stale_db_namespace(StorageIdOrData, Namespace) ->
+    clear_all_tables(ensure_storage_data(StorageIdOrData), Namespace).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes the entries a storage keeps for one space - the two tables that hold
+%% any. Unlike the functions above, this narrows the scope by space, not by
+%% namespace, and so always works within the storage's current one.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_space_entries(storage:id() | storage:data(), od_space:id()) -> ok | {error, term()}.
+clear_space_entries(StorageIdOrData, SpaceId) ->
     StorageData = ensure_storage_data(StorageIdOrData),
 
     % NOTE: no event - this is called when the space is being unsupported, so the
@@ -286,6 +322,44 @@ onedata_groups_delete(StorageIdOrData, AclGroup) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec clear_all_tables(storage:data()) -> ok.
+clear_all_tables(StorageData) ->
+    clear_all_tables(StorageData, storage:get_luma_db_namespace(StorageData)).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% The whole LUMA DB API addresses entries through storage data, deriving the
+%% namespace from it, so a namespace other than the storage's current one is
+%% reached by handing it storage data that points at the former. This is the
+%% only place that does so.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_all_tables(storage:data(), undefined | luma_db:namespace()) -> ok.
+clear_all_tables(StorageData, Namespace) ->
+    NamespacedStorageData = storage:with_luma_db_namespace(StorageData, Namespace),
+
+    ?info("Clearing LUMA DB tables for storage '~ts' (namespace: ~tp)", [
+        storage:get_id(StorageData), Namespace
+    ]),
+
+    Tables = [
+        {luma_storage_users, fun luma_storage_users:clear_all/1},
+        {luma_spaces_display_defaults, fun luma_spaces_display_defaults:clear_all/1},
+        {luma_spaces_posix_storage_defaults, fun luma_spaces_posix_storage_defaults:clear_all/1},
+        {luma_onedata_users, fun luma_onedata_users:clear_all/1},
+        {luma_onedata_groups, fun luma_onedata_groups:clear_all/1}
+    ],
+    lists:foreach(fun({TableName, ClearFun}) ->
+        ?info("Clearing LUMA table '~ts'", [TableName]),
+        ClearFun(NamespacedStorageData)
+    end, Tables),
+
+    ?info("Successfully cleared LUMA DB").
 
 
 %% @private

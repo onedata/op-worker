@@ -379,6 +379,7 @@ before_listeners_start() ->
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
     file_upload_manager_watcher_service:setup_internal_service(),
+    luma_db_garbage_collector:setup_internal_service(),
     atm_warden_service:setup_internal_service(),
     atm_workflow_execution_api:init_engine(),
     gs_channel_service:trigger_pending_on_connect_to_oz_procedures().
@@ -398,6 +399,7 @@ before_listeners_start() ->
 after_listeners_stop() ->
     atm_supervision_worker:try_to_gracefully_stop_atm_workflow_executions(),
     atm_warden_service:terminate_internal_service(),
+    luma_db_garbage_collector:terminate_internal_service(),
     file_upload_manager_watcher_service:terminate_internal_service(),
     % GS connection should be closed at the end as other services
     % may still require access to synced documents

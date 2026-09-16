@@ -77,14 +77,14 @@ storage_config_upgrade_test_() ->
         },
         {3, "without timeout",
             {storage_config, Helper, AutoFeedLumaConfig},
-            {storage_config, {helper_spec, ?S3_HELPER_NAME, undefined, Args, AdminCtx}, AutoFeedLumaConfig, 0}
+            {storage_config, {helper_spec, ?S3_HELPER_NAME, undefined, Args, AdminCtx}, AutoFeedLumaConfig, undefined, []}
         },
         {3, "with timeout and archive storage option",
             {storage_config,
                 {helper, ?S3_HELPER_NAME, Args#{<<"timeout">> => <<"120000">>, <<"archiveStorage">> => <<"true">>}, AdminCtx},
                 ExternalFeedLumaConfig
             },
-            {storage_config, {helper_spec, ?S3_HELPER_NAME, 120000, Args, AdminCtx}, ExternalFeedLumaConfig, 0}
+            {storage_config, {helper_spec, ?S3_HELPER_NAME, 120000, Args, AdminCtx}, ExternalFeedLumaConfig, undefined, []}
         }
     ]).
 
