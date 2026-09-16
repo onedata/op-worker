@@ -12,9 +12,9 @@
 -module(api_dataset_tree_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/fslogic/data_access_control.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -150,7 +150,7 @@ get_top_datasets_test(Config) ->
 
     TopAttachedDatasets = case SpaceDirDataset of
         undefined ->
-            onenv_dataset_test_utils:get_exp_child_datasets(
+            dataset_test_utils:get_exp_child_datasets(
                 ?ATTACHED_DATASET, SpaceDirPath, undefined, [], FileTree
             );
         {_, _, _} ->
@@ -160,7 +160,7 @@ get_top_datasets_test(Config) ->
 
     ct:pal("Test listing top detached datasets"),
 
-    TopDetachedDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
+    TopDetachedDatasets = dataset_test_utils:get_exp_child_datasets(
         ?DETACHED_DATASET, SpaceDirPath, undefined, [], FileTree
     ),
     get_top_datasets_test_base(SpaceId, ?DETACHED_DATASET, TopDetachedDatasets).
@@ -238,7 +238,7 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
 build_get_top_datasets_prepare_rest_args_fun(SpaceId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(SpaceId, Data1),
+        {Id, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(SpaceId, Data1),
 
         RestPath = <<"spaces/", Id/binary, "/datasets">>,
 
@@ -265,7 +265,7 @@ build_get_top_datasets_prepare_gs_args_fun(SpaceId) ->
 build_prepare_get_top_datasets_gs_args_fun(SpaceId, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {GriId, Data2} = api_test_utils:maybe_substitute_bad_id(SpaceId, Data1),
+        {GriId, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(SpaceId, Data1),
 
         #gs_args{
             operation = get,
@@ -306,7 +306,7 @@ get_child_datasets_test(Config) ->
 
     ct:pal("Listing child datasets of attached dataset"),
 
-    AttachedChildDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
+    AttachedChildDatasets = dataset_test_utils:get_exp_child_datasets(
         ?ATTACHED_DATASET, DirWithDetachedDatasetPath, AttachedDatasetId, DirWithAttachedDatasetEffProtectionFlags,
         DirWithAttachedDataset
     ),
@@ -314,7 +314,7 @@ get_child_datasets_test(Config) ->
 
     ct:pal("Listing child datasets of detached dataset"),
 
-    DetachedChildDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
+    DetachedChildDatasets = dataset_test_utils:get_exp_child_datasets(
         ?DETACHED_DATASET, TestDirPath, DetachedDatasetId, TestDirProtectionFlags, DirWithDetachedDataset
     ),
     get_child_datasets_test_base(DetachedDatasetId, DetachedChildDatasets).
@@ -380,7 +380,7 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
 build_get_child_datasets_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
+        {Id, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         RestPath = <<"datasets/", Id/binary, "/children">>,
 
@@ -399,7 +399,7 @@ build_get_child_datasets_prepare_rest_args_fun(ValidId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_child_datasets_prepare_gs_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #gs_args{
             operation = get,
@@ -574,8 +574,8 @@ get_file_dataset_summary_test_base(FileGuid, ExpSummary) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                     FileGuid, ?DUMMY_SHARE_ID, undefined
                 )
             )
@@ -617,7 +617,7 @@ build_getfile_dataset_summary_prepare_rest_args_fun(FileGuid) ->
 
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data1),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(FileObjectId, Data1),
 
         RestPath = <<"data/", Id/binary, "/dataset/summary">>,
 
@@ -630,7 +630,7 @@ build_getfile_dataset_summary_prepare_rest_args_fun(FileGuid) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_file_dataset_summary_prepare_gs_args_fun(FileGuid) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = get,
@@ -652,11 +652,11 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             dir_stats_test_utils:disable_stats_counting(NewConfig),
             SpaceId = oct_background:get_space_id(space_krk_par),
-            ozt_spaces:set_privileges(SpaceId, ?OCT_USER_ID(user3), [
+            ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(user3), [
                 ?SPACE_MANAGE_DATASETS | privileges:space_member()
             ]),
             ozt_spaces:set_privileges(
-                SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
+                SpaceId, oct_background:get_user_id(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
             NewConfig
         end
@@ -665,7 +665,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 
 init_per_group(_Group, Config) ->
@@ -682,7 +682,7 @@ init_per_group(_Group, Config) ->
         2 ->
             ct:pal("Establishing dataset for space root dir"),
 
-            #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user3, SpaceId),
+            #dataset_object{id = DatasetId} = dataset_test_utils:set_up_and_sync_dataset(user3, SpaceId),
 
             DatasetInfo = #dataset_info{
                 id = DatasetId,
@@ -697,14 +697,14 @@ init_per_group(_Group, Config) ->
             },
             {?SPACE_KRK_PAR, DatasetId, DatasetInfo}
     end,
-    FileTree = onenv_file_test_utils:create_and_sync_file_tree(
+    FileTree = file_tree_test_utils:create_and_sync_file_tree(
         user3, SpaceId, ?FILE_TREE_SPEC
     ),
     [{space_dir_dataset, SpaceDirDataset}, {file_tree, FileTree} | NewConfig].
 
 
 end_per_group(_Group, Config) ->
-    onenv_dataset_test_utils:cleanup_all_datasets(space_krk_par),
+    dataset_test_utils:cleanup_all_datasets(space_krk_par),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 

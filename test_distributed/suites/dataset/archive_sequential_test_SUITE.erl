@@ -13,7 +13,7 @@
 -author("Jakub Kudzia").
 
 
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
@@ -118,7 +118,7 @@ archive_dataset_attached_to_space_dir(_Config) ->
     #dataset_object{
         id = DatasetId,
         archives = [#archive_object{id = ArchiveId}]
-    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, SpaceDirGuid, #dataset_spec{archives = 1}),
+    } = dataset_test_utils:set_up_and_sync_dataset(?USER1, SpaceDirGuid, #dataset_spec{archives = 1}),
     archive_sequential_test_base:archive_simple_dataset_test(SpaceDirGuid, DatasetId, ArchiveId).
 
 archive_big_tree_plain_layout(_Config) ->
@@ -185,7 +185,7 @@ delete_nested_archive_error(_Config) ->
                 dataset = #dataset_object{id = DatasetId}
             }
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{
                 config = #archive_config{create_nested_archives = true, layout = ?ARCHIVE_PLAIN_LAYOUT}
@@ -198,7 +198,7 @@ delete_nested_archive_error(_Config) ->
     {ok, {[{_, ArchiveId}], _}} = ?assertMatch({ok, {[_], true}},
         opt_archives:list(Node, SessionId, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
     
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, FileGuid, 1, 0, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, FileGuid, 1, 0, ?ATTEMPTS),
     ?assertEqual(?ERR_NESTED_ARCHIVE_DELETION_FORBIDDEN(ParentArchiveId), opt_archives:delete(Node, SessionId, ArchiveId)),
     ?assertEqual(ok, opt_archives:delete(Node, SessionId, ParentArchiveId)),
     ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_info(Node, SessionId, ArchiveId)),
@@ -211,7 +211,7 @@ delete_not_finished_archive_error(_Config) ->
     #object{
         guid = Guid,
         dataset = #dataset_object{id = DatasetId, archives = [#archive_object{id = ArchiveId}]}
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]}
         }
@@ -221,7 +221,7 @@ delete_not_finished_archive_error(_Config) ->
     ?assertEqual(?ERR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(?ARCHIVE_PENDING, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING,
         ?ARCHIVE_VERIFICATION_FAILED, ?ARCHIVE_CANCELLED]), opt_archives:delete(Node, SessionId, ArchiveId)),
     finalize_archive_creation(?FUNCTION_NAME),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, 0, 0, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, 0, 0, ?ATTEMPTS),
     ?assertEqual(ok, opt_archives:delete(Node, SessionId, ArchiveId)).
 
 
@@ -256,7 +256,7 @@ audit_log_failed_dir_verification_test(_Config) ->
 errors_test_base(TraverseType, JobType) ->
     mock_error_requested_job(TraverseType, JobType),
     #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} =
-        onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+        file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
             dataset = #dataset_spec{archives = 1},
             children = [#file_spec{}, #dir_spec{}]
         }),
@@ -264,7 +264,7 @@ errors_test_base(TraverseType, JobType) ->
         archivisation -> ?ARCHIVE_FAILED;
         verification -> ?ARCHIVE_VERIFICATION_FAILED
     end,
-    archive_tests_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS).
+    archive_check_test_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS).
 
 
 audit_log_test_base(ExpectedState, FailedFileType) ->
@@ -275,13 +275,13 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
         children = [
             #object{name = ChildFileName}
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
         dataset = #dataset_spec{archives = [
             #archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}
         ]},
         children = [#file_spec{}]
     }, krakow),
-    archive_tests_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS),
     PathFun = fun
         ([]) -> <<>>;
         (Tokens) -> filename:join(Tokens)
@@ -425,7 +425,10 @@ finalize_archive_creation(FunctionName) ->
 
 init_per_suite(Config) ->
     opt:init_per_suite(
-        [{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils, archive_sequential_test_base]} | Config],
+        [{?LOAD_MODULES, [
+            ?MODULE, archive_test_utils, archive_check_test_utils,
+            dir_stats_test_utils, archive_sequential_test_base
+        ]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op-archive",
             envs = [{op_worker, op_worker, [

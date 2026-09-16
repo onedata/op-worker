@@ -11,7 +11,6 @@
 -module(client_events_test_SUITE).
 -author("Michal Wrzeszcz").
 
--include("fuse_test_utils.hrl").
 -include("modules/events/routing.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/event_messages.hrl").
@@ -765,7 +764,7 @@ init_per_suite(Config) ->
         initializer:mock_auth_manager(Config3),
         initializer:create_test_users_and_spaces(?TEST_FILE(Config3, "env_desc.json"), Config3)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils, ?MODULE]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, datastore_pool_test_utils, ?MODULE]} | Config].
 
 init_per_testcase(events_on_conflicts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),

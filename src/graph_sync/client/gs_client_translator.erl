@@ -496,7 +496,7 @@ privileges_to_atoms(Map) ->
 
 
 %% @private
-% TODO VFS-VFS-12490 [file, dir] deprecated, left for BC, can be removed in 23.02.*
+% TODO VFS-12490 [file, dir] deprecated, left for BC, can be removed in 23.02.*
 -spec translate_share_file_type(json_utils:json_map()) -> onedata_file:type().
 translate_share_file_type(#{<<"fileType">> := <<"file">>}) -> ?REGULAR_FILE_TYPE;
 translate_share_file_type(#{<<"fileType">> := <<"REG">>}) -> ?REGULAR_FILE_TYPE;

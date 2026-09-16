@@ -46,6 +46,12 @@
 ]).
 
 
+% Spaces created by initializer from the default global setup (this suite's
+% env_desc.json does not override it).
+-define(SPACE_IDS, [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>]).
+-define(SPACE_CLEANING_ATTEMPTS, 30).
+
+
 all() -> [
     basic_test,
     hardlinks_test,
@@ -139,32 +145,54 @@ local_opened_many_files_deletion_closing_race(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    lfm_files_test_base:init_per_suite(Config).
+    Posthook = fun(NewConfig) ->
+        initializer:mock_auth_manager(NewConfig),
+        initializer:setup_storage(NewConfig)
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, dir_stats_collector_test_base]} | Config].
 
 
 end_per_suite(Config) ->
-    lfm_files_test_base:end_per_suite(Config).
+    initializer:teardown_storage(Config),
+    initializer:unmock_auth_manager(Config).
 
 
-init_per_testcase(basic_test = Case, Config) ->
-    dir_stats_collector_test_base:init_and_enable_for_new_space(lfm_files_test_base:init_per_testcase(
-        Case, Config
-    ));
-init_per_testcase(hardlinks_test = Case, Config) ->
+init_per_testcase(basic_test, Config) ->
+    dir_stats_collector_test_base:init_and_enable_for_new_space(setup_users_and_spaces(Config));
+init_per_testcase(hardlinks_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:set_env(Workers, op_worker, dir_stats_collector_race_preventing_time, 1000),
-    dir_stats_collector_test_base:init_and_enable_for_new_space(lfm_files_test_base:init_per_testcase(
-        Case, Config
-    ));
-init_per_testcase(Case, Config) ->
-    dir_stats_collector_test_base:init(lfm_files_test_base:init_per_testcase(Case, Config)).
+    dir_stats_collector_test_base:init_and_enable_for_new_space(setup_users_and_spaces(Config));
+init_per_testcase(_Case, Config) ->
+    dir_stats_collector_test_base:init(setup_users_and_spaces(Config)).
 
 
-end_per_testcase(hardlinks_test = Case, Config) ->
+end_per_testcase(hardlinks_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:set_env(Workers, op_worker, dir_stats_collector_race_preventing_time, 30000),
     dir_stats_collector_test_base:teardown(Config),
-    lfm_files_test_base:end_per_testcase(Case, Config);
-end_per_testcase(Case, Config) ->
+    clean_users_and_spaces(Config);
+end_per_testcase(_Case, Config) ->
     dir_stats_collector_test_base:teardown(Config),
-    lfm_files_test_base:end_per_testcase(Case, Config).
+    clean_users_and_spaces(Config).
+
+
+%% @private
+setup_users_and_spaces(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    initializer:communicator_mock(Workers),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"), Config),
+    lfm_proxy:init(ConfigWithSessionInfo).
+
+
+%% @private
+clean_users_and_spaces(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(SpaceId) ->
+        lfm_test_utils:clean_space(Workers, SpaceId, ?SPACE_CLEANING_ATTEMPTS)
+    end, ?SPACE_IDS),
+    lfm_proxy:teardown(Config),
+    lfm_ct:clear_context(),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    test_utils:mock_validate_and_unload(Workers, [communicator]).

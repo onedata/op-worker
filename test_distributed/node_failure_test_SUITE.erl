@@ -103,7 +103,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
 
     % TODO VFS-7037 uncomment and make it pass
 %%    ct:pal("Create fuse sessions on nodes: ~n~tp~n~tp", [WorkerToKillP1, WorkerToKillP2]),
-%%    AccessToken = provider_onenv_test_utils:create_oz_temp_access_token(User1),
+%%    AccessToken = provider_test_utils:create_oz_temp_access_token(User1),
 %%    {FuseSessIdP1, ConnectionsP1} = setup_fuse_session_with_connections(
 %%        AccessToken, WorkerToKillP1, WorkerToCheckP1, SpaceDirGuid, Attempts
 %%    ),
@@ -152,7 +152,7 @@ init_per_suite(Config) ->
     opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op-2nodes",
         posthook = fun(NewConfig) ->
-            provider_onenv_test_utils:setup_sessions(NewConfig)
+            provider_test_utils:setup_sessions(NewConfig)
         end
     }).
 init_per_testcase(_Case, Config) ->
@@ -171,8 +171,8 @@ end_per_suite(_Config) ->
 
 enable_ha(Config) ->
     Workers = oct_background:get_provider_nodes(krakow) ++ oct_background:get_provider_nodes(paris),
-    CM_P1 = provider_onenv_test_utils:get_primary_cm_node(Config, krakow),
-    CM_P2 = provider_onenv_test_utils:get_primary_cm_node(Config, paris),
+    CM_P1 = provider_test_utils:get_primary_cm_node(Config, krakow),
+    CM_P2 = provider_test_utils:get_primary_cm_node(Config, paris),
     ClusterManagerNodes = [CM_P1, CM_P2],
 
     lists:foreach(fun(Worker) ->

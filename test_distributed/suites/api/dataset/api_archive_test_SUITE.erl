@@ -12,9 +12,8 @@
 -module(api_archive_test_SUITE).
 -author("Jakub Kudzia").
 
--include("api_test_runner.hrl").
--include("onenv_test_utils.hrl").
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -102,13 +101,13 @@ create_archive(_Config) ->
 
     #object{
         dataset = #dataset_object{id = DatasetId, archives = [#archive_object{id = BaseArchiveId}]}
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 1
     }}),
 
     #object{
         dataset = #dataset_object{id = DetachedDatasetId}
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         state = ?DETACHED_DATASET
     }}),
 
@@ -234,7 +233,7 @@ build_create_archive_validate_rest_call_result_fun(MemRef) ->
         ArchiveId = maps:get(<<"archiveId">>, Body),
         api_test_memory:set(MemRef, archive_id, ArchiveId),
 
-        ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"archives">>, ArchiveId]),
+        ExpLocation = rest_test_utils:build_rest_url(TestNode, [<<"archives">>, ArchiveId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers))
     end.
 
@@ -354,7 +353,7 @@ get_archive_info(_Config) ->
             config = Config,
             description = Description
         }]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE,
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE,
         #file_spec{dataset = #dataset_spec{archives = 1}}, krakow
     ),
     
@@ -409,8 +408,10 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_gs_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{}, {ok, Result}) ->
                         DirGuid = get_root_dir_guid(ArchiveId),
-                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, oct_background:get_user_id(user3), ?ARCHIVE_PRESERVED,
-                            Config, Description, undefined, undefined, DirGuid, oct_background:get_provider_id(krakow)),
+                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId,
+                            oct_background:get_user_id(user3), ?ARCHIVE_PRESERVED,
+                            Config, Description, undefined, undefined, DirGuid,
+                            oct_background:get_provider_id(krakow)),
                         ?assertEqual(ExpArchiveData, maps:without([<<"creationTime">>, <<"index">>, <<"relatedDip">>], Result)),
                         ?assertEqual(archive_config:should_include_dip(Config), maps:get(<<"relatedDip">>, Result) =/= null)
                     end
@@ -428,7 +429,7 @@ get_archive_info(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_archive_prepare_rest_args_fun(ArchiveId) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data),
 
         #rest_args{
             method = get,
@@ -442,7 +443,7 @@ build_get_archive_prepare_rest_args_fun(ArchiveId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_archive_prepare_gs_args_fun(ArchiveId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
 
         #gs_args{
             operation = get,
@@ -460,7 +461,7 @@ modify_archive_description(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE,
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE,
         #file_spec{dataset = #dataset_spec{archives = 30}}
     ),
 
@@ -512,7 +513,7 @@ modify_archive_description(_Config) ->
 build_update_archive_description_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
         api_test_memory:set(MemRef, archive_to_modify, ArchiveObject#archive_object{id = Id}),
 
         #rest_args{
@@ -530,7 +531,7 @@ build_update_archive_description_prepare_rest_args_fun(MemRef) ->
 build_update_archive_description_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
         api_test_memory:set(MemRef, archive_to_modify, ArchiveObject#archive_object{id = Id}),
 
         #gs_args{
@@ -564,7 +565,7 @@ build_verify_modified_archive_description_fun(MemRef, Providers) ->
                 end,
 
                 lists:foreach(fun(Provider) ->
-                    Node = ?OCT_RAND_OP_NODE(Provider),
+                    Node = oct_background:get_random_provider_node(Provider),
                     UserSessId = oct_background:get_user_session_id(user3, Provider),
                     ?assertMatch({ok, #archive_info{description = ExpCurrentDescription}},
                         opt_archives:get_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
@@ -582,7 +583,7 @@ get_dataset_archives(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         % pick random count of archives
         archives = rand:uniform(300)
     }}),
@@ -658,7 +659,7 @@ get_dataset_archives(_Config) ->
 build_get_dataset_archives_prepare_rest_args_fun(ValidDatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidDatasetId, Data1),
+        {Id, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(ValidDatasetId, Data1),
 
         RestPath = <<"datasets/", Id/binary, "/archives">>,
 
@@ -676,7 +677,7 @@ build_get_dataset_archives_prepare_rest_args_fun(ValidDatasetId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_dataset_archives_prepare_gs_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #gs_args{
             operation = get,
@@ -754,7 +755,7 @@ init_archive_delete_test(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 30
     }}),
 
@@ -805,7 +806,7 @@ init_archive_delete_test(_Config) ->
 build_init_delete_archive_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
         api_test_memory:set(MemRef, archive_to_delete, ArchiveObject#archive_object{id = Id}),
 
         #rest_args{
@@ -823,7 +824,7 @@ build_init_delete_archive_prepare_rest_args_fun(MemRef) ->
 build_init_delete_archive_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
         api_test_memory:set(MemRef, archive_to_delete, ArchiveObject#archive_object{id = Id}),
 
         #gs_args{
@@ -861,7 +862,7 @@ build_verify_archive_deleted_fun(MemRef, Providers, DatasetId) ->
                 end,
 
                 lists:foreach(fun(Provider) ->
-                    Node = ?OCT_RAND_OP_NODE(Provider),
+                    Node = oct_background:get_random_provider_node(Provider),
                     UserSessId = oct_background:get_user_session_id(user2, Provider),
                     ListOpts = #{offset => 0, limit => 1000},
                     ListArchiveFun = fun() ->
@@ -903,7 +904,7 @@ init_archive_recall_test(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = [ArchiveObject]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 1
     }}),
 
@@ -960,7 +961,7 @@ init_archive_recall_test(_Config) ->
 -spec validate_recall_result([oct_background:entity_selector()], file_id:file_guid()) -> ok.
 validate_recall_result(Providers, RootFileGuid) ->
     lists:foreach(fun(Provider) ->
-        Node = ?OCT_RAND_OP_NODE(Provider),
+        Node = oct_background:get_random_provider_node(Provider),
         UserSessId = oct_background:get_user_session_id(user2, Provider),
         ?assertMatch({ok, _}, lfm_proxy:stat(Node, UserSessId, #file_ref{guid = RootFileGuid}), ?ATTEMPTS)
     end, Providers).
@@ -972,7 +973,7 @@ validate_recall_result(Providers, RootFileGuid) ->
 build_init_recall_archive_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         #archive_object{id = ArchiveId} = api_test_memory:get(MemRef, archive_object),
-        {Id, Data} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, Data} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
 
         #rest_args{
             method = post,
@@ -989,7 +990,7 @@ build_init_recall_archive_prepare_rest_args_fun(MemRef) ->
 build_init_recall_archive_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         #archive_object{id = ArchiveId} = api_test_memory:get(MemRef, archive_object),
-        {Id, Data} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {Id, Data} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
 
         #gs_args{
             operation = create,
@@ -1010,7 +1011,7 @@ maybe_create_recall_target_parent(Data) ->
 %% @private
 -spec create_recall_parent() -> file_id:objectid().
 create_recall_parent() ->
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #dir_spec{}),
+    #object{guid = Guid} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #dir_spec{}),
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     ObjectId.
 
@@ -1032,7 +1033,7 @@ get_archive_recall_test_base(Providers, Aspect) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = [#archive_object{id = ArchiveId}]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{
         content = crypto:strong_rand_bytes(20),
         dataset = #dataset_spec{archives = 1}
     }),
@@ -1122,7 +1123,7 @@ get_recall_validate_result(progress, rest, _ArchiveId, _DatasetId, RespBody) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_recall_archive_details_prepare_rest_args_fun(RootFileObjectId, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data} = api_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
+        {Id, Data} = api_data_spec_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
 
         #rest_args{
             method = get,
@@ -1138,7 +1139,7 @@ build_get_recall_archive_details_prepare_rest_args_fun(RootFileObjectId, Aspect)
     onenv_api_test_runner:prepare_args_fun().
 build_get_recall_archive_details_prepare_gs_args_fun(RootFileObjectId, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data} = api_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
+        {Id, Data} = api_data_spec_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
 
         #gs_args{
             operation = get,
@@ -1167,7 +1168,7 @@ rest_recall_get_path_suffix(progress) -> <<"/recall/progress">>.
 get_archivisation_audit_log(_Config) ->
     #object{dataset = #dataset_object{
         archives = [#archive_object{id = ArchiveId}]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+    }} = file_tree_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 1
     }}, krakow),
 
@@ -1219,7 +1220,7 @@ get_archivisation_audit_log(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
 
         #gs_args{
             operation = get,
@@ -1257,7 +1258,7 @@ get_datasets_summary_for_archive_test(_Config) ->
         dataset = #dataset_spec{archives = 1}
     },
     #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user2, ?SPACE, StructureSpec, krakow),
+        file_tree_test_utils:create_and_sync_file_tree(user2, ?SPACE, StructureSpec, krakow),
     {ok, #archive_info{root_dir_guid = RootDirGuid}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         opw_test_rpc:call(krakow, archive_api, get_archive_info, [ArchiveId])),
     ?assertEqual({ok, #file_eff_dataset_summary{
@@ -1281,7 +1282,7 @@ verify_archive(
     PreservedCallback, DeletedCallback, Description
 ) ->
     lists:foreach(fun(Provider) ->
-        Node = ?OCT_RAND_OP_NODE(Provider),
+        Node = oct_background:get_random_provider_node(Provider),
         UserSessId = oct_background:get_user_session_id(UserId, Provider),
         ListOpts = #{offset => 0, limit => 1000},
         GetDatasetsFun =  fun() -> list_archive_ids(Node, UserSessId, DatasetId, ListOpts) end,
@@ -1354,7 +1355,7 @@ build_archive_gs_instance(ArchiveId, DatasetId, Creator, State, Config, Descript
     maps:without([<<"creationTime">>, <<"index">>, <<"relatedDip">>], BasicInfo#{<<"revision">> => 1}).
 
 
--spec take_random_archive(api_test_memory:mem_ref()) -> onenv_archive_test_utils:archive_object().
+-spec take_random_archive(api_test_memory:mem_ref()) -> archive_test_utils:archive_object().
 take_random_archive(MemRef) ->
     case lists_utils:shuffle(api_test_memory:get(MemRef, archive_objects)) of
         [ArchiveObject | RestArchiveIds] ->
@@ -1382,12 +1383,12 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             dir_stats_test_utils:disable_stats_counting(NewConfig),
             SpaceId = oct_background:get_space_id(?SPACE),
-            ozt_spaces:set_privileges(SpaceId, ?OCT_USER_ID(user3), [
+            ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(user3), [
                 ?SPACE_MANAGE_DATASETS, ?SPACE_VIEW_ARCHIVES, ?SPACE_CREATE_ARCHIVES,
                 ?SPACE_REMOVE_ARCHIVES, ?SPACE_RECALL_ARCHIVES | privileges:space_member()
             ]),
             ozt_spaces:set_privileges(
-                SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
+                SpaceId, oct_background:get_user_id(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
 
             start_http_server(),
@@ -1399,7 +1400,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     stop_http_server(),
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 
 init_per_group(_Group, Config) ->
@@ -1407,7 +1408,7 @@ init_per_group(_Group, Config) ->
     lfm_proxy:init(Config, false).
 
 end_per_group(_Group, Config) ->
-    onenv_dataset_test_utils:cleanup_all_datasets(?SPACE),
+    dataset_test_utils:cleanup_all_datasets(?SPACE),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 

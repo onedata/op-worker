@@ -13,7 +13,7 @@
 -module(api_test_runner).
 -author("Bartosz Walkowicz").
 
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").

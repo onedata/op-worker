@@ -15,7 +15,7 @@
 -module(file_registration_s3_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("file_registration_test.hrl").
+-include("storage/file_registration_test.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 %% export for ct
@@ -114,7 +114,7 @@ read_registered_file_after_source_modified_on_storage_test(_Config) -> ?run_test
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, file_registration_test_base, storage_file_setup_utils, storage_import_test_utils],
+    ModulesToLoad = [?MODULE, file_registration_test_base, storage_file_tree_test_utils, storage_import_test_utils],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op_s3",
         envs = [{op_worker, op_worker, [

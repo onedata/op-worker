@@ -337,7 +337,7 @@ init_per_suite(Config) ->
         application:start(ssl),
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), NewConfig)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, datastore_pool_test_utils]} | Config].
 
 
 end_per_suite(Config) ->
@@ -458,7 +458,7 @@ assert_synced_documents_cleaned_up(Worker, SpaceId) ->
 
 
 assert_documents_cleaned_up(Worker, Scope, Models) ->
-    {PoolActiveEntries, _} = pool_utils:get_pools_entries_and_sizes(Worker, memory),
+    {PoolActiveEntries, _} = datastore_pool_test_utils:get_pools_entries_and_sizes(Worker, memory),
     ActiveMemoryKeys = lists:map(fun(Entry) ->
         element(2, Entry)
     end, lists:flatten(PoolActiveEntries)),

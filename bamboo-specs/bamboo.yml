@@ -95,14 +95,8 @@ stages:
         - archive_recall
         - archive_sequential
         - archivisation_cancellation
-        - atm_audit_log_store
-        - atm_exception_store
-        - atm_list_store
         - atm_openfaas_activity_feed
-        - atm_range_store
-        - atm_single_value_store
-        - atm_time_series_store
-        - atm_tree_forest_store
+        - atm_store
         - atm_value
         - atm_workflow_execution
         - atm_workflow_executions_collection
@@ -132,12 +126,14 @@ stages:
         - events_performance
         - events_reliability
         - events_reliability_2op
-        - file_deletion
-        - file_lifecycle
+        - file_lfm_posix
+        - file_lfm_s3
+        - file_lifecycle_races
         - file_links_reconciliation_traverse
         - file_popularity
         - file_registration_http
         - file_registration_s3
+        - file_symlinks
         - fslogic_req
         - gs_atm_inventory_logic
         - gs_atm_lambda_logic
@@ -172,9 +168,6 @@ stages:
         - helper_xrootd
         - idp_access_token
         - lfm_attrs
-        - lfm_files_posix
-        - lfm_files_s3
-        - lfm_symlinks_resolution
         - luma
         - luma_reverse
         - massive_multi_provider_file_ops
@@ -188,7 +181,6 @@ stages:
         - multi_provider_hardlinks
         - multi_provider_proxy
         - multi_provider_rest
-        - multi_provider_view_rest
         - multipart_upload
         - multiple_workflow_scheduling
 #        - node_failure # TODO VFS-11953
@@ -202,7 +194,6 @@ stages:
         - qos_replica_protection
         - qos_status
         - quota
-        - readonly_storage
         - rename
         - replica_deletion
         - replication
@@ -233,6 +224,7 @@ stages:
         - storage_import_race_posix
         - storage_import_race_s3
         - storage_monitoring
+        - storage_readonly
         - storage_req
         - storage_sync_links
         - storage_traverse
@@ -245,7 +237,8 @@ stages:
         - tree_deletion_traverse
         - tree_traverse_listing
         - user_auth
-        - view
+        - view_multi_provider
+        - view_single_provider
         - webdav_token
         - workflow_scheduling
         - workflow_scheduling_cancellation_and_restart
@@ -784,27 +777,6 @@ archivisation_cancellation:
     - <<: *ct_logs
       name: ct_logs_archivisation_cancellation.tar.gz
 
-atm_audit_log_store:
-  <<: *ct-onenv-job
-  key: AALS
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_audit_log_store.tar.gz
-
-atm_exception_store:
-  <<: *ct-onenv-job
-  key: ATMEXCST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_exception_store.tar.gz
-
-atm_list_store:
-  <<: *ct-onenv-job
-  key: ATMLST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_list_store.tar.gz
-
 atm_openfaas_activity_feed:
   <<: *ct-onenv-job
   key: AOAF
@@ -812,33 +784,12 @@ atm_openfaas_activity_feed:
     - <<: *ct_logs
       name: ct_logs_atm_openfaas_activity_feed.tar.gz
 
-atm_range_store:
+atm_store:
   <<: *ct-onenv-job
-  key: ATMRST
+  key: ATMSTORE
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_atm_range_store.tar.gz
-
-atm_single_value_store:
-  <<: *ct-onenv-job
-  key: ATMSVST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_single_value_store.tar.gz
-
-atm_time_series_store:
-  <<: *ct-onenv-job
-  key: ATMTSSTEST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_time_series_store.tar.gz
-
-atm_tree_forest_store:
-  <<: *ct-onenv-job
-  key: ATMTFST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_atm_tree_forest_store.tar.gz
+      name: ct_logs_atm_store.tar.gz
 
 atm_value:
   <<: *ct-onenv-job
@@ -882,25 +833,12 @@ authz_misc:
     - <<: *ct_logs
       name: ct_logs_authz_misc.tar.gz
 
-autocleaning: &ct-job
+autocleaning:
+  <<: *ct-onenv-job
   key: AUT
-  description: Autocleaning test
-  other: *common-opts
-  tasks:
-    - checkout: *fake-checkout
-    - script: *unpack
-    - script: *quarantine-hack-pull-surefire
-    - script:
-        <<: *run-script-working-dir
-        scripts:
-          - ./ct_run.py --suite ${bamboo.shortJobName}
-        description: Run CT
-  final-tasks: *final-tasks
   artifacts:
     - <<: *ct_logs
       name: ct_logs_autocleaning.tar.gz
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
 
 cdmi_single_provider:
   <<: *ct-onenv-job
@@ -916,12 +854,25 @@ cdmi_multi_provider:
     - <<: *ct_logs
       name: ct_logs_cdmi_multi_provider.tar.gz
 
-client_events:
-  <<: *ct-job
+client_events: &ct-job
   key: CLIEVE
+  description: Client events test
+  other: *common-opts
+  tasks:
+    - checkout: *fake-checkout
+    - script: *unpack
+    - script: *quarantine-hack-pull-surefire
+    - script:
+        <<: *run-script-working-dir
+        scripts:
+          - ./ct_run.py --suite ${bamboo.shortJobName}
+        description: Run CT
+  final-tasks: *final-tasks
   artifacts:
     - <<: *ct_logs
       name: ct_logs_client_events.tar.gz
+  requirements: *requirements
+  artifact-subscriptions: *op-worker
 
 client_events_user_root_dir:
   <<: *ct-onenv-job
@@ -1061,19 +1012,26 @@ events_reliability_2op:
     - <<: *ct_logs
       name: ct_logs_events_reliability_2op.tar.gz
 
-file_deletion:
-  <<: *ct-job
-  key: FILEDEL
+file_lfm_posix:
+  <<: *ct-onenv-job
+  key: FILELFMPOS
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_file_deletion.tar.gz
+      name: ct_logs_file_lfm_posix.tar.gz
 
-file_lifecycle:
-  <<: *ct-job
+file_lfm_s3:
+  <<: *ct-onenv-job
+  key: FILELFMS3
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_file_lfm_s3.tar.gz
+
+file_lifecycle_races:
+  <<: *ct-onenv-job
   key: FIL
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_file_lifecycle.tar.gz
+      name: ct_logs_file_lifecycle_races.tar.gz
 
 file_links_reconciliation_traverse:
   <<: *ct-onenv-job
@@ -1084,7 +1042,7 @@ file_links_reconciliation_traverse:
   requirements: *os-agent
 
 file_popularity:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: FPOP
   artifacts:
     - <<: *ct_logs
@@ -1103,6 +1061,13 @@ file_registration_s3:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_file_registration_s3.tar.gz
+
+file_symlinks:
+  <<: *ct-onenv-job
+  key: LFMSYMLINKRESOLUTION
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_file_symlinks.tar.gz
 
 fslogic_req:
   <<: *ct-job
@@ -1350,27 +1315,6 @@ lfm_attrs:
     - <<: *ct_logs
       name: ct_logs_lfm_attrs.tar.gz
 
-lfm_files_posix:
-  <<: *ct-job
-  key: LFMFIL
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_lfm_files_posix.tar.gz
-
-lfm_files_s3:
-  <<: *ct-job
-  key: LFMFS3
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_lfm_files_s3.tar.gz
-
-lfm_symlinks_resolution:
-  <<: *ct-onenv-job
-  key: LFMSYMLINKRESOLUTION
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_lfm_symlinks_resolution.tar.gz
-
 luma:
   <<: *ct-job
   key: LUMA
@@ -1468,14 +1412,6 @@ multi_provider_rest:
     - <<: *ct_logs
       name: ct_logs_multi_provider_rest.tar.gz
 
-multi_provider_view_rest:
-  <<: *ct-job
-  key: MULIDX
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_multi_provider_view_rest.tar.gz
-  requirements: *os-agent
-
 multipart_upload:
   <<: *ct-onenv-job
   key: MULUPL
@@ -1569,13 +1505,6 @@ quota:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_quota.tar.gz
-
-readonly_storage:
-  <<: *ct-job
-  key: ROST
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_readonly_storage.tar.gz
 
 rename:
   <<: *ct-job
@@ -1692,14 +1621,14 @@ space_file_events_rest:
       name: ct_logs_space_file_events_rest.tar.gz
 
 storage_cleanup:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: STCL
   artifacts:
     - <<: *ct_logs
       name: ct_logs_storage_cleanup.tar.gz
 
 storage_files:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: STFILES
   artifacts:
     - <<: *ct_logs
@@ -1789,6 +1718,13 @@ storage_monitoring:
     - <<: *ct_logs
       name: ct_logs_storage_monitoring.tar.gz
 
+storage_readonly:
+  <<: *ct-onenv-job
+  key: ROST
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_readonly.tar.gz
+
 storage_req:
   <<: *ct-job
   key: FUS
@@ -1873,12 +1809,19 @@ user_auth:
     - <<: *ct_logs
       name: ct_logs_user_auth.tar.gz
 
-view:
+view_multi_provider:
+  <<: *ct-onenv-job
+  key: MULIDX
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_view_multi_provider.tar.gz
+
+view_single_provider:
   <<: *ct-onenv-job
   key: INDEX
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_view.tar.gz
+      name: ct_logs_view_single_provider.tar.gz
 
 webdav_token:
   <<: *ct-job
@@ -1985,14 +1928,8 @@ Coverage report:
     - artifact: ct_logs_archive_recall.tar.gz
     - artifact: ct_logs_archive_sequential.tar.gz
     - artifact: ct_logs_archivisation_cancellation.tar.gz
-    - artifact: ct_logs_atm_audit_log_store.tar.gz
-    - artifact: ct_logs_atm_exception_store.tar.gz
-    - artifact: ct_logs_atm_list_store.tar.gz
     - artifact: ct_logs_atm_openfaas_activity_feed.tar.gz
-    - artifact: ct_logs_atm_range_store.tar.gz
-    - artifact: ct_logs_atm_single_value_store.tar.gz
-    - artifact: ct_logs_atm_time_series_store.tar.gz
-    - artifact: ct_logs_atm_tree_forest_store.tar.gz
+    - artifact: ct_logs_atm_store.tar.gz
     - artifact: ct_logs_atm_value.tar.gz
     - artifact: ct_logs_atm_workflow_execution.tar.gz
     - artifact: ct_logs_atm_workflow_executions_collection.tar.gz
@@ -2022,12 +1959,14 @@ Coverage report:
     - artifact: ct_logs_events_performance.tar.gz
     - artifact: ct_logs_events_reliability.tar.gz
     - artifact: ct_logs_events_reliability_2op.tar.gz
-    - artifact: ct_logs_file_deletion.tar.gz
-    - artifact: ct_logs_file_lifecycle.tar.gz
+    - artifact: ct_logs_file_lfm_posix.tar.gz
+    - artifact: ct_logs_file_lfm_s3.tar.gz
+    - artifact: ct_logs_file_lifecycle_races.tar.gz
     - artifact: ct_logs_file_links_reconciliation_traverse.tar.gz
     - artifact: ct_logs_file_popularity.tar.gz
     - artifact: ct_logs_file_registration_http.tar.gz
     - artifact: ct_logs_file_registration_s3.tar.gz
+    - artifact: ct_logs_file_symlinks.tar.gz
     - artifact: ct_logs_fslogic_req.tar.gz
     - artifact: ct_logs_gs_atm_inventory_logic.tar.gz
     - artifact: ct_logs_gs_atm_lambda_logic.tar.gz
@@ -2062,9 +2001,6 @@ Coverage report:
     - artifact: ct_logs_helper_xrootd.tar.gz
     - artifact: ct_logs_idp_access_token.tar.gz
     - artifact: ct_logs_lfm_attrs.tar.gz
-    - artifact: ct_logs_lfm_files_posix.tar.gz
-    - artifact: ct_logs_lfm_files_s3.tar.gz
-    - artifact: ct_logs_lfm_symlinks_resolution.tar.gz
     - artifact: ct_logs_luma.tar.gz
     - artifact: ct_logs_luma_reverse.tar.gz
     - artifact: ct_logs_massive_multi_provider_file_ops.tar.gz
@@ -2078,7 +2014,6 @@ Coverage report:
     - artifact: ct_logs_multi_provider_hardlinks.tar.gz
     - artifact: ct_logs_multi_provider_proxy.tar.gz
     - artifact: ct_logs_multi_provider_rest.tar.gz
-    - artifact: ct_logs_multi_provider_view_rest.tar.gz
     - artifact: ct_logs_multipart_upload.tar.gz
     - artifact: ct_logs_multiple_workflow_scheduling.tar.gz
 #    - artifact: ct_logs_node_failure.tar.gz # TODO VFS-11953
@@ -2092,7 +2027,6 @@ Coverage report:
     - artifact: ct_logs_qos_replica_protection.tar.gz
     - artifact: ct_logs_qos_status.tar.gz
     - artifact: ct_logs_quota.tar.gz
-    - artifact: ct_logs_readonly_storage.tar.gz
     - artifact: ct_logs_rename.tar.gz
     - artifact: ct_logs_replica_deletion.tar.gz
     - artifact: ct_logs_replication.tar.gz
@@ -2123,6 +2057,7 @@ Coverage report:
     - artifact: ct_logs_storage_import_race_posix.tar.gz
     - artifact: ct_logs_storage_import_race_s3.tar.gz
     - artifact: ct_logs_storage_monitoring.tar.gz
+    - artifact: ct_logs_storage_readonly.tar.gz
     - artifact: ct_logs_storage_req.tar.gz
     - artifact: ct_logs_storage_sync_links.tar.gz
     - artifact: ct_logs_storage_traverse.tar.gz
@@ -2135,7 +2070,8 @@ Coverage report:
     - artifact: ct_logs_tree_deletion_traverse.tar.gz
     - artifact: ct_logs_tree_traverse_listing.tar.gz
     - artifact: ct_logs_user_auth.tar.gz
-    - artifact: ct_logs_view.tar.gz
+    - artifact: ct_logs_view_multi_provider.tar.gz
+    - artifact: ct_logs_view_single_provider.tar.gz
     - artifact: ct_logs_webdav_token.tar.gz
     - artifact: ct_logs_workflow_scheduling.tar.gz
     - artifact: ct_logs_workflow_scheduling_cancellation_and_restart.tar.gz

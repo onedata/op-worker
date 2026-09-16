@@ -12,7 +12,7 @@
 -module(storage_import_initial_posix_test_SUITE).
 -author("Katarzyna Such").
 
--include("storage_import_test.hrl").
+-include("storage/storage_import_test.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 -export([
@@ -152,7 +152,7 @@ import_directory_error_test(_Config) -> ?run_test().
 
 init_per_suite(Config) ->
     ModulesToLoad = [
-        ?MODULE, sd_test_utils, storage_file_setup_utils,
+        ?MODULE, sd_test_utils, storage_file_tree_test_utils,
         storage_import_test_utils, storage_import_initial_test_base
     ],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{

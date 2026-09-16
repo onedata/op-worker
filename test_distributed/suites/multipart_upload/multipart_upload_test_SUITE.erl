@@ -12,8 +12,8 @@
 -module(multipart_upload_test_SUITE).
 -author("Michal Stanisz").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").

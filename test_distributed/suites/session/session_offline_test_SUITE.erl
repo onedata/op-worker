@@ -12,7 +12,7 @@
 -module(session_offline_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/auth/offline_access_manager.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").

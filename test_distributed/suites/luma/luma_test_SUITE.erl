@@ -11,7 +11,7 @@
 -module(luma_test_SUITE).
 -author("Jakub Kudzia").
 
--include("luma_test_utils.hrl").
+-include("luma/luma_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -96,7 +96,7 @@ luma_generation_namespace_base(Config, StorageLumaConfig) ->
     ExpectedUserCreds = maps:get(user_credentials, StorageLumaConfig),
 
     MapFun = fun(Storage_) ->
-        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage_)
+        luma_test_utils:map_to_storage_creds(Worker, ?LUMA_SESS_ID, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage_)
     end,
 
     % Already filled luma db for current luma generation should properly map
@@ -109,7 +109,7 @@ luma_generation_namespace_base(Config, StorageLumaConfig) ->
     ?assertMatch({error, not_found}, MapFun(Storage2)),
 
     % Unless it is explicitly added
-    {ok, _} = rpc:call(Worker, luma_crud_api, storage_users_store, [Storage2, ?USER_ID, #{
+    {ok, _} = rpc:call(Worker, luma_crud_api, storage_users_store, [Storage2, ?LUMA_USER_ID, #{
         <<"storageCredentials">> => ExpectedUserCreds
     }]),
     ?assertMatch({ok, ExpectedUserCreds}, MapFun(Storage2)),
@@ -237,43 +237,43 @@ map_root_to_storage_creds_returns_admin_creds_base(Config, StorageLumaConfig) ->
     Storage = maps:get(storage_record, StorageLumaConfig),
     AdminCreds = maps:get(admin_credentials, StorageLumaConfig),
     ?assertEqual({ok, AdminCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?ROOT_SESS_ID, ?ROOT_USER_ID, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?ROOT_SESS_ID, ?ROOT_USER_ID, ?LUMA_SPACE_ID, Storage)).
 
 map_space_owner_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DefaultCreds = maps:get(default_credentials, StorageLumaConfig),
     ?assertEqual({ok, DefaultCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?LUMA_SPACE_ID), ?LUMA_SPACE_ID, Storage)).
 
 map_space_owner_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DefaultCreds = maps:get(default_credentials, StorageLumaConfig),
     ?assertEqual({ok, DefaultCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?LUMA_SPACE_ID), ?LUMA_SPACE_ID, Storage)).
 
 map_space_owner_to_storage_creds_posix_incompatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     AdminCreds = maps:get(admin_credentials, StorageLumaConfig),
     ?assertEqual({ok, AdminCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)),
+        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?LUMA_SPACE_ID), ?LUMA_SPACE_ID, Storage)),
     % changing admin creds should change mapping
     {ChangedAdminCreds, ChangedStorage} = luma_test_utils:change_admin_creds(Storage),
     ?assertEqual({ok, ChangedAdminCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, ChangedStorage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?LUMA_SPACE_ID), ?LUMA_SPACE_ID, ChangedStorage)).
 
 map_user_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     UserCreds = maps:get(user_credentials, StorageLumaConfig),
     ?assertMatch({ok, UserCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)),
+        luma_test_utils:map_to_storage_creds(Worker, ?LUMA_SESS_ID, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage)),
     % changing admin creds should NOT change mapping
     {_ChangedAdminCreds, ChangedStorage} = luma_test_utils:change_admin_creds(Storage),
     ?assertMatch({ok, UserCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, ChangedStorage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?LUMA_SESS_ID, ?LUMA_USER_ID, ?LUMA_SPACE_ID, ChangedStorage)).
 
 
 map_user_to_storage_creds_on_storage_with_auto_feed_luma_not_posix_incompatible_base(Config, StorageLumaConfig) ->
@@ -281,46 +281,46 @@ map_user_to_storage_creds_on_storage_with_auto_feed_luma_not_posix_incompatible_
     Storage = maps:get(storage_record, StorageLumaConfig),
     AdminCreds = maps:get(admin_credentials, StorageLumaConfig),
     ?assertMatch({ok, AdminCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?LUMA_SESS_ID, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage)).
 
 map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ExpectedUserCreds = maps:get(user_credentials, StorageLumaConfig),
     ?assertMatch({ok, ExpectedUserCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?LUMA_SESS_ID, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage)).
 
 map_user_to_storage_creds_on_storage_with_user_defined_luma_imported_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ExpectedUserCreds = maps:get(user_credentials, StorageLumaConfig),
     ?assertMatch({ok, ExpectedUserCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)),
+        luma_test_utils:map_to_storage_creds(Worker, ?LUMA_SESS_ID, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage)),
     Uid = binary_to_integer(maps:get(<<"uid">>, ExpectedUserCreds)),
     % reverse mapping should be stored automatically,
-    ?assertMatch({ok, ?USER_ID},
-        luma_test_utils:map_uid_to_onedata_user(Worker, Uid, ?SPACE_ID, Storage)).
+    ?assertMatch({ok, ?LUMA_USER_ID},
+        luma_test_utils:map_uid_to_onedata_user(Worker, Uid, ?LUMA_SPACE_ID, Storage)).
 
 map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_incompatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ExpectedUserCreds = maps:get(user_credentials, StorageLumaConfig),
     ?assertMatch({ok, ExpectedUserCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?LUMA_SESS_ID, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage)).
 
 map_user_to_storage_creds_fails_on_invalid_response_from_external_feed_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(User) ->
         ?assertEqual({error, not_found},
-            luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, User, ?SPACE_ID, Storage))
+            luma_test_utils:map_to_storage_creds(Worker, ?LUMA_SESS_ID, User, ?LUMA_SPACE_ID, Storage))
     end, ?ERR_USERS).
 
 map_user_to_storage_creds_fails_when_mapping_is_not_found_in_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({error, not_found},
-        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, <<"not existing user id">>, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?LUMA_SESS_ID, <<"not existing user id">>, ?LUMA_SPACE_ID, Storage)).
 
 %%%===================================================================
 %%% Test bases - mapping user to display credentials
@@ -330,56 +330,56 @@ map_root_to_display_creds_returns_root_creds_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({ok, ?ROOT_DISPLAY_CREDS},
-        luma_test_utils:map_to_display_creds(Worker, ?ROOT_USER_ID, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_display_creds(Worker, ?ROOT_USER_ID, ?LUMA_SPACE_ID, Storage)).
 
 map_space_owner_to_display_creds_on_storage_with_auto_feed_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DisplayCreds = maps:get(default_credentials, StorageLumaConfig),
     ?assertEqual({ok, ?POSIX_CREDS_TO_TUPLE(DisplayCreds)},
-        luma_test_utils:map_to_display_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_display_creds(Worker, ?SPACE_OWNER_ID(?LUMA_SPACE_ID), ?LUMA_SPACE_ID, Storage)).
 
 map_space_owner_to_display_creds_on_storage_with_user_defined_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DisplayCreds = maps:get(display_credentials, StorageLumaConfig),
     ?assertEqual({ok, ?POSIX_CREDS_TO_TUPLE(DisplayCreds)},
-        luma_test_utils:map_to_display_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_display_creds(Worker, ?SPACE_OWNER_ID(?LUMA_SPACE_ID), ?LUMA_SPACE_ID, Storage)).
 
 map_space_owner_to_display_creds_posix_incompatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DispCreds = maps:get(display_credentials, StorageLumaConfig),
     ?assertEqual({ok, ?POSIX_CREDS_TO_TUPLE(DispCreds)},
-        luma_test_utils:map_to_display_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_display_creds(Worker, ?SPACE_OWNER_ID(?LUMA_SPACE_ID), ?LUMA_SPACE_ID, Storage)).
 
 map_user_to_display_creds_on_storage_with_auto_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DispCreds = maps:get(user_display_credentials, StorageLumaConfig),
     ?assertMatch({ok, DispCreds},
-        luma_test_utils:map_to_display_creds(Worker, ?USER_ID, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_display_creds(Worker, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage)).
 
 map_user_to_display_creds_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ExpectedUserCreds = maps:get(user_display_credentials, StorageLumaConfig),
     ?assertMatch({ok, ExpectedUserCreds},
-        luma_test_utils:map_to_display_creds(Worker, ?USER_ID, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_display_creds(Worker, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage)).
 
 map_user_to_display_creds_fails_on_invalid_response_from_external_feed_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(User) ->
         ?assertEqual({error, not_found},
-            luma_test_utils:map_to_display_creds(Worker, User, ?SPACE_ID, Storage))
+            luma_test_utils:map_to_display_creds(Worker, User, ?LUMA_SPACE_ID, Storage))
     end, ?ERR_USERS).
 
 map_user_to_display_creds_fails_when_mapping_is_not_found_in_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({error, not_found},
-        luma_test_utils:map_to_display_creds(Worker, <<"not existing user id">>, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_display_creds(Worker, <<"not existing user id">>, ?LUMA_SPACE_ID, Storage)).
 
 
 %%%===================================================================
@@ -412,9 +412,9 @@ init_per_testcase(default, Config) ->
     luma_test_utils:setup_local_feed_luma(Worker, Config, <<"local_feed_luma.json">>),
     ok = test_utils:mock_new(Worker, [idp_access_token]),
     ok = test_utils:mock_expect(Worker, idp_access_token, acquire, fun
-        (?ADMIN_ID, TokenCredentials, ?OAUTH2_IDP) when element(1, TokenCredentials) == token_credentials ->
+        (?LUMA_ADMIN_ID, TokenCredentials, ?OAUTH2_IDP) when element(1, TokenCredentials) == token_credentials ->
             {ok, {?IDP_ADMIN_TOKEN, ?TTL}};
-        (?USER_ID, ?SESS_ID, ?OAUTH2_IDP) ->
+        (?LUMA_USER_ID, ?LUMA_SESS_ID, ?OAUTH2_IDP) ->
             {ok, {?IDP_USER_TOKEN, ?TTL}}
     end),
     Config;

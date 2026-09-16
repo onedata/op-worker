@@ -14,7 +14,7 @@
 -module(dir_stats_initialization_retry_test_SUITE).
 -behaviour(ct_suite).
 
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
@@ -251,11 +251,11 @@ setup_failing_dirs_fixture(SpaceId, Nodes) ->
     SessId = oct_background:get_user_session_id(user1, krakow),
     reset_dir_stats_and_files(SpaceId, Node, SessId),
 
-    #object{guid = Fail1Guid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = Fail1Guid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space1, #dir_spec{children = [#file_spec{}]}, krakow),
-    #object{guid = Fail2Guid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = Fail2Guid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space1, #dir_spec{children = [#file_spec{}]}, krakow),
-    #object{guid = NormalDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = NormalDirGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space1, #dir_spec{children = [#file_spec{}]}, krakow),
 
     test_utils:mock_new(Nodes, file_tree, [passthrough]),

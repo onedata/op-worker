@@ -11,7 +11,6 @@
 -module(storage_import_deletion_test_SUITE).
 -author("Jakub Kudzia").
 
--include("lfm_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -20,6 +19,10 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/errors.hrl").
+
+
+-define(SESS_ID(User, Worker, Config),
+    ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config)).
 
 -define(ATTEMPTS, 30).
 

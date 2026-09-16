@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2021-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -31,9 +31,10 @@
     push_message_handler :: push_message_handler()
 }).
 
--type state() :: no_state.
+-type state() :: #state{}.
 
 -define(HEARTBEAT_INTERVAL, timer:seconds(30)).
+-define(SEND_CONFIRMATION_TIMEOUT, timer:seconds(60)).
 
 
 %%%===================================================================
@@ -51,12 +52,7 @@ connect_to_provider_node(NodeSelector, Path, Headers, PushMessageHandler) ->
 -spec connect_to_url(binary(), http_client:headers(), proplists:proplist(), push_message_handler()) ->
     {ok, client_ref()} | {error, term()}.
 connect_to_url(Url, Headers, TransportOpts, PushMessageHandler) ->
-    case websocket_client:start_link(Url, Headers, ?MODULE, [PushMessageHandler], TransportOpts) of
-        {ok, Pid} ->
-            {ok, Pid};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    websocket_client:start_link(Url, Headers, ?MODULE, [PushMessageHandler], TransportOpts).
 
 
 -spec send(client_ref(), binary()) -> ok.
@@ -65,7 +61,7 @@ send(ClientRef, Message) ->
     receive
         {send_confirmation, ClientRef} ->
             ok
-    after 60000 ->
+    after ?SEND_CONFIRMATION_TIMEOUT ->
         error(timeout)
     end.
 

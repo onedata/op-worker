@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2022-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -13,18 +13,16 @@
 -module(atm_test_inventory).
 -author("Bartosz Walkowicz").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("atm/atm_test_schema.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 -export([
-    init_per_suite/2,
-
-    get_id/0,
+    set_up/2,
 
     add_member/1,
     add_workflow_schema/1,
-    get_workflow_schema/1,
     get_workflow_schema_revision/2
 ]).
 
@@ -43,12 +41,12 @@
 %%%===================================================================
 
 
--spec init_per_suite(
+-spec set_up(
     oct_background:entity_selector(),
     oct_background:entity_selector()
 ) ->
     ok.
-init_per_suite(ProviderSelector, AdminUserSelector) ->
+set_up(ProviderSelector, AdminUserSelector) ->
     case node_cache:get(?ATM_INVENTORY_ID_KEY, undefined) of
         undefined ->
             node_cache:put(?PROVIDER_SELECTOR_KEY, ProviderSelector),
@@ -63,11 +61,6 @@ init_per_suite(ProviderSelector, AdminUserSelector) ->
             ct:pal("Attempt to init already initiated test inventory!!!"),
             error(not_gonna_happen)
     end.
-
-
--spec get_id() -> od_atm_inventory:id().
-get_id() ->
-    node_cache:get(?ATM_INVENTORY_ID_KEY).
 
 
 -spec add_member(oct_background:entity_selector()) -> ok.
@@ -87,19 +80,6 @@ add_workflow_schema(#atm_workflow_schema_dump{} = AtmWorkflowSchemaDump) ->
 
 add_workflow_schema(AtmWorkflowSchemaDumpDraft) ->
     add_workflow_schema(atm_test_schema_factory:create_from_draft(AtmWorkflowSchemaDumpDraft)).
-
-
--spec get_workflow_schema(od_atm_workflow_schema:id()) -> od_atm_workflow_schema:record().
-get_workflow_schema(AtmWorkflowSchemaId) ->
-    AdminUserId = node_cache:get(?ATM_INVENTORY_ADMIN_KEY),
-    ProviderSelector = node_cache:get(?PROVIDER_SELECTOR_KEY),
-    AdminUserSessionId = oct_background:get_user_session_id(AdminUserId, ProviderSelector),
-
-    {ok, #document{value = AtmWorkflowSchema}} = ?assertMatch(
-        {ok, _},
-        ?rpc(ProviderSelector, atm_workflow_schema_logic:get(AdminUserSessionId, AtmWorkflowSchemaId))
-    ),
-    AtmWorkflowSchema.
 
 
 -spec get_workflow_schema_revision(
@@ -153,3 +133,23 @@ atm_workflow_schema_dump_to_json(#atm_workflow_schema_dump{
             end, SupplementaryLambdas)
         }
     }.
+
+
+%% @private
+-spec get_id() -> od_atm_inventory:id().
+get_id() ->
+    node_cache:get(?ATM_INVENTORY_ID_KEY).
+
+
+%% @private
+-spec get_workflow_schema(od_atm_workflow_schema:id()) -> od_atm_workflow_schema:record().
+get_workflow_schema(AtmWorkflowSchemaId) ->
+    AdminUserId = node_cache:get(?ATM_INVENTORY_ADMIN_KEY),
+    ProviderSelector = node_cache:get(?PROVIDER_SELECTOR_KEY),
+    AdminUserSessionId = oct_background:get_user_session_id(AdminUserId, ProviderSelector),
+
+    {ok, #document{value = AtmWorkflowSchema}} = ?assertMatch(
+        {ok, _},
+        ?rpc(ProviderSelector, atm_workflow_schema_logic:get(AdminUserSessionId, AtmWorkflowSchemaId))
+    ),
+    AtmWorkflowSchema.

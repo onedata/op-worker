@@ -22,11 +22,11 @@
 -module(api_transfer_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
--include("onenv_test_utils.hrl").
--include("transfer_test.hrl").
+-include("file/file_tree_test.hrl").
+-include("transfers/transfer_test.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
@@ -157,7 +157,7 @@ create_file_transfer(_Config) ->
     % (it will be added to '#data_spec.bad_values'). It is created by user2 -
     % the space owner - as creating shares requires privileges the test users
     % are stripped of above.
-    #object{guid = SharedFileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = SharedFileGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user2, ?SPACE_SELECTOR, #file_spec{
             name = str_utils:format_bin("~ts_shared_file_~ts", [CaseName, str_utils:rand_hex(6)]),
             shares = [#share_spec{}]
@@ -195,8 +195,8 @@ create_file_transfer(_Config) ->
                     validate_result_fun = build_create_transfer_validate_gs_call_result_fun(TestSuiteCtx, MemRef)
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     SharedFileGuid, SpaceId, ShareId,
                     build_op_transfer_spec(TestSuiteCtx, <<"file">>)
                 )
@@ -378,7 +378,7 @@ build_create_transfer_validate_rest_call_result_fun(TestSuiteCtx, MemRef) ->
         ),
         TransferId = maps:get(<<"transferId">>, Body),
 
-        ExpLocation = api_test_utils:build_rest_url(Node, [<<"transfers">>, TransferId]),
+        ExpLocation = rest_test_utils:build_rest_url(Node, [<<"transfers">>, TransferId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers)),
 
         validate_created_transfer(TestSuiteCtx, MemRef, TransferId, TestCtx)
@@ -420,7 +420,7 @@ await_callback_call(TransferId) ->
     {called, CallTime} = ?assertMatch({called, _}, opw_test_rpc:call(
         ?HTTP_SERVER_PROVIDER_SELECTOR, node_cache, get,
         [?CALLBACK_CALL_TIME_KEY(TransferId), undefined]
-    ), ?ATTEMPTS),
+    ), ?TRANSFER_ATTEMPTS),
     CallTime.
 
 
@@ -503,7 +503,7 @@ run_get_transfer_status_tests(TransferType, DataSourceType, Env, ExpState) ->
 %% @private
 build_get_transfer_status_prepare_rest_args_fun(#{transfer_id := TransferId}) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #rest_args{
             method = get,
@@ -515,7 +515,7 @@ build_get_transfer_status_prepare_rest_args_fun(#{transfer_id := TransferId}) ->
 %% @private
 build_get_transfer_status_prepare_gs_args_fun(#{transfer_id := TransferId}) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #gs_args{
             operation = get,
@@ -1023,7 +1023,7 @@ build_cancel_transfer_verify_fun(TestSuiteCtx, MemRef) ->
 build_cancel_transfer_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         #{transfer_id := TransferId} = get_transfer_details(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #rest_args{
             method = delete,
@@ -1036,7 +1036,7 @@ build_cancel_transfer_prepare_rest_args_fun(MemRef) ->
 build_cancel_transfer_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         #{transfer_id := TransferId} = get_transfer_details(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #gs_args{
             operation = delete,
@@ -1124,7 +1124,7 @@ rerun_transfer(_Config) ->
 build_rerun_transfer_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         #{transfer_id := TransferId} = get_transfer_details(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #rest_args{
             method = post,
@@ -1137,7 +1137,7 @@ build_rerun_transfer_prepare_rest_args_fun(MemRef) ->
 build_rerun_transfer_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         #{transfer_id := TransferId} = get_transfer_details(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #gs_args{
             operation = create,
@@ -1155,7 +1155,7 @@ build_rerun_transfer_validate_rest_call_result_fun(TestSuiteCtx, MemRef) ->
         ),
         NewTransferId = maps:get(<<"transferId">>, Body),
 
-        ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"transfers">>, NewTransferId]),
+        ExpLocation = rest_test_utils:build_rest_url(TestNode, [<<"transfers">>, NewTransferId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers)),
 
         validate_rerun_transfer(TestSuiteCtx, MemRef, NewTransferId)
@@ -1574,7 +1574,7 @@ await_transfer_cancelled(#transfer_test_suite_ctx{transfer_type = TransferType} 
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, transfer_test_utils],
+    ModulesToLoad = [?MODULE, transfer_test_utils, permit_gate_test_utils],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [
@@ -1678,7 +1678,7 @@ do(#mod{method = "POST", request_uri = ?ENDED_TRANSFERS_PATH, entity_body = Body
     #transfer_test_suite_ctx{},
     api_test_memory:mem_ref(),
     file | view,
-    [onenv_file_test_utils:object()],
+    [file_tree_test_utils:object()],
     map(),
     map()
 ) ->
@@ -1749,7 +1749,7 @@ schedule_transfer_via_api(#transfer_test_suite_ctx{
         opw_test_rpc:call(CreationProviderSelector, middleware, handle, [Req])
     ),
     % Wait for transfer doc sync with the other provider
-    ?assertMatch({ok, _}, opw_test_rpc:call(OtherProviderSelector, transfer, get, [TransferId]), ?ATTEMPTS),
+    ?assertMatch({ok, _}, opw_test_rpc:call(OtherProviderSelector, transfer, get, [TransferId]), ?TRANSFER_ATTEMPTS),
     TransferId.
 
 
@@ -1800,7 +1800,7 @@ await_transfer_state(#transfer_test_suite_ctx{
                 end, ExpStatusFields);
             {error, _} = Error ->
                 Error
-        end, ?ATTEMPTS)
+        end, ?TRANSFER_ATTEMPTS)
     end, [CreationProviderSelector, OtherProviderSelector]).
 
 
@@ -1826,7 +1826,7 @@ get_file_path(#transfer_test_suite_ctx{
 
 
 %% @private
--spec collect_regular_files(onenv_file_test_utils:object()) -> [onenv_file_test_utils:object()].
+-spec collect_regular_files(file_tree_test_utils:object()) -> [file_tree_test_utils:object()].
 collect_regular_files(#object{type = ?REGULAR_FILE_TYPE} = FileObject) ->
     [FileObject];
 collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
@@ -1835,7 +1835,7 @@ collect_regular_files(#object{type = ?DIRECTORY_TYPE, children = Children}) ->
 
 %% @private
 -spec setup_file_tree_replicas(#transfer_test_suite_ctx{}, atom(), pos_integer()) ->
-    onenv_file_test_utils:object().
+    file_tree_test_utils:object().
 setup_file_tree_replicas(TestSuiteCtx, CaseName, FilesCount) ->
     RootDirObject = transfer_test_utils:create_file_tree(
         TestSuiteCtx, CaseName, #dir_spec{children = [
@@ -1850,7 +1850,7 @@ setup_file_tree_replicas(TestSuiteCtx, CaseName, FilesCount) ->
 %% The transfer target is either the single regular file of a fresh tree or
 %% the whole 5-file tree root directory, depending on the given root file type.
 -spec create_transfer_target_object(#transfer_test_suite_ctx{}, atom(), binary()) ->
-    onenv_file_test_utils:object().
+    file_tree_test_utils:object().
 create_transfer_target_object(TestSuiteCtx, CaseName, <<"file">>) ->
     RootDirObject = setup_file_tree_replicas(TestSuiteCtx, CaseName, 1),
     hd(RootDirObject#object.children);
@@ -1862,7 +1862,7 @@ create_transfer_target_object(TestSuiteCtx, CaseName, <<"dir">>) ->
 %% Creates a file not taking part in the transfer, used to verify that the
 %% transfer affects nothing beyond its target.
 -spec create_bystander_file(#transfer_test_suite_ctx{}, atom()) ->
-    onenv_file_test_utils:object().
+    file_tree_test_utils:object().
 create_bystander_file(TestSuiteCtx, CaseName) ->
     RootDirObject = setup_file_tree_replicas(TestSuiteCtx, CaseName, 1),
     hd(RootDirObject#object.children).
@@ -1875,19 +1875,19 @@ create_bystander_file(TestSuiteCtx, CaseName) ->
 -spec create_view_matching_files(
     #transfer_test_suite_ctx{},
     atom(),
-    [onenv_file_test_utils:object()]
+    [file_tree_test_utils:object()]
 ) ->
     index:name().
 create_view_matching_files(TestSuiteCtx, CaseName, FileObjects) ->
-    XattrName = transfer_test_utils:rand_xattr_name(CaseName),
+    XattrName = file_test_utils:rand_xattr_name(CaseName),
     lists:foreach(fun(#object{guid = FileGuid}) ->
         set_xattr(TestSuiteCtx, FileGuid, XattrName, ?VIEW_XATTR_VALUE)
     end, FileObjects),
 
-    ViewName = transfer_test_utils:rand_view_name(CaseName),
+    ViewName = view_test_utils:rand_view_name(CaseName),
     transfer_test_utils:create_view(
         TestSuiteCtx, ViewName,
-        transfer_test_utils:gen_view_map_function(XattrName), undefined, []
+        view_test_utils:gen_map_function(XattrName), undefined, []
     ),
     ExpObjectIds = lists:map(fun(#object{guid = FileGuid}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
