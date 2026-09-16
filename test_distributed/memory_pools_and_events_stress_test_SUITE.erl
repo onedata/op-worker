@@ -119,7 +119,7 @@ many_files_test_base(Config, TestScenario) ->
             end, Pids),
 
             client_simulation_test_utils:verify_streams(Config),
-            {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
+            {Before, _SizesBefore} = datastore_pool_test_utils:get_pools_entries_and_sizes(Worker1, memory),
             put(memory_pools, Before),
             put(slave_pids, Pids),
 
@@ -149,9 +149,9 @@ many_files_test_base(Config, TestScenario) ->
     timer:sleep(timer:seconds(30)), % Events are async
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {After, _SizesAfter} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
+    {After, _SizesAfter} = datastore_pool_test_utils:get_pools_entries_and_sizes(Worker1, memory),
     MemPoolsBefore = get(memory_pools),
-    Res = pool_utils:get_documents_diff(Worker1, After, MemPoolsBefore, false),
+    Res = datastore_pool_test_utils:get_documents_diff(Worker1, After, MemPoolsBefore, false),
     ?assertEqual([], Res),
 %%    ct:print("Docs number ~tp", [{length(Res), Res}]),
     client_simulation_test_utils:verify_streams(Config, false).

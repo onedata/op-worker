@@ -12,12 +12,13 @@
 -module(api_file_attrs_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/fslogic/data_distribution.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
+-include("test_rpc.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/provider_rpc_messages.hrl").
@@ -123,7 +124,7 @@ get_file_attrs_test(Config) ->
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+    DataSpec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
         FileGuid, undefined, get_attrs_data_spec(normal_mode)
     ),
     get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs).
@@ -249,7 +250,7 @@ get_shared_file_attrs_test(_Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, ShareId1, get_attrs_data_spec(share_mode)
             )
         },
@@ -262,7 +263,7 @@ get_shared_file_attrs_test(_Config) ->
             validate_result_fun = fun(_, Result) ->
                 ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result)
             end,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, ShareId1, get_attrs_data_spec(normal_mode)
             )
         }
@@ -412,7 +413,7 @@ get_attrs_data_spec(share_mode) ->
 build_get_attrs_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
+        {Id, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         RestPath = <<"data/", Id/binary>>,
     
@@ -441,7 +442,7 @@ build_get_attrs_prepare_rest_args_fun(ValidId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_attrs_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = get,
@@ -456,7 +457,7 @@ build_get_attrs_prepare_gs_args_fun(FileGuid, Scope) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_hardlink_relation_prepare_gs_args_fun(MemRef, FileGuid) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
         Guid2 = maps:get(<<"guid">>, Data1, <<"invalid_guid">>),
         api_test_memory:set(MemRef, <<"guid">>, Guid2),
         
@@ -475,7 +476,7 @@ build_get_hardlink_relation_prepare_rest_args_fun(MemRef, FileGuid) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
         {ok, ValidObjectId} = file_id:guid_to_objectid(FileGuid),
-        {Id, _Data2} = api_test_utils:maybe_substitute_bad_id(ValidObjectId, Data1),
+        {Id, _Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(ValidObjectId, Data1),
         Guid2 = maps:get(<<"guid">>, Data1, <<"invalid_guid">>),
         {ok, ObjectId2} = file_id:guid_to_objectid(Guid2),
         api_test_memory:set(MemRef, <<"guid">>, Guid2),
@@ -544,7 +545,7 @@ get_attrs_exp_result(#api_test_ctx{data = Data, client = Client, node = Node}, #
                 undefined -> opw_test_rpc:get_provider_id(Node);
                 _ -> undefined
             end,
-            JsonAttrs = api_test_utils:file_attr_to_json(ShareId, Format, ProviderId, FileAttr),
+            JsonAttrs = api_file_attr_test_utils:file_attr_to_json(ShareId, Format, ProviderId, FileAttr),
             {AttrType, RequestedAttributesJson} = case maps:get(<<"attributes">>, Data, undefined) of
                 undefined ->
                     case ShareId of
@@ -562,7 +563,7 @@ get_attrs_exp_result(#api_test_ctx{data = Data, client = Client, node = Node}, #
                     {current, utils:ensure_list(Attr)}
             end,
             JsonAttrs2 = case AttrType of
-                deprecated -> maps:merge(JsonAttrs, api_test_utils:replace_attrs_with_deprecated(JsonAttrs));
+                deprecated -> maps:merge(JsonAttrs, api_file_attr_test_utils:replace_attrs_with_deprecated(JsonAttrs));
                 current -> JsonAttrs
             end,
             {ok, maps:with(RequestedAttributesJson, JsonAttrs2)}
@@ -619,7 +620,7 @@ get_file_shares_test(_Config) ->
             validate_result_fun = fun(_, Result) ->
                 ?assertEqual({ok, ExpGsResponse}, Result)
             end,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 FileGuid, ShareId1, undefined
             )
         },
@@ -642,7 +643,7 @@ get_file_shares_test(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_shares_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = get,
@@ -730,7 +731,7 @@ set_file_mode_test(Config) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 FileGuid, ShareId, set_mode_data_spec()
             )
         },
@@ -832,7 +833,7 @@ set_mode_data_spec() ->
     onenv_api_test_runner:prepare_args_fun().
 build_set_mode_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(
             ValidId, utils:ensure_defined(Data0, #{})
         ),
         RestPath = <<"data/", Id/binary>>,
@@ -854,7 +855,7 @@ build_set_mode_prepare_rest_args_fun(ValidId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_set_mode_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = create,
@@ -947,7 +948,7 @@ get_dir_distribution_1_test(Config) ->
         guid = DirGuid,
         shares = [ShareId],
         children = [#object{guid = FileGuid}]
-    } = onenv_file_test_utils:create_and_sync_file_tree(
+    } = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{
             mode = 8#707,
             shares = [#share_spec{}],
@@ -1020,7 +1021,7 @@ get_dir_distribution_2_test(Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
-    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
@@ -1087,7 +1088,7 @@ get_dir_distribution_3_test(Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
-    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
@@ -1110,7 +1111,7 @@ get_dir_distribution_3_test(Config) ->
     wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist1),
     get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist1, Config),
 
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user3, DirGuid, #file_spec{}
     ),
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 5, {rand_content, 10}),
@@ -1150,7 +1151,7 @@ get_dir_distribution_4_test(Config) ->
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
 
-    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_s3, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
@@ -1161,7 +1162,7 @@ get_dir_distribution_4_test(Config) ->
                 logical_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0},
                 locations_per_storage = #{
-                    P1StorageId => ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(P1StorageId, ?POSIX_COMPATIBLE_HELPERS)
+                    P1StorageId => ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(P1StorageId, storage_type:list_types_with_capability(posix_compatible))
                 }
             },
             P2Id => #provider_dir_distribution{
@@ -1169,7 +1170,7 @@ get_dir_distribution_4_test(Config) ->
                 logical_size = 0,
                 physical_size_per_storage = #{P2StorageId => 0},
                 locations_per_storage = #{
-                    P2StorageId => ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(P2StorageId, ?POSIX_COMPATIBLE_HELPERS)
+                    P2StorageId => ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(P2StorageId, storage_type:list_types_with_capability(posix_compatible))
                 }
             }
         }
@@ -1195,7 +1196,7 @@ get_dir_distribution_backwards_compatibility_test(Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
-    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
@@ -1244,7 +1245,7 @@ get_dir_distribution_backwards_compatibility_test(Config) ->
 get_symlink_distribution_test(Config) ->
     FileType = <<"sym">>,
     
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>}
     ),
 
@@ -1406,8 +1407,8 @@ get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config,
                     validate_result_fun = CreateValidateGsSuccessfulCallFun(op_file)
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                     FileGuid, ShareId, undefined
                 )
             )
@@ -1420,7 +1421,7 @@ get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config,
     onenv_api_test_runner:prepare_args_fun().
 build_get_distribution_prepare_rest_args_fun(FileObjectId) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(FileObjectId, Data),
 
         #rest_args{
             method = get,
@@ -1434,7 +1435,7 @@ build_get_distribution_prepare_rest_args_fun(FileObjectId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_distribution_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data}) ->
-        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
+        {GriId, _} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data),
 
         #gs_args{
             operation = get,
@@ -1484,7 +1485,7 @@ get_historical_dir_size_stats_layout_test(Config) ->
     P2StorageId = get_storage_id(SpaceId, P2Id),
 
     [#object{guid = DirGuid, shares = [ShareId]}, #object{guid = FileGuid}] =
-        onenv_file_test_utils:create_and_sync_file_tree(
+        file_tree_test_utils:create_and_sync_file_tree(
             user3, space_krk_par, [
                 #dir_spec{
                     mode = 8#707,
@@ -1554,7 +1555,7 @@ get_historical_dir_size_stats_slice_test(Config) ->
 
     time_test_utils:set_current_time_seconds(CurrentTimestamp),
     [#object{guid = DirGuid, shares = [ShareId]}, #object{guid = FileGuid}] =
-        onenv_file_test_utils:create_and_sync_file_tree(
+        file_tree_test_utils:create_and_sync_file_tree(
             user3, space_krk_par, [
                 #dir_spec{
                     mode = 8#707,
@@ -1571,13 +1572,13 @@ get_historical_dir_size_stats_slice_test(Config) ->
     await_dir_size_sync([krakow, paris], 8, DirGuid),
 
     time_test_utils:simulate_seconds_passing(100),
-    onenv_file_test_utils:create_and_sync_file_tree(
+    file_tree_test_utils:create_and_sync_file_tree(
         user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(16)}, krakow
     ),
     await_dir_size_sync([krakow, paris], 24, DirGuid),
 
     time_test_utils:simulate_seconds_passing(180),
-    onenv_file_test_utils:create_and_sync_file_tree(
+    file_tree_test_utils:create_and_sync_file_tree(
         user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(8)}, krakow
     ),
     await_dir_size_sync([krakow, paris], 32, DirGuid),
@@ -1691,7 +1692,7 @@ get_historical_dir_size_stats_disabled_test(Config) ->
     disable_dir_stats_collecting_for_space(paris, space_krk_par),
 
     [#object{guid = DirGuid, shares = [ShareId]}] =
-        onenv_file_test_utils:create_and_sync_file_tree(
+        file_tree_test_utils:create_and_sync_file_tree(
             user3, space_krk_par, [
                 #dir_spec{
                     mode = 8#707,
@@ -1746,8 +1747,8 @@ gather_historical_dir_size_stats_test_base(
 ) ->
     lists:foreach(fun(Provider) ->
         api_test_memory:set(MemRef, current_provider, Provider),
-        DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-            api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+        DataSpec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+            api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 FileGuid, ShareId, DataSpecFun(Provider)
             )
         ),
@@ -1791,7 +1792,7 @@ gather_historical_dir_size_stats_test_base(
     onenv_api_test_runner:prepare_args_fun().
 build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, Provider, DefaultData) ->
     fun(#api_test_ctx{data = Data}) ->
-        {GriId, Data2} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
+        {GriId, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data),
 
         #gs_args{
             operation = get,
@@ -1807,7 +1808,7 @@ build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, Provider, D
 build_gather_historical_dir_size_stats_prepare_rest_args_fun(Guid, DefaultData) ->
     fun(#api_test_ctx{data = Data}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        {FinalObjectId, Data2} = api_test_utils:maybe_substitute_bad_id(ObjectId, Data),
+        {FinalObjectId, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(ObjectId, Data),
         RestPath = <<"data/", FinalObjectId/binary, "/dir_size_stats">>,
 
         #rest_args{
@@ -1867,7 +1868,7 @@ get_file_storage_locations_test(Config, FileType, StorageType) ->
                 <<"locationsPerStorageBackend">> => #{
                     StorageId => #{
                         <<"success">> => false,
-                        <<"error">> => errors:to_json(?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(StorageId, ?POSIX_COMPATIBLE_HELPERS))
+                        <<"error">> => errors:to_json(?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(StorageId, storage_type:list_types_with_capability(posix_compatible)))
                     }
                 }
             };
@@ -1939,8 +1940,8 @@ get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
                     validate_result_fun = ValidateGsSuccessfulCallFun
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                     FileGuid, ShareId, undefined
                 )
             )
@@ -1953,7 +1954,7 @@ get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_storage_locations_prepare_rest_args_fun(FileObjectId) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(FileObjectId, Data),
         
         #rest_args{
             method = get,
@@ -1967,7 +1968,7 @@ build_get_storage_locations_prepare_rest_args_fun(FileObjectId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_storage_locations_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data}) ->
-        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
+        {GriId, _} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data),
         
         #gs_args{
             operation = get,
@@ -1991,7 +1992,7 @@ assert_file_location_created(_Node, dir, _DirUuid, _LocationProviderId) ->
 -spec create_storage_locations_test_file(reg | dir, od_space:id()) ->
     {file_id:file_guid(), file_id:file_guid(), od_share:id()}.
 create_storage_locations_test_file(reg, SpaceId) ->
-    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_dir:guid(SpaceId), #file_spec{
             shares = [#share_spec{}],
             mode = 8#707,
@@ -2004,7 +2005,7 @@ create_storage_locations_test_file(dir, SpaceId) ->
         guid = DirGuid,
         shares = [ShareId],
         children = [#object{guid = FileGuid}]
-    } = onenv_file_test_utils:create_and_sync_file_tree(
+    } = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_dir:guid(SpaceId), #dir_spec{
             shares = [#share_spec{}],
             mode = 8#707,

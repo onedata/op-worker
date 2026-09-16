@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("transfers_test_mechanism.hrl").
+-include("transfers/transfers_test_mechanism.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -992,8 +992,10 @@ get_recursive_file_list(Config0) ->
         file_test_utils:await_sync([Worker1, Worker2], Guid)
     end, AllExpectedFilesW1),
 
-    lfm_files_test_base:check_list_recursive_start_after(Worker1, SessionId(Worker1), MainDirGuid, AllExpectedFilesW1),
-    lfm_files_test_base:check_list_recursive_start_after(Worker2, SessionId(Worker2), MainDirGuid, AllExpectedFilesW2).
+    lfm_test_utils:assert_recursive_listing_from_each_start_after(
+        Worker1, SessionId(Worker1), MainDirGuid, AllExpectedFilesW1),
+    lfm_test_utils:assert_recursive_listing_from_each_start_after(
+        Worker2, SessionId(Worker2), MainDirGuid, AllExpectedFilesW2).
 
 
 check_fs_stats_on_different_providers(Config) ->

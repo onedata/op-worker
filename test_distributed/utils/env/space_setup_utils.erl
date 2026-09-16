@@ -1,0 +1,393 @@
+%%%-------------------------------------------------------------------
+%%% @author Katarzyna Such
+%%% @copyright (C) 2024-2026 Onedata (onedata.org)
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @doc
+%%% Utility functions for setting up spaces and storages in onenv tests, and for
+%%% cleaning up the ones left behind by a previous run.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(space_setup_utils).
+-author("Katarzyna Such").
+
+-include("modules/fslogic/fslogic_common.hrl").
+-include("env/space_setup_utils.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/errors.hrl").
+
+-type s3_storage_params() :: #s3_storage_params{}.
+-type posix_storage_params() :: #posix_storage_params{}.
+-type nulldevice_storage_params() :: #nulldevice_storage_params{}.
+-type http_storage_params() :: #http_storage_params{}.
+-type storage_params() ::
+    http_storage_params() |
+    posix_storage_params() |
+    nulldevice_storage_params() |
+    s3_storage_params().
+
+-type luma_feed_spec() :: auto | local | #external_feed_luma{}.
+
+-type support_spec() :: #support_spec{}.
+-type space_spec() :: #space_spec{}.
+
+-export_type([
+    http_storage_params/0, posix_storage_params/0, nulldevice_storage_params/0,
+    s3_storage_params/0, storage_params/0, luma_feed_spec/0, support_spec/0
+]).
+
+-define(CURRENT_DATETIME(), time:seconds_to_datetime(global_clock:timestamp_seconds())).
+-define(STORAGE_DELETE_ATTEMPTS, 60).
+
+%% API
+-export([create_storage/2, delete_storage/2, set_up_space/1]).
+-export([build_s3_hostname/1]).
+-export([clean_up_after_previous_run/2]).
+-export([mock_existence_of_unhealthy_storage/1]).
+
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+
+-spec create_storage(oct_background:node_selector(), storage_params()) -> od_storage:id().
+create_storage(Provider, #s3_storage_params{storage_path_type = StoragePathType,
+    imported_storage = Imported, hostname = Hostname, bucket_name = BucketName,
+    access_key = AccessKey, secret_key = SecretKey, block_size = BlockSize,
+    luma_feed = LumaFeed
+} = S3StorageParam) ->
+    create_bucket(Provider, S3StorageParam),
+    CreateStorageData = #{?RAND_STR() => maps:merge(#{
+        <<"type">> => <<"s3">>,
+        <<"storagePathType">> => StoragePathType,
+        <<"importedStorage">> => Imported,
+        <<"hostname">> => Hostname,
+        <<"bucketName">> => BucketName,
+        <<"accessKey">> => AccessKey,
+        <<"secretKey">> => SecretKey,
+        <<"blockSize">> => BlockSize
+    }, luma_feed_args(LumaFeed))},
+    panel_test_rpc:add_storage(Provider, CreateStorageData);
+
+create_storage(Provider, #posix_storage_params{
+    mount_point = MountPoint, imported_storage = Imported, readonly = Readonly, luma_feed = LumaFeed
+}) ->
+    ?assertMatch(ok, opw_test_rpc:call(Provider, filelib, ensure_path, [MountPoint])),
+    panel_test_rpc:add_storage(Provider,
+        #{?RAND_STR() => maps:merge(#{
+            <<"type">> => <<"posix">>,
+            <<"mountPoint">> => MountPoint,
+            <<"importedStorage">> => Imported,
+            <<"readonly">> => Readonly
+        }, luma_feed_args(LumaFeed))}
+    );
+
+create_storage(Provider, #nulldevice_storage_params{
+    imported_storage = Imported,
+    latency_min = LatencyMin,
+    latency_max = LatencyMax,
+    timeout_probability = TimeoutProbability,
+    filter = Filter
+}) ->
+    panel_test_rpc:add_storage(Provider,
+        #{?RAND_STR() => #{
+            <<"type">> => <<"nulldevice">>,
+            <<"importedStorage">> => Imported,
+            <<"latencyMin">> => LatencyMin,
+            <<"latencyMax">> => LatencyMax,
+            <<"timeoutProbability">> => TimeoutProbability,
+            <<"filter">> => Filter
+        }}
+    );
+
+create_storage(Provider, #http_storage_params{
+    endpoint = Endpoint,
+    readonly = Readonly,
+    imported_storage = Imported,
+    verify_server_certificate = VerifyServerCertificate,
+    emulate_range_read = EmulateRangeRead,
+    max_emulated_range_read_file_size = MaxEmulatedRangeReadFileSize
+}) ->
+    BaseArgs = #{
+        <<"type">> => <<"http">>,
+        <<"importedStorage">> => Imported,
+        <<"readonly">> => Readonly,
+        <<"endpoint">> => Endpoint,
+        <<"verifyServerCertificate">> => VerifyServerCertificate,
+        <<"emulateRangeRead">> => EmulateRangeRead
+    },
+    Args = case MaxEmulatedRangeReadFileSize of
+        undefined -> BaseArgs;
+        _ -> BaseArgs#{<<"maxEmulatedRangeReadFileSize">> => MaxEmulatedRangeReadFileSize}
+    end,
+    panel_test_rpc:add_storage(Provider, #{?RAND_STR() => Args}).
+
+
+%% @doc Storages supporting a space are deleted along with it by
+%% clean_up_after_previous_run/2; this is for the ones that support none
+%% (e.g. auxiliary storages set up by a suite for its own bookkeeping).
+-spec delete_storage(oct_background:node_selector(), storage:id()) -> ok.
+delete_storage(ProviderSelector, StorageId) ->
+    ?assertEqual(ok, opw_test_rpc:call(ProviderSelector, storage, delete, [StorageId]), ?STORAGE_DELETE_ATTEMPTS).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Hostname under which the s3 volume deployed for the given provider is reachable
+%% from within the cluster - both as the hostname of an s3 storage and for talking
+%% to the volume directly, e.g. to create a bucket. The structure results from the
+%% onenv charts, which deploy one such volume per provider in a scenario declaring
+%% the s3 storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec build_s3_hostname(oct_background:entity_selector()) -> binary().
+build_s3_hostname(ProviderSelector) ->
+    <<
+        "volume-s3.dev-volume-s3-",
+        (atom_to_binary(oct_background:to_entity_placeholder(ProviderSelector)))/binary,
+        ".default:9000"
+    >>.
+
+
+-spec set_up_space(space_spec()) -> oct_background:entity_id().
+set_up_space(SpaceSpec = #space_spec{
+    name = SpaceName,
+    owner = OwnerSelector,
+    users = Users,
+    supports = SupportSpecs
+}) ->
+    NameBinary = case SpaceName of
+        undefined -> str_utils:rand_hex(8);
+        Binary when is_binary(Binary) -> Binary;
+        Atom when is_atom(Atom) -> atom_to_binary(Atom)
+    end,
+    OwnerId = oct_background:get_user_id(OwnerSelector),
+    SpaceId = ozw_test_rpc:create_space(OwnerId, NameBinary),
+
+    SupportToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
+    support_space(SupportSpecs, SupportToken),
+
+    add_users_to_space(Users, SpaceId),
+    force_fetch_entities(SpaceId, SpaceSpec),
+    SpaceId.
+
+
+-spec mock_existence_of_unhealthy_storage([node()]) -> ok.
+mock_existence_of_unhealthy_storage(Nodes) ->
+    ok = test_utils:mock_new(Nodes, storage_monitoring),
+    ok = test_utils:mock_expect(Nodes, storage_monitoring, perform_regular_checks, fun(PreviousUnhealthyStorageIds) ->
+        [<<"dummy_unhealthy_storage">> | meck:passthrough([PreviousUnhealthyStorageIds -- [<<"dummy_unhealthy_storage">>]])]
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes every space left over by a previous run of one of the given test cases
+%% (matched by the space name) together with its supporting storages on the given
+%% providers. Suites that name each per-case space after the test case and leave it
+%% behind for post-mortem inspection call this at suite init to clean the leftovers
+%% from the previous run.
+%% @end
+%%--------------------------------------------------------------------
+-spec clean_up_after_previous_run([atom()], [oct_background:entity_selector()]) -> ok.
+clean_up_after_previous_run(AllTestCases, ProviderSelectors) ->
+    lists_utils:pforeach(fun(SpaceId) ->
+        delete_space_with_supporting_storages(SpaceId, ProviderSelectors)
+    end, filter_spaces_from_previous_run(AllTestCases)).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec filter_spaces_from_previous_run([atom()]) -> [od_space:id()].
+filter_spaces_from_previous_run(AllTestCases) ->
+    lists:filter(fun(SpaceId) ->
+        SpaceDetails = ozw_test_rpc:get_space_protected_data(?ROOT, SpaceId),
+        SpaceName = maps:get(<<"name">>, SpaceDetails),
+        lists:member(binary_to_atom(SpaceName), AllTestCases)
+    end, ozw_test_rpc:list_spaces()).
+
+
+%% @private
+-spec delete_space_with_supporting_storages(od_space:id(), [oct_background:entity_selector()]) -> ok.
+delete_space_with_supporting_storages(SpaceId, ProviderSelectors) ->
+    % storages must be resolved before the space is deleted, as the space->storage link
+    % is gone afterwards; a space is normally supported by one storage per provider, but
+    % some cases support it on just a subset of the given providers - tolerate an empty
+    % list per provider rather than assuming each has one
+    StoragesPerProvider = lists:map(fun(ProviderSelector) ->
+        {ProviderSelector, get_local_storages(ProviderSelector, SpaceId)}
+    end, ProviderSelectors),
+
+    ok = ozw_test_rpc:delete_space(SpaceId),
+
+    % a storage still supporting any other space cannot be deleted - storage:delete/1 (as
+    % well as Onezone) refuses with ?ERR_STORAGE_IN_USE, so no space is left behind without
+    % its storage; the retries in delete_storage/2 only wait for the provider to learn that
+    % the deleted space is no longer supported, while a storage shared with a space that
+    % outlives the cleanup fails it rather than breaking that space
+    lists:foreach(fun({ProviderSelector, Storages}) ->
+        lists:foreach(fun(StorageId) -> delete_storage(ProviderSelector, StorageId) end, Storages)
+    end, StoragesPerProvider).
+
+
+%% @private
+-spec get_local_storages(oct_background:entity_selector(), od_space:id()) -> [od_storage:id()].
+get_local_storages(ProviderSelector, SpaceId) ->
+    case opw_test_rpc:call(ProviderSelector, space_logic, get_local_storages, [SpaceId]) of
+        {ok, Storages} -> Storages;
+        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) -> []
+    end.
+
+
+%% @private
+%% @doc Maps a luma_feed_spec() onto onepanel add-storage request parameters.
+%% For the auto feed no parameters are emitted - it is the onepanel default.
+-spec luma_feed_args(luma_feed_spec()) -> map().
+luma_feed_args(auto) ->
+    #{};
+luma_feed_args(local) ->
+    #{<<"lumaFeed">> => <<"local">>};
+luma_feed_args(#external_feed_luma{url = Url, api_key = undefined}) ->
+    #{<<"lumaFeed">> => <<"external">>, <<"lumaFeedUrl">> => Url};
+luma_feed_args(#external_feed_luma{url = Url, api_key = ApiKey}) ->
+    #{<<"lumaFeed">> => <<"external">>, <<"lumaFeedUrl">> => Url, <<"lumaFeedApiKey">> => ApiKey}.
+
+
+%% @private
+-spec support_space([support_spec()], tokens:serialized()) -> ok.
+support_space(SupportSpecs, SupportToken) ->
+    lists:foreach(fun(#support_spec{
+        provider = Provider,
+        storage_spec = StorageSpec,
+        size = Size,
+        storage_import = StorageImport
+    }) ->
+        StorageId = case StorageSpec of
+            any -> lists_utils:random_element(opw_test_rpc:get_storages(Provider));
+            Id when is_binary(Id) -> Id;
+            Spec when is_tuple(Spec) -> create_storage(Provider, Spec)
+        end,
+        panel_test_rpc:support_space(Provider, StorageId, SupportToken, Size, #{
+            storage_import => StorageImport
+        })
+    end, SupportSpecs).
+
+
+%% @private
+-spec add_users_to_space([oct_background:entity_selector()], oct_background:entity_id()) -> ok.
+add_users_to_space(Users, SpaceId) ->
+    lists:foreach(fun(User) ->
+        UserId = oct_background:get_user_id(User),
+        ozw_test_rpc:add_user_to_space(SpaceId, UserId)
+    end, Users).
+
+
+%% @private
+-spec force_fetch_entities(od_space:id(), space_spec()) -> ok.
+force_fetch_entities(SpaceId, #space_spec{
+    owner = OwnerSelector,
+    users = Users,
+    supports = Supports
+}) ->
+    ProviderSelectors = lists:map(fun(SupportSpec) -> SupportSpec#support_spec.provider end, Supports),
+    opt:force_fetch_entity(od_space, SpaceId, ProviderSelectors),
+    lists:foreach(fun(User) ->
+        UserId = oct_background:get_user_id(User),
+        opt:force_fetch_entity(od_user, UserId, ProviderSelectors)
+    end, [OwnerSelector | Users]).
+
+
+%% @private
+-spec create_bucket(oct_background:node_selector(), s3_storage_params()) -> ok.
+create_bucket(Provider, #s3_storage_params{bucket_name = BucketName,
+    access_key = AccessKey, secret_key = SecretKey
+}) ->
+    Hostname = build_s3_hostname(Provider),
+    Url = str_utils:format("http://~ts/~ts", [Hostname, BucketName]),
+
+    DateTime = datetime_to_compact_iso8601(?CURRENT_DATETIME()),
+    AmzContent = hash_to_hex_list(crypto:hash(sha256, "")),
+    Authorization = s3_authorization(Hostname, AmzContent, DateTime, BucketName, SecretKey, AccessKey),
+
+    Headers = #{
+        <<"Content-Length">> => 0,
+        <<"X-Amz-Date">> => DateTime,
+        <<"X-Amz-Content-SHA256">> => AmzContent,
+        <<"Authorization">> => Authorization
+    },
+    {ok, 200, _, _} = opw_test_rpc:call(Provider, http_client, put, [Url, Headers, "", []]),
+    ok.
+
+
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @private
+%% Creates an s3 authorization key according to the documentation:
+%% https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html.
+%% @end
+%%------------------------------------------------------------------------------
+-spec s3_authorization(string(), string(), string(), binary(), binary(), binary()) -> string().
+s3_authorization(Hostname, AmzContent, DateTime, BucketName, SecretKey, AccessKey) ->
+    CanonicalHeaders = str_utils:format(
+        "host:~ts\n"
+        "x-amz-content-sha256:~ts\n"
+        "x-amz-date:~ts",
+        [Hostname, AmzContent, DateTime]
+    ),
+    SignedHeaders = "host;x-amz-content-sha256;x-amz-date",
+    CanonicalRequest = str_utils:format(
+        "PUT\n/~ts\n\n"
+        "~ts\n\n"
+        "~ts\n"
+        "~ts",
+        [BucketName, CanonicalHeaders, SignedHeaders, AmzContent]
+    ),
+
+    Date = lists:sublist(DateTime, 8),
+    CredentialScope = str_utils:format("~ts/eu-central-1/s3/aws4_request", [Date]),
+    HashedCanonicalRequest = hash_to_hex_list(crypto:hash(sha256, CanonicalRequest)),
+
+    StringToSign = str_utils:format(
+        "AWS4-HMAC-SHA256\n~ts\n"
+        "~ts\n"
+        "~ts",
+        [DateTime, CredentialScope, HashedCanonicalRequest]
+    ),
+    SigningKey = s3_signing_key(SecretKey, Date),
+    Signature = hash_to_hex_list(crypto:mac(hmac, sha256, SigningKey, StringToSign)),
+
+    str_utils:format(
+        "AWS4-HMAC-SHA256 Credential=~ts/~ts, SignedHeaders=~ts, Signature=~ts",
+        [AccessKey, CredentialScope, SignedHeaders, Signature]
+    ).
+
+
+%% @private
+-spec s3_signing_key(string(), string()) -> binary().
+s3_signing_key(SecretKey, Date) ->
+    KDate = crypto:mac(hmac, sha256, "AWS4" ++ SecretKey, Date),
+    KRegion = crypto:mac(hmac, sha256, KDate, "eu-central-1"),
+    KService = crypto:mac(hmac, sha256, KRegion, "s3"),
+    crypto:mac(hmac, sha256, KService, "aws4_request").
+
+
+%% @private
+-spec hash_to_hex_list(binary()) -> string().
+hash_to_hex_list(Hash) ->
+    binary_to_list(hex_utils:hex(Hash)).
+
+
+%% @private
+%% @doc AWS CLI requires X-Amz-Date to be in yyyyMMddTHHmmssZ ISO 8601 format
+-spec datetime_to_compact_iso8601(calendar:datetime()) -> string().
+datetime_to_compact_iso8601({{Y,Mo,D}, {H,Mn,S}}) when is_float(S) ->
+    io_lib:format("~4.10.0B~2.10.0B~2.10.0BT~2.10.0B~2.10.0B~9.6.0fZ", [Y, Mo, D, H, Mn, S]);
+datetime_to_compact_iso8601({{Y,Mo,D}, {H,Mn,S}}) ->
+    io_lib:format("~4.10.0B~2.10.0B~2.10.0BT~2.10.0B~2.10.0B~2.10.0BZ", [Y, Mo, D, H, Mn, S]).
+

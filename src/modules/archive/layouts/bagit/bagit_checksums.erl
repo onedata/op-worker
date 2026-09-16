@@ -16,6 +16,7 @@
 -include("modules/dataset/bagit.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([create_manifests/3, add_entries_to_manifests/5]).
@@ -28,9 +29,12 @@
 
 -spec create_manifests(file_ctx:ctx(), user_ctx:ctx(), file_checksum:algorithms()) -> ok.
 create_manifests(ArchiveDirCtx, UserCtx, Algorithms) ->
+    LogCtx = archivisation_logger:report_started(
+        "creating bagit checksum manifests", ?autoformat(Algorithms)),
     lists:foreach(fun(Algorithm) ->
         create_manifest(ArchiveDirCtx, UserCtx, Algorithm)
-    end, Algorithms).
+    end, Algorithms),
+    archivisation_logger:report_finished(LogCtx).
 
 
 -spec add_entries_to_manifests(file_ctx:ctx(), user_ctx:ctx(), file_meta:path(), file_checksum:checksums(),
@@ -59,13 +63,19 @@ add_entry_to_manifest(ManifestFileCtx, UserCtx, FilePath, Checksum) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     ManifestFileGuid = file_ctx:get_logical_guid_const(ManifestFileCtx),
 
+    LockLogCtx = archivisation_logger:report_started(
+        "acquiring bagit manifest lock", ?autoformat(ManifestFileGuid, FilePath)),
     ?CRITICAL_SECTION(ManifestFileGuid, fun() ->
+        archivisation_logger:report_finished(LockLogCtx),
+        WriteLogCtx = archivisation_logger:report_started(
+            "appending entry to bagit manifest", ?autoformat(ManifestFileGuid, FilePath)),
         {FileSize, _} = file_ctx:get_file_size(ManifestFileCtx),
         {ok, Handle} = lfm:open(SessionId, ?FILE_REF(ManifestFileGuid), write),
         Entry = ?MANIFEST_FILE_ENTRY(Checksum, FilePath),
         {ok, _, _} = lfm:write(Handle, FileSize, Entry),
         ok = lfm:fsync(Handle),
-        ok = lfm:release(Handle)
+        ok = lfm:release(Handle),
+        archivisation_logger:report_finished(WriteLogCtx)
     end).
 
 

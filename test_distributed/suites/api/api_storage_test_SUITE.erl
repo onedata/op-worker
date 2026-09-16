@@ -12,10 +12,8 @@
 -module(api_storage_test_SUITE).
 -author("Lukasz Opiola").
 
--include("api_file_test_utils.hrl").
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 
@@ -76,7 +74,7 @@ get_shared_storage_test_base(TargetProviders, SpaceId, StorageId, StorageName, P
                     name = <<"Get shared storage using gs api">>,
                     type = gs,
                     prepare_args_fun = fun(#api_test_ctx{data = Data0}) ->
-                        {TestedId, _} = api_test_utils:maybe_substitute_bad_id(StorageId, Data0),
+                        {TestedId, _} = api_data_spec_test_utils:maybe_substitute_bad_id(StorageId, Data0),
                         #gs_args{
                             operation = get,
                             gri = #gri{type = op_storage, id = TestedId, aspect = instance, scope = shared},

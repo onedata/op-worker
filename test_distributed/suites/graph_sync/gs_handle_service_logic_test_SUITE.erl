@@ -12,7 +12,7 @@
 -module(gs_handle_service_logic_test_SUITE).
 -author("Lukasz Opiola").
 
--include("logic_tests_common.hrl").
+-include("graph_sync/logic_tests_common.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).

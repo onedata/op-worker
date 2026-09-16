@@ -14,9 +14,8 @@
 -author("Lukasz Opiola").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("api_test_runner.hrl").
--include("onenv_test_utils.hrl").
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/api_samples/common.hrl").
 -include_lib("ctool/include/test/rest_api_samples_test_utils.hrl").
@@ -88,7 +87,7 @@ public_file_api_samples_test(_Config) ->
                 ]
             }
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par,
+    } = file_tree_test_utils:create_and_sync_file_tree(user2, space_krk_par,
         #dir_spec{
             metadata = ?EXAMPLE_METADATA_SPEC,
             shares = [#share_spec{}],
@@ -152,7 +151,7 @@ public_file_api_samples_test_base(FileType, FileGuid, ShareId, FilePathInShare, 
                     prepare_args_fun = fun(#api_test_ctx{node = Node, data = Data0}) ->
                         % clear cached values for the xrootd config
                         rpc:call(Node, node_cache, clear, [{service_configuration, onezone}]),
-                        {TestedId, _} = api_test_utils:maybe_substitute_bad_id(ShareGuid, Data0),
+                        {TestedId, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareGuid, Data0),
                         #gs_args{
                             operation = get,
                             gri = #gri{type = op_file, id = TestedId, aspect = api_samples, scope = public}
@@ -197,7 +196,7 @@ private_file_api_samples_test(_Config) ->
                 type = ?SYMLINK_TYPE
             }
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par,
+    } = file_tree_test_utils:create_and_sync_file_tree(user2, space_krk_par,
         #dir_spec{
             metadata = ?EXAMPLE_METADATA_SPEC,
             children = [
@@ -239,7 +238,7 @@ private_file_api_samples_test_base(FileType, FileGuid) ->
                     name = <<"Get private file API samples using gs api">>,
                     type = gs,
                     prepare_args_fun = fun(#api_test_ctx{data = Data0}) ->
-                        {TestedId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+                        {TestedId, _} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
                         #gs_args{
                             operation = get,
                             gri = #gri{type = op_file, id = TestedId, aspect = api_samples, scope = private}

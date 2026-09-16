@@ -900,7 +900,7 @@ listing_file_attrs_should_work_properly_in_public_data_mode(Config) ->
         initializer:create_access_token(User),
         #cv_interface{interface = oneclient}
     ),
-    PublicDataSessId = provider_onenv_test_utils:create_session(
+    PublicDataSessId = provider_test_utils:create_session(
         Worker, User, ClientAccessToken, public_data
     ),
 

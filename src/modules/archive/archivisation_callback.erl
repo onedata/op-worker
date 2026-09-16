@@ -76,7 +76,12 @@ do_notify_or_retry(_ArchiveId, _DatasetId, _CallbackUrl, _Operation, _ErrorDescr
     ok;
 do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft) ->
     try
-        case http_client:post(CallbackUrl, ?HEADERS, prepare_body(ArchiveId, DatasetId, ErrorDescription)) of
+        LogCtx = archivisation_logger:report_started("sending archive callback notification",
+            ?autoformat(ArchiveId, CallbackUrl, Operation, RetriesLeft)),
+        PostResult = http_client:post(
+            CallbackUrl, ?HEADERS, prepare_body(ArchiveId, DatasetId, ErrorDescription)),
+        archivisation_logger:report_finished(LogCtx),
+        case PostResult of
             {ok, ResponseCode, _, _} ->
                 case http_utils:is_success_code(ResponseCode) of
                     true ->

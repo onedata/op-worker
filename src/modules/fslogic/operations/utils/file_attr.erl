@@ -168,8 +168,8 @@ optional_attrs_perms_mask(AttributesList) ->
 
 %% @private
 -spec resolve_file_meta_attrs(state()) -> {state(), record()}.
-resolve_file_meta_attrs(#state{user_ctx = UserCtx, file_ctx = FileCtx, current_stage_attrs = Attrs} = State) ->
-    {FileDoc, State2} = get_file_doc(State),
+resolve_file_meta_attrs(#state{user_ctx = UserCtx, current_stage_attrs = Attrs} = State) ->
+    {FileDoc, #state{file_ctx = FileCtx} = State2} = get_file_doc(State),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
     ShareId = file_ctx:get_share_id_const(FileCtx),
     BaseAttrs = case ShareId of

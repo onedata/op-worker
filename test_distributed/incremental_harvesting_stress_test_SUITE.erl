@@ -14,9 +14,10 @@
 -module(incremental_harvesting_stress_test_SUITE).
 -author("Jakub Kudzia").
 
--include("harvesting_stress_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+
+-define(SPACE_ID, <<"space1">>).
 
 %% export for ct
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
@@ -77,7 +78,7 @@ incremental_harvesting_test_base(Config) ->
     Stopwatch = stopwatch:start(),
     % start harvesting_stream
     harvesting_stress_test_utils:revise_all_spaces(Worker),
-    harvesting_stress_test_utils:harvesting_receive_loop(NewFilesSum),
+    harvesting_stress_test_utils:await_files_harvested(NewFilesSum),
 
     DiffSec = stopwatch:read_seconds(Stopwatch, float),
     AvgRate =  NewFilesSum /DiffSec,

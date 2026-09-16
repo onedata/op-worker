@@ -79,11 +79,19 @@ handle_request_unsafe(OpReq0, Req) ->
     ensure_operation_supported(Operation, Aspect, Scope),
     OpReq2 = sanitize_params(OpReq1, Req),
 
-    ?check(api_auth:check_authorization(Auth, ?OP_WORKER, Operation, GRI)),
+    ?check(api_auth:check_authorization(Auth, ?OP_WORKER, operation_to_api_operation(Operation), GRI)),
     ensure_has_access_to_file(OpReq1),
     middleware_utils:assert_file_managed_locally(FileGuid),
 
     process_request(OpReq2, Req).
+
+
+%% @private
+%% HEAD requests are authorized exactly like the corresponding GET requests -
+%% the API caveats system does not distinguish them (see cv_api:operation()).
+-spec operation_to_api_operation(middleware:operation()) -> cv_api:operation().
+operation_to_api_operation(head) -> get;
+operation_to_api_operation(Operation) -> Operation.
 
 
 %% @private
@@ -95,6 +103,9 @@ ensure_operation_supported(create, file_at_path, private) -> true;
 ensure_operation_supported(get, content, public) -> true;
 ensure_operation_supported(get, content, private) -> true;
 ensure_operation_supported(get, file_at_path, private) -> true;
+ensure_operation_supported(head, content, public) -> true;
+ensure_operation_supported(head, content, private) -> true;
+ensure_operation_supported(head, file_at_path, private) -> true;
 ensure_operation_supported(delete, file_at_path, private) -> true;
 ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
@@ -179,7 +190,10 @@ sanitize_params(#op_req{
         required => AllRequiredParams,
         optional => AllOptionalParams
     })};
-sanitize_params(#op_req{operation = get, data = RawParams, gri = #gri{aspect = content}} = OpReq, _Req) ->
+sanitize_params(#op_req{operation = Operation, data = RawParams, gri = #gri{aspect = content}} = OpReq, _Req) when
+    Operation == get;
+    Operation == head
+->
     OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
         optional => #{<<"follow_symlinks">> => {boolean, any}}
     })};
@@ -187,7 +201,7 @@ sanitize_params(#op_req{
     operation = Operation,
     data = RawParams,
     gri = #gri{aspect = file_at_path}
-} = OpReq, Req) when Operation == delete orelse Operation == get ->
+} = OpReq, Req) when Operation == delete orelse Operation == get orelse Operation == head ->
 
     AllRawParams = RawParams#{path => cowboy_req:path_info(Req)},
     AllOptionalParams = #{
@@ -202,7 +216,10 @@ sanitize_params(#op_req{
 
 %% @private
 -spec ensure_has_access_to_file(middleware:req()) -> true | no_return().
-ensure_has_access_to_file(#op_req{operation = get, auth = ?GUEST, gri = #gri{id = Guid, scope = public}}) ->
+ensure_has_access_to_file(#op_req{operation = Operation, auth = ?GUEST, gri = #gri{id = Guid, scope = public}}) when
+    Operation == get;
+    Operation == head
+->
     file_id:is_share_guid(Guid) orelse throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined));
 ensure_has_access_to_file(#op_req{auth = ?GUEST}) ->
     throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined));
@@ -292,26 +309,43 @@ process_request(#op_req{
         Req3
     );
 process_request(#op_req{
-    operation = get,
+    operation = Operation,
     auth = #auth{session_id = SessionId},
     gri = #gri{aspect = Aspect},
     data = Data
-} = OpReq, Req) when Aspect == content orelse Aspect == file_at_path ->
-
+} = OpReq, Req) when
+    (Operation == get orelse Operation == head) andalso (Aspect == content orelse Aspect == file_at_path)
+->
     FileGuid = resolve_target_file(OpReq),
 
     FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
     case ?lfm_check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
-            file_content_download_utils:download_single_file(SessionId, FileAttrs, Req);
-        {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
-            file_content_download_utils:download_single_file(SessionId, FileAttrs, Req);
+        {ok, #file_attr{type = Type} = FileAttrs} when
+            Type == ?REGULAR_FILE_TYPE;
+            Type == ?SYMLINK_TYPE
+        ->
+            case Operation of
+                get ->
+                    file_content_download_utils:download_single_file(SessionId, FileAttrs, Req);
+                head ->
+                    file_content_download_utils:provide_single_file_download_headers(SessionId, FileAttrs, Req)
+            end;
         {ok, #file_attr{}} ->
-            case page_file_content_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
-                {ok, {_, Url}} ->
-                    cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
-                {error, _} = Error ->
-                    http_req:send_error(Error, Req)
+            % A directory is downloaded (via GET) as a dynamically built tarball -
+            % its size is not known upfront and byte ranges are not supported for
+            % it, so there are no meaningful content headers to return. HEAD, whose
+            % sole purpose here is to describe a single file download, is therefore
+            % not supported for directories.
+            case Operation of
+                get ->
+                    case page_file_content_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
+                        {ok, {_, Url}} ->
+                            cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
+                        {error, _} = Error ->
+                            http_req:send_error(Error, Req)
+                    end;
+                head ->
+                    http_req:send_error(?ERROR_NOT_SUPPORTED, Req)
             end
     end;
 process_request(#op_req{

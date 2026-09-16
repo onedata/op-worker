@@ -444,7 +444,7 @@ is_building(#document{value = Archive}) ->
 
 -spec mark_deleting(id(), callback()) -> {ok, doc()} | error().
 mark_deleting(ArchiveId, Callback) ->
-    update(ArchiveId, fun(Archive = #archive{
+    update_state(ArchiveId, fun(Archive = #archive{
         state = State,
         modifiable_fields = ModifiableFields = #modifiable_fields{
             deleted_callback = PrevDeletedCallback
@@ -470,7 +470,7 @@ mark_deleting(ArchiveId, Callback) ->
 
 -spec mark_building(id() | doc()) -> ok | error().
 mark_building(ArchiveDocOrId) ->
-    ?extract_ok(update(ArchiveDocOrId, fun(Archive) ->
+    ?extract_ok(update_state(ArchiveDocOrId, fun(Archive) ->
         {ok, Archive#archive{
             state = ?ARCHIVE_BUILDING
         }}
@@ -479,7 +479,7 @@ mark_building(ArchiveDocOrId) ->
 
 -spec mark_creation_finished(id() | doc(), archive_stats:record()) -> ok | {error, marked_to_delete}.
 mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
-    UpdateResult = update(ArchiveDocOrId, fun
+    UpdateResult = update_state(ArchiveDocOrId, fun
         (Archive = #archive{stats = CurrentStats, state = ?ARCHIVE_BUILDING}) ->
             AggregatedStats = archive_stats:sum(CurrentStats, NestedArchivesStats),
             {ok, Archive#archive{
@@ -513,7 +513,7 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
 
 -spec mark_preserved(id() | doc()) -> ok | error().
 mark_preserved(ArchiveDocOrId) ->
-    ?extract_ok(update(ArchiveDocOrId, fun
+    ?extract_ok(update_state(ArchiveDocOrId, fun
         (#archive{state = State} = Archive) when State =/= ?ARCHIVE_VERIFICATION_FAILED ->
             {ok, Archive#archive{state = ?ARCHIVE_PRESERVED}};
         (Archive) ->
@@ -524,7 +524,7 @@ mark_preserved(ArchiveDocOrId) ->
 -spec mark_cancelling(id() | doc(), cancel_preservation_policy()) -> 
     ok | {error, already_finished} | {error, already_cancelled} | error().
 mark_cancelling(ArchiveDocOrId, PreservationPolicy) ->
-    ?extract_ok(update(ArchiveDocOrId, fun
+    ?extract_ok(update_state(ArchiveDocOrId, fun
         (#archive{state = State} = Archive) ->
             case {is_finished(Archive), State} of
                 {true, ?ARCHIVE_CANCELLED} -> {error, already_cancelled};
@@ -536,7 +536,7 @@ mark_cancelling(ArchiveDocOrId, PreservationPolicy) ->
 
 -spec mark_cancelled(id() | doc()) -> ok | {error, marked_to_delete} | error().
 mark_cancelled(ArchiveDocOrId) ->
-    UpdateResult = ?extract_ok(update(ArchiveDocOrId, fun
+    UpdateResult = ?extract_ok(update_state(ArchiveDocOrId, fun
         (#archive{state = State} = Archive) ->
             case {is_finished(Archive), State} of
                 {true, _} ->
@@ -557,7 +557,7 @@ mark_cancelled(ArchiveDocOrId) ->
 
 -spec mark_archivisation_failed(id() | doc()) -> ok | error().
 mark_archivisation_failed(ArchiveDocOrId) ->
-    ?extract_ok(update(ArchiveDocOrId, fun(Archive) ->
+    ?extract_ok(update_state(ArchiveDocOrId, fun(Archive) ->
         {ok, Archive#archive{
             state = ?ARCHIVE_FAILED
         }}
@@ -566,7 +566,7 @@ mark_archivisation_failed(ArchiveDocOrId) ->
 
 -spec mark_verification_failed(id() | doc()) -> ok | error().
 mark_verification_failed(ArchiveDocOrId) ->
-    ?extract_ok(update(ArchiveDocOrId, fun(Archive) ->
+    ?extract_ok(update_state(ArchiveDocOrId, fun(Archive) ->
         {ok, Archive#archive{
             state = ?ARCHIVE_VERIFICATION_FAILED
         }}
@@ -635,6 +635,19 @@ update(#document{key = ArchiveId}, Diff) ->
     update(ArchiveId, Diff);
 update(ArchiveId, Diff) ->
     datastore_model:update(?CTX, ArchiveId, Diff).
+
+
+%% @private
+-spec update_state(id() | doc(), datastore_doc:diff(record())) -> {ok, doc()} | error().
+update_state(ArchiveDocOrId, Diff) ->
+    Result = update(ArchiveDocOrId, Diff),
+    case Result of
+        {ok, #document{key = ArchiveId, value = #archive{state = State}}} ->
+            archivisation_logger:report_event("archive state after update", ?autoformat(ArchiveId, State));
+        _ ->
+            ok
+    end,
+    Result.
 
 
 -spec get_all_ancestors(undefined | id(), [doc()]) -> {ok, [doc()]}.

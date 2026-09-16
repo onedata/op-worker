@@ -22,6 +22,7 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -50,10 +51,19 @@
 %%       <<"uid">> => non_neg_integer(),
 %%       <<"gid">> => non_neg_integer(),
 %%       <<"autoDetectAttributes">> => boolean(),
+%%       <<"verifyExistence">> => boolean(),
 %%       <<"xattrs">> => json_utils:json_map(),
 %%       <<"json">> => json_utils:json_map(),
 %%       <<"rdf">> => binary() % base64 encoded RDF
 %% }
+%%
+%% autoDetectAttributes (default true) and verifyExistence (default true) are
+%% independent. autoDetectAttributes controls whether missing attributes are read
+%% from the storage (a full stat), verifyExistence whether the file's presence on
+%% the storage is confirmed. As detecting attributes requires a stat that already
+%% verifies existence, verifyExistence is only meaningful when autoDetectAttributes
+%% is false (when both are false the caller is fully trusted and the storage is not
+%% contacted at all).
 
 -export_type([spec/0]).
 
@@ -71,7 +81,7 @@
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 register(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
     Args = [SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec],
-    Timeout = select_file_registration_timeout(storage:get_helper(StorageId)),
+    Timeout = select_file_registration_timeout(storage:get_helper_spec(StorageId)),
     Result = worker_pool:call(
         ?FILE_REGISTRATION_POOL,
         {?MODULE, register_internal, Args},
@@ -133,7 +143,7 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
             iterator_type => storage_traverse:get_iterator(StorageId),
             is_posix_storage => storage:is_posix_compatible(StorageId),
             sync_acl => false,
-            verify_existence => maps:get(<<"autoDetectAttributes">>, Spec, true),
+            verify_existence => maps:get(<<"verifyExistence">>, Spec, true),
             manual => true,
             user_id => user_ctx:get_user_id(UserCtx)
         }),
@@ -180,20 +190,20 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
 
 -spec normalize_storage_file_id(storage:id(), helpers:file_id()) -> helpers:file_id().
 normalize_storage_file_id(StorageId, StorageFileId) ->
-    Helper = storage:get_helper(StorageId),
-    case helper:get_name(Helper) of
+    HelperSpec = storage:get_helper_spec(StorageId),
+    case helper_spec:get_name(HelperSpec) of
         ?XROOTD_HELPER_NAME ->
-            normalize_xrootd_storage_file_id(Helper, StorageFileId);
+            normalize_xrootd_storage_file_id(HelperSpec, StorageFileId);
         _ ->
             StorageFileId
     end.
 
--spec normalize_xrootd_storage_file_id(helpers:helper(), helpers:file_id()) -> helpers:file_id().
-normalize_xrootd_storage_file_id(Helper, StorageFileId) ->
+-spec normalize_xrootd_storage_file_id(helper_spec:t(), helpers:file_id()) -> helpers:file_id().
+normalize_xrootd_storage_file_id(HelperSpec, StorageFileId) ->
     case is_url(StorageFileId) of
         true ->
-            Args = helper:get_args(Helper),
-            HelperUrl = maps:get(<<"url">>, Args),
+            ConfigurationParams = helper_spec:get_configuration(HelperSpec),
+            HelperUrl = maps:get(<<"url">>, ConfigurationParams),
             HelperUrlSize = byte_size(HelperUrl),
             case binary:match(StorageFileId, HelperUrl) of
                 {0, HelperUrlSize} ->
@@ -287,20 +297,39 @@ destination_path_to_canonical_path(SpaceId, DestinationPath) ->
 -spec maybe_verify_existence(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
 maybe_verify_existence(StorageFileCtx, Spec) ->
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    Helper = storage:get_helper(StorageId),
-    HelperName = helper:get_name(Helper),
-    HelperArgs = Helper#helper.args,
+    HelperSpec = storage:get_helper_spec(StorageId),
+    HelperName = helper_spec:get_name(HelperSpec),
+    ConfigurationParams = HelperSpec#helper_spec.configuration,
     IsHttpWithoutEmulateRangeRead = HelperName =:= ?HTTP_HELPER_NAME
-        andalso maps:get(<<"emulateRangeRead">>, HelperArgs, <<"false">>) =:= <<"false">>,
+        andalso maps:get(<<"emulateRangeRead">>, ConfigurationParams, <<"false">>) =:= <<"false">>,
     AutoDetect = maps:get(<<"autoDetectAttributes">>, Spec, true),
+    VerifyExistence = maps:get(<<"verifyExistence">>, Spec, true),
     case IsHttpWithoutEmulateRangeRead orelse AutoDetect of
         true ->
-            % in case of the HTTP helper without range read emulation, we don't allow overriding
-            % file attributes because reads from servers without support for range read will fail
+            % a full stat is required - it detects the attributes and, as a side
+            % effect, verifies the file's existence (throws ENOENT if missing). For
+            % the HTTP helper without range read emulation we don't allow overriding
+            % file attributes, as reads from servers without range read support fail.
             {_, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
             StorageFileCtx2;
         false ->
+            % attributes are taken from the caller; existence on the storage is
+            % independently verified (unless explicitly disabled) via a cheap exists
+            % check rather than a full stat, throwing ENOENT if the file is missing
+            case VerifyExistence of
+                true -> assert_file_exists_on_storage(StorageFileCtx);
+                false -> ok
+            end,
             StorageFileCtx
+    end.
+
+
+-spec assert_file_exists_on_storage(storage_file_ctx:ctx()) -> ok.
+assert_file_exists_on_storage(StorageFileCtx) ->
+    SDHandle = storage_file_ctx:get_handle_const(StorageFileCtx),
+    case storage_driver:exists(SDHandle) of
+        true -> ok;
+        false -> throw(?ERR_POSIX(?err_ctx(), ?ENOENT))
     end.
 
 -spec prepare_stat(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
@@ -434,29 +463,37 @@ get_default_file_stat(StorageFileCtx) ->
         st_mtime = CurrentTimestamp,
         st_atime = CurrentTimestamp,
         st_ctime = CurrentTimestamp,
-        st_mode = get_default_file_mode(storage:get_helper(Storage)),
+        st_mode = get_default_file_mode(storage:get_helper_spec(Storage)),
         st_uid = ?ROOT_UID,
         st_gid = ?ROOT_GID
     },
     {DefaultStat, storage_file_ctx:set_stat(StorageFileCtx2, DefaultStat)}.
 
 
--spec get_default_file_mode(helpers:helper()) -> file_meta:mode().
-get_default_file_mode(#helper{name = HelperName, args = Args})
+-spec get_default_file_mode(helper_spec:t()) -> file_meta:mode().
+get_default_file_mode(#helper_spec{name = HelperName, configuration = ConfigurationParams})
     when HelperName =:= ?HTTP_HELPER_NAME
     orelse HelperName =:= ?S3_HELPER_NAME
     orelse HelperName =:= ?WEBDAV_HELPER_NAME
 ->
-    maps:get(<<"fileMode">>, Args, ?DEFAULT_FILE_MODE);
-get_default_file_mode(#helper{name = ?XROOTD_HELPER_NAME, args = Args}) ->
-    maps:get(<<"fileModeMask">>, Args, ?DEFAULT_FILE_MODE);
+    ensure_mode_int(maps:get(<<"fileMode">>, ConfigurationParams, ?DEFAULT_FILE_MODE));
+get_default_file_mode(#helper_spec{name = ?XROOTD_HELPER_NAME, configuration = ConfigurationParams}) ->
+    ensure_mode_int(maps:get(<<"fileModeMask">>, ConfigurationParams, ?DEFAULT_FILE_MODE));
 get_default_file_mode(_) ->
     ?DEFAULT_FILE_MODE.
 
 
--spec select_file_registration_timeout(helpers:helper()) -> timeout().
-select_file_registration_timeout(#helper{name = ?HTTP_HELPER_NAME, args = Args}) ->
-    case maps:get(<<"emulateRangeRead">>, Args, <<"false">>) of
+%% @private
+-spec ensure_mode_int(integer() | binary()) -> file_meta:mode().
+ensure_mode_int(Int) when is_integer(Int) ->
+    Int;
+ensure_mode_int(Bin) when is_binary(Bin) ->
+    binary_to_integer(Bin, 8).
+
+
+-spec select_file_registration_timeout(helper_spec:t()) -> timeout().
+select_file_registration_timeout(#helper_spec{name = ?HTTP_HELPER_NAME, configuration = ConfigurationParams}) ->
+    case maps:get(<<"emulateRangeRead">>, ConfigurationParams, <<"false">>) of
         <<"true">> ->
             ?FILE_REGISTRATION_HTTP_EMULATED_RANGE_READ_TIMEOUT;
         <<"false">> ->
