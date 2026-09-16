@@ -125,7 +125,8 @@ init_per_suite(Config) ->
             onenv_scenario = "2op-archive",
             envs = [{op_worker, op_worker, [
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
-                {provider_token_ttl_sec, 24 * 60 * 60}
+                {provider_token_ttl_sec, 24 * 60 * 60},
+                {archivisation_verbose_logs_enabled, true}
             ]}]
         }
     ).
