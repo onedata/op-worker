@@ -61,7 +61,8 @@
     {6, <<"21.02.5">>},
     {7, <<"21.02.8">>},
     {8, <<"25.0">>},
-    {9, op_worker:get_release_version()}
+    {9, <<"25.1">>},
+    {10, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
@@ -310,14 +311,14 @@ upgrade_cluster(7) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
-        storage:upgrade_after_swift_version_update_to_v3(),
+        storage_upgrader:upgrade_after_swift_version_update_to_v3(),
 
         % clear cached auto luma entries in db
         {ok, StorageIds} = provider_logic:get_storages(),
         lists:foreach(fun(StorageId) ->
             ?info("Clearing cached auto-feed LUMA entries for storage: ~ts", [StorageId]),
             case storage_config:get_luma_feed(StorageId) of
-                ?AUTO_FEED -> luma:clear_db(StorageId);
+                ?AUTO_FEED -> luma_crud_api:clear_db(StorageId);
                 _ -> ok
             end
         end, StorageIds)
@@ -342,7 +343,23 @@ upgrade_cluster(8) ->
             trash_dir:clear_all(SpaceId, no_events)
         end, SpaceIds)
     end),
-    {ok, 9}.
+    {ok, 9};
+upgrade_cluster(9) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Clearing trash of space '~ts' after upgrade", [SpaceId]),
+            trash_dir:clear_all(SpaceId, no_events)
+        end, SpaceIds),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Reinitializing stats for space '~ts' after upgrade", [SpaceId]),
+            dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
+        end, SpaceIds)
+    end),
+    {ok, 10}.
 
 
 %%--------------------------------------------------------------------

@@ -12,10 +12,15 @@
 -module(authz_share_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
+-include("authz/authz_api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
--include("storage_files_test_SUITE.hrl").
+-include("file/file_tree_test.hrl").
+-include("storage/storage_test.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
@@ -34,7 +39,7 @@ test_create_share(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{name = <<"dir1">>}],
+        files = [#authz_dir_spec{name = <<"dir1">>}],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         blocked_by_data_access_caveats = {true, ?ERR_POSIX(?EAGAIN)},
@@ -59,7 +64,7 @@ test_remove_share(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             on_create = fun(Node, _FileOwnerSessionId, Guid) ->
                 {ok, ShareId} = opt_shares:create(Node, SpaceOwnerSessionId, ?FILE_REF(Guid), <<"share">>),
@@ -95,7 +100,7 @@ test_share_perms_are_checked_only_up_to_share_root(SpaceId) ->
         children = [#object{
             children = [#object{guid = FileGuid}]
         }]
-    }]} = onenv_file_test_utils:create_file_tree(SpaceOwnerUserId, SpaceDirGuid, krakow, #dir_spec{
+    }]} = file_tree_test_utils:create_file_tree(SpaceOwnerUserId, SpaceDirGuid, krakow, #dir_spec{
         name = <<"root_dir">>,
         mode = ?FILE_MODE(8#700),
         children = [#dir_spec{

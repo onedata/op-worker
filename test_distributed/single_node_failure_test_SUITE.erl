@@ -14,7 +14,8 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
--include("distribution_assert.hrl").
+-include("file/distribution_assert.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -33,6 +34,10 @@ all() -> [
     failure_test
 ].
 
+% The only space in the "2op" scenario that is supported by both providers
+% and has an imported storage (required by find_importing_provider/2).
+-define(SPACE_SELECTOR, space1).
+
 -define(ATTEMPTS, 30).
 -define(assertInEndedList(Node, SpaceId, ExpectedEndedTransferIds),
     ?assertEqual([], ExpectedEndedTransferIds -- list_ended_transfers(Node, SpaceId), ?ATTEMPTS)
@@ -50,7 +55,7 @@ all() -> [
 
 failure_test(Config) ->
     UpdatedConfig = cm_failure_test_base(Config),
-    InitialData = create_initial_data_structure(UpdatedConfig),
+    InitialData = create_initial_data_structure(),
     UpdatedConfig2 = worker_failure_test_base(UpdatedConfig, InitialData, true),
     worker_failure_test_base(UpdatedConfig2, InitialData, false),
 
@@ -58,7 +63,7 @@ failure_test(Config) ->
 
 
 cm_failure_test_base(Config) ->
-    KilledCM = provider_onenv_test_utils:get_primary_cm_node(Config, krakow),
+    KilledCM = provider_test_utils:get_primary_cm_node(Config, krakow),
     [NodeExpectedToStopItself] = oct_background:get_provider_nodes(krakow),
 
     failure_test_utils:kill_nodes(Config, KilledCM),
@@ -100,14 +105,14 @@ worker_failure_test_base(Config, InitialData, StopAppBeforeKill) ->
 %%% Helper Functions
 %%%===================================================================
 
-create_initial_data_structure(Config) ->
+create_initial_data_structure() ->
     Providers = [P1, P2] = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
     [WorkerP1] = oct_background:get_provider_nodes(krakow),
     [WorkerP2] = oct_background:get_provider_nodes(paris),
     SessId = fun(P) ->
         oct_background:get_user_session_id(user1, P)
     end,
-    [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
+    SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
     SpaceDirGuid = space_dir:guid(SpaceId),
 
     ConflictingDirName = generator:gen_name(),
@@ -123,7 +128,7 @@ create_initial_data_structure(Config) ->
         end, [{WorkerP1, P1}, {WorkerP2, P2}])
     end, [P1DirGuid, P2DirGuid]),
 
-    FailingProvider = provider_onenv_test_utils:find_importing_provider(Config, SpaceId),
+    FailingProvider = provider_test_utils:find_importing_provider(Providers, SpaceId),
     [HealthyProvider] = Providers -- [FailingProvider],
     #{
         test_dirs => #{
@@ -253,9 +258,9 @@ prepare_import(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
 
     % check whether initial scan has been finished
-    storage_import_test_base:assertInitialScanFinished(ImportingOpNode, SpaceId, ?ATTEMPTS),
-    storage_import_test_base:assertNoScanInProgress(ImportingOpNode, SpaceId, ?ATTEMPTS),
-    FinishedScans = storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId),
+    assert_initial_scan_finished(ImportingOpNode, SpaceId),
+    assert_no_scan_in_progress(ImportingOpNode, SpaceId),
+    FinishedScans = get_finished_scans_num(ImportingOpNode, SpaceId),
 
     % wait for new files to occur on storage
     % the storage supporting the space is a nulldevice storage with simulated filesystem that grows with the time
@@ -263,7 +268,7 @@ prepare_import(InitialData, TestData) ->
     % mock importing process to block
     block_import(ImportingOpNode),
     % forcefully start import scan
-    storage_import_test_base:start_scan(ImportingOpNode, SpaceId),
+    start_scan(ImportingOpNode, SpaceId),
 
     TestData#{finished_scans => FinishedScans}.
 
@@ -459,7 +464,7 @@ verify_import(InitialData, TestData) ->
     % get last finished scan
     Scans0 = kv_utils:get(finished_scans, TestData),
     % wait till next scan is finished
-    ?assertEqual(Scans0 + 1, storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId), ?ATTEMPTS).
+    ?assertEqual(Scans0 + 1, get_finished_scans_num(ImportingOpNode, SpaceId), ?ATTEMPTS).
 
 
 verify_auto_cleaning(InitialData, TestData) ->
@@ -585,6 +590,31 @@ get_application_closing_status(Worker) ->
     rpc:call(Worker, datastore_worker, get_application_closing_status, []).
 
 
+assert_initial_scan_finished(OpwNode, SpaceId) ->
+    ?assertEqual(true, try
+        rpc:call(OpwNode, storage_import_monitoring, is_initial_scan_finished, [SpaceId])
+    catch _:_ ->
+        error
+    end, ?ATTEMPTS).
+
+
+assert_no_scan_in_progress(OpwNode, SpaceId) ->
+    ?assertEqual(false, try
+        rpc:call(OpwNode, storage_import_monitoring, is_scan_in_progress, [SpaceId])
+    catch _:_ ->
+        error
+    end, ?ATTEMPTS).
+
+
+get_finished_scans_num(OpwNode, SpaceId) ->
+    #{<<"scans">> := Scans} = rpc:call(OpwNode, storage_import_monitoring, describe, [SpaceId]),
+    Scans.
+
+
+start_scan(OpwNode, SpaceId) ->
+    ok = rpc:call(OpwNode, storage_import, start_auto_scan, [SpaceId]).
+
+
 block_import(OpwNode) ->
     test_node_starter:load_modules([OpwNode], [?MODULE]),
     ok = test_utils:mock_new(OpwNode, storage_import_engine),
@@ -618,7 +648,7 @@ block_eviction_transfer(OpwNode) ->
 
 
 get_current_space_quota(Node, SpaceId) ->
-    rpc:call(Node, space_quota, current_size, [SpaceId]).
+    opt_spaces:get_occupancy(Node, SpaceId).
 
 enable_file_popularity(Node, SpaceId) ->
     ok = rpc:call(Node, file_popularity_api, enable, [SpaceId]).

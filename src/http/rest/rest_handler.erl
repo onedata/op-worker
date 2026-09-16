@@ -23,7 +23,7 @@
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--type method() :: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'.
+-type method() :: http_utils:method().
 -type parse_body() :: ignore | as_json_params | {as_is, KeyName :: binary()}.
 -type binding() :: {binding, atom()} | {objectid_binding, atom()} | path_binding.
 -type bound_gri() :: #b_gri{}.
@@ -241,6 +241,7 @@ process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_re
 method_to_operation('POST') -> create;
 method_to_operation('PUT') -> create;
 method_to_operation('GET') -> get;
+method_to_operation('HEAD') -> head;
 method_to_operation('PATCH') -> update;
 method_to_operation('DELETE') -> delete.
 
@@ -355,8 +356,10 @@ route_to_proper_handler(#op_req{operation = Operation, gri = #gri{
     (Operation == create andalso As == child);
     (Operation == create andalso As == content);
     (Operation == get andalso As == content);
+    (Operation == head andalso As == content);
     (Operation == create andalso As == file_at_path);
     (Operation == get andalso As == file_at_path);
+    (Operation == head andalso As == file_at_path);
     (Operation == delete andalso As == file_at_path)
 ->
     file_content_rest_handler:handle_request(OpReq, Req);

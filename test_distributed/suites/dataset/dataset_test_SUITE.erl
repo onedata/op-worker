@@ -17,7 +17,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -1123,7 +1123,7 @@ remove_hardlink_with_protection_flags(_Config) ->
             ]
         },
         #object{guid = LinkGuid2}
-    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, [
+    ] = file_tree_test_utils:create_and_sync_file_tree(user1, space1, [
         #dir_spec{
             children = [
                 #file_spec{custom_label = link_target},
@@ -1159,7 +1159,7 @@ end_per_testcase(_Case, Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     PNodes = oct_background:get_all_providers_nodes(),
     SpaceId = oct_background:get_space_id(space1),
-    onenv_dataset_test_utils:cleanup_all_datasets(krakow, space1),
+    dataset_test_utils:cleanup_all_datasets(krakow, space1),
     lfm_test_utils:clean_space(P1Node, PNodes, SpaceId, ?ATTEMPTS),
     lfm_proxy:teardown(Config).
 

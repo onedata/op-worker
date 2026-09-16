@@ -32,7 +32,7 @@
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
 -export([get_credentials/1, get_data_constraints/1, get_user_id/1]).
--export([get_mode/1]).
+-export([get_mode/1, get_proxy_via/1]).
 -export([set_direct_io/3]).
 
 % exometer callbacks
@@ -178,6 +178,7 @@ delete(SessId) ->
     ?update_counter(?EXOMETER_NAME(active_sessions), -1),
     session_helpers:delete_helpers(SessId),
     session_handles:remove_handles(SessId),
+    session_remote_handles:remove_all(SessId),
     session_open_files:invalidate_entries(SessId),
     datastore_model:delete(?CTX, SessId).
 
@@ -305,6 +306,26 @@ get_mode(#session{mode = SessMode}) ->
     {ok, SessMode};
 get_mode(#document{value = #session{mode = SessMode}}) ->
     {ok, SessMode}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the provider that the session's requests come through, if the session
+%% was created for another provider acting on behalf of its own client.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_proxy_via(id() | record() | doc()) -> {ok, undefined | oneprovider:id()} | {error, term()}.
+get_proxy_via(<<_/binary>> = SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{proxy_via = ProxyVia}}} ->
+            {ok, ProxyVia};
+        {error, _} = Error ->
+            Error
+    end;
+get_proxy_via(#session{proxy_via = ProxyVia}) ->
+    {ok, ProxyVia};
+get_proxy_via(#document{value = #session{proxy_via = ProxyVia}}) ->
+    {ok, ProxyVia}.
 
 
 %%--------------------------------------------------------------------

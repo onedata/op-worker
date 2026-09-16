@@ -59,6 +59,7 @@ run_and_handle_error(SDHandle = #sd_handle{
             throw(Reason)
     end.
 
+
 -spec run_with_file_handle_and_handle_error
     (SDHandle, Operation, SufficientAccessType) -> Result when
     SDHandle :: storage_driver:handle(),
@@ -67,6 +68,7 @@ run_and_handle_error(SDHandle = #sd_handle{
     Result :: ok | {ok, term()} | {error, term()}.
 run_with_file_handle_and_handle_error(SDHandle = #sd_handle{file_handle = FileHandle}, Operation, SufficientAccessType) ->
     run_and_handle_error(SDHandle, FileHandle, Operation, SufficientAccessType).
+
 
 -spec run_and_handle_error
     (SDHandle, Handle, Operation, SufficientAccessType) -> Result when
@@ -103,6 +105,7 @@ handle_error({error, ?EKEYEXPIRED}, FileOrHelperHandle, SDHandle) ->
 handle_error(Error, _, _) ->
     Error.
 
+
 -spec handle_ekeyexpired(handle(), storage_driver:handle()) ->
     {error, term()} | retry.
 handle_ekeyexpired(FileOrHelperHandle, #sd_handle{
@@ -111,12 +114,12 @@ handle_ekeyexpired(FileOrHelperHandle, #sd_handle{
     storage_id = StorageId
 }) ->
     {ok, Storage} = storage:get(StorageId),
-    Helper = storage:get_helper(Storage),
-    case helper:get_name(Helper) of
-        ?WEBDAV_HELPER_NAME ->
+    HelperSpec = storage:get_helper_spec(Storage),
+    case helper_spec:is_oauth2_supported(HelperSpec) of
+        true ->
             % called by module for CT tests
             helpers_reload:refresh_handle_params(FileOrHelperHandle, SessionId, SpaceId, Storage),
             retry;
-        _ ->
+        false ->
             {error, ?EKEYEXPIRED}
     end.

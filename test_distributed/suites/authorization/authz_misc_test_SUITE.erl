@@ -14,7 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/logical_file_manager/lfm.hrl").
--include("permissions_test.hrl").
+-include("authz/authz_test.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -30,6 +30,7 @@
 
 -export([
     test_expired_session/1,
+    test_acl_is_returned_with_resolved_names/1,
     test_multi_provider_posix_permission_cache/1,
     test_multi_provider_acl_permission_cache/1
 ]).
@@ -37,6 +38,7 @@
 groups() -> [
     {all_tests, [parallel], [
         test_expired_session,
+        test_acl_is_returned_with_resolved_names,
         test_multi_provider_posix_permission_cache,
         test_multi_provider_acl_permission_cache
     ]}
@@ -58,9 +60,9 @@ test_expired_session(_Config) ->
     Node = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
 
     UserId = oct_background:get_user_id(user2),
-    AccessToken = provider_onenv_test_utils:create_oz_temp_access_token(UserId),
+    AccessToken = provider_test_utils:create_oz_temp_access_token(UserId),
 
-    SessionId = provider_onenv_test_utils:create_session(Node, UserId, AccessToken),
+    SessionId = provider_test_utils:create_session(Node, UserId, AccessToken),
 
     SpaceName = oct_background:get_space_name(space1),
     FilePath = filepath_utils:join([<<"/">>, SpaceName, ?RAND_STR()]),
@@ -69,6 +71,43 @@ test_expired_session(_Config) ->
     ok = rpc:call(Node, session, delete, [SessionId]),
 
     ?assertMatch({error, ?EACCES}, lfm_proxy:open(Node, SessionId, ?FILE_REF(FileGuid), read)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% The name carried by an access control entity is not stored along with it -
+%% it is stripped when the acl is set and resolved anew from the identifier
+%% every time the acl is read (see acl:strip_names/1 and acl:add_names/1).
+%% @end
+%%--------------------------------------------------------------------
+test_acl_is_returned_with_resolved_names(_Config) ->
+    ProviderSelector = ?RAND_ELEMENT([krakow, paris]),
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+    SessionId = oct_background:get_user_session_id(user1, ProviderSelector),
+
+    SpaceName = oct_background:get_space_name(space1),
+    FilePath = filepath_utils:join([<<"/">>, SpaceName, ?RAND_STR()]),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessionId, FilePath)),
+
+    UserAce = ?ALLOW_ACE(
+        oct_background:get_user_id(user1),
+        ?no_flags_mask,
+        ?read_all_object_mask bor ?write_all_object_mask
+    ),
+    GroupAce = ?DENY_ACE(
+        oct_background:get_group_id(group1),
+        ?identifier_group_mask,
+        ?write_all_object_mask
+    ),
+    ?assertEqual(ok, lfm_proxy:set_acl(Node, SessionId, ?FILE_REF(FileGuid), [UserAce, GroupAce])),
+
+    ?assertEqual(
+        {ok, [
+            UserAce#access_control_entity{name = oct_background:get_user_fullname(user1)},
+            GroupAce#access_control_entity{name = oct_background:get_group_name(group1)}
+        ]},
+        lfm_proxy:get_acl(Node, SessionId, ?FILE_REF(FileGuid))
+    ).
 
 
 test_multi_provider_posix_permission_cache(_Config) ->

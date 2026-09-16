@@ -503,9 +503,23 @@
 -record(deletion_marker, {}).
 
 
+%% Everything a storage helper needs before LUMA substitutes the per-user
+%% credentials: the timeout and the two halves of the parameter set, kept as
+%% the flat binary maps the C++ helper layer consumes. helper_spec:describe/1
+%% turns those maps back into the contract's typed records.
+-record(helper_spec, {
+    name :: helper_spec:name(),
+    %% Undefined means the storage helper's own default applies.
+    timeout :: undefined | onedata_storage:operation_timeout(),
+    configuration = #{} :: helper_spec:configuration(),
+    credentials = #{} :: helper_spec:credentials()
+}).
+
+
 -record(storage_config, {
-    helper :: helpers:helper(),
-    luma_config :: storage:luma_config()
+    helper_spec :: helper_spec:t(),
+    luma_config :: storage:luma_config(),
+    luma_generation :: non_neg_integer()
 }).
 
 
@@ -797,7 +811,7 @@
     task_id :: traverse:id(),
     callback_module :: traverse:callback_module(),
     % storage traverse specific fields
-    storage_file_id :: helper:name(),
+    storage_file_id :: helper_spec:name(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
     iterator_module :: storage_traverse:iterator_type(),
@@ -1073,6 +1087,10 @@
     % incarnation is incremented every time when status is changed to initializing ;
     % it is used to evaluate if collection is outdated (see dir_stats_collection_behaviour:acquire/1)
     incarnation = 0 :: non_neg_integer(),
+
+    % number of times the initialization traverse has been automatically restarted due to errors
+    % in the current enable cycle; reset to 0 on every fresh transition to initializing
+    initialization_retry_count = 0 :: non_neg_integer(),
 
     % information about next status transition that is expected to be executed after ongoing transition is finished
     pending_status_transition :: dir_stats_service_state:pending_status_transition(),

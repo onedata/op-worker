@@ -12,7 +12,6 @@
 -module(quota_test_SUITE).
 -author("Rafal Slota").
 
--include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
@@ -887,9 +886,9 @@ get_space_mount_point(Worker, SpaceId) ->
     storage_mount_point(Worker, StorageId).
 
 storage_mount_point(Worker, StorageId) ->
-    Helper = rpc:call(Worker, storage, get_helper, [StorageId]),
-    HelperArgs = helper:get_args(Helper),
-    maps:get(<<"mountPoint">>, HelperArgs).
+    Helper = rpc:call(Worker, storage, get_helper_spec, [StorageId]),
+    ConfigurationParams = helper_spec:get_configuration(Helper),
+    maps:get(<<"mountPoint">>, ConfigurationParams).
 
 list_ended_transfers(Worker, SpaceId) ->
     {ok, List} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceId]),

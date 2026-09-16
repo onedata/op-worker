@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2022-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -17,7 +17,6 @@
 %% API
 -export([connect_to_provider_node/2]).
 -export([send_pod_status_report/2]).
--export([has_received_internal_server_error_push_message/1]).
 
 
 %%%===================================================================
@@ -38,9 +37,6 @@ send_pod_status_report(ClientRef, Batch) ->
     atm_openfaas_activity_feed_client_mock:send_report(ClientRef, atm_openfaas_function_pod_status_report, Batch).
 
 
--spec has_received_internal_server_error_push_message(test_websocket_client:client_ref()) -> boolean().
-has_received_internal_server_error_push_message(ClientRef) ->
-    node_cache:get({internal_server_error_received, ClientRef}, false).
 
 %%%===================================================================
 %%% Internal functions
@@ -52,7 +48,7 @@ has_received_internal_server_error_push_message(ClientRef) ->
     no_reply | {reply_text, binary()}.
 handle_push_message(ClientRef, <<"Internal server error while processing the request">>) ->
     % this push message is received when an error occurs during report processing
-    node_cache:put({internal_server_error_received, ClientRef}, true),
+    atm_openfaas_activity_feed_client_mock:record_internal_server_error_push_message(ClientRef),
     no_reply;
 handle_push_message(_ClientRef, Message) ->
     ct:print("Unexpected message in ~tp: ~ts", [?MODULE, Message]),

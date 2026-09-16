@@ -12,10 +12,9 @@
 -module(api_share_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -65,7 +64,7 @@ create_share_test(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
 
     {FileType, FileSpec} = generate_random_file_spec(),
-    FileInfo = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec),
+    FileInfo = file_tree_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec),
     FileGuid = FileInfo#object.guid,
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -96,8 +95,8 @@ create_share_test(_Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     % Operations should be rejected even before checking if share exists
                     % (in case of using share file id) so it is not necessary to use
                     % valid share id
@@ -170,7 +169,7 @@ build_create_share_validate_rest_call_result_fun(MemRef, Providers, FileType, Sp
 
         api_test_memory:set(MemRef, shares, [ShareId | api_test_memory:get(MemRef, shares, [])]),
 
-        ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"shares">>, ShareId]),
+        ExpLocation = rest_test_utils:build_rest_url(TestNode, [<<"shares">>, ShareId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers)),
 
         verify_share_doc(
@@ -232,7 +231,7 @@ get_share_test(_Config) ->
     {FileType, FileSpec} = generate_random_file_spec([
         #share_spec{name = ShareName, description = Description}
     ]),
-    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, SpaceId, FileSpec
     ),
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
@@ -303,7 +302,7 @@ get_share_test(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_share_prepare_rest_args_fun(ShareId) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ShareId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data),
 
         #rest_args{
             method = get,
@@ -317,7 +316,7 @@ build_get_share_prepare_rest_args_fun(ShareId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_share_prepare_gs_args_fun(ShareId, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data0),
 
         #gs_args{
             operation = get,
@@ -338,7 +337,7 @@ update_share_test(_Config) ->
     {FileType, FileSpec} = generate_random_file_spec([
         #share_spec{name = OriginalShareName, description = OriginalDescription}
     ]),
-    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid, shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, SpaceKrkParId, FileSpec
     ),
 
@@ -420,7 +419,7 @@ update_share_test(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_update_share_prepare_rest_args_fun(ShareId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data0),
 
         #rest_args{
             method = patch,
@@ -436,7 +435,7 @@ build_update_share_prepare_rest_args_fun(ShareId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_update_share_prepare_gs_args_fun(ShareId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data0),
 
         #gs_args{
             operation = update,
@@ -515,19 +514,19 @@ delete_share_test(_Config) ->
 
 %% @private
 -spec build_delete_share_setup_fun(
-    [oct_background:entity_placeholder()], oct_background:entity_id(), onenv_file_test_utils:file_spec(),
+    [oct_background:entity_placeholder()], oct_background:entity_id(), file_tree_test_utils:object_spec(),
     api_test_memory:mem_ref(), boolean()
 ) -> ok.
 build_delete_share_setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare) ->
     fun() ->
-        #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
+        #object{guid = FileGuid, shares = ShareIds} = file_tree_test_utils:create_and_sync_file_tree(
             ?HANDLE_CREATOR, SpaceId, FileSpec
         ),
         api_test_memory:set(MemRef, shares, ShareIds),
         api_test_memory:set(MemRef, file_guid, FileGuid),
 
         ZombieShare andalso begin
-            onenv_file_test_utils:rm_and_sync_file(?HANDLE_CREATOR, FileGuid),
+            file_tree_test_utils:rm_and_sync_file(?HANDLE_CREATOR, FileGuid),
             assert_zombie_shares_exist(ShareIds, ?HANDLE_CREATOR, Providers)
         end
     end.
@@ -539,7 +538,7 @@ build_delete_share_setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare) 
 build_delete_share_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         ShareId = choose_share_to_remove(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ShareId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data),
 
         #rest_args{
             method = delete,
@@ -554,7 +553,7 @@ build_delete_share_prepare_rest_args_fun(MemRef) ->
 build_delete_share_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ShareId = choose_share_to_remove(MemRef),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ShareId, Data0),
 
         #gs_args{
             operation = delete,
@@ -646,7 +645,7 @@ assert_zombie_shares_exist(ShareIds, UserSelector, Providers) ->
 
 share_root_accessed_via_public_data_mode_should_have_parent_set(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
-    #object{shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{shares = [ShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, SpaceId, #file_spec{shares = [#share_spec{}]}
     ),
 
@@ -670,14 +669,14 @@ share_root_accessed_via_public_data_mode_should_have_parent_set(_Config) ->
 
 %% @private
 -spec generate_random_file_spec() ->
-    {api_test_utils:file_type(), onenv_file_test_utils:file_spec()}.
+    {api_test_utils:file_type(), file_tree_test_utils:object_spec()}.
 generate_random_file_spec() ->
     generate_random_file_spec([]).
 
 
 %% @private
--spec generate_random_file_spec([onenv_file_test_utils:shares_spec()]) ->
-    {binary(), onenv_file_test_utils:file_spec()}.
+-spec generate_random_file_spec([file_tree_test_utils:share_spec()]) ->
+    {binary(), file_tree_test_utils:object_spec()}.
 generate_random_file_spec(ShareSpecs) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     case FileType of
@@ -847,7 +846,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 
 init_per_group(_Group, Config) ->

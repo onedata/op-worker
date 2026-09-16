@@ -47,12 +47,11 @@
 -type marker() :: binary().
 -type open_flag() :: rdwr | write | read.
 -type file_type_flag() :: reg | chr | blk | fifo | sock.
--type helper() :: #helper{}.
 -type helper_handle() :: #helper_handle{}.
 -type file_handle() :: #file_handle{}.
 -type stat() :: #statbuf{}.
 
--export_type([file_id/0, open_flag/0, file_type_flag/0, helper/0, helper_handle/0, file_handle/0,
+-export_type([file_id/0, open_flag/0, file_type_flag/0, helper_handle/0, file_handle/0,
     marker/0, stat/0]).
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
@@ -73,13 +72,13 @@
 %% record.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_handle(helper(), helper:user_ctx()) -> helper_handle().
-get_helper_handle(#helper{name = Name} = Helper, UserCtx) ->
-    {ok, Args} = helper:get_args_with_user_ctx(Helper, UserCtx),
-    {ok, Handle} = helpers_nif:get_helper_handle(Name, Args),
+-spec get_helper_handle(helper_spec:t(), helper_spec:credentials()) -> helper_handle().
+get_helper_handle(#helper_spec{name = Name} = HelperSpec, StorageCredentials) ->
+    {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, StorageCredentials),
+    {ok, Handle} = helpers_nif:get_helper_handle(Name, HelperParams),
     #helper_handle{
         handle = Handle,
-        timeout = helper:get_timeout(Helper)
+        timeout = helper_spec:get_effective_timeout(HelperSpec)
     }.
 
 %%--------------------------------------------------------------------
@@ -109,10 +108,10 @@ get_helper_cache_stats() ->
 %%--------------------------------------------------------------------
 -spec refresh_params(helper_handle() | file_handle(), map()) ->
     ok | {error, Reason :: term()}.
-refresh_params(#helper_handle{} = Handle, Args) ->
-    ?MODULE:apply_helper_nif(Handle, refresh_params, [Args]);
-refresh_params(#file_handle{} = Handle, Args) ->
-    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
+refresh_params(#helper_handle{} = Handle, HelperParams) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_params, [HelperParams]);
+refresh_params(#file_handle{} = Handle, HelperParams) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [HelperParams]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -351,8 +350,8 @@ open(#helper_handle{timeout = Timeout} = Handle, FileId, Flag) ->
 %%--------------------------------------------------------------------
 -spec refresh_helper_params(file_handle(), map()) ->
     ok | {error, Reason :: term()}.
-refresh_helper_params(Handle, Args) ->
-    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
+refresh_helper_params(Handle, HelperParams) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [HelperParams]).
 
 
 %%--------------------------------------------------------------------

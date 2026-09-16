@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -34,7 +34,7 @@
 -module(onenv_api_test_runner).
 -author("Bartosz Walkowicz").
 
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -42,6 +42,7 @@
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 -export([run_tests/1]).
+-export([get_rest_api_root/1, random_share_rest_api_root/1]).
 
 -type ct_config() :: proplists:proplist().
 
@@ -1074,7 +1075,20 @@ get_rest_endpoint(Node, ResourcePath) ->
 
 
 %%--------------------------------------------------------------------
-%% @private
+%% @doc
+%% Returns a randomly chosen REST API root suitable for accessing a publicly
+%% shared resource - either one of the given providers' own REST API, or the
+%% Onezone public-share redirector (which 302-redirects to a supporting
+%% provider). Lets tests exercise public share access without pinning it to a
+%% single concrete endpoint.
+%% @end
+%%--------------------------------------------------------------------
+-spec random_share_rest_api_root([node()]) -> URL :: binary().
+random_share_rest_api_root(ProviderNodes) ->
+    get_rest_api_root(lists_utils:random_element([?ONEZONE_TARGET_NODE | ProviderNodes])).
+
+
+%%--------------------------------------------------------------------
 %% @doc
 %% In case of rest_with_shared_guid, we also test the Onezone's endpoint that
 %% should redirect to the target endpoint in a supporting Oneprovider:
@@ -1089,9 +1103,7 @@ get_rest_endpoint(Node, ResourcePath) ->
 get_rest_api_root(?ONEZONE_TARGET_NODE) ->
     str_utils:format_bin("https://~ts/api/v3/onezone/shares/", [ozw_test_rpc:get_domain()]);
 get_rest_api_root(Node) ->
-    Port = api_test_utils:get_https_server_port_str(Node),
-    Domain = opw_test_rpc:get_provider_domain(Node),
-    str_utils:format_bin("https://~ts~ts/api/v3/oneprovider/", [Domain, Port]).
+    rest_test_utils:rest_api_root(Node).
 
 
 %% @private

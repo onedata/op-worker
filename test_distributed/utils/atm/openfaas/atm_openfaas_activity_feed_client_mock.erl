@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2022-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -24,6 +24,10 @@
 -export([connect_to_url/4]).
 -export([send_text/2]).
 -export([send_report/3]).
+-export([
+    record_internal_server_error_push_message/1,
+    has_received_internal_server_error_push_message/1
+]).
 
 
 %%%===================================================================
@@ -58,6 +62,17 @@ connect_to_provider_node(NodeSelector, ClientType, BasicAuthorization, PushMessa
 connect_to_url(Url, BasicAuthorization, TransportOpts, PushMessageHandler) ->
     Headers = build_headers(BasicAuthorization),
     test_websocket_client:connect_to_url(Url, Headers, TransportOpts, PushMessageHandler).
+
+
+%% @doc Push message received when an error occurs during report processing.
+-spec record_internal_server_error_push_message(test_websocket_client:client_ref()) -> ok.
+record_internal_server_error_push_message(ClientRef) ->
+    node_cache:put({internal_server_error_received, ClientRef}, true).
+
+
+-spec has_received_internal_server_error_push_message(test_websocket_client:client_ref()) -> boolean().
+has_received_internal_server_error_push_message(ClientRef) ->
+    node_cache:get({internal_server_error_received, ClientRef}, false).
 
 
 %% @private

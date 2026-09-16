@@ -12,7 +12,7 @@
 -module(api_file_ls_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -92,7 +92,7 @@ get_dir_children_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, undefined, get_children_data_spec(gs, private)
             )
         },
@@ -110,7 +110,7 @@ get_dir_children_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, undefined, get_children_data_spec(rest, private)
             )
         },
@@ -160,7 +160,7 @@ get_shared_dir_children_test(Config) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, ShareId, get_children_data_spec(gs, public)
             )
         },
@@ -177,7 +177,7 @@ get_shared_dir_children_test(Config) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, ShareId, get_children_data_spec(rest, public)
             )
         }
@@ -268,7 +268,7 @@ get_file_children_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, undefined, get_children_data_spec(gs, private)
             )
         },
@@ -295,7 +295,7 @@ get_file_children_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, undefined, get_children_data_spec(rest, private)
             )
         },
@@ -362,7 +362,7 @@ get_shared_file_children_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, ShareId, get_children_data_spec(rest, public)
             )
         },
@@ -377,7 +377,7 @@ get_shared_file_children_test(Config) ->
                     validate_result_fun = fun(#api_test_ctx{node = Node}, {ok, Result}) ->
                         ProviderId = opw_test_rpc:get_provider_id(Node),
                         ?assertEqual(#{
-                            <<"children">> => [api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, FileAttr1)],
+                            <<"children">> => [api_file_attr_test_utils:file_attr_to_json(ShareId, gs, ProviderId, FileAttr1)],
                             <<"isLast">> => true
                         }, Result)
                     end
@@ -394,7 +394,7 @@ get_shared_file_children_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, ShareId, get_children_data_spec(gs, public)
             )
         }
@@ -592,7 +592,7 @@ get_children_data_spec(rest, Scope, IsSpace) ->
 build_get_children_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
+        {Id, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         RestPath = <<"data/", Id/binary, "/children">>,
     
@@ -640,7 +640,7 @@ build_get_children_attrs_prepare_gs_args_fun(FileGuid, Scope) ->
     onenv_api_test_runner:prepare_args_fun().
 build_prepare_gs_args_fun(FileGuid, Aspect, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = get,
@@ -700,7 +700,7 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Node) -
                     };
                 _ ->
                     maps:with(utils:ensure_list(Attributes),
-                        api_test_utils:file_attr_to_json(ShareId, Format, ProviderId, Attrs))
+                        api_file_attr_test_utils:file_attr_to_json(ShareId, Format, ProviderId, Attrs))
             end,
             MappedChildAttrs2 = case space_dir:is_special(guid, Guid) of
                 % do not check localReplicationRate for space dirs as it might be difficult to determine actual correct value

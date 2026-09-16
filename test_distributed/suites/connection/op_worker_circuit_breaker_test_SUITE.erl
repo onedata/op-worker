@@ -12,13 +12,14 @@
 -module(op_worker_circuit_breaker_test_SUITE).
 -author("Katarzyna Such").
 
--include("api_file_test_utils.hrl").
--include("cdmi_test.hrl").
+-include("api/api_test_runner.hrl").
+-include("cdmi/cdmi_test.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
 -define(PROVIDER_SELECTOR, krakow).
+-define(ATTEMPTS, 100).
 -define(LOW_GUI_UPLOAD_RETRY_INTERVAL_SECONDS, 2).
 
 %% API

@@ -45,7 +45,10 @@ get(FileCtx, #provider_dir_distribution_get_request{
                 true ->
                     undefined;
                 false ->
-                    ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), StorageId, ?POSIX_COMPATIBLE_HELPERS)
+                    ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(
+                        ?err_ctx(), StorageId,
+                        storage_type:list_types_with_capability(posix_compatible)
+                    )
             end;
         DirLocationDoc ->
             dir_location:get_storage_file_id(DirLocationDoc)

@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2022-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -22,13 +22,14 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% API
 -export([
     init/5,
     expect/2,
+    matches_with_backend/1,
     assert_matches_with_backend/1, assert_matches_with_backend/2,
     assert_deleted/1
 ]).
@@ -37,12 +38,10 @@
 
     set_current_lane_run/3,
 
-    get_task_selector/2,
     get_task_schema_id/2,
     get_task_id/2,
     get_task_stats/2,
-    adjust_abruptly_stopped_task_stats/1,
-    get_task_status/2
+    adjust_abruptly_stopped_task_stats/1
 ]).
 
 % json object similar in structure to translations returned via API endpoints
@@ -230,8 +229,11 @@ expect(ExpStateCtx0, {task, AtmTaskExecutionIdOrSelector, items_scheduled, ItemC
         fun expect_task_transitioned_to_active_status_if_was_in_pending_status/2,
         fun expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status/2
     ]),
+    % NOTE: 'stopping' task also counts - the backend registers every batch that
+    % was dispatched before the task's own status changed, and such batch is
+    % reported to the test only after it has already been registered
     case get_task_status(AtmTaskExecutionId, ExpStateCtx1) of
-        <<"active">> ->
+        Status when Status =:= <<"active">>; Status =:= <<"stopping">> ->
             ExpAtmTaskExecutionStateDiff = fun(AtmTaskExecution = #{<<"itemsInProcessing">> := IIP}) ->
                 AtmTaskExecution#{<<"itemsInProcessing">> => IIP + ItemCount}
             end,
@@ -451,6 +453,18 @@ expect(ExpStateCtx, Expectations) when is_list(Expectations) ->
     end, ExpStateCtx, Expectations).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Tells whether the expectations match the data stored in op without reporting
+%% any mismatch found - suitable for callers that treat a mismatch as a state
+%% that may still resolve itself rather than an immediate failure.
+%% @end
+%%--------------------------------------------------------------------
+-spec matches_with_backend(ctx()) -> boolean().
+matches_with_backend(ExpStateCtx) ->
+    assert_matches_with_backend_internal(ExpStateCtx, fun(_, _) -> ok end).
+
+
 -spec assert_matches_with_backend(ctx()) -> boolean().
 assert_matches_with_backend(ExpStateCtx) ->
     assert_matches_with_backend(ExpStateCtx, 0).
@@ -461,7 +475,7 @@ assert_matches_with_backend(ExpStateCtx, 0) ->
     assert_matches_with_backend_internal(ExpStateCtx, fun ct:pal/2);
 
 assert_matches_with_backend(ExpStateCtx, Retries) ->
-    case assert_matches_with_backend_internal(ExpStateCtx, fun(_, _) -> ok end) of
+    case matches_with_backend(ExpStateCtx) of
         true ->
             true;
         false ->
@@ -490,19 +504,6 @@ set_current_lane_run(AtmLaneIndex, AtmRunNum, ExpState) ->
         current_lane_index = AtmLaneIndex,
         current_run_num = AtmRunNum
     }.
-
-
--spec get_task_selector(atm_task_execution:id(), ctx()) -> task_selector().
-get_task_selector(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
-    exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
-}) ->
-    #exp_task_execution_state_ctx{
-        lane_run_selector = AtmLaneRunSelector,
-        parallel_box_schema_id = AtmParallelBoxSchemaId,
-        exp_state = #{<<"schemaId">> := AtmTaskSchemaId}
-    } = maps:get(AtmTaskExecutionId, ExpAtmTaskExecutionsRegistry),
-
-    {AtmLaneRunSelector, AtmParallelBoxSchemaId, AtmTaskSchemaId}.
 
 
 -spec get_task_schema_id(atm_task_execution:id(), ctx()) -> automation:id().
@@ -551,16 +552,6 @@ adjust_abruptly_stopped_task_stats(ExpAtmTaskExecutionState = #{
         <<"itemsProcessed">> => ItemsProcessed + ItemsInProcessing,
         <<"itemsFailed">> => ItemsFailed + ItemsInProcessing
     }.
-
-
--spec get_task_status(atm_task_execution:id(), ctx()) -> binary().
-get_task_status(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
-    exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
-}) ->
-    #exp_task_execution_state_ctx{exp_state = #{<<"status">> := ExpStatus}} = maps:get(
-        AtmTaskExecutionId, ExpAtmTaskExecutionsRegistry
-    ),
-    ExpStatus.
 
 
 %%%===================================================================
@@ -762,10 +753,22 @@ expect_current_lane_run_started_preparing(ExpStateCtx0, AtmLaneRunSelector) ->
     ExpStateCtx1 = update_exp_lane_run_state(ExpStateCtx0, AtmLaneRunSelector, #{
         <<"status">> => <<"preparing">>}
     ),
-    update_exp_workflow_execution_state(ExpStateCtx1, #{
-        <<"status">> => <<"active">>,
-        <<"startTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx1))
-    }).
+    % 'startTime' is stamped by the backend once, when the execution enters the ongoing
+    % phase (@see atm_workflow_execution_status:set_times_on_phase_transition/1), and
+    % every following lane run only finds it already set. Restamping it here would pit
+    % a validator built around the current time against a timestamp from the beginning
+    % of the execution - a mismatch as soon as the two drift apart far enough.
+    update_exp_workflow_execution_state(ExpStateCtx1, fun
+        (ExpAtmWorkflowExecutionState = #{<<"startTime">> := 0}) ->
+            ExpAtmWorkflowExecutionState#{
+                <<"status">> => <<"active">>,
+                <<"startTime">> => build_timestamp_field_validator(get_timestamp_seconds(
+                    ExpStateCtx1
+                ))
+            };
+        (ExpAtmWorkflowExecutionState) ->
+            ExpAtmWorkflowExecutionState#{<<"status">> => <<"active">>}
+    end).
 
 
 %% @private
@@ -1628,3 +1631,14 @@ assert_json_expectations(Path, Expected, Value, LogFun) ->
             ]),
             throw(badmatch)
     end.
+
+
+%% @private
+-spec get_task_status(atm_task_execution:id(), ctx()) -> binary().
+get_task_status(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
+    exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
+}) ->
+    #exp_task_execution_state_ctx{exp_state = #{<<"status">> := ExpStatus}} = maps:get(
+        AtmTaskExecutionId, ExpAtmTaskExecutionsRegistry
+    ),
+    ExpStatus.

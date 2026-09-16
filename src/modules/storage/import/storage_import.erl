@@ -297,14 +297,16 @@ assert_auto_storage_import_supported(SpaceId) ->
     case space_logic:get_local_supporting_storage(SpaceId) of
         {ok, StorageId} ->
             assert_imported_storage(StorageId),
-            Helper = storage:get_helper(StorageId),
-            case helper:is_auto_import_supported(Helper) of
+            HelperSpec = storage:get_helper_spec(StorageId),
+            case helper_spec:is_auto_import_supported(HelperSpec) of
                 true ->
                     ok;
                 false ->
                     throw(?ERR_AUTO_STORAGE_IMPORT_NOT_SUPPORTED(
-                        ?err_ctx(), StorageId, ?AUTO_IMPORT_HELPERS, ?AUTO_IMPORT_OBJECT_HELPERS)
-                    )
+                        ?err_ctx(), StorageId,
+                        storage_type:list_types_with_capability(auto_import),
+                        storage_type:list_types_with_capabilities([auto_import, object_storage])
+                    ))
             end;
         Error ->
             throw(Error)
@@ -316,12 +318,15 @@ assert_manual_storage_import_supported(SpaceId) ->
     case space_logic:get_local_supporting_storage(SpaceId) of
         {ok, StorageId} ->
             assert_imported_storage(StorageId),
-            Helper = storage:get_helper(StorageId),
-            case helper:is_file_registration_supported(Helper) of
+            HelperSpec = storage:get_helper_spec(StorageId),
+            case helper_spec:is_file_registration_supported(HelperSpec) of
                 true ->
                     ok;
                 false ->
-                    throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(?err_ctx(), StorageId, ?OBJECT_HELPERS))
+                    throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(
+                        ?err_ctx(), StorageId,
+                        storage_type:list_types_with_capability(object_storage)
+                    ))
             end;
         Error ->
             throw(Error)

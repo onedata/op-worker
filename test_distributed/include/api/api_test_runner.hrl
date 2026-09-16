@@ -1,0 +1,196 @@
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Definitions of macros and records used in API (REST + gs) tests.
+%%% @end
+%%%-------------------------------------------------------------------
+
+-ifndef(API_TEST_RUNNER_HRL).
+-define(API_TEST_RUNNER_HRL, 1).
+
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
+
+
+-record(client_spec, {
+    correct = [] :: [aai:auth() | onenv_api_test_runner:client_placeholder()],
+    % list of clients unauthorized to perform operation. By default it is assumed
+    % that ?ERR_UNAUTHORIZED is returned when executing operation on their behalf
+    % but it is possible to specify concrete error if necessary (edge cases).
+    unauthorized = [] :: [
+        aai:auth() |
+        onenv_api_test_runner:client_placeholder() |
+        {aai:auth() | onenv_api_test_runner:client_placeholder(), errors:error()}
+    ],
+    % list of clients (members of space in context of which operation is performed)
+    % forbidden to perform operation. By default it is assumed that ?ERR_FORBIDDEN
+    % is returned when executing operation on their behalf but it is possible to
+    % specify concrete error if necessary (edge cases).
+    forbidden_in_space = [] :: [
+        aai:auth() |
+        onenv_api_test_runner:client_placeholder() |
+        {aai:auth() | onenv_api_test_runner:client_placeholder(), errors:error()}
+    ],
+    % list of clients (not in space in context of which operation is performed)
+    % forbidden to perform operation. By default it is assumed that ?ERR_FORBIDDEN
+    % is returned when executing operation on their behalf but it is possible to
+    % specify concrete error if necessary (edge cases).
+    forbidden_not_in_space = [] :: [
+        aai:auth() |
+        onenv_api_test_runner:client_placeholder() |
+        {aai:auth() | onenv_api_test_runner:client_placeholder(), errors:error()}
+    ],
+    supported_clients_per_node :: #{node() => [aai:auth()]}
+}).
+
+-record(data_spec, {
+    required = [] :: [Key :: binary()],
+    optional = [] :: [Key :: binary()],
+    at_least_one = [] :: [Key :: binary()],
+    % Some endpoints behave differently when some optional parameters (discriminators) are provided
+    % e.g. optional parameters may became required or new parameters may be available.
+    % NOTE: it is assumed, that all provided keys form a single discriminator, i.e. all of them will
+    % be added to each request. In order to test behaviour for different discriminator new data_spec must be provided.
+    % During tests value for each discriminator key is selected randomly from those specified in correct_values.
+    discriminator = [] :: [Key :: binary()],
+    correct_values = #{} :: #{Key :: binary() => Values :: [binary()]},
+    bad_values = [] :: [{
+        Key :: binary(),
+        Value :: term(),
+        errors:error() | {onenv_api_test_runner:scenario_type(), errors:error()}
+    }],
+    % by default (`relaxed`) datasets from the optional values are generated as follows:
+    % - one dataset for each key-value pair
+    % - one dataset containing each key with randomly selected value;
+    % e.g:
+    % given
+    %   optional = [<<"key1">>, <<"key2">>]
+    %   correct_values = #{<<"key1">> => [<<"value1">>, <<"value2">>], <<"key2">> => [<<"value1">>]}
+    % following datasets could be generated:
+    %  #{<<"key1">> => <<"value1">>},
+    %  #{<<"key1">> => <<"value2">>},
+    %  #{<<"key2">> => <<"value1">>},
+    %  #{<<"key1">> => <<"value1">>, #{<<"key2">> => <<"value1">>}
+    % with `all_combinations` option following datasets will be generated (empty dataset is omitted):
+    %  #{<<"key1">> => <<"value1">>},
+    %  #{<<"key1">> => <<"value2">>},
+    %  #{<<"key2">> => <<"value1">>},
+    %  #{<<"key1">> => <<"value1">>, #{<<"key2">> => <<"value1">>}
+    %  #{<<"key1">> => <<"value2">>, #{<<"key2">> => <<"value1">>}
+    % NOTE: calculation of all combinations can take same time (because of naïve implementation),
+    % so it is not recommended to use with more than 10 total correct values for optional keys.
+    optional_values_data_sets = relaxed :: relaxed | all_combinations
+}).
+
+-record(rest_args, {
+    method :: get | patch | post | put | delete,
+    path :: binary(),
+    headers = #{} :: #{Key :: binary() => Value :: binary()},
+    body = <<>> :: binary()
+}).
+
+-record(gs_args, {
+    operation :: gs_protocol:operation(),
+    gri :: gri:gri(),
+    auth_hint = undefined :: gs_protocol:auth_hint(),
+    data = undefined :: undefined | map()
+}).
+
+-record(api_test_ctx, {
+    scenario_name :: binary(),
+    scenario_type :: onenv_api_test_runner:scenario_type(),
+    node :: node(),
+    client :: aai:auth(),
+    data :: map()
+}).
+
+-record(scenario_spec, {
+    name :: binary(),
+    type :: onenv_api_test_runner:scenario_type(),
+    target_nodes :: onenv_api_test_runner:target_nodes(),
+    client_spec :: onenv_api_test_runner:client_spec(),
+
+    setup_fun = fun() -> ok end :: onenv_api_test_runner:setup_fun(),
+    teardown_fun = fun() -> ok end :: onenv_api_test_runner:teardown_fun(),
+    verify_fun = fun(_, _) -> true end :: onenv_api_test_runner:verify_fun(),
+
+    prepare_args_fun :: onenv_api_test_runner:prepare_args_fun(),
+    validate_result_fun :: onenv_api_test_runner:validate_call_result_fun(),
+
+    data_spec = undefined :: undefined | onenv_api_test_runner:data_spec()
+}).
+
+-record(scenario_template, {
+    name :: binary(),
+    type :: onenv_api_test_runner:scenario_type(),
+    prepare_args_fun :: onenv_api_test_runner:prepare_args_fun(),
+    validate_result_fun :: onenv_api_test_runner:validate_call_result_fun()
+}).
+
+-record(suite_spec, {
+    target_nodes :: onenv_api_test_runner:target_nodes(),
+    client_spec :: onenv_api_test_runner:client_spec(),
+
+    setup_fun = fun() -> ok end :: onenv_api_test_runner:setup_fun(),
+    teardown_fun = fun() -> ok end :: onenv_api_test_runner:teardown_fun(),
+    verify_fun = fun(_, _) -> true end :: onenv_api_test_runner:verify_fun(),
+
+    scenario_templates = [] :: [onenv_api_test_runner:scenario_template()],
+    % If set then instead of running all scenarios for all clients and data sets
+    % only one scenario will be drawn from 'scenario_templates' for client and
+    % data set combination. For 2 clients (client1, client2), 2 data sets (data1,
+    % data2), 2 providers (provider1, provider2) and 2 scenario_templates (A, B)
+    % only 4 testcase will be run (instead of 8 in case of flag not set), e.g.:
+    % - client1 makes call with data1 on provider1 using scenario B
+    % - client1 makes call with data2 on provider2 using scenario A
+    % - client2 makes call with data1 on provider2 using scenario A
+    % - client2 makes call with data2 on provider1 using scenario B
+    randomly_select_scenarios = false,
+
+    data_spec = undefined :: undefined | onenv_api_test_runner:data_spec()
+}).
+
+-define(CLIENT_SPEC_FOR_SPACE_KRK, #client_spec{
+    correct = [user1, user3, user4],
+    unauthorized = [nobody],
+    forbidden_not_in_space = [user2]
+}).
+
+-define(CLIENT_SPEC_FOR_SPACE_KRK_PAR(__ERRNO), #client_spec{
+    correct = [
+        user2, % space owner - doesn't need any perms
+        user3  % files owner (see fun create_shared_file/1)
+    ],
+    unauthorized = [nobody],
+    forbidden_not_in_space = [user1],
+    forbidden_in_space = [{user4, ?ERR_POSIX(__ERRNO)}]
+}).
+-define(CLIENT_SPEC_FOR_SPACE_KRK_PAR, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EACCES)).
+
+-define(CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS, #client_spec{
+    correct = [nobody, user1, user2, user3, user4]
+}).
+
+-define(CLIENT_SPEC_FOR_SHARES, ?CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS).
+
+-define(SPACE_KRK, <<"space_krk">>).
+-define(SPACE_KRK_PAR, <<"space_krk_par">>).
+
+-define(REST_ERROR(__ERROR), #{<<"error">> => errors:to_json(__ERROR)}).
+
+-define(RANDOM_FILE_NAME(), generator:gen_name()).
+-define(RANDOM_FILE_TYPE(), lists_utils:random_element([<<"file">>, <<"dir">>])).
+
+% used only for rest_with_shared_guid scenario type to indicate that the request
+% should be made to Onezone, which should redirect the client back to a suitable provider
+-define(ONEZONE_TARGET_NODE, onezone_target_node).
+
+
+-endif.

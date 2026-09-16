@@ -13,7 +13,7 @@
 -author("Jakub Kudzia").
 
 
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
@@ -213,7 +213,7 @@ create_archivisation_tree(_Config) ->
     lists_utils:pforeach(fun({Provider, Data}) ->
         Node = oct_background:get_random_provider_node(Provider),
         lists_utils:pforeach(fun({DatasetId, ArchiveId, UserId}) ->
-            archive_tests_utils:create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId)
+            archive_test_utils:create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId)
         end, Data)
     end, [{P1, P1Data}, {P2, P2Data}]),
 
@@ -222,7 +222,7 @@ create_archivisation_tree(_Config) ->
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
         lists_utils:pforeach(fun({DatasetId, ArchiveId, UserId}) ->
-            archive_tests_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?ATTEMPTS)
+            archive_check_test_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?ATTEMPTS)
         end, MockedData)
     end, Providers).
 
@@ -391,7 +391,7 @@ archive_dataset_attached_to_dir_test_base(Layout, IncludeDip) ->
         dataset = #dataset_object{
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
-        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+        }} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
             dataset = #dataset_spec{archives = [
                 #archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}
             ]},
@@ -406,7 +406,7 @@ archive_dataset_attached_to_file_test_base(Layout, IncludeDip) ->
         dataset = #dataset_object{
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
-        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
+        }} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
         dataset = #dataset_spec{archives = [#archive_spec{
             config = #archive_config{layout = Layout, include_dip = IncludeDip}
         }]},
@@ -421,7 +421,7 @@ archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     SpaceDirGuid = space_dir:guid(SpaceId),
     Size = 20,
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
         content = ?RAND_CONTENT(Size)
     }),
     {ok, #file_attr{guid = LinkGuid}} =
@@ -429,14 +429,14 @@ archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
     Json = ?RAND_JSON_METADATA(),
     ok = opt_file_metadata:set_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), json, Json, []),
     UserId = oct_background:get_user_id(?USER1),
-    onenv_file_test_utils:await_file_metadata_sync(oct_background:get_space_supporting_providers(?SPACE), UserId, #object{
+    file_tree_test_utils:await_file_metadata_sync(oct_background:get_space_supporting_providers(?SPACE), UserId, #object{
         guid = LinkGuid,
         metadata = #metadata_object{json = Json}
     }),
     #dataset_object{
         id = DatasetId,
         archives = [#archive_object{id = ArchiveId}]
-    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, LinkGuid, #dataset_spec{archives = [#archive_spec{
+    } = dataset_test_utils:set_up_and_sync_dataset(?USER1, LinkGuid, #dataset_spec{archives = [#archive_spec{
         config = #archive_config{layout = Layout, include_dip = IncludeDip}
     }]}),
 
@@ -459,7 +459,7 @@ archive_dataset_containing_symlink_to_directory_test_base(Layout, IncludeDip, Fo
     archive_dataset_containing_symlink_test_base(Layout, IncludeDip, FollowSymlinks, TargetSpec, Strategy).
 
 archive_dataset_containing_symlink_test_base(Layout, IncludeDip, FollowSymlinks, TargetSpec, Strategy) ->
-    #object{name = TargetName, content = Content} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, TargetSpec),
+    #object{name = TargetName, content = Content} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, TargetSpec),
     SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(oct_background:get_space_id(?SPACE)),
     LinkTarget = filename:join([SpaceIdPrefix, TargetName]),
     DatasetSpec = #dataset_spec{archives = [#archive_spec{
@@ -483,7 +483,7 @@ archive_dataset_containing_symlink_test_base(Layout, IncludeDip, FollowSymlinks,
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, Spec),
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, Spec),
     {FileCount, ExpSize} = case {Content, FollowSymlinks} of
         {_, false} -> {1, 0};
         {undefined, _} -> {0, 0};
@@ -497,10 +497,10 @@ archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId, FileCount, ExpSize,
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
         UserId = oct_background:get_user_id(?USER1),
-        archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
-        archive_tests_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?ATTEMPTS),
-        archive_tests_utils:assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, FollowSymlinks, 2 * ?ATTEMPTS),
-        archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize, ?ATTEMPTS)
+        archive_check_test_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+        archive_check_test_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?ATTEMPTS),
+        archive_check_test_utils:assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, FollowSymlinks, 2 * ?ATTEMPTS),
+        archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize, ?ATTEMPTS)
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
 archive_nested_datasets_test_base(ArchiveLayout, IncludeDip) ->
@@ -540,7 +540,7 @@ archive_nested_datasets_test_base(ArchiveLayout, IncludeDip) ->
                 dataset = #dataset_object{id = DatasetDir22Id}
             }
         ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{ % dataset
             dataset = #dataset_spec{archives = [#archive_spec{
                 config = #archive_config{
@@ -601,11 +601,11 @@ archive_nested_datasets_test_base(ArchiveLayout, IncludeDip) ->
     ArchiveDir11Bytes = File21Size + File41Size + File42Size,
     ArchiveDir31Bytes = File41Size + File42Size,
 
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir11Id, DatasetDir11Id, Dir11Guid, 3, ArchiveDir11Bytes, ?ATTEMPTS),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveFile21Id, DatasetFile21Id, File21Guid, 1, File21Size, ?ATTEMPTS),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir22Id,  DatasetDir22Id, Dir22Guid, 0, 0, ?ATTEMPTS),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir31Id, DatasetDir31Id, Dir31Guid, 2, ArchiveDir31Bytes, ?ATTEMPTS),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveFile41Id, DatasetFile41Id, File41Guid, 1, File41Size, ?ATTEMPTS).
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir11Id, DatasetDir11Id, Dir11Guid, 3, ArchiveDir11Bytes, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveFile21Id, DatasetFile21Id, File21Guid, 1, File21Size, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir22Id,  DatasetDir22Id, Dir22Guid, 0, 0, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveDir31Id, DatasetDir31Id, Dir31Guid, 2, ArchiveDir31Bytes, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveFile41Id, DatasetFile41Id, File41Guid, 1, File41Size, ?ATTEMPTS).
 
 
 simple_incremental_archive_test_base(Layout, Modifications) ->
@@ -615,7 +615,7 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
         dataset = #dataset_object{
             id = DatasetId,
             archives = [#archive_object{id = BaseArchiveId}]
-        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, 
+        }} = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, 
             #dir_spec{
                 dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]},
                 children = [#file_spec{
@@ -624,7 +624,7 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
                     metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
                 }]
             }, paris),
-    archive_tests_utils:assert_archive_state(BaseArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_state(BaseArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
     Node = oct_background:get_random_provider_node(krakow),
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
     ModifiedFiles = lists:usort(lists:map(fun
@@ -648,14 +648,14 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
         incremental = #{<<"enabled">> => true, <<"basedOn">> => BaseArchiveId},
         layout = Layout
     }, <<>>),
-    archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
-    archive_tests_utils:assert_incremental_archive_links(BaseArchiveId, ArchiveId, ModifiedFiles),
+    archive_check_test_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    archive_check_test_utils:assert_incremental_archive_links(BaseArchiveId, ArchiveId, ModifiedFiles),
     {ok, Children} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(DirGuid), 0, 10),
     {FilesNum, TotalSize} = lists:foldl(fun({Guid, _}, {AccNum, AccSize}) ->
         {ok, #file_attr{size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
         {AccNum + 1, AccSize + Size}
     end, {0, 0}, Children),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DirGuid, FilesNum, TotalSize, ?ATTEMPTS).
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DirGuid, FilesNum, TotalSize, ?ATTEMPTS).
 
 
 nested_incremental_archive_test_base(Layout) ->
@@ -675,7 +675,7 @@ nested_incremental_archive_test_base(Layout) ->
                 children = [#object{guid = FileGuid2}]
             }
         ]
-        } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+        } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, create_nested_archives = true}}]},
             children = [
@@ -691,7 +691,7 @@ nested_incremental_archive_test_base(Layout) ->
                 }
             ]
         }, paris),
-    archive_tests_utils:assert_archive_state(TopBaseArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_state(TopBaseArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
     Node = oct_background:get_random_provider_node(krakow),
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
     
@@ -715,13 +715,13 @@ nested_incremental_archive_test_base(Layout) ->
     {ok, #file_attr{size = Size1}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid1)),
     {ok, #file_attr{size = Size2}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid2)),
     
-    archive_tests_utils:assert_archive_state(TopArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
-    archive_tests_utils:assert_incremental_archive_links(TopBaseArchiveId, TopArchiveId, []),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, TopArchiveId, TopDatasetId, TopDirGuid, 2, Size1 + Size2, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_state(TopArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    archive_check_test_utils:assert_incremental_archive_links(TopBaseArchiveId, TopArchiveId, []),
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, TopArchiveId, TopDatasetId, TopDirGuid, 2, Size1 + Size2, ?ATTEMPTS),
     
-    archive_tests_utils:assert_archive_state(NestedArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
-    archive_tests_utils:assert_incremental_archive_links(NestedBaseArchiveId, NestedArchiveId, []),
-    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, NestedArchiveId, NestedDatasetId, NestedDirGuid, 1, Size2, ?ATTEMPTS).
+    archive_check_test_utils:assert_archive_state(NestedArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    archive_check_test_utils:assert_incremental_archive_links(NestedBaseArchiveId, NestedArchiveId, []),
+    archive_check_test_utils:assert_archive_is_preserved(Node, SessionId, NestedArchiveId, NestedDatasetId, NestedDirGuid, 1, Size2, ?ATTEMPTS).
 
 
 modify_preserved_archive_test_base(Layout) ->
@@ -729,7 +729,7 @@ modify_preserved_archive_test_base(Layout) ->
         dataset = #dataset_object{
             archives = [#archive_object{id = ArchiveId}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]},
             children = [#file_spec{content = ?RAND_CONTENT(), metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}]
@@ -755,7 +755,7 @@ share_archive_dir_test_base(Layout) ->
         dataset = #dataset_object{
             archives = [#archive_object{id = ArchiveId}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+    } = file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]}
         }),
@@ -774,19 +774,20 @@ share_archive_dir_test_base(Layout) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_check_test_utils, dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op-archive",
             envs = [{op_worker, op_worker, [
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
                 {provider_token_ttl_sec, 24 * 60 * 60},
-                {dir_stats_collector_race_preventing_time, 2000}
+                {dir_stats_collector_race_preventing_time, 2000},
+                {archivisation_verbose_logs_enabled, true}
             ]}]
         }).
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 
 init_per_group(_Group, Config) ->
