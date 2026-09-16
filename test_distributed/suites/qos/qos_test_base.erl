@@ -68,8 +68,8 @@
     qos_status_after_failed_transfer/1,
     qos_status_after_failed_transfer_deleted_file/1,
     qos_status_after_failed_transfer_deleted_entry/1,
-    qos_transfer_of_file_with_deleted_local_location_test_base/2,
-    qos_status_after_synchronization_not_found_test_base/2,
+    qos_transfer_of_file_with_deleted_local_location_test_base/1,
+    qos_status_after_synchronization_not_found_test_base/1,
 
     % QoS with hardlinks test bases
     qos_with_hardlink_test_base/1,
@@ -1516,9 +1516,9 @@ qos_status_after_failed_transfer_deleted_entry(TargetProvider) ->
 %% on another provider and the deletion was propagated here by dbsync).
 %% @end
 %%--------------------------------------------------------------------
--spec qos_transfer_of_file_with_deleted_local_location_test_base(od_provider:id(), binary()) -> ok.
-qos_transfer_of_file_with_deleted_local_location_test_base(TargetProvider, FileContent) ->
-    [Provider1 | _] = oct_background:get_provider_ids(),
+-spec qos_transfer_of_file_with_deleted_local_location_test_base(binary()) -> ok.
+qos_transfer_of_file_with_deleted_local_location_test_base(FileContent) ->
+    [Provider1, TargetProvider | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     TargetNode = oct_background:get_random_provider_node(TargetProvider),
     Name = generator:gen_name(),
@@ -1567,9 +1567,9 @@ qos_transfer_of_file_with_deleted_local_location_test_base(TargetProvider, FileC
 %% not influence the tested code path - only qos_traverse error handling is verified here.
 %% @end
 %%--------------------------------------------------------------------
--spec qos_status_after_synchronization_not_found_test_base(od_provider:id(), binary()) -> ok.
-qos_status_after_synchronization_not_found_test_base(TargetProvider, FileContent) ->
-    [Provider1 | _] = oct_background:get_provider_ids(),
+-spec qos_status_after_synchronization_not_found_test_base(binary()) -> ok.
+qos_status_after_synchronization_not_found_test_base(FileContent) ->
+    [Provider1, TargetProvider | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     % literal error tuple, as returned by replica_synchronizer for a file
     % with a deleted local location
