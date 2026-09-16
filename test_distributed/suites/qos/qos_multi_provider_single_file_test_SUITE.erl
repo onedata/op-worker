@@ -411,9 +411,9 @@ basic_qos_reconciliation_test_base(DirStructureType) ->
     StoragePaths = lists:map(fun({Guid, Path}) ->
         % remove leading slash and space id
         [_, _ | PathTokens] = binary:split(Path, <<"/">>, [global]),
-        StoragePath = storage_file_path(oct_background:get_random_provider_node(Provider2),
-            SpaceId, filename:join(PathTokens)),
-        ?assertEqual({ok, ?QOS_TEST_DATA}, read_file(oct_background:get_random_provider_node(Provider2), StoragePath)),
+        Provider2Node = oct_background:get_random_provider_node(Provider2),
+        StoragePath = storage_test_utils:file_path(Provider2Node, SpaceId, filename:join(PathTokens)),
+        ?assertEqual({ok, ?QOS_TEST_DATA}, storage_test_utils:read_file(Provider2Node, StoragePath)),
         {ok, FileHandle} = lfm_proxy:open(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Guid), write),
         {ok, _} = lfm_proxy:write(P1Node, FileHandle, 0, NewData),
         ok = lfm_proxy:close(P1Node, FileHandle),
@@ -421,7 +421,7 @@ basic_qos_reconciliation_test_base(DirStructureType) ->
     end, maps:get(files, GuidsAndPaths)),
     lists:foreach(fun(StoragePath) ->
         lists:foreach(fun(N) ->
-            ?assertEqual({ok, NewData}, read_file(N, StoragePath), ?QOS_ATTEMPTS)
+            ?assertEqual({ok, NewData}, storage_test_utils:read_file(N, StoragePath), ?QOS_ATTEMPTS)
         end, oct_background:get_provider_nodes(Provider2))
     end, StoragePaths).
 
@@ -637,26 +637,6 @@ get_expected_structure_for_single_dir(ProviderIdList, Name) ->
             ]}
         ]}
     }.
-
-
-storage_file_path(Node, SpaceId, FilePath) ->
-    SpaceMnt = get_space_mount_point(Node, SpaceId),
-    filename:join([SpaceMnt, SpaceId, FilePath]).
-
-
-get_space_mount_point(Node, SpaceId) ->
-    {ok, StorageId} = opw_test_rpc:call(Node, space_logic, get_local_supporting_storage, [SpaceId]),
-    storage_mount_point(Node, StorageId).
-
-
-storage_mount_point(Node, StorageId) ->
-    Helper = opw_test_rpc:call(Node, storage, get_helper_spec, [StorageId]),
-    ConfigurationParams = helper_spec:get_configuration(Helper),
-    maps:get(<<"mountPoint">>, ConfigurationParams).
-
-
-read_file(Node, FilePath) ->
-    opw_test_rpc:call(Node, file, read_file, [FilePath]).
 
 
 check_transfer_stats(Provider, QosEntryId, Type, ExpTimeSeriesNames, ExpectedFirstWindow) ->

@@ -627,7 +627,7 @@ failed_gui_upload_test(Config) ->
     upload_file(P1, ?USER(User1, SessId(P1)), 160, 1048576, 5, File2Guid),
     ok = lfm_proxy:fsync(P1, User1, f(<<"space4">>, File2), ProviderId),
 
-    StorageFilePath1 = storage_file_path(P1, <<"space_id4">>, File2),
+    StorageFilePath1 = storage_test_utils:file_path(P1, <<"space_id4">>, File2),
     ?assertMatch(FileSize, current_size(P1, <<"space_id4">>)),
     ?assertMatch({error, ?ENOENT}, open_storage_file(P1, StorageFilePath1), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1, User1, f(<<"space4">>, File2)), ?ATTEMPTS).
@@ -876,19 +876,6 @@ do_multipart(Worker, ?USER(_UserId) = Auth, PartsNumber, PartSize, ChunksNumber,
 
 open_storage_file(Worker, FilePath) ->
     rpc:call(Worker, file, open, [FilePath, read]).
-
-storage_file_path(Worker, SpaceId, FilePath) ->
-    SpaceMnt = get_space_mount_point(Worker, SpaceId),
-    filename:join([SpaceMnt, SpaceId, FilePath]).
-
-get_space_mount_point(Worker, SpaceId) ->
-    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
-    storage_mount_point(Worker, StorageId).
-
-storage_mount_point(Worker, StorageId) ->
-    Helper = rpc:call(Worker, storage, get_helper_spec, [StorageId]),
-    ConfigurationParams = helper_spec:get_configuration(Helper),
-    maps:get(<<"mountPoint">>, ConfigurationParams).
 
 list_ended_transfers(Worker, SpaceId) ->
     {ok, List} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceId]),

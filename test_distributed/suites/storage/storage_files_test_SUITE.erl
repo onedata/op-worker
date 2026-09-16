@@ -16,12 +16,20 @@
 %%% service (luma_test_server) and the local feed is populated through the
 %%% same code path as the onepanel LUMA REST API - LUMA DB is fed exactly
 %%% the way it is in production.
+%%%
+%%% The last group of cases covers the opposite direction - directories
+%%% (the space directory included) that were removed directly on storage while
+%%% their metadata still marks them as created there. Recreation based on
+%%% file_meta does nothing then (all ancestors are marked as created), so the
+%%% storage file creation falls back to recreating the ancestors based on the
+%%% file's storage file id (see sd_utils:generic_create_deferred/3).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_files_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("env/space_setup_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("storage/storage_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
@@ -45,7 +53,10 @@
     directory_with_unknown_owner_test/1,
     rename_file_test/1,
     creating_file_should_result_in_eacces_when_mapping_is_not_found/1,
-    remotely_updated_perms_should_be_updated_on_storage/1
+    remotely_updated_perms_should_be_updated_on_storage/1,
+    missing_space_dir_is_recreated_on_file_create_test/1,
+    missing_space_dir_is_recreated_on_existing_file_open_test/1,
+    missing_ancestor_dir_is_recreated_on_file_create_test/1
 ]).
 
 all() -> [
@@ -58,7 +69,10 @@ all() -> [
     directory_with_unknown_owner_test,
     rename_file_test,
     creating_file_should_result_in_eacces_when_mapping_is_not_found,
-    remotely_updated_perms_should_be_updated_on_storage
+    remotely_updated_perms_should_be_updated_on_storage,
+    missing_space_dir_is_recreated_on_file_create_test,
+    missing_space_dir_is_recreated_on_existing_file_open_test,
+    missing_ancestor_dir_is_recreated_on_file_create_test
 ].
 
 %% Matrix row names - they double as the names of the per-row spaces.
@@ -87,6 +101,14 @@ matrix_rows() -> [
     ?POSIX_EXTERNAL_NO_USER_MAPPINGS
 ].
 
+%% Rows whose space dir is a regular directory created by the provider - the only
+%% ones where the space dir itself can go missing on storage. On an imported storage
+%% it is the storage mount point, which the provider neither creates nor removes,
+%% so only its descendants can go missing.
+-define(NON_IMPORTED_POSIX_ROWS, [?POSIX_AUTO, ?POSIX_EXTERNAL, ?POSIX_LOCAL]).
+-define(POSIX_ROWS, ?NON_IMPORTED_POSIX_ROWS ++
+    [?IMPORTED_POSIX_AUTO, ?IMPORTED_POSIX_EXTERNAL, ?IMPORTED_POSIX_LOCAL]).
+
 -define(SUPPORT_SIZE, 10 * 1024 * 1024 * 1024).
 
 %% Id under which files of a user that has never logged to Onezone may be chowned
@@ -106,6 +128,8 @@ matrix_rows() -> [
 -define(ASSERT_FILE_INFO(Expected, Node, FilePath, Attempts),
     storage_test_utils:assert_file_info(Expected, Node, FilePath, ?LINE, Attempts)
 ).
+
+-define(FILE_CONTENT, <<"file_content">>).
 
 -define(ATTEMPTS, 15).
 -define(CLEAN_SPACE_ATTEMPTS, 30).
@@ -141,6 +165,15 @@ matrix_rows() -> [
 }.
 -type setups_per_row() :: #{row_name() => [setup()]}.
 -type test_fun() :: fun((TestName :: atom(), test_env(), row_name(), setup()) -> ok).
+
+%% Tree created by the storage dir recreation cases: <top dir>/<parent dir>/<file>.
+%% The paths are relative to the space dir, the way the storage assertions address files.
+-record(nested_file_tree, {
+    top_dir_rel_path :: file_meta:path(),
+    parent_dir_rel_path :: file_meta:path(),
+    parent_dir_guid :: file_id:file_guid(),
+    file_guid :: file_id:file_guid()
+}).
 
 
 %%%===================================================================
@@ -219,6 +252,24 @@ remotely_updated_perms_should_be_updated_on_storage(Config) ->
     Env = test_env(Config),
     run_matrix(?FUNCTION_NAME, Env, fun remotely_updated_perms_should_be_updated_on_storage_test_base/4,
         #{}, #{?POSIX_AUTO => [#{user => user1}]}).
+
+
+missing_space_dir_is_recreated_on_file_create_test(Config) ->
+    Env = test_env(Config),
+    run_matrix(?FUNCTION_NAME, Env, fun missing_space_dir_is_recreated_on_file_create_test_base/4,
+        #{}, storage_dir_recreation_setups(?NON_IMPORTED_POSIX_ROWS)).
+
+
+missing_space_dir_is_recreated_on_existing_file_open_test(Config) ->
+    Env = test_env(Config),
+    run_matrix(?FUNCTION_NAME, Env, fun missing_space_dir_is_recreated_on_existing_file_open_test_base/4,
+        #{}, storage_dir_recreation_setups(?NON_IMPORTED_POSIX_ROWS)).
+
+
+missing_ancestor_dir_is_recreated_on_file_create_test(Config) ->
+    Env = test_env(Config),
+    run_matrix(?FUNCTION_NAME, Env, fun missing_ancestor_dir_is_recreated_on_file_create_test_base/4,
+        #{}, storage_dir_recreation_setups(?POSIX_ROWS)).
 
 
 %%%===================================================================
@@ -387,6 +438,15 @@ unknown_owner_setups(Env) ->
             expected_display_owner => ?OWNER(UnknownUserUid, generated_gid(space_id(Env, ?S3_AUTO)))
         }]
     }.
+
+
+%% @private
+%% @doc The storage dir recreation cases do not depend on the LUMA mappings - the
+%% recreated dir must regain whatever it was created with, whichever feed that came
+%% from - so every row is verified with a single, arbitrary user.
+-spec storage_dir_recreation_setups([row_name()]) -> setups_per_row().
+storage_dir_recreation_setups(RowNames) ->
+    maps:from_list([{RowName, [#{user => user1}]} || RowName <- RowNames]).
 
 
 %%%===================================================================
@@ -674,6 +734,87 @@ remotely_updated_perms_should_be_updated_on_storage_test_base(TestName, Env, Row
     ?ASSERT_FILE_INFO(#{mode => ?FILE_MODE(UpdatedPerms)}, KrkNode, StorageFilePath, ?ATTEMPTS).
 
 
+-spec missing_space_dir_is_recreated_on_file_create_test_base(
+    TestName :: atom(), test_env(), row_name(), setup()
+) ->
+    ok | no_return().
+missing_space_dir_is_recreated_on_file_create_test_base(TestName, Env, RowName, Args) ->
+    #{krk_node := KrkNode} = Env,
+    SpaceId = space_id(Env, RowName),
+    #nested_file_tree{
+        parent_dir_rel_path = ParentDirRelPath,
+        parent_dir_guid = ParentDirGuid
+    } = create_nested_file_tree(TestName, Env, RowName, Args),
+    SpaceDirStoragePath = storage_test_utils:space_path(KrkNode, SpaceId),
+    SpaceDirInfoBeforeRemoval = storage_test_utils:get_file_info(KrkNode, SpaceDirStoragePath),
+
+    % when
+    storage_test_utils:remove_dir(KrkNode, SpaceDirStoragePath),
+    NewFileName = create_file_with_content(Args, ParentDirGuid, TestName),
+
+    % then
+    ?assertStorageFileContent(
+        KrkNode, SpaceId, filename:join(ParentDirRelPath, NewFileName), ?FILE_CONTENT
+    ),
+    storage_test_utils:assert_owner_and_mode(
+        KrkNode, SpaceDirInfoBeforeRemoval, SpaceDirStoragePath, ?ATTEMPTS
+    ).
+
+
+-spec missing_space_dir_is_recreated_on_existing_file_open_test_base(
+    TestName :: atom(), test_env(), row_name(), setup()
+) ->
+    ok | no_return().
+missing_space_dir_is_recreated_on_existing_file_open_test_base(TestName, Env, RowName, Args) ->
+    #{krk_node := KrkNode} = Env,
+    SessId = session_id(maps:get(user, Args), krakow),
+    SpaceId = space_id(Env, RowName),
+    #nested_file_tree{
+        parent_dir_rel_path = ParentDirRelPath,
+        file_guid = FileGuid
+    } = create_nested_file_tree(TestName, Env, RowName, Args),
+    SpaceDirStoragePath = storage_test_utils:space_path(KrkNode, SpaceId),
+    SpaceDirInfoBeforeRemoval = storage_test_utils:get_file_info(KrkNode, SpaceDirStoragePath),
+
+    % when
+    storage_test_utils:remove_dir(KrkNode, SpaceDirStoragePath),
+    % the file is already marked as created on storage, so it is recreated on open
+    lfm_test_utils:write_file(KrkNode, SessId, FileGuid, ?FILE_CONTENT),
+
+    % then
+    ?assertStorageFileContent(
+        KrkNode, SpaceId, filename:join(ParentDirRelPath, file_name(TestName)), ?FILE_CONTENT
+    ),
+    storage_test_utils:assert_owner_and_mode(
+        KrkNode, SpaceDirInfoBeforeRemoval, SpaceDirStoragePath, ?ATTEMPTS
+    ).
+
+
+-spec missing_ancestor_dir_is_recreated_on_file_create_test_base(
+    TestName :: atom(), test_env(), row_name(), setup()
+) ->
+    ok | no_return().
+missing_ancestor_dir_is_recreated_on_file_create_test_base(TestName, Env, RowName, Args) ->
+    #{krk_node := KrkNode} = Env,
+    SpaceId = space_id(Env, RowName),
+    #nested_file_tree{
+        top_dir_rel_path = TopDirRelPath,
+        parent_dir_rel_path = ParentDirRelPath,
+        parent_dir_guid = ParentDirGuid
+    } = create_nested_file_tree(TestName, Env, RowName, Args),
+
+    % when
+    storage_test_utils:remove_dir(
+        KrkNode, storage_test_utils:file_path(KrkNode, SpaceId, TopDirRelPath)
+    ),
+    NewFileName = create_file_with_content(Args, ParentDirGuid, TestName),
+
+    % then
+    ?assertStorageFileContent(
+        KrkNode, SpaceId, filename:join(ParentDirRelPath, NewFileName), ?FILE_CONTENT
+    ).
+
+
 %%%===================================================================
 %%% Matrix run machinery
 %%%===================================================================
@@ -736,7 +877,7 @@ clean_up_after_sub_run(Env, RowName) ->
 
     lists:foreach(fun({Node, StorageId}) ->
         case maps:get(posix, Row) of
-            true -> reset_space_dir_on_storage(Node, SpaceId, StorageId);
+            true -> storage_test_utils:reset_space_dir(Node, SpaceId, StorageId);
             false -> ok
         end,
         case maps:get(feed, Row) of
@@ -745,15 +886,6 @@ clean_up_after_sub_run(Env, RowName) ->
             _ -> ok = rpc:call(Node, luma_crud_api, clear_db, [StorageId])
         end
     end, NodesWithStorages).
-
-
-%% @private
--spec reset_space_dir_on_storage(node(), od_space:id(), storage:id()) -> ok | no_return().
-reset_space_dir_on_storage(Node, SpaceId, StorageId) ->
-    ok = rpc:call(Node, dir_location, delete, [space_dir:uuid(SpaceId)]),
-    SDHandle = sd_test_utils:new_handle(Node, SpaceId, <<"/">>, StorageId),
-    sd_test_utils:recursive_rm(Node, SDHandle, true),
-    ?assertMatch({ok, []}, sd_test_utils:ls(Node, SDHandle, 0, 1)).
 
 
 %%%===================================================================
@@ -1031,21 +1163,84 @@ dir_name(TestName) -> <<"dir_", (atom_to_binary(TestName))/binary>>.
 
 
 %% @private
+%% @doc Creates <top dir>/<parent dir>/<file with content> in the space. Writing the
+%% content materializes the whole chain of dirs on storage, which is the state the
+%% storage dir recreation cases start from.
+-spec create_nested_file_tree(TestName :: atom(), test_env(), row_name(), setup()) ->
+    #nested_file_tree{}.
+create_nested_file_tree(TestName, Env, RowName, Args) ->
+    TopDirName = dir_name(TestName),
+    ParentDirName = <<"parent_", (dir_name(TestName))/binary>>,
+
+    #object{children = [#object{
+        guid = ParentDirGuid,
+        children = [#object{guid = FileGuid}]
+    }]} = create_file_tree(Args, space_dir:guid(space_id(Env, RowName)), #dir_spec{
+        name = TopDirName,
+        mode = ?DEFAULT_DIR_PERMS,
+        children = [#dir_spec{
+            name = ParentDirName,
+            mode = ?DEFAULT_DIR_PERMS,
+            children = [#file_spec{
+                name = file_name(TestName),
+                mode = ?DEFAULT_FILE_PERMS,
+                content = ?FILE_CONTENT
+            }]
+        }]
+    }),
+
+    #nested_file_tree{
+        top_dir_rel_path = TopDirName,
+        parent_dir_rel_path = filename:join(TopDirName, ParentDirName),
+        parent_dir_guid = ParentDirGuid,
+        file_guid = FileGuid
+    }.
+
+
+%% @private
+%% @doc Creating a file on storage is what recreates its missing ancestors there.
+-spec create_file_with_content(setup(), file_id:file_guid(), TestName :: atom()) ->
+    file_meta:name().
+create_file_with_content(Args, ParentGuid, TestName) ->
+    FileName = <<"new_", (file_name(TestName))/binary>>,
+    #object{} = create_file_tree(Args, ParentGuid, #file_spec{
+        name = FileName,
+        mode = ?DEFAULT_FILE_PERMS,
+        content = ?FILE_CONTENT
+    }),
+    FileName.
+
+
+%% @private
+%% @doc NOTE: the matrix spaces are created at runtime, hence they have no onenv
+%% placeholder and file_tree_test_utils:create_and_sync_file_tree/3,4 cannot be used
+%% here - it resolves the providers supporting the space through oct_background.
+-spec create_file_tree(setup(), file_id:file_guid(), file_tree_test_utils:object_spec()) ->
+    file_tree_test_utils:object().
+create_file_tree(Args, ParentGuid, FileTreeSpec) ->
+    file_tree_test_utils:create_file_tree(
+        user_id(maps:get(user, Args)), ParentGuid, krakow, FileTreeSpec
+    ).
+
+
+%% @private
 -spec mount_dir_owner(test_env(), row_name()) -> owner().
-mount_dir_owner(#{krk_node := KrkNode} = Env, RowName) ->
-    StorageId = maps:get(storage_id, matrix_row(Env, RowName)),
-    MountPoint = storage_test_utils:storage_mount_point(KrkNode, StorageId),
-    {ok, FileInfo} = storage_test_utils:read_file_info(KrkNode, MountPoint),
-    ?OWNER(FileInfo#file_info.uid, FileInfo#file_info.gid).
+mount_dir_owner(Env, RowName) ->
+    #file_info{uid = Uid, gid = Gid} = mount_dir_file_info(Env, RowName),
+    ?OWNER(Uid, Gid).
 
 
 %% @private
 -spec mount_dir_mode(test_env(), row_name()) -> file_meta:mode().
-mount_dir_mode(#{krk_node := KrkNode} = Env, RowName) ->
+mount_dir_mode(Env, RowName) ->
+    (mount_dir_file_info(Env, RowName))#file_info.mode.
+
+
+%% @private
+-spec mount_dir_file_info(test_env(), row_name()) -> #file_info{}.
+mount_dir_file_info(#{krk_node := KrkNode} = Env, RowName) ->
     StorageId = maps:get(storage_id, matrix_row(Env, RowName)),
-    MountPoint = storage_test_utils:storage_mount_point(KrkNode, StorageId),
-    {ok, FileInfo} = storage_test_utils:read_file_info(KrkNode, MountPoint),
-    FileInfo#file_info.mode.
+    storage_test_utils:get_mount_point_file_info(KrkNode, StorageId).
 
 
 %% @private
