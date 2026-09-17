@@ -6,17 +6,23 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of the LUMA DB namespace bookkeeping done by the storage update
-%%% saga - which namespace a storage reads through, and which ones are recorded
-%%% for the garbage collector to clean up.
+%%% Unit tests of the storage update saga, covering the two things about it that
+%%% are easy to break while reshuffling the code.
 %%%
-%%% The bookkeeping is split between the action (draw a namespace, mark the
+%%% The first is the LUMA DB namespace bookkeeping - which namespace a storage
+%%% reads through, and which ones are recorded for the garbage collector to
+%%% clean up. It is split between the action (draw a namespace, mark the
 %%% previous one stale) and the compensation (bring the previous one back, mark
 %%% the one just abandoned stale), and the two must agree on one invariant: a
-%%% storage must
-%%% never list the namespace it reads through as stale, or the garbage collector
-%%% would delete live mappings. These tests pin that down, as the saga is the
-%%% kind of code that gets reshuffled later.
+%%% storage must never list the namespace it reads through as stale, or the
+%%% garbage collector would delete live mappings.
+%%%
+%%% The second is what a saga step is allowed to report. A compensation is armed
+%%% only once its action has returned 'ok', so a step that reports the failure
+%%% of anything it did after the storage_config write would leave that write
+%%% applied with nothing to take it back. The write is therefore the only thing
+%%% the step reports on; that the propagation which follows it cannot fail the
+%%% step is covered by rtransfer_config_test.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater_test).
@@ -24,6 +30,8 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("eunit/include/eunit.hrl").
+
+-define(STORAGE_ID, <<"dummyStorageId">>).
 
 
 %%%===================================================================
@@ -127,8 +135,71 @@ rollback_changes_nothing_but_the_stale_list_test() ->
 
 
 %%%===================================================================
+%%% Saga step reporting tests
+%%%===================================================================
+
+
+helper_spec_change_propagates_to_clients_and_rtransfer_test_() ->
+    {setup, fun mock_update_in_op_deps/0, fun unmock_update_in_op_deps/1, fun() ->
+        ?assertEqual(ok, update_in_op(_HelperSpecChanged = true, _LumaChanged = false)),
+
+        % neither of the two can fail the step - both are best effort, which is
+        % covered by rtransfer_config_test and fslogic_event_emitter itself
+        ?assertEqual(1, meck:num_calls(fslogic_event_emitter, emit_helper_params_changed, '_')),
+        ?assertEqual(1, meck:num_calls(rtransfer_config, add_storage, '_'))
+    end}.
+
+
+failed_storage_config_write_fails_the_step_test_() ->
+    {setup, fun mock_update_in_op_deps/0, fun unmock_update_in_op_deps/1, fun() ->
+        % the write is the one thing the step can report on - there is nothing
+        % applied yet for a missing compensation to leave behind
+        meck:expect(storage_config, update, fun(_StorageId, _Diff) -> {error, not_found} end),
+
+        ?assertEqual(
+            {error, not_found},
+            update_in_op(_HelperSpecChanged = true, _LumaChanged = false)
+        ),
+        ?assertEqual(0, meck:num_calls(rtransfer_config, add_storage, '_'))
+    end}.
+
+
+luma_only_change_does_not_touch_rtransfer_test_() ->
+    {setup, fun mock_update_in_op_deps/0, fun unmock_update_in_op_deps/1, fun() ->
+        ?assertEqual(ok, update_in_op(_HelperSpecChanged = false, _LumaChanged = true)),
+
+        % rtransfer reaches storages with the helper spec's own credentials,
+        % which LUMA has no say over
+        ?assertEqual(0, meck:num_calls(rtransfer_config, add_storage, '_')),
+        ?assertEqual(1, meck:num_calls(fslogic_event_emitter, emit_helper_params_changed, '_'))
+    end}.
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+update_in_op(HelperSpecChanged, LumaChanged) ->
+    storage_updater:update_in_op(
+        ?STORAGE_ID, #storage_config{}, HelperSpecChanged, LumaChanged
+    ).
+
+
+%% @private
+mock_update_in_op_deps() ->
+    meck:new([storage_config, fslogic_event_emitter, rtransfer_config], [no_link]),
+    meck:expect(storage_config, update, fun(StorageId, _Diff) ->
+        {ok, #document{key = StorageId}}
+    end),
+    meck:expect(fslogic_event_emitter, emit_helper_params_changed, fun(_StorageId) -> ok end),
+    meck:expect(rtransfer_config, add_storage, fun(_StorageId) -> ok end).
+
+
+%% @private
+unmock_update_in_op_deps(_) ->
+    meck:unload().
 
 
 %% @private

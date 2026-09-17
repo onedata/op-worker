@@ -435,6 +435,10 @@ supports_any_space(StorageData) ->
 %% @private
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
+    % NOTE: registration is best effort and reports its own failures - by this
+    % point the storage is in Onezone and in the local datastore, with no
+    % compensation left to undo either, so a failure to reach rtransfer must not
+    % turn a created storage into a reported failure
     rtransfer_config:add_storage(StorageId).
 
 

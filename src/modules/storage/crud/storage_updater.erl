@@ -29,12 +29,15 @@
 -ifdef(TEST).
 %% Export for unit testing of the LUMA DB namespace bookkeeping
 -export([rotate_luma_db_namespace/1, build_rollback_storage_config/3]).
+%% Export for unit testing of what the first saga step reports
+-export([update_in_op/4]).
 -endif.
 
 
 -record(saga_step, {
     name :: binary(),
     should_run :: boolean(),
+    % NOTE: the action must be atomic - see execute_saga/2
     action :: fun(() -> ok | {error, term()}),
     compensation :: fun(() -> ok | {error, term()})
 }).
@@ -336,8 +339,11 @@ update_in_op(StorageId, StorageConfig, HelperSpecChanged, LumaChanged) ->
 %% @private
 -spec on_helper_changed(storage:id()) -> ok.
 on_helper_changed(StorageId) ->
+    % NOTE: both calls report their own failures and return ok - the step that
+    % runs them must not report anything it did after its write, see
+    % execute_saga/2
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
-    ?check(rtransfer_config:add_storage(StorageId)).
+    rtransfer_config:add_storage(StorageId).
 
 
 %% @private
@@ -401,7 +407,22 @@ execute_saga(Steps) ->
     execute_saga(Steps, []).
 
 
+%%--------------------------------------------------------------------
 %% @private
+%% @doc
+%% Runs the steps in order and, on the first failure, compensates the steps that
+%% have already succeeded, in reverse order.
+%%
+%% NOTE: a step's compensation is armed only once its action has returned 'ok',
+%% so NOTHING EVER UNDOES A STEP THAT FAILED. Every action must therefore be
+%% ATOMIC - it either applies in full or leaves nothing behind. An action that
+%% does several things in sequence must not report the failure of a later one,
+%% or the saga returns an error while what the earlier ones did stays applied,
+%% with no compensation queued to take it back. That is why update_in_op/4
+%% propagates the config change on a best effort basis: the one thing the step
+%% can report on is the storage_config write itself.
+%% @end
+%%--------------------------------------------------------------------
 -spec execute_saga([saga_step()], [named_compensation()]) -> ok | {error, term()}.
 execute_saga([], _Compensations) ->
     ok;

@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles helper handle management.
+%%% TODO VFS-13846 cache get(SessionId, SpaceId, StorageId)
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helper_handle).
