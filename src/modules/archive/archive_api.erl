@@ -102,6 +102,8 @@ start_archivisation(
             of
                 {ok, AipArchiveDoc} ->
                     {ok, AipArchiveId} = archive:get_id(AipArchiveDoc),
+                    archivisation_logger:report_event("archivisation requested",
+                        ?autoformat(DatasetId, AipArchiveId, BaseArchiveId)),
                     {ok, Timestamp} = archive:get_creation_time(AipArchiveDoc),
                     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
                     {ok, FinalAipArchiveDoc} = case archive_config:should_include_dip(Config) of

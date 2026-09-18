@@ -20,6 +20,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -type checksum_type() :: content | metadata | children_count.
 
@@ -35,24 +36,44 @@
 
 -spec file_calculate_and_save(file_ctx:ctx(), user_ctx:ctx()) -> ok.
 file_calculate_and_save(ArchivedFileCtx, UserCtx) ->
+    ArchivedFileGuid = file_ctx:get_logical_guid_const(ArchivedFileCtx),
+    LogCtx = archivisation_logger:report_started(
+        "calculating and saving file checksums", ?autoformat(ArchivedFileGuid)),
     ok = save(ArchivedFileCtx, calculate(ArchivedFileCtx, UserCtx, content), content),
-    ok = save(ArchivedFileCtx, calculate(ArchivedFileCtx, UserCtx, metadata), metadata).
+    ok = save(ArchivedFileCtx, calculate(ArchivedFileCtx, UserCtx, metadata), metadata),
+    archivisation_logger:report_finished(LogCtx).
 
 
 -spec dir_calculate_and_save(file_ctx:ctx(), user_ctx:ctx(), non_neg_integer()) -> ok.
 dir_calculate_and_save(ArchivedDirCtx, UserCtx, ChildrenCount) ->
+    ArchivedDirGuid = file_ctx:get_logical_guid_const(ArchivedDirCtx),
+    LogCtx = archivisation_logger:report_started(
+        "calculating and saving dir checksums", ?autoformat(ArchivedDirGuid, ChildrenCount)),
     ok = save(ArchivedDirCtx, calculate(ArchivedDirCtx, UserCtx, metadata), metadata),
-    ok = save(ArchivedDirCtx, ChildrenCount, children_count).
+    ok = save(ArchivedDirCtx, ChildrenCount, children_count),
+    archivisation_logger:report_finished(LogCtx).
 
 
 has_file_changed(ArchivedFileCtx, FileCtx, UserCtx) ->
-    has_checksum_changed(ArchivedFileCtx, FileCtx, UserCtx, metadata) orelse
-        has_checksum_changed(ArchivedFileCtx, FileCtx, UserCtx, content).
+    ArchivedFileGuid = file_ctx:get_logical_guid_const(ArchivedFileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    LogCtx = archivisation_logger:report_started(
+        "comparing file checksums with archived version", ?autoformat(FileGuid, ArchivedFileGuid)),
+    HasChanged = has_checksum_changed(ArchivedFileCtx, FileCtx, UserCtx, metadata) orelse
+        has_checksum_changed(ArchivedFileCtx, FileCtx, UserCtx, content),
+    archivisation_logger:report_finished(LogCtx),
+    HasChanged.
 
 
 has_dir_changed(ArchivedDirCtx, DirCtx, UserCtx, CurrentChildrenCount) ->
-    has_checksum_changed(ArchivedDirCtx, DirCtx, UserCtx, metadata) orelse
-        get(ArchivedDirCtx, children_count) =/= CurrentChildrenCount.
+    ArchivedDirGuid = file_ctx:get_logical_guid_const(ArchivedDirCtx),
+    DirGuid = file_ctx:get_logical_guid_const(DirCtx),
+    LogCtx = archivisation_logger:report_started("comparing dir checksums with archived version",
+        ?autoformat(DirGuid, ArchivedDirGuid, CurrentChildrenCount)),
+    HasChanged = has_checksum_changed(ArchivedDirCtx, DirCtx, UserCtx, metadata) orelse
+        get(ArchivedDirCtx, children_count) =/= CurrentChildrenCount,
+    archivisation_logger:report_finished(LogCtx),
+    HasChanged.
 
 
 %%%===================================================================
