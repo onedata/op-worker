@@ -73,6 +73,11 @@ groups() -> [
     {sequential_tests, [], [
         sync_first_file_block_test,
         bulk_download_dir_retry_teardown_test
+    ]},
+    {performance_tests, [], [
+        gui_download_file_test,
+        gui_download_dir_test,
+        gui_download_multiple_files_test
     ]}
 ].
 
@@ -82,9 +87,7 @@ groups() -> [
 ]).
 
 -define(PERFORMANCE_CASES, [
-    gui_download_file_test,
-    gui_download_dir_test,
-    gui_download_multiple_files_test
+    {group, performance_tests}
 ]).
 
 all() -> ?ALL(?STANDARD_CASES, ?PERFORMANCE_CASES).
