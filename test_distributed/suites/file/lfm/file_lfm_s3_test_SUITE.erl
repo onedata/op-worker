@@ -204,9 +204,7 @@ groups() -> [
 ]).
 
 -define(PERFORMANCE_CASES, [
-    ls_test,
-    ls_with_stats_test,
-    echo_loop_test
+    {group, performance_tests}
 ]).
 
 all() -> ?ALL(?STANDARD_CASES, ?PERFORMANCE_CASES).
