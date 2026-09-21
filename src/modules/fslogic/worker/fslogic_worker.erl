@@ -920,8 +920,7 @@ check_helpers_cache() ->
         ok = helpers:prune_cache(),
 
         {ok, Stats} = helpers:get_helper_cache_stats(),
-        % TODO check type of Stats and logs in live env
-        ?debug("Helpers statistics: ~tp", [Stats])
+        ?debug("Helpers statistics:~n~tp", [Stats])
     catch Class:Reason:Stacktrace ->
         ?examine_exception("Periodic helpers check failed", Class, Reason, Stacktrace)
     end.
