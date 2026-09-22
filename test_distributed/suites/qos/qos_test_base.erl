@@ -21,6 +21,7 @@
 -define(EUNIT_NOAUTO, 1).
 
 -include("qos/qos_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -67,7 +68,9 @@
     qos_status_after_failed_transfer/1,
     qos_status_after_failed_transfer_deleted_file/1,
     qos_status_after_failed_transfer_deleted_entry/1,
-    
+    qos_transfer_of_file_with_deleted_local_location_test_base/1,
+    qos_status_after_synchronization_not_found_test_base/1,
+
     % QoS with hardlinks test bases
     qos_with_hardlink_test_base/1,
     qos_with_hardlink_deletion_test_base/1,
@@ -1502,8 +1505,89 @@ qos_status_after_failed_transfer_deleted_entry(TargetProvider) ->
     % check file distribution again (file blocks should be on both source and target provider)
     ?assertEqual(true, qos_test_utils:assert_distribution_in_dir_structure(
         DirStructure(lists:usort([Provider1, TargetProvider])), GuidsAndPaths)),
-    % check that failed files list is empty 
+    % check that failed files list is empty
     ?assert(is_failed_files_list_empty(Providers, file_id:guid_to_space_id(FileGuid))).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Test of a QoS transfer of a file, whose local location document has been
+%% deleted while its QoS slave job was already running (e.g. because the file was deleted
+%% on another provider and the deletion was propagated here by dbsync).
+%% @end
+%%--------------------------------------------------------------------
+-spec qos_transfer_of_file_with_deleted_local_location_test_base(binary()) -> ok.
+qos_transfer_of_file_with_deleted_local_location_test_base(FileContent) ->
+    [Provider1, TargetProvider | _] = oct_background:get_provider_ids(),
+    P1Node = oct_background:get_random_provider_node(Provider1),
+    TargetNode = oct_background:get_random_provider_node(TargetProvider),
+    Name = generator:gen_name(),
+
+    {DirGuid, FileGuid} = create_dir_with_single_file(Provider1, Name, FileContent),
+
+    ?assertEqual(ok, opw_test_rpc:call(
+        TargetNode, qos_test_utils, ensure_local_location_created, [FileGuid])),
+
+    qos_test_utils:mock_transfers_passing_result(oct_background:get_all_providers_nodes()),
+
+    {ok, QosEntryId} = ?assertMatch({ok, _}, opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1),
+        ?FILE_REF(DirGuid), <<"providerId=", TargetProvider/binary>>, 1)),
+    qos_test_utils:wait_for_file_transfer_start(FileGuid),
+
+    % delete the file on Provider1 - the deletion is propagated to the target provider,
+    % where it marks the local location document as deleted
+    ?assertEqual(ok, lfm_proxy:unlink(P1Node, ?SESS_ID(Provider1), ?FILE_REF(FileGuid))),
+    ?assertEqual(true, opw_test_rpc:call(
+        TargetNode, qos_test_utils, is_local_location_deleted, [FileGuid]), ?QOS_ATTEMPTS),
+
+    % release the slave job - synchronization is now requested for a file
+    % with a deleted local location
+    ok = qos_test_utils:finish_transfers([FileGuid]),
+
+    ?assertEqual({error, not_found}, qos_test_utils:await_file_transfer_result(FileGuid)),
+
+    % QoS entry must be eventually fulfilled - a deleted file cannot block it
+    ?assertEqual([], qos_test_utils:gather_not_matching_statuses_on_all_nodes(
+        [DirGuid], [QosEntryId], ?FULFILLED_QOS_STATUS), ?QOS_ATTEMPTS),
+    % deletion of a file during a traverse is not a QoS failure, so no error should be
+    % reported to the audit log ...
+    ?assertEqual([], get_audit_log_error_entries(TargetProvider, QosEntryId)),
+    % ... the file must not be left on the failed files list ...
+    ?assertEqual(false, is_file_in_failed_files_list(TargetProvider, FileGuid)),
+    % ... and the transfer must be removed from the QoS entry transfers list
+    ?assertEqual([], get_qos_transfers_list(TargetProvider, QosEntryId)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks that {error, not_found} returned by the synchronizer (i.e. the file no longer
+%% exists) is not reported as a QoS failure - contrary to any other error, see
+%% qos_status_after_failed_transfer/1.
+%% NOTE: replica_synchronizer:synchronize/7 is replaced entirely, so the file content does
+%% not influence the tested code path - only qos_traverse error handling is verified here.
+%% @end
+%%--------------------------------------------------------------------
+-spec qos_status_after_synchronization_not_found_test_base(binary()) -> ok.
+qos_status_after_synchronization_not_found_test_base(FileContent) ->
+    [Provider1, TargetProvider | _] = oct_background:get_provider_ids(),
+    P1Node = oct_background:get_random_provider_node(Provider1),
+    % literal error tuple, as returned by replica_synchronizer for a file
+    % with a deleted local location
+    qos_test_utils:mock_replica_synchronizer(
+        oct_background:get_all_providers_nodes(), {error, not_found}),
+
+    Name = generator:gen_name(),
+    {_DirGuid, FileGuid} = create_dir_with_single_file(Provider1, Name, FileContent),
+    {ok, QosEntryId} = ?assertMatch({ok, _}, opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1),
+        ?FILE_REF(FileGuid), <<"providerId=", TargetProvider/binary>>, 1)),
+
+    % QoS entry must be eventually fulfilled ...
+    ?assertEqual([], qos_test_utils:gather_not_matching_statuses_on_all_nodes(
+        [FileGuid], [QosEntryId], ?FULFILLED_QOS_STATUS), ?QOS_ATTEMPTS),
+    % ... no error should be reported to the audit log ...
+    ?assertEqual([], get_audit_log_error_entries(TargetProvider, QosEntryId)),
+    % ... and the file must not be added to the failed files list
+    ?assertEqual(false, is_file_in_failed_files_list(TargetProvider, FileGuid)).
 
 
 %%%===================================================================
@@ -1742,6 +1826,43 @@ is_file_in_failed_files_list(Provider, FileGuid) ->
     Uuid = file_id:guid_to_uuid(FileGuid),
     SpaceId = file_id:guid_to_space_id(FileGuid),
     lists:member(Uuid, get_qos_failed_files_list(Provider, SpaceId)).
+
+
+%% @private
+get_qos_transfers_list(Provider, QosEntryId) ->
+    Node = oct_background:get_random_provider_node(Provider),
+    {ok, AccumulatedLinks} = opw_test_rpc:call(Node, datastore_model, fold_links, [
+        #{model => qos_entry},
+        <<"transfer_qos_key_", QosEntryId/binary>>,
+        Provider,
+        fun qos_entry:accumulate_links/2,
+        [],
+        #{}
+    ]),
+    lists:map(fun({Name, _Target}) -> Name end, AccumulatedLinks).
+
+
+%% @private
+get_audit_log_error_entries(Provider, QosEntryId) ->
+    Node = oct_background:get_random_provider_node(Provider),
+    case opw_test_rpc:call(Node, qos_entry_audit_log, browse_content, [QosEntryId, #{}]) of
+        {ok, #{<<"logEntries">> := LogEntries}} ->
+            lists:filter(fun(#{<<"severity">> := Severity}) ->
+                Severity =:= <<"error">>
+            end, LogEntries);
+        {error, not_found} ->
+            % audit log is created lazily, upon the first append
+            []
+    end.
+
+
+create_dir_with_single_file(CreationProvider, Name, FileContent) ->
+    #object{guid = DirGuid, children = [#object{guid = FileGuid}]} =
+        file_tree_test_utils:create_and_sync_file_tree(?USER_PLACEHOLDER, ?SPACE_PLACEHOLDER,
+            #dir_spec{name = Name, children = [
+                #file_spec{name = ?filename(Name, 1), content = FileContent}
+            ]}, CreationProvider),
+    {DirGuid, FileGuid}.
 
 
 %% @private
