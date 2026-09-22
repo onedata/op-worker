@@ -43,10 +43,18 @@
 % mock related functions
 -export([
     mock_transfers/1,
+    mock_transfers_passing_result/1,
     wait_for_file_transfer_start/1,
+    await_file_transfer_result/1,
     finish_transfers/1, finish_transfers/2,
     finish_all_transfers/0,
     mock_replica_synchronizer/2
+]).
+
+% functions executed on op-worker nodes via rpc
+-export([
+    ensure_local_location_created/1,
+    is_local_location_deleted/1
 ]).
 
 % assertions
@@ -62,6 +70,9 @@
     file_id:guid_to_uuid(resolve_guid(Node, SessId, FilePath))
 ).
 
+
+% see ensure_local_location_created/1
+-define(QOS_CHECK_SIZE_LIMIT_ABOVE_ANY_TEST_FILE, 1073741824). % 1 GiB
 
 %%%====================================================================
 %%% Util functions
@@ -377,6 +388,38 @@ wait_for_file_transfer_start(FileGuid) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Same as mock_transfers/1, but returns the result of the original call instead of
+%% a hardcoded {ok, FileGuid}. Required by tests that verify how QoS handles errors
+%% returned by replica_synchronizer:synchronize/7.
+%% @end
+%%--------------------------------------------------------------------
+mock_transfers_passing_result(Nodes) ->
+    TestPid = self(),
+    ok = test_utils:mock_expect(Nodes, replica_synchronizer, synchronize,
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
+            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+            TestPid ! {qos_slave_job, self(), FileGuid},
+            receive
+                {completed, FileGuid} ->
+                    Result = meck:passthrough(
+                        [UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule]),
+                    TestPid ! {qos_slave_job_result, FileGuid, Result},
+                    Result
+            end
+        end).
+
+
+% above mock (mock_transfers_passing_result/1) required for this function to work
+await_file_transfer_result(FileGuid) ->
+    receive {qos_slave_job_result, FileGuid, Result} ->
+        Result
+    after timer:seconds(?QOS_ATTEMPTS) ->
+        throw(transfer_result_not_received)
+    end.
+
+
 % above mock (mock_transfers/1) required for this function to work
 finish_transfers(Files) ->
     finish_transfers(Files, strict).
@@ -440,6 +483,28 @@ mock_replica_synchronizer(Nodes, Expected) ->
         fun(_, _, _, _, _, _, _) ->
             Expected
         end).
+
+%%%====================================================================
+%%% Functions executed on op-worker nodes via rpc
+%%%====================================================================
+
+-spec ensure_local_location_created(file_id:file_guid()) -> ok.
+ensure_local_location_created(FileGuid) ->
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    % QoS check size limit is set above any size used in tests, so that creation of the
+    % location does not schedule a QoS reconciliation (see fslogic_location:create_doc/5)
+    {#document{deleted = false}, _FileCtx2} = file_ctx:get_or_create_local_regular_file_location_doc(
+        FileCtx, skip_local_blocks, true, ?QOS_CHECK_SIZE_LIMIT_ABOVE_ANY_TEST_FILE),
+    ok.
+
+
+-spec is_local_location_deleted(file_id:file_guid()) -> boolean().
+is_local_location_deleted(FileGuid) ->
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    case fslogic_location_cache:get_local_location_including_deleted(FileCtx, skip_local_blocks) of
+        {ok, #document{deleted = true}} -> true;
+        _ -> false
+    end.
 
 %%%====================================================================
 %%% Assertions

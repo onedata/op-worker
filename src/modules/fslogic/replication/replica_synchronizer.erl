@@ -49,6 +49,10 @@
 -define(REF_TO_TIDS_CLEARING_DELAY, 15000).
 -define(REF_TO_TIDS_CLEARING_MSG(__Ref), {clear_ref_to_tids_association, __Ref}).
 
+% Thrown when the file's local location has been deleted concurrently
+% (see assert_local_location_not_deleted/0).
+-define(LOCAL_LOCATION_DELETED, local_location_deleted).
+
 -define(PREFETCH_PRIORITY,
     op_worker:get_env(default_prefetch_priority, 96)).
 -define(MAX_RETRIES, op_worker:get_env(synchronizer_max_retries, 0)).
@@ -575,6 +579,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
     } = State0
 ) ->
     try
+        assert_local_location_not_deleted(),
         State = case FG of
             undefined ->
                 FileGuid = file_ctx:get_logical_guid_const(FileCtx),
@@ -652,6 +657,13 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                 end
         end
     catch
+        throw:?LOCAL_LOCATION_DELETED ->
+            % The file's local location was deleted concurrently (delete race during
+            % synchronization - possibly a deletion propagated from a remote provider);
+            % there is nothing to synchronize.
+            ?debug("Synchronization of file ~tp skipped - its local location was deleted",
+                [fslogic_cache:get_uuid()]),
+            {reply, {error, not_found}, State0, ?DIE_AFTER};
         throw:?EROFS ->
             % the blocks cannot be fetched onto a readonly storage - not a failure
             % of this provider, but a request that another one has to serve
@@ -1355,6 +1367,14 @@ is_sequential(#file_block{offset = NextOffset, size = NewSize},
     true;
 is_sequential(_, _State) ->
     false.
+
+%% @private
+-spec assert_local_location_not_deleted() -> ok | no_return().
+assert_local_location_not_deleted() ->
+    case fslogic_cache:get_local_location_including_deleted() of
+        #document{deleted = true} -> throw(?LOCAL_LOCATION_DELETED);
+        _ -> ok
+    end.
 
 %% @private
 -spec start_transfers([block()], transfer:id() | undefined, #state{}, priority()) ->
