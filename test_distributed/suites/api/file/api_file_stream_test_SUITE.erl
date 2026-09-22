@@ -1781,7 +1781,13 @@ init_per_testcase(bulk_download_dir_retry_teardown_test = Case, Config) ->
     end, ProviderNodes),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 40}),
+    GroupProperties = proplists:get_value(tc_group_properties, Config, []),
+    ct:timetrap(case proplists:get_value(name, GroupProperties) of
+        % performance configurations operate on much larger file trees, which
+        % setup_fun recreates for every tested combination
+        performance_tests -> {hours, 2};
+        _ -> {minutes, 40}
+    end),
     Config.
 
 end_per_testcase(sync_first_file_block_test = Case, Config) ->
