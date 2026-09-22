@@ -71,6 +71,7 @@ init_per_suite(Config) ->
     opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [
+            {fuse_session_grace_period_seconds, 24 * 60 * 60},
             {storages_check_interval_sec, 1}
         ]}]
     }).

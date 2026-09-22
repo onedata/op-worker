@@ -118,6 +118,7 @@ init_per_suite(Config) ->
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op_s3",
         envs = [{op_worker, op_worker, [
+            {fuse_session_grace_period_seconds, 24 * 60 * 60},
             {dbsync_changes_broadcast_interval, timer:seconds(1)}
         ]}],
         posthook = fun(NewConfig) ->
