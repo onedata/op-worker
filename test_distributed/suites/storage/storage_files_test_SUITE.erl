@@ -802,16 +802,24 @@ missing_ancestor_dir_is_recreated_on_file_create_test_base(TestName, Env, RowNam
         parent_dir_rel_path = ParentDirRelPath,
         parent_dir_guid = ParentDirGuid
     } = create_nested_file_tree(TestName, Env, RowName, Args),
+    TopDirStoragePath = storage_test_utils:file_path(KrkNode, SpaceId, TopDirRelPath),
+    ParentDirStoragePath = storage_test_utils:file_path(KrkNode, SpaceId, ParentDirRelPath),
+    TopDirInfoBeforeRemoval = storage_test_utils:get_file_info(KrkNode, TopDirStoragePath),
+    ParentDirInfoBeforeRemoval = storage_test_utils:get_file_info(KrkNode, ParentDirStoragePath),
 
     % when
-    storage_test_utils:remove_dir(
-        KrkNode, storage_test_utils:file_path(KrkNode, SpaceId, TopDirRelPath)
-    ),
+    storage_test_utils:remove_dir(KrkNode, TopDirStoragePath),
     NewFileName = create_file_with_content(Args, ParentDirGuid, TestName),
 
     % then
     ?assertStorageFileContent(
         KrkNode, SpaceId, filename:join(ParentDirRelPath, NewFileName), ?FILE_CONTENT
+    ),
+    storage_test_utils:assert_owner_and_mode(
+        KrkNode, TopDirInfoBeforeRemoval, TopDirStoragePath, ?ATTEMPTS
+    ),
+    storage_test_utils:assert_owner_and_mode(
+        KrkNode, ParentDirInfoBeforeRemoval, ParentDirStoragePath, ?ATTEMPTS
     ).
 
 
