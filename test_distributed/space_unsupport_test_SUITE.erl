@@ -139,7 +139,7 @@ cleanup_traverse_stage_test(Config) ->
     % Relative paths to space dir. Empty binary represents space dir.
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
     AllPathsWithoutSpace = [DirPath, F1Path, F2Path],
-    check_files_on_storage(Worker, AllPaths, true, false),
+    check_files_on_storage(Worker, AllPaths, true),
 
     StageJob = #space_unsupport_job{
         stage = cleanup_traverse,
@@ -149,8 +149,8 @@ cleanup_traverse_stage_test(Config) ->
     
     ok = rpc:call(Worker, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     rpc:call(Worker, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]),
-    check_files_on_storage(Worker, AllPathsWithoutSpace, false, false),
-    assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId)),
+    check_files_on_storage(Worker, AllPathsWithoutSpace, false),
+    assert_storage_cleaned_up(Worker, storage_test_utils:storage_mount_point(Worker, StorageId)),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
 
@@ -169,7 +169,7 @@ cleanup_traverse_stage_with_import_test(Config) ->
     
     % Relative paths to space dir. Empty binary represents space dir.
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
-    check_files_on_storage(Worker, AllPaths, true, true),
+    check_files_on_storage(Worker, AllPaths, true),
     
     StageJob = #space_unsupport_job{
         stage = cleanup_traverse,
@@ -180,7 +180,7 @@ cleanup_traverse_stage_with_import_test(Config) ->
     ok = rpc:call(Worker, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     % do not delete ended unsupport_cleanup_traverse - it will be deleted in `delete_local_documents_stage_test`
     
-    check_files_on_storage(Worker, AllPaths, true, true),
+    check_files_on_storage(Worker, AllPaths, true),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
 
@@ -188,9 +188,9 @@ cleanup_traverse_stage_with_import_test(Config) ->
     
     % files on storage have to be deleted manually as only file location documents have 
     % been deleted during cleanup traverse on imported storage
-    ok = remove_storage_file(Worker, storage_file_path(Worker, ?SPACE_ID, F1Path, true)),
-    ok = remove_storage_file(Worker, storage_file_path(Worker, ?SPACE_ID, F2Path, true)),
-    ok = remove_storage_dir(Worker, storage_file_path(Worker, ?SPACE_ID, DirPath, true)).
+    ok = remove_storage_file(Worker, storage_test_utils:file_path(Worker, ?SPACE_ID, F1Path)),
+    ok = remove_storage_file(Worker, storage_test_utils:file_path(Worker, ?SPACE_ID, F2Path)),
+    ok = remove_storage_dir(Worker, storage_test_utils:file_path(Worker, ?SPACE_ID, DirPath)).
 
 
 cleanup_traverse_stage_persistence_test(Config) ->
@@ -323,7 +323,7 @@ overall_test(Config) ->
     % wait for documents to expire 
     timer:sleep(timer:seconds(70)),
     
-    assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId)),
+    assert_storage_cleaned_up(Worker, storage_test_utils:storage_mount_point(Worker, StorageId)),
     assert_synced_documents_cleaned_up(Worker, ?SPACE_ID),
     assert_local_documents_cleaned_up(Worker).
 
@@ -375,7 +375,7 @@ init_per_testcase(_, Config) ->
     SpaceDirGuid = space_dir:guid(?SPACE_ID),
     lists:foreach(fun(Worker) ->
         ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, ?FILE_REF(SpaceDirGuid), 0, 10), ?ATTEMPTS),
-        assert_space_on_storage_cleaned_up(Worker, initializer:get_supporting_storage_id(Worker, ?SPACE_ID), ?SPACE_ID)
+        assert_space_on_storage_cleaned_up(Worker, ?SPACE_ID)
     end, Workers),
     ct:timetrap({minutes, 30}),
     lfm_proxy:init(Config).
@@ -409,11 +409,8 @@ assert_storage_cleaned_up(Worker, Path, Attempts) ->
     end.
 
 
-assert_space_on_storage_cleaned_up(Worker, StorageId, SpaceId) ->
-    case rpc:call(Worker, storage, is_imported, [StorageId]) of
-        true -> assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId), ?ATTEMPTS);
-        false -> assert_storage_cleaned_up(Worker, filename:join(get_space_mount_point(Worker, SpaceId), SpaceId), ?ATTEMPTS)
-    end.
+assert_space_on_storage_cleaned_up(Worker, SpaceId) ->
+    assert_storage_cleaned_up(Worker, storage_test_utils:space_path(Worker, SpaceId), ?ATTEMPTS).
 
 
 assert_local_documents_cleaned_up(Worker, SpaceId) ->
@@ -590,9 +587,9 @@ check_expected_distribution(Workers, SessId, ExpectedDistribution, Guid)  ->
         )
     end, Workers).
 
-check_files_on_storage(Worker, FilesList, ShouldExist, IsImportedStorage) ->
+check_files_on_storage(Worker, FilesList, ShouldExist) ->
     lists:foreach(fun(FileRelativePath) ->
-        StoragePath = storage_file_path(Worker, ?SPACE_ID, FileRelativePath, IsImportedStorage),
+        StoragePath = storage_test_utils:file_path(Worker, ?SPACE_ID, FileRelativePath),
         ?assertEqual(ShouldExist, check_exists_on_storage(Worker, StoragePath), ?ATTEMPTS)
     end, FilesList).
 
@@ -604,22 +601,6 @@ remove_storage_file(Worker, StorageFilePath) ->
 
 remove_storage_dir(Worker, StorageDirPath) ->
     rpc:call(Worker, file, del_dir, [StorageDirPath]).
-
-storage_file_path(Worker, SpaceId, FilePath, true) ->
-    SpaceMnt = get_space_mount_point(Worker, SpaceId),
-    filename:join([SpaceMnt, FilePath]);
-storage_file_path(Worker, SpaceId, FilePath, false) ->
-    SpaceMnt = get_space_mount_point(Worker, SpaceId),
-    filename:join([SpaceMnt, SpaceId, FilePath]).
-
-get_space_mount_point(Worker, SpaceId) ->
-    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
-    storage_mount_point(Worker, StorageId).
-
-storage_mount_point(Worker, StorageId) ->
-    HelperSpec = rpc:call(Worker, storage, get_helper_spec, [StorageId]),
-    ConfigurationParams = helper_spec:get_configuration(HelperSpec),
-    maps:get(<<"mountPoint">>, ConfigurationParams).
 
 select_provider_with_imported_storage(Workers) ->
     select_provider_by_imported_storage_value(Workers, true).
