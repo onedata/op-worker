@@ -806,17 +806,12 @@ cancel_autocleaning_run(Config) ->
     await_gated_candidate_processing_job(),
     grant_candidate_processing_permits(KrkNode, EvictedBeforeCancelNum),
 
-    ?assertEqual(run_progressed, case get_run_report(KrkNode, ARId) of
-        {ok, #{
-            released_bytes := __ReleasedBytes,
-            bytes_to_release := TotalSize,
-            files_number := __FilesNumber,
-            status := ?ACTIVE
-        }} when __ReleasedBytes > 0, __FilesNumber > 0 ->
-            run_progressed;
-        {ok, __Report} ->
-            __Report
-    end, ?ATTEMPTS),
+    % the eviction progress is checked on the occupancy, as the run report may not show
+    % it - its counters are persisted only along with the run's subsequent events, at
+    % most once per second (see autocleaning_run_controller:maybe_update_doc_counters/1),
+    % and none come once the gate holds the remaining candidates
+    ?assertMatch(__Occupancy when __Occupancy < TotalSize, opt_spaces:get_occupancy(KrkNode, SpaceId), ?ATTEMPTS),
+    ?assertMatch({ok, #{bytes_to_release := TotalSize, status := ?ACTIVE}}, get_run_report(KrkNode, ARId)),
 
     % the remaining candidates are still held at the gate, so the run cannot have finished
     cancel(KrkNode, SpaceId, ARId),

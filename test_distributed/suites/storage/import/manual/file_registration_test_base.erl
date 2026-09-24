@@ -511,8 +511,8 @@ registration_should_succeed_if_size_is_passed(
 
 
 interrupted_registration_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}) ->
-    % this test checks whether subsequent registration can succeed when previous one was interrupted by user
-    % e. g. by pressing CTRL + C
+    % this test checks whether subsequent registration can succeed when previous one was
+    % interrupted midway (see mock_file_meta_save/2)
     #test_case_ctx{
         space_id = SpaceId,
         space_path = SpacePath,
@@ -541,17 +541,14 @@ interrupted_registration_test(SuiteCtx = #file_registration_test_suite_ctx{test_
         <<"json">> => ?JSON1,
         <<"rdf">> => ?ENCODED_RDF1
     },
-    Pid = spawn(fun() -> register_file(RegNode, User, Body) end),
-
-    wait_until_saving_file_meta_is_frozen(),
-
-    % kill process that requested the registration, the same things happen when user
-    % aborts the REST request with CTRL + C
-    exit(Pid, shutdown),
+    RegistrationRef = register_file_async(RegNode, User, Body),
+    FrozenSavePid = await_frozen_file_meta_save(),
 
     % file shouldn't have been registered
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
 
+    interrupt_frozen_file_meta_save(FrozenSavePid),
+    ?assertMatch({ok, __Code, _, _} when __Code >= 400, await_registration_result(RegistrationRef)),
     unmock_file_meta_save(RegProvider),
 
     % retry registration
@@ -567,8 +564,8 @@ interrupted_registration_test(SuiteCtx = #file_registration_test_suite_ctx{test_
 interrupted_registration_nested_file_test(
     SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
 ) ->
-    % this test checks whether subsequent registration can succeed when previous one was interrupted by user
-    % e. g. by pressing CTRL + C
+    % this test checks whether subsequent registration can succeed when previous one was
+    % interrupted midway (see mock_file_meta_save/2)
     #test_case_ctx{
         space_id = SpaceId,
         space_path = SpacePath,
@@ -599,20 +596,15 @@ interrupted_registration_nested_file_test(
         <<"json">> => ?JSON1,
         <<"rdf">> => ?ENCODED_RDF1
     },
-    Pid = spawn(fun() ->
-        ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, Body))
-    end),
-
-    wait_until_saving_file_meta_is_frozen(),
-
-    % kill process that requested the registration, the same things happen when user
-    % aborts the REST request with CTRL + C
-    exit(Pid, shutdown),
+    RegistrationRef = register_file_async(RegNode, User, Body),
+    FrozenSavePid = await_frozen_file_meta_save(),
 
     % parent dir and file shouldn't have been created
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(RegNode, RegSessId, {path, filepath_utils:join([SpacePath, DirName])})),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
 
+    interrupt_frozen_file_meta_save(FrozenSavePid),
+    ?assertMatch({ok, __Code, _, _} when __Code >= 400, await_registration_result(RegistrationRef)),
     unmock_file_meta_save(RegProvider),
 
     % retry registration
@@ -1382,8 +1374,43 @@ read_full_content(Node, Handle, Offset, Size, Acc) ->
 
 
 %% @private
-%% @doc Freezes the save of the file_meta doc of the given file for 5 seconds,
-%% notifying the test master process the moment the save is entered.
+%% @doc Makes the registration request in a separate process - its result is to be
+%% collected with await_registration_result/1.
+-spec register_file_async(oct_background:node(), oct_background:entity_selector(), map()) ->
+    reference().
+register_file_async(Node, UserSelector, Body) ->
+    TestMasterPid = self(),
+    Ref = make_ref(),
+    spawn(fun() -> TestMasterPid ! {Ref, register_file(Node, UserSelector, Body)} end),
+    Ref.
+
+
+%% @private
+-spec await_registration_result(reference()) -> {ok, integer(), map(), binary()} | {error, term()}.
+await_registration_result(Ref) ->
+    receive
+        {Ref, Result} -> Result
+    after timer:seconds(60) ->
+        ct:fail(registration_result_not_received)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Freezes the save of the file_meta doc of the given file, notifying the test master
+%% process the moment the save is entered (see await_frozen_file_meta_save/0), until
+%% interrupt_frozen_file_meta_save/1 makes the save fail - which aborts the
+%% registration midway.
+%%
+%% The registration runs in a provider's worker pool (see file_registration:register/6),
+%% so neither aborting the REST request (e.g. with CTRL + C) nor killing the process
+%% that made it interrupts the registration - hence it is made to fail. A test must
+%% then await the failed request's response before retrying the registration: only
+%% then is the interrupted registration's rollback done, and the rollback deletes the
+%% file by name - run after the retry, it would delete the retried registration's file.
+%% @end
+%%--------------------------------------------------------------------
 -spec mock_file_meta_save(oct_background:entity_selector(), file_meta:name()) -> ok.
 mock_file_meta_save(ProviderSelector, FileName) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
@@ -1392,9 +1419,11 @@ mock_file_meta_save(ProviderSelector, FileName) ->
     ok = test_utils:mock_expect(Nodes, file_meta, save, fun(Doc = #document{value = FM}) ->
         case FM#file_meta.name =:= FileName of
             true ->
-                TestMasterPid ! saving_file_meta_frozen,
-                timer:sleep(timer:seconds(5)),
-                meck:passthrough([Doc]);
+                TestMasterPid ! {saving_file_meta_frozen, self()},
+                receive
+                    interrupt_saving_file_meta ->
+                        meck:exception(error, file_meta_save_interrupted_by_test)
+                end;
             false ->
                 meck:passthrough([Doc])
         end
@@ -1409,9 +1438,21 @@ unmock_file_meta_save(ProviderSelector) ->
 
 
 %% @private
--spec wait_until_saving_file_meta_is_frozen() -> ok.
-wait_until_saving_file_meta_is_frozen() ->
-    receive saving_file_meta_frozen -> ok end.
+%% @doc Returns the pid of the process whose file_meta save is frozen.
+-spec await_frozen_file_meta_save() -> pid().
+await_frozen_file_meta_save() ->
+    receive
+        {saving_file_meta_frozen, Pid} -> Pid
+    after timer:seconds(60) ->
+        ct:fail(saving_file_meta_not_frozen)
+    end.
+
+
+%% @private
+-spec interrupt_frozen_file_meta_save(pid()) -> ok.
+interrupt_frozen_file_meta_save(Pid) ->
+    Pid ! interrupt_saving_file_meta,
+    ok.
 
 
 %%%===================================================================
