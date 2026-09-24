@@ -16,7 +16,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -record(status, {
-    code :: code(),
+    code :: od_error:errno(),
     description :: undefined | binary()
 }).
 
