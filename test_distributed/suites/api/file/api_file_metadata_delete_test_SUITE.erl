@@ -16,6 +16,7 @@
 -include("api/api_test_runner.hrl").
 -include("api/api_file_metadata_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -219,6 +220,30 @@ delete_metadata_test_base(
 %% @private
 -spec build_setup_fun(test_setup_variant(), file_id:file_guid(), api_test_utils:metadata_type(),
     Metadata :: term(), [node()]) -> onenv_api_test_runner:verify_fun().
+build_setup_fun(preset_initial_metadata, FileGuid, <<"xattrs">>, FullXattrSet, Nodes) ->
+    fun() ->
+        % Only removed xattrs are restored. Rewriting unchanged ones (e.g. acl kept
+        % in file_meta, unlike the rest kept in custom_metadata) creates changes that
+        % can't be awaited and may later override deletion made on other provider
+        % (see onenv_api_test_runner COMMON PITFALLS 1).
+        RandNode = lists_utils:random_element(Nodes),
+        {ok, CurrXattrs} = api_test_utils:get_xattrs(RandNode, FileGuid),
+        XattrsToRestore = maps:filter(fun(Key, Value) ->
+            maps:find(Key, CurrXattrs) /= {ok, Value}
+        end, FullXattrSet),
+        maps:size(XattrsToRestore) > 0 andalso ct:pal("Xattrs setup: restoring ~p on ~p", [
+            maps:keys(XattrsToRestore), RandNode
+        ]),
+
+        maps:foreach(fun(Key, Value) ->
+            ?assertEqual(ok, lfm_proxy:set_xattr(
+                RandNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), #xattr{name = Key, value = Value}
+            ), ?ATTEMPTS)
+        end, XattrsToRestore),
+        lists:foreach(fun(Node) ->
+            ?assertEqual({ok, FullXattrSet}, api_test_utils:get_xattrs(Node, FileGuid), ?ATTEMPTS)
+        end, Nodes)
+    end;
 build_setup_fun(preset_initial_metadata, FileGuid, MetadataType, Metadata, Nodes) ->
     fun() ->
         % Check to prevent race condition in tests (see onenv_api_test_runner
@@ -241,7 +266,12 @@ build_verify_fun(preset_initial_metadata, FileGuid, <<"xattrs">>, FullXattrSet, 
         (expected_failure, #api_test_ctx{node = TestNode}) ->
             ?assertMatch({ok, FullXattrSet}, api_test_utils:get_xattrs(TestNode, FileGuid), ?ATTEMPTS),
             true;
-        (expected_success, #api_test_ctx{data = #{<<"keys">> := Keys}}) ->
+        (expected_success, #api_test_ctx{
+            scenario_type = ScenarioType,
+            node = TestNode,
+            data = #{<<"keys">> := Keys}
+        }) ->
+            ct:pal("Xattrs delete: removed ~p on ~p (~p)", [Keys, TestNode, ScenarioType]),
             ExpXattrs = maps:without(Keys, FullXattrSet),
             lists:foreach(fun(Node) ->
                 ?assertEqual({ok, ExpXattrs}, api_test_utils:get_xattrs(Node, FileGuid), ?ATTEMPTS)
