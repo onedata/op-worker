@@ -2052,7 +2052,7 @@ get_file_storage_location(s3, FileGuid, _Node, _SessId) ->
 
 init_per_suite(Config) ->
     opt:init_per_suite(Config, #onenv_test_config{
-        onenv_scenario = "api_tests",
+        onenv_scenario = "api_tests_s3",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
             User3Id = oct_background:get_user_id(user3),
