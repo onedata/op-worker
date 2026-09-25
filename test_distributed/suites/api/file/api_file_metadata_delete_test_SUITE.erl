@@ -231,7 +231,7 @@ build_setup_fun(preset_initial_metadata, FileGuid, <<"xattrs">>, FullXattrSet, N
         XattrsToRestore = maps:filter(fun(Key, Value) ->
             maps:find(Key, CurrXattrs) /= {ok, Value}
         end, FullXattrSet),
-        maps:size(XattrsToRestore) > 0 andalso ct:pal("Xattrs setup: restoring ~p on ~p", [
+        maps:size(XattrsToRestore) > 0 andalso ct:pal("Xattrs setup: restoring ~tp on ~tp", [
             maps:keys(XattrsToRestore), RandNode
         ]),
 
@@ -271,7 +271,7 @@ build_verify_fun(preset_initial_metadata, FileGuid, <<"xattrs">>, FullXattrSet, 
             node = TestNode,
             data = #{<<"keys">> := Keys}
         }) ->
-            ct:pal("Xattrs delete: removed ~p on ~p (~p)", [Keys, TestNode, ScenarioType]),
+            ct:pal("Xattrs delete: removed ~tp on ~tp (~tp)", [Keys, TestNode, ScenarioType]),
             ExpXattrs = maps:without(Keys, FullXattrSet),
             lists:foreach(fun(Node) ->
                 ?assertEqual({ok, ExpXattrs}, api_test_utils:get_xattrs(Node, FileGuid), ?ATTEMPTS)
