@@ -290,7 +290,8 @@ get_file_children_test(Config) ->
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data, node = Node}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_files(Response, rest, undefined, Data, [{FileGuid, FileName, FilePath, FileAttr}], Node)
+                        validate_listed_files(Response, rest, undefined, maps:without([<<"offset">>, <<"limit">>, <<"index">>], Data),
+                            [{FileGuid, FileName, FilePath, FileAttr}], Node)
                     end
                 }
             ],
@@ -357,7 +358,8 @@ get_shared_file_children_test(Config) ->
                     type = {rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
                     prepare_args_fun = build_get_children_prepare_rest_args_fun(ShareFileObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_files(Response, rest, ShareId, Data, [{FileGuid, FileName, FilePath, FileAttr1}], undefined)
+                        validate_listed_files(Response, rest, ShareId, maps:without([<<"offset">>, <<"limit">>, <<"index">>], Data),
+                            [{FileGuid, FileName, FilePath, FileAttr1}], undefined)
                     end
                 }
             ],
@@ -687,7 +689,10 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Node) -
         {file_id:guid_to_share_guid(Guid, ShareId), Name, Path, Attrs}
     end, ExpFiles1),
 
-    IsLast = Limit + Offset >= length(AllFiles),
+    % Directory listing does not look past the requested page, so a full page is
+    % never reported as last, even when it ends exactly at the last child
+    % (listing a regular file ignores listing options - callers drop them)
+    IsLast = length(ExpFiles1) < Limit,
 
     ExpFiles3 = #{
         <<"children">> => lists:map(fun({Guid, Name, _Path, Attrs}) ->
