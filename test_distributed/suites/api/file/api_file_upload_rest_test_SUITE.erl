@@ -204,7 +204,7 @@ build_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
         ShouldResultInWrite = Offset > 0 orelse byte_size(DataSent) > 0,
 
         Type = maps:get(<<"type">>, Data, <<"REG">>),
-        Mode = maps:get(<<"mode">>, Data, undefined),
+        Mode = get_requested_mode(Data),
 
         case {Type, Mode, ShouldResultInWrite, UserId == SpaceOwnerId} of
             {<<"REG">>, <<"0544">>, true, false} ->
@@ -253,14 +253,9 @@ build_create_file_verify_fun(MemRef, DirGuid, Providers) ->
                         <<"REG">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
                         <<"DIR">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
                     end,
-                    ExpMode = case maps:get(<<"posixPermissions">>, Data, undefined) of
-                        undefined -> 
-                            case maps:get(<<"mode">>, Data, undefined) of
-                                undefined -> DefaultMode;
-                                ModeBin -> binary_to_integer(ModeBin, 8)
-                            end;
-                        PosixPermissionsBin -> 
-                            binary_to_integer(PosixPermissionsBin, 8)
+                    ExpMode = case get_requested_mode(Data) of
+                        undefined -> DefaultMode;
+                        ModeBin -> binary_to_integer(ModeBin, 8)
                     end,
 
                     lists:foreach(fun(Provider) ->
@@ -479,14 +474,9 @@ build_rest_create_file_at_path_verify_fun(MemRef, Providers) ->
                         <<"REG">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
                         <<"DIR">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
                     end,
-                    ExpMode = case maps:get(<<"posixPermissions">>, Data, undefined) of
-                        undefined ->
-                            case maps:get(<<"mode">>, Data, undefined) of
-                                undefined -> DefaultMode;
-                                ModeBin -> binary_to_integer(ModeBin, 8)
-                            end;
-                        PosixPermissionsBin ->
-                            binary_to_integer(PosixPermissionsBin, 8)
+                    ExpMode = case get_requested_mode(Data) of
+                        undefined -> DefaultMode;
+                        ModeBin -> binary_to_integer(ModeBin, 8)
                     end,
 
                     lists:foreach(fun(Provider) ->
@@ -512,6 +502,13 @@ build_rest_create_file_at_path_verify_fun(MemRef, Providers) ->
                     ?assertMatch({error, _}, lfm_proxy:stat(TestNode, ?ROOT_SESS_ID, {path, FilePath}))
             end
     end.
+
+
+%% @private
+-spec get_requested_mode(map()) -> undefined | binary().
+get_requested_mode(Data) ->
+    % Same precedence as in file_content_rest_handler - posixPermissions wins over mode
+    maps:get(<<"posixPermissions">>, Data, maps:get(<<"mode">>, Data, undefined)).
 
 
 %% @private
