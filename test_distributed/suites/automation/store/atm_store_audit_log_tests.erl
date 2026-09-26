@@ -262,7 +262,7 @@ logging_level_test() ->
         <<"limit">> => ItemsNum
     }),
     BrowseFun = fun() ->
-        ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
+        ?erpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
     end,
     case ExpEntries of
         [] -> ?assertThrow(?ERROR_NOT_FOUND, BrowseFun());
