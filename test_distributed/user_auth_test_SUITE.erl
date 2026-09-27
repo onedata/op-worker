@@ -23,7 +23,7 @@
 %% export for ct
 -export([
     all/0,
-    init_per_suite/1,
+    init_per_suite/1, end_per_suite/1,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -635,6 +635,10 @@ init_per_suite(Config) ->
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook} | Config].
+
+
+end_per_suite(_Config) ->
+    ok.
 
 
 init_per_testcase(auth_cache_expiration_with_time_warps_test = Case, Config) ->
