@@ -55,13 +55,12 @@ get_documents_diff(Worker, After, Before, SessionClosed) ->
                                     ({ok, #document{value = #links_node{model = session_local_links}}}) -> false;
                                     ({ok, #document{value = #links_forest{model = session_local_links}}}) -> false;
                                     ({ok, #document{value = #session{}}}) -> false;
-                                    ({ok, #document{value = #helper_handle{}}}) -> false;
                                     (_) -> true
             end, Ans2),
 
             Diff = Ans2 -- Ans3,
-            case length(Diff) =< 4 of
-                true -> Ans3; % helper handle, session doc and two session links may exist if session is open
+            case length(Diff) =< 3 of
+                true -> Ans3; % session doc and two session links may exist if session is open
                 _ -> Ans2
             end
     end.

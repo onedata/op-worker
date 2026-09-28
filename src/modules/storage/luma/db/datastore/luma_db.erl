@@ -11,9 +11,19 @@
 %%%
 %%% Ids of documents of this model are results of hashing 4 keys:
 %%%  - storage:id(),
-%%%  - luma_generation (included only when > 0 for backward compatibility),
+%%%  - namespace() - drawn anew whenever the storage's LUMA config changes, so
+%%%    that one write makes every entry stored under the previous one stale
+%%%    (omitted when 'undefined', which is the original keyspace kept for
+%%%    backward compatibility),
 %%%  - table() - name of the module that implements LUMA DB table
 %%%  - db_key() - internal key in the table
+%%%
+%%% A namespace is a unique stamp rather than a counter on purpose: only
+%%% equality is ever tested, so ordering buys nothing, while a counter could be
+%%% handed out twice (the storage update saga restores the previous config,
+%%% number included, when it rolls back) and bring long-dead entries back to
+%%% life. Stale namespaces are recorded on the storage config and their entries
+%%% are deleted by luma_db_garbage_collector.
 %%%
 %%% Single document of this model stores custom record (db_record())
 %%% of one of the modules implementing LUMA DB table.
@@ -37,7 +47,8 @@
     delete/3, delete/4,
     clear_all/2,
     get_and_describe/3, get_and_describe/4,
-    delete_if_auto_feed/3
+    delete_if_auto_feed/3,
+    draw_namespace/0
 ]).
 
 %% datastore_model callbacks
@@ -53,7 +64,11 @@
 -type doc_record() :: #luma_db{}.
 -type doc() :: datastore_doc:doc(doc_record()).
 
--export_type([doc_id/0]).
+%% Unique stamp partitioning one storage's entries from those it stored under
+%% any earlier LUMA config - see the module doc.
+-type namespace() :: binary().
+
+-export_type([doc_id/0, namespace/0]).
 
 % Modules that implement LUMA DB tables.
 % @formatter:off
@@ -93,6 +108,10 @@
 -type constraints() :: [constraint()].
 
 -define(BATCH_SIZE, 1000).
+
+%% Enough for a value that only ever has to be unique among the namespaces of a
+%% single storage - see draw_namespace/0.
+-define(NAMESPACE_BYTES, 8).
 
 
 %%%===================================================================
@@ -289,6 +308,24 @@ get_and_describe(StorageData, Key, Table, Constraints) ->
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Draws a namespace for a storage whose LUMA config is about to change. Every
+%% call yields a value that has never been used and never will be again, which
+%% is what keeps the entries of the outgoing namespace unreachable for good,
+%% whether or not anyone gets around to deleting them.
+%%
+%% NOTE: plain random bytes rather than a datastore key - a namespace is never
+%% used as one. It is only ever digested into a document id or concatenated into
+%% a link forest key, so the chash label a datastore key carries would claim a
+%% routing meaning this value does not have.
+%% @end
+%%--------------------------------------------------------------------
+-spec draw_namespace() -> namespace().
+draw_namespace() ->
+    str_utils:rand_hex(?NAMESPACE_BYTES).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -298,9 +335,9 @@ get_and_describe(StorageData, Key, Table, Constraints) ->
 id(StorageData, Table, Key) ->
     StorageId = storage:get_id(StorageData),
     TableBin = atom_to_binary(Table, utf8),
-    DigestComponents = case storage:get_luma_generation(StorageData) of
-        0 -> [StorageId, TableBin, Key];
-        Generation -> [StorageId, integer_to_binary(Generation), TableBin, Key]
+    DigestComponents = case storage:get_luma_db_namespace(StorageData) of
+        undefined -> [StorageId, TableBin, Key];
+        Namespace -> [StorageId, Namespace, TableBin, Key]
     end,
     datastore_key:new_from_digest(DigestComponents).
 

@@ -301,15 +301,21 @@ emit_quota_exceeded() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends event indicating storage helper params have changed.
+%% Sends event indicating storage helper params have changed, so that direct IO
+%% clients re-fetch them. Op-worker itself needs no notification - it resolves
+%% helper params anew for every operation.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_helper_params_changed(StorageId :: storage:id()) ->
-    ok | {error, Reason :: term()}.
+-spec emit_helper_params_changed(StorageId :: storage:id()) -> ok.
 emit_helper_params_changed(StorageId) ->
-    event:emit(#helper_params_changed_event{
-        storage_id = StorageId
-    }).
+    case event:emit(#helper_params_changed_event{storage_id = StorageId}) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            ?warning("Failed to emit helper params changed event for storage '~ts' due to: ~tp", [
+                StorageId, Reason
+            ])
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

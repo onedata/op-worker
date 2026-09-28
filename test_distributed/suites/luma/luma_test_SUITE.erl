@@ -24,7 +24,9 @@
 -export([init_per_testcase/1, init_per_testcase/2, end_per_testcase/1, end_per_testcase/2]).
 
 -export([
-    luma_generation_namespace/1,
+    luma_db_namespace_isolation/1,
+    stale_luma_db_namespaces_are_garbage_collected/1,
+    luma_db_is_cleared_with_its_stale_namespaces/1,
 
     % tests of mapping user to storage credentials
     map_root_to_storage_creds_returns_admin_creds/1,
@@ -52,7 +54,9 @@
 
 all() ->
     ?ALL([
-        luma_generation_namespace,
+        luma_db_namespace_isolation,
+        stale_luma_db_namespaces_are_garbage_collected,
+        luma_db_is_cleared_with_its_stale_namespaces,
 
         % tests of mapping user to storage credentials
         map_root_to_storage_creds_returns_admin_creds,
@@ -81,16 +85,23 @@ all() ->
 % users for which mappings defined in luma.json are incorrect
 -define(ERR_USERS, [<<"user", (integer_to_binary(I))/binary>> || I <- lists:seq(2, 10)]).
 
+% Credentials used to tell the mappings of the two namespaces apart in the
+% garbage collection tests
+-define(STALE_NAMESPACE_CREDENTIALS,
+    luma_test_utils:new_s3_credentials(<<"STALE_ACCESS_KEY">>, <<"STALE_SECRET_KEY">>)).
+-define(LIVE_NAMESPACE_CREDENTIALS,
+    luma_test_utils:new_s3_credentials(<<"LIVE_ACCESS_KEY">>, <<"LIVE_SECRET_KEY">>)).
+
 %% @TODO VFS-12827 - implement tests for all helper types
 
 %%%===================================================================
-%%% Test functions - luma generations
+%%% Test functions - luma db namespaces
 %%%===================================================================
 
-luma_generation_namespace(Config) ->
-    ?RUN(Config, [?LOCAL_FEED_LUMA_S3_STORAGE_CONFIG], fun luma_generation_namespace_base/2).
+luma_db_namespace_isolation(Config) ->
+    ?RUN(Config, [?LOCAL_FEED_LUMA_S3_STORAGE_CONFIG], fun luma_db_namespace_isolation_base/2).
 
-luma_generation_namespace_base(Config, StorageLumaConfig) ->
+luma_db_namespace_isolation_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = #document{value = StorageConfig}  = maps:get(storage_record, StorageLumaConfig),
     ExpectedUserCreds = maps:get(user_credentials, StorageLumaConfig),
@@ -99,12 +110,12 @@ luma_generation_namespace_base(Config, StorageLumaConfig) ->
         luma_test_utils:map_to_storage_creds(Worker, ?LUMA_SESS_ID, ?LUMA_USER_ID, ?LUMA_SPACE_ID, Storage_)
     end,
 
-    % Already filled luma db for current luma generation should properly map
+    % Already filled luma db for current luma db namespace should properly map
     ?assertMatch({ok, ExpectedUserCreds}, MapFun(Storage)),
 
-    % But it is not available for local luma db on generation change
+    % But it is not available once the storage draws a new namespace
     Storage2 = Storage#document{value = StorageConfig#storage_config{
-        luma_generation = StorageConfig#storage_config.luma_generation + 1
+        luma_db_namespace = rpc:call(Worker, luma_db, draw_namespace, [])
     }},
     ?assertMatch({error, not_found}, MapFun(Storage2)),
 
@@ -117,12 +128,60 @@ luma_generation_namespace_base(Config, StorageLumaConfig) ->
     % Which does not invalidate entries in other namespaces (they must be deleted separately)
     ?assertMatch({ok, ExpectedUserCreds}, MapFun(Storage)),
 
-    % Clearing luma db clears entries only for specific generation
+    % Clearing luma db clears entries only for specific namespace
     ok = rpc:call(Worker, luma_crud_api, clear_db, [Storage2]),
     ?assertMatch({error, not_found}, MapFun(Storage2)),
     ?assertMatch({ok, ExpectedUserCreds}, MapFun(Storage)),
 
     ok.
+
+
+stale_luma_db_namespaces_are_garbage_collected(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {StorageId, StaleStorageData, LiveStorageData} = set_up_storage_with_stale_namespace(
+        Worker, ?FUNCTION_NAME
+    ),
+
+    StaleCredentials = ?STALE_NAMESPACE_CREDENTIALS,
+    LiveCredentials = ?LIVE_NAMESPACE_CREDENTIALS,
+
+    store_user_mapping(Worker, StaleStorageData, StaleCredentials),
+    store_user_mapping(Worker, LiveStorageData, LiveCredentials),
+    ?assertMatch({ok, #{<<"storageCredentials">> := StaleCredentials}},
+        get_user_mapping(Worker, StaleStorageData)),
+    ?assertMatch({ok, #{<<"storageCredentials">> := LiveCredentials}},
+        get_user_mapping(Worker, LiveStorageData)),
+
+    ok = rpc:call(Worker, luma_db_garbage_collector, run, []),
+
+    % the stale namespace is emptied...
+    ?assertEqual({error, not_found}, get_user_mapping(Worker, StaleStorageData)),
+
+    % ...while the namespace the storage reads through is left alone - a collector
+    % that swept it would be deleting live mappings
+    ?assertMatch({ok, #{<<"storageCredentials">> := LiveCredentials}},
+        get_user_mapping(Worker, LiveStorageData)),
+
+    % and the namespace is struck off, so the next run has nothing to do
+    ?assertEqual([], rpc:call(Worker, storage_config, get_stale_luma_db_namespaces, [StorageId])).
+
+
+luma_db_is_cleared_with_its_stale_namespaces(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {StorageId, StaleStorageData, LiveStorageData} = set_up_storage_with_stale_namespace(
+        Worker, ?FUNCTION_NAME
+    ),
+
+    store_user_mapping(Worker, StaleStorageData, ?STALE_NAMESPACE_CREDENTIALS),
+    store_user_mapping(Worker, LiveStorageData, ?LIVE_NAMESPACE_CREDENTIALS),
+
+    % this is what a storage being deleted goes through - once its config is gone
+    % the stale namespaces can no longer be found, so they must be cleared here
+    {ok, StorageConfigDoc} = rpc:call(Worker, storage_config, get, [StorageId]),
+    ok = rpc:call(Worker, luma_crud_api, clear_db_with_stale_namespaces, [StorageConfigDoc]),
+
+    ?assertEqual({error, not_found}, get_user_mapping(Worker, StaleStorageData)),
+    ?assertEqual({error, not_found}, get_user_mapping(Worker, LiveStorageData)).
 
 
 %%%===================================================================
@@ -429,5 +488,64 @@ end_per_testcase(default, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     luma_test_utils:clear_luma_db_for_all_storages(Worker),
     ok = test_utils:mock_unload(Worker, [storage_file_ctx, idp_access_token, storage_config]);
+end_per_testcase(Case, Config) when
+    Case =:= stale_luma_db_namespaces_are_garbage_collected;
+    Case =:= luma_db_is_cleared_with_its_stale_namespaces
+->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    % the storage exists only for the duration of the case; left behind, its
+    % stale namespace would be swept by every later garbage collector run
+    rpc:call(Worker, storage_config, delete, [gc_test_storage_id(Case)]),
+    Config;
 end_per_testcase(_Case, Config) ->
     Config.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+%% Registers a storage config (only the op-worker side of a storage - the LUMA
+%% DB never consults Onezone) that already has one stale namespace, and
+%% returns storage data addressing each of the two namespaces.
+set_up_storage_with_stale_namespace(Worker, Case) ->
+    StorageId = gc_test_storage_id(Case),
+    StaleNamespace = rpc:call(Worker, luma_db, draw_namespace, []),
+    LiveNamespace = rpc:call(Worker, luma_db, draw_namespace, []),
+
+    % NOTE: deliberately a posix INCOMPATIBLE storage - storing a mapping on a
+    % posix one adds a reverse mapping, which consults storage:is_imported/1 and
+    % so would drag Onezone into a test that otherwise needs nothing but the
+    % local storage config
+    StorageConfig = #storage_config{
+        helper_spec = ?S3_HELPER(?S3_ADMIN_CREDENTIALS),
+        luma_config = ?LUMA_CONFIG(?LOCAL_FEED),
+        luma_db_namespace = LiveNamespace,
+        stale_luma_db_namespaces = [StaleNamespace]
+    },
+    {ok, _} = rpc:call(Worker, storage_config, create, [StorageId, StorageConfig]),
+
+    LiveStorageData = #document{key = StorageId, value = StorageConfig},
+    StaleStorageData = LiveStorageData#document{
+        value = StorageConfig#storage_config{luma_db_namespace = StaleNamespace}
+    },
+    {StorageId, StaleStorageData, LiveStorageData}.
+
+
+%% @private
+gc_test_storage_id(Case) ->
+    <<"lumaDbGcStorage_", (atom_to_binary(Case, utf8))/binary>>.
+
+
+%% @private
+store_user_mapping(Worker, StorageData, StorageCredentials) ->
+    {ok, _} = rpc:call(Worker, luma_crud_api, storage_users_store, [
+        StorageData, ?LUMA_USER_ID, #{<<"storageCredentials">> => StorageCredentials}
+    ]).
+
+
+%% @private
+get_user_mapping(Worker, StorageData) ->
+    rpc:call(Worker, luma_crud_api, storage_users_get_and_describe, [StorageData, ?LUMA_USER_ID]).

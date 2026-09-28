@@ -24,8 +24,8 @@
 -define(FOREST_KEY(ForestType, StorageId),
     str_utils:join_binary([?FORESTS_PREFIX, ForestType, StorageId], ?SEPARATOR)
 ).
--define(FOREST_KEY_GEN(ForestType, StorageId, Gen),
-    str_utils:join_binary([?FORESTS_PREFIX, ForestType, StorageId, Gen], ?SEPARATOR)
+-define(FOREST_KEY_IN_NAMESPACE(ForestType, StorageId, Namespace),
+    str_utils:join_binary([?FORESTS_PREFIX, ForestType, StorageId, Namespace], ?SEPARATOR)
 ).
 
 %% API
@@ -96,11 +96,11 @@ list(ForestType, StorageData, Token, Limit) ->
 forest_key(ForestType, StorageData) ->
     StorageId = storage:get_id(StorageData),
     ForestTypeBin = atom_to_binary(ForestType, utf8),
-    case storage:get_luma_generation(StorageData) of
-        0 ->
+    case storage:get_luma_db_namespace(StorageData) of
+        undefined ->
             ?FOREST_KEY(ForestTypeBin, StorageId);
-        Generation ->
-            ?FOREST_KEY_GEN(ForestTypeBin, StorageId, integer_to_binary(Generation))
+        Namespace ->
+            ?FOREST_KEY_IN_NAMESPACE(ForestTypeBin, StorageId, Namespace)
     end.
 
 

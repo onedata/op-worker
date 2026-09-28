@@ -901,12 +901,46 @@ restart_autocleaning_runs() ->
 %% @private
 -spec handle_periodic_storages_check() -> ok.
 handle_periodic_storages_check() ->
+    check_helpers_cache(),
+    check_rtransfer_storages_registration(),
+
     PreviousUnhealthyStorages = worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY),
     case storage_monitoring:perform_regular_checks(PreviousUnhealthyStorages) of
         PreviousUnhealthyStorages ->
             ok;
         UnhealthyStoragesIds ->
             worker_host:state_put(?MODULE, ?UNHEALTHY_STORAGES_KEY, UnhealthyStoragesIds)
+    end.
+
+
+%% @private
+-spec check_helpers_cache() -> ok.
+check_helpers_cache() ->
+    try
+        ok = helpers:prune_cache(),
+
+        {ok, Stats} = helpers:get_helper_cache_stats(),
+        ?debug("Helpers statistics:~n~tp", [Stats])
+    catch Class:Reason:Stacktrace ->
+        ?examine_exception("Periodic helpers check failed", Class, Reason, Stacktrace)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Converges this node's rtransfer with the storage configs - registering a
+%% changed storage in rtransfer is best effort and may have missed this node.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_rtransfer_storages_registration() -> ok.
+check_rtransfer_storages_registration() ->
+    try
+        ok = rtransfer_config:ensure_storages_registered_on_this_node()
+    catch Class:Reason:Stacktrace ->
+        ?examine_exception(
+            "Periodic rtransfer storages registration check failed", Class, Reason, Stacktrace
+        )
     end.
 
 

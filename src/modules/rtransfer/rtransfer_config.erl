@@ -26,7 +26,7 @@
 %% API
 -export([start_rtransfer/0, restart_link/0, fetch/6]).
 -export([get_nodes/1, open/2, fsync/1, close/1, auth_request/2, get_connection_secret/2]).
--export([add_storage/1, add_storages/0, generate_secret/2]).
+-export([add_storage/1, add_storages/0, ensure_storages_registered_on_this_node/0, generate_secret/2]).
 -export([get_local_ip_and_port/0]).
 
 %% Dialyzer doesn't find the behaviour
@@ -198,37 +198,30 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds storage to rtransfer.
+%% Hands rtransfer on every cluster node the storage's current helper params,
+%% which it keeps cached per storage.
+%%
+%% Deliberately best effort - a failure is reported to the logs and nothing
+%% else. Every caller is propagating a change that is already persisted and
+%% that none of them can take back, so there is nothing to be gained by
+%% answering with an error:
+%%   * it is a multicall, so it can take on some nodes and fail on others -
+%%     there is no single outcome to report faithfully;
+%%   * the storage update runs it inside a saga step, which must not report
+%%     anything it did after its own write (see
+%%     storage_updater:execute_saga/2), and repeating that update would not
+%%     even retry it - the diff would come out empty and the step be skipped;
+%%   * the storage creation runs it after both stores already hold the new
+%%     storage, with no compensation left to undo them.
+%% A node that did not take the change converges on the next periodic storages
+%% check - see ensure_storages_registered_on_this_node/0.
 %% @end
 %%--------------------------------------------------------------------
--spec add_storage(storage:id()) -> ok | errors:error().
+-spec add_storage(storage:id()) -> ok.
 add_storage(StorageId) ->
-    HelperSpec = storage:get_helper_spec(StorageId),
-    CredentialsParams = helper_spec:get_credentials(HelperSpec),
-    {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, CredentialsParams),
-    HelperName = helper_spec:get_name(HelperSpec),
-    AllNodes = consistent_hashing:get_all_nodes(),
-
-    case utils:rpc_multicall(
-        AllNodes, rtransfer_link, add_storage, [StorageId, HelperName, maps:to_list(HelperParams)]
-    ) of
-        {GatheredResults, []} ->
-            case lists:filter(fun(R) -> R =/= ok end, GatheredResults) of
-                [] ->
-                    ok;
-                _ErrorResults ->
-                    ?report_internal_server_error(?autoformat_with_msg(
-                        "There were errors while adding storage to rtransfer",
-                        [StorageId, AllNodes, GatheredResults]
-                    ))
-            end;
-        {_, BadNodes} ->
-            ?report_internal_server_error(?autoformat_with_msg(
-                "Failed to call some nodes to add storage to rtransfer",
-                [StorageId, BadNodes]
-            ))
-    end.
-
+    % both an error and an exception are reported by the callee
+    ?catch_exceptions(add_storage(StorageId, consistent_hashing:get_all_nodes())),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -239,6 +232,25 @@ add_storage(StorageId) ->
 add_storages() ->
     {ok, StorageIds} = get_storages(10),
     lists:foreach(fun add_storage/1, StorageIds).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Makes sure this node's rtransfer holds the current helper params of every
+%% storage known locally. rtransfer ignores a registration carrying the params
+%% it already has, so repeating this is cheap.
+%% It is what makes the best effort of add_storage/1 good enough - a node that
+%% was unreachable when a storage changed would otherwise keep reaching it with
+%% the previous params until the provider reconnects to Onezone or is restarted.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_storages_registered_on_this_node() -> ok.
+ensure_storages_registered_on_this_node() ->
+    {ok, AllStorages} = storage:get_all(),
+
+    lists:foreach(fun(StorageData) ->
+        % any error is reported by the callee
+        ?catch_exceptions(add_storage(storage:get_id(StorageData), [node()]))
+    end, AllStorages).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -278,6 +290,43 @@ get_local_ip_and_port() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds storage to rtransfer on the given nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_storage(storage:id(), [node()]) -> ok | errors:error().
+add_storage(StorageId, Nodes) ->
+    HelperSpec = storage:get_helper_spec(StorageId),
+    CredentialsParams = helper_spec:get_credentials(HelperSpec),
+    {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, CredentialsParams),
+    HelperName = helper_spec:get_name(HelperSpec),
+
+    case utils:rpc_multicall(
+        Nodes, rtransfer_link, add_storage, [StorageId, HelperName, maps:to_list(HelperParams)]
+    ) of
+        {GatheredResults, []} ->
+            case lists:filter(fun(R) -> R =/= ok end, GatheredResults) of
+                [] ->
+                    ok;
+                _ErrorResults ->
+                    ?report_internal_server_error(?autoformat_with_msg(
+                        "There were errors while adding storage to rtransfer; until the next "
+                        "periodic storages check, transfers handled by those nodes may reach "
+                        "the storage with the previously registered params",
+                        [StorageId, Nodes, GatheredResults]
+                    ))
+            end;
+        {_, BadNodes} ->
+            ?report_internal_server_error(?autoformat_with_msg(
+                "Failed to call some nodes to add storage to rtransfer; until the next periodic "
+                "storages check, transfers handled by those nodes may reach the storage with "
+                "the previously registered params",
+                [StorageId, BadNodes]
+            ))
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

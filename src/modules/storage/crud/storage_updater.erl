@@ -26,10 +26,18 @@
     update_helper_spec/2
 ]).
 
+-ifdef(TEST).
+%% Export for unit testing of the LUMA DB namespace bookkeeping
+-export([rotate_luma_db_namespace/1, build_rollback_storage_config/3]).
+%% Export for unit testing of what the first saga step reports
+-export([update_in_op/4]).
+-endif.
+
 
 -record(saga_step, {
     name :: binary(),
     should_run :: boolean(),
+    % NOTE: the action must be atomic - see execute_saga/2
     action :: fun(() -> ok | {error, term()}),
     compensation :: fun(() -> ok | {error, term()})
 }).
@@ -93,15 +101,17 @@ do_update(StorageId, UpdateSpec) ->
         StorageId, UpdateSpec, PrevStorageConfig, PrevOzStorageData
     ),
 
+    RollbackStorageConfig = build_rollback_storage_config(PrevStorageConfig, NewStorageConfig, LumaChanged),
+
     Result = execute_saga([
         #saga_step{
             name = <<"update OP storage config">>,
             should_run = HelperSpecChanged orelse LumaChanged,
             action = fun() ->
-                update_in_op(StorageId, NewStorageConfig, HelperSpecChanged)
+                update_in_op(StorageId, NewStorageConfig, HelperSpecChanged, LumaChanged)
             end,
             compensation = fun() ->
-                update_in_op(StorageId, PrevStorageConfig, HelperSpecChanged)
+                update_in_op(StorageId, RollbackStorageConfig, HelperSpecChanged, LumaChanged)
             end
         },
         #saga_step{
@@ -123,12 +133,37 @@ do_update(StorageId, UpdateSpec) ->
         }
     ]),
 
-    LumaChanged andalso best_effort_clear_luma(StorageId, case Result of
-        ok -> PrevStorageConfig;
-        {error, _} -> NewStorageConfig
-    end),
-
     Result.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Builds the storage config the first saga step reverts to. Beyond restoring
+%% the previous LUMA config, it marks the namespace the action drew as stale:
+%% entries may have been stored under it while it was briefly live, and once the
+%% previous config is back nothing will ever read them again.
+%%
+%% NOTE: the stale list written here is the one the previous config carried, not
+%% whatever is in the database at the time. That is deliberate - it drops the
+%% previous namespace back off the list, which is required, as the rollback
+%% makes it live again. The only entry it can lose is one the garbage collector
+%% has finished cleaning in the meantime, which merely costs one more (empty)
+%% pass over it.
+%% @end
+%%--------------------------------------------------------------------
+-spec build_rollback_storage_config(storage_config:record(), storage_config:record(), boolean()) ->
+    storage_config:record().
+build_rollback_storage_config(PrevStorageConfig, _NewStorageConfig, false = _LumaChanged) ->
+    PrevStorageConfig;
+
+build_rollback_storage_config(PrevStorageConfig, NewStorageConfig, true = _LumaChanged) ->
+    AbandonedNamespace = NewStorageConfig#storage_config.luma_db_namespace,
+    PrevStorageConfig#storage_config{
+        stale_luma_db_namespaces = [
+            AbandonedNamespace | PrevStorageConfig#storage_config.stale_luma_db_namespaces
+        ]
+    }.
 
 
 %% @private
@@ -197,7 +232,6 @@ prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStora
     end,
 
     PrevLumaConfig = PrevStorageConfig#storage_config.luma_config,
-    PrevLumaGeneration = PrevStorageConfig#storage_config.luma_generation,
 
     {LumaChanged, NewLumaConfig} = case UpdateSpec#storage_update_spec.luma of
         undefined ->
@@ -235,14 +269,37 @@ prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStora
             ok
     end,
 
-    {HelperSpecChanged, LumaChanged, #storage_config{
+    % NOTE: built from the previous config rather than from scratch, so that a
+    % field added later is carried over instead of being silently reset
+    NewStorageConfig = PrevStorageConfig#storage_config{
         helper_spec = NewHelperSpec,
-        luma_config = NewLumaConfig,
-        luma_generation = case LumaChanged of
-            true -> PrevLumaGeneration + 1;
-            false -> PrevLumaGeneration
-        end
-    }}.
+        luma_config = NewLumaConfig
+    },
+
+    {HelperSpecChanged, LumaChanged, case LumaChanged of
+        true -> rotate_luma_db_namespace(NewStorageConfig);
+        false -> NewStorageConfig
+    end}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Draws a fresh LUMA DB namespace for the storage. Every entry stored under the
+%% outgoing one becomes unreachable the moment this record is written, and the
+%% same write marks that namespace stale - which is what lets the garbage
+%% collector find those entries afterwards.
+%% @end
+%%--------------------------------------------------------------------
+-spec rotate_luma_db_namespace(storage_config:record()) -> storage_config:record().
+rotate_luma_db_namespace(#storage_config{
+    luma_db_namespace = OutgoingNamespace,
+    stale_luma_db_namespaces = StaleNamespaces
+} = StorageConfig) ->
+    StorageConfig#storage_config{
+        luma_db_namespace = luma_db:draw_namespace(),
+        stale_luma_db_namespaces = [OutgoingNamespace | StaleNamespaces]
+    }.
 
 
 %% @private
@@ -262,11 +319,16 @@ build_luma_diff(#luma_spec{feed = Feed, url = Url, api_key = ApiKey}) ->
 
 
 %% @private
--spec update_in_op(storage:id(), storage_config:record(), boolean()) -> ok | {error, term()}.
-update_in_op(StorageId, StorageConfig, HelperSpecChanged) ->
+-spec update_in_op(storage:id(), storage_config:record(), boolean(), boolean()) ->
+    ok | {error, term()}.
+update_in_op(StorageId, StorageConfig, HelperSpecChanged, LumaChanged) ->
     case storage_config:update(StorageId, fun(_) -> {ok, StorageConfig} end) of
         {ok, _} when HelperSpecChanged ->
+            % covers a simultaneous LUMA change as well - the event carries only
+            % the storage id, so one is enough
             on_helper_changed(StorageId);
+        {ok, _} when LumaChanged ->
+            on_luma_changed(StorageId);
         {ok, _} ->
             ok;
         {error, _} = Error ->
@@ -277,23 +339,20 @@ update_in_op(StorageId, StorageConfig, HelperSpecChanged) ->
 %% @private
 -spec on_helper_changed(storage:id()) -> ok.
 on_helper_changed(StorageId) ->
-    emit_helper_params_changed_event(StorageId),
-    ?check(rtransfer_config:add_storage(StorageId)),
-
-    helpers_reload:refresh_helpers_by_storage(StorageId).
+    % NOTE: both calls report their own failures and return ok - the step that
+    % runs them must not report anything it did after its write, see
+    % execute_saga/2
+    fslogic_event_emitter:emit_helper_params_changed(StorageId),
+    rtransfer_config:add_storage(StorageId).
 
 
 %% @private
--spec emit_helper_params_changed_event(storage:id()) -> ok.
-emit_helper_params_changed_event(StorageId) ->
-    case fslogic_event_emitter:emit_helper_params_changed(StorageId) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            ?warning("Failed to emit helper changed event for storage '~ts' due to: ~tp", [
-                StorageId, Reason
-            ])
-    end.
+-spec on_luma_changed(storage:id()) -> ok.
+on_luma_changed(StorageId) ->
+    % NOTE: unlike a helper spec change, this does not re-register the storage in
+    % rtransfer - rtransfer accesses storages with the helper spec's own
+    % credentials, which LUMA does not resolve
+    fslogic_event_emitter:emit_helper_params_changed(StorageId).
 
 
 %% @private
@@ -337,28 +396,6 @@ on_qos_change(StorageId) ->
     end, Spaces).
 
 
-%% @private
--spec best_effort_clear_luma(storage:id(), storage_config:record()) -> ok.
-best_effort_clear_luma(StorageId, StorageConfig) ->
-    LumaGeneration = StorageConfig#storage_config.luma_generation,
-
-    try
-        luma_crud_api:clear_db(#document{
-            key = StorageId,
-            value = StorageConfig
-        })
-    catch Class:Reason:Stacktrace ->
-        ?warning(
-            "Failed to clear LUMA DB for generation ~B of storage '~ts' - "
-            "stale LUMA entries may remain in the database and require manual cleanup",
-            [LumaGeneration, StorageId]
-        ),
-        ?examine_exception(Class, Reason, Stacktrace)
-    end,
-
-    ok.
-
-
 %%%===================================================================
 %%% Saga execution
 %%%===================================================================
@@ -370,7 +407,22 @@ execute_saga(Steps) ->
     execute_saga(Steps, []).
 
 
+%%--------------------------------------------------------------------
 %% @private
+%% @doc
+%% Runs the steps in order and, on the first failure, compensates the steps that
+%% have already succeeded, in reverse order.
+%%
+%% NOTE: a step's compensation is armed only once its action has returned 'ok',
+%% so NOTHING EVER UNDOES A STEP THAT FAILED. Every action must therefore be
+%% ATOMIC - it either applies in full or leaves nothing behind. An action that
+%% does several things in sequence must not report the failure of a later one,
+%% or the saga returns an error while what the earlier ones did stays applied,
+%% with no compensation queued to take it back. That is why update_in_op/4
+%% propagates the config change on a best effort basis: the one thing the step
+%% can report on is the storage_config write itself.
+%% @end
+%%--------------------------------------------------------------------
 -spec execute_saga([saga_step()], [named_compensation()]) -> ok | {error, term()}.
 execute_saga([], _Compensations) ->
     ok;

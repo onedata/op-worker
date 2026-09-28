@@ -519,7 +519,17 @@
 -record(storage_config, {
     helper_spec :: helper_spec:t(),
     luma_config :: storage:luma_config(),
-    luma_generation :: non_neg_integer()
+    %% Namespaces this storage's entries in the LUMA DB - see luma_db. A fresh
+    %% namespace is drawn on every LUMA config change, which makes all entries
+    %% stored so far unreachable in a single write. 'undefined' is the original,
+    %% unnamespaced keyspace, retained by storages that never changed their LUMA
+    %% config (and by all storages predating the mechanism).
+    luma_db_namespace :: undefined | luma_db:namespace(),
+    %% Namespaces that no longer back any lookup and whose entries are still to
+    %% be deleted - see luma_db_garbage_collector. A namespace lands here in the
+    %% very write that supersedes it, so it can never be lost; the live namespace
+    %% is never among them.
+    stale_luma_db_namespaces = [] :: [undefined | luma_db:namespace()]
 }).
 
 
@@ -632,11 +642,6 @@
     current_run :: undefined | autocleaning:run_id(),
     % record describing configuration of auto-cleaning per given space
     config :: undefined | autocleaning:config()
-}).
-
--record(helper_handle, {
-    handle :: helpers_nif:helper_handle(),
-    timeout = infinity :: timeout()
 }).
 
 %% Model for storing file's location data

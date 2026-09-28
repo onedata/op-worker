@@ -39,7 +39,8 @@
 %%% Functions to retrieve storage details
 -export([
     get_id/1, get_block_size/1, get_helper_spec/1, get_helper_name/1,
-    get_luma_feed/1, get_luma_config/1, get_luma_generation/1
+    get_luma_feed/1, get_luma_config/1,
+    get_luma_db_namespace/1, get_stale_luma_db_namespaces/1, with_luma_db_namespace/2
 ]).
 -export([
     fetch_shared_data/2,
@@ -145,7 +146,9 @@ delete_insecure(StorageId) ->
     case storage_logic:delete_in_zone(StorageId) of
         ok ->
             ok = storage_config:delete(StorageId),
-            luma_crud_api:clear_db(StorageData);
+            % the storage config is gone, so this is the last moment its stale
+            % namespaces can still be reached
+            luma_crud_api:clear_db_with_stale_namespaces(StorageData);
         Error ->
             Error
     end.
@@ -203,9 +206,25 @@ get_luma_config(StorageData) ->
     storage_config:get_luma_config(StorageData).
 
 
--spec get_luma_generation(id() | data()) -> non_neg_integer().
-get_luma_generation(Storage) ->
-    storage_config:get_luma_generation(Storage).
+-spec get_luma_db_namespace(id() | data()) -> undefined | luma_db:namespace().
+get_luma_db_namespace(Storage) ->
+    storage_config:get_luma_db_namespace(Storage).
+
+
+-spec get_stale_luma_db_namespaces(id() | data()) -> [undefined | luma_db:namespace()].
+get_stale_luma_db_namespaces(Storage) ->
+    storage_config:get_stale_luma_db_namespaces(Storage).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage data addressing a different LUMA DB namespace than the
+%% storage's current one. Nothing is written - see storage_config.
+%% @end
+%%--------------------------------------------------------------------
+-spec with_luma_db_namespace(data(), undefined | luma_db:namespace()) -> data().
+with_luma_db_namespace(StorageData, Namespace) ->
+    storage_config:with_luma_db_namespace(StorageData, Namespace).
 
 
 -spec fetch_shared_data(id(), od_space:id()) -> od_storage:doc().
@@ -416,6 +435,10 @@ supports_any_space(StorageData) ->
 %% @private
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
+    % NOTE: registration is best effort and reports its own failures - by this
+    % point the storage is in Onezone and in the local datastore, with no
+    % compensation left to undo either, so a failure to reach rtransfer must not
+    % turn a created storage into a reported failure
     rtransfer_config:add_storage(StorageId).
 
 

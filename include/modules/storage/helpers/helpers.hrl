@@ -18,6 +18,25 @@
     st_ctime, st_blksize, st_blocks
 }).
 
+%% Handle to a storage helper instance, through which all path based operations
+%% (stat, mkdir, unlink, truncate, xattrs, ...) are performed. It is resolved
+%% anew for every operation - see helper_handle module.
+-record(helper_handle, {
+    handle :: helpers_nif:helper_handle(),
+    timeout = infinity :: timeout()
+}).
+
+%% Handle to a file opened through a storage helper, through which the four data
+%% operations (read, write, fsync, release) are performed. Unlike the helper
+%% handle, it freezes the helper params as of the moment the file was opened.
+-record(file_handle, {
+    handle :: helpers_nif:file_handle(),
+    timeout :: timeout()
+}).
+
+%% NOTE: neither handle is persisted - both are transient wrappers around C++
+%% objects and do not outlive the node they were created on.
+
 %% Helper types
 -define(CEPH_HELPER_NAME, <<"ceph">>).
 -define(CEPHRADOS_HELPER_NAME, <<"cephrados">>).
