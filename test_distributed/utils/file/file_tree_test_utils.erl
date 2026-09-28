@@ -636,7 +636,12 @@ await_file_distribution_sync(CreationProvider, SyncProviders, UserId, #object{
                     ?DISTS(
                         [CreationProvider | SyncProviders],
                         [byte_size(Content) | lists:duplicate(length(SyncProviders), 0)]
-                    ), Guid, ?ATTEMPTS)
+                    ), Guid, ?ATTEMPTS),
+                % Each provider reports its own blocks over provider rpc, so the
+                % above passes before the creator's file_location reaches the
+                % sync provider - which reports size 0 until then (e.g. streams
+                % an empty file in a tarball download).
+                file_test_utils:await_size(SyncNode, Guid, byte_size(Content))
             end, SyncProviders)
     end.
 

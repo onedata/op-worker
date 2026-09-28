@@ -290,7 +290,8 @@ get_file_children_test(Config) ->
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data, node = Node}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_files(Response, rest, undefined, Data, [{FileGuid, FileName, FilePath, FileAttr}], Node)
+                        validate_listed_files(Response, rest, undefined, maps:without([<<"offset">>, <<"limit">>, <<"index">>], Data),
+                            [{FileGuid, FileName, FilePath, FileAttr}], Node)
                     end
                 }
             ],
@@ -357,7 +358,8 @@ get_shared_file_children_test(Config) ->
                     type = {rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
                     prepare_args_fun = build_get_children_prepare_rest_args_fun(ShareFileObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_files(Response, rest, ShareId, Data, [{FileGuid, FileName, FilePath, FileAttr1}], undefined)
+                        validate_listed_files(Response, rest, ShareId, maps:without([<<"offset">>, <<"limit">>, <<"index">>], Data),
+                            [{FileGuid, FileName, FilePath, FileAttr1}], undefined)
                     end
                 }
             ],
@@ -409,18 +411,25 @@ get_user_root_dir_children_test(_Config) ->
     User4Id = oct_background:get_user_id(user4),
     User4RootDirGuid = user_root_dir:guid(User4Id),
     {ok, User4RootDirObjectId} = file_id:guid_to_objectid(User4RootDirGuid),
-    
+
+    % User4 spaces depend on onenv scenario (e.g. space_s3 exists only in api_tests_s3)
+    % so they are fetched from Onezone. Spaces are listed sorted by name.
+    {ok, User4SpaceIds} = ?assertMatch({ok, _}, ozw_test_rpc:call(
+        user_logic, get_eff_spaces, [aai:root_auth(), User4Id]
+    )),
+    User4SpaceNamesAndIds = lists:sort([
+        {oct_background:get_space_name(SpaceId), SpaceId} || SpaceId <- User4SpaceIds
+    ]),
+
     % Space dir docs are not synchronized between providers but kept locally. Because of that
     % file attrs differs between responses from various providers and it is necessary to get attrs
     % corresponding to specific provider.
-    GetSpaceInfoFun = fun(SpacePlaceholder, Node) ->
-        SpaceId = oct_background:get_space_id(SpacePlaceholder),
-        SpaceName = atom_to_binary(SpacePlaceholder, utf8),
+    GetSpaceInfoFun = fun({SpaceName, SpaceId}, Node) ->
         SpaceDirGuid = space_dir:guid(SpaceId),
         {SpaceDirGuid, SpaceName, <<"/", SpaceName/binary>>, get_space_dir_attrs(Node, SpaceDirGuid)}
     end,
     GetAllSpacesInfoFun = fun(Node) ->
-        [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node), GetSpaceInfoFun(space_s3, Node)]
+        [GetSpaceInfoFun(SpaceNameAndId, Node) || SpaceNameAndId <- User4SpaceNamesAndIds]
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -680,7 +689,10 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Node) -
         {file_id:guid_to_share_guid(Guid, ShareId), Name, Path, Attrs}
     end, ExpFiles1),
 
-    IsLast = Limit + Offset >= length(AllFiles),
+    % Directory listing does not look past the requested page, so a full page is
+    % never reported as last, even when it ends exactly at the last child
+    % (listing a regular file ignores listing options - callers drop them)
+    IsLast = length(ExpFiles1) < Limit,
 
     ExpFiles3 = #{
         <<"children">> => lists:map(fun({Guid, Name, _Path, Attrs}) ->

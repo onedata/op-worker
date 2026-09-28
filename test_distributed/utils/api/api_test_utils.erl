@@ -104,7 +104,13 @@ create_and_sync_shared_file_in_space_krk_par(FileType, FileName, Mode) ->
     {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
-    file_test_utils:await_sync(P2Node, FileGuid),
+    % The share reaches paris as a later revision of file_meta than the file itself -
+    % a file merely visible there may still be reported as not shared.
+    ?assertMatch(
+        {ok, #file_attr{shares = [ShareId]}},
+        lfm_proxy:stat(P2Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), [?attr_shares]),
+        ?ATTEMPTS
+    ),
 
     {FileType, FilePath, FileGuid, ShareId}.
 

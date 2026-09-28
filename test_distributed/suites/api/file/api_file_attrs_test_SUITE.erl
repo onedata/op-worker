@@ -2052,7 +2052,7 @@ get_file_storage_location(s3, FileGuid, _Node, _SessId) ->
 
 init_per_suite(Config) ->
     opt:init_per_suite(Config, #onenv_test_config{
-        onenv_scenario = "api_tests",
+        onenv_scenario = "api_tests_s3",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
             User3Id = oct_background:get_user_id(user3),
@@ -2099,7 +2099,7 @@ end_per_testcase(get_dir_distribution_3_test = Case, Config) ->
     enable_dir_stats_collecting_for_space(paris, space_krk_par),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(get_historical_dir_size_stats_slice_test = Case, Config) ->
+end_per_testcase(get_dir_distribution_backwards_compatibility_test = Case, Config) ->
     [P2Node] = oct_background:get_provider_nodes(paris),
     test_utils:mock_unload(P2Node, [provider_rpc_worker]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);

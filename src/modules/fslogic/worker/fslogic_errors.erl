@@ -147,7 +147,7 @@ gen_status_message(_Reason) ->
 %% Convert error code to loglevel.
 %% @end
 %%--------------------------------------------------------------------
--spec code_to_loglevel(code()) -> error | debug.
+-spec code_to_loglevel(od_error:errno()) -> error | debug.
 code_to_loglevel(?EAGAIN) ->
     error;
 code_to_loglevel(_) ->
