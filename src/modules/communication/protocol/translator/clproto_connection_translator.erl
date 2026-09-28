@@ -144,7 +144,7 @@ session_mode_from_protobuf(_)             -> normal.
 client_type_from_protobuf('ONECLIENT_TYPE') -> oneclient;
 client_type_from_protobuf('ONEDATAFS_TYPE') -> onedatafs;
 client_type_from_protobuf('ONES3_TYPE')     -> ones3;
-client_type_from_protobuf(_)               -> undefined.
+client_type_from_protobuf(_)                -> undefined.
 
 
 -spec client_options_from_protobuf([#'ClientOption'{}]) -> [session:client_option()].
