@@ -378,7 +378,12 @@ handle_request_and_process_response(SessId, Request) ->
                     OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
                 );
             false ->
-                handle_request_remotely(OriginalUserCtx, Request, Providers)
+                case user_ctx:get_client_type(OriginalUserCtx) of
+                    %% The use of ENXIO posix error code here is arbitrary, chosen because it's not
+                    %% used elsewhere and is not a network error
+                    ones3 -> throw({?ENXIO, <<"Requested space is not supported on this Oneprovider.">>});
+                    _ -> handle_request_remotely(OriginalUserCtx, Request, Providers)
+                end
         end
     catch
         Type2:Error2:Stacktrace ->

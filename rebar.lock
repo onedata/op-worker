@@ -57,7 +57,7 @@
   1},
  {<<"folsom">>,{pkg,<<"folsom">>,<<"1.0.0">>},2},
  {<<"gen_server2">>,
-  {git,"http://github.com/mistanisz/gen_server2.git",
+  {git,"https://github.com/mistanisz/gen_server2.git",
        {ref,"8edb4a3383444634bbff6f2468a341607cd97a4b"}},
   1},
  {<<"gen_server_mock">>,

@@ -270,7 +270,7 @@ perform_io_test(Path, AccessToken) ->
 -spec create_fuse_session(binary(), aai:subject(), session:mode(),
     auth_manager:token_credentials()) -> {ok, session:id()} | no_return().
 create_fuse_session(Nonce, Identity, SessMode, TokenCredentials) ->
-    session_manager:reuse_or_create_fuse_session(Nonce, Identity, SessMode, TokenCredentials).
+    session_manager:reuse_or_create_fuse_session(Nonce, Identity, SessMode, TokenCredentials, oneclient, [], []).
 
 
 %% @private
