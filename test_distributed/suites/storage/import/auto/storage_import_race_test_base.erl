@@ -232,6 +232,11 @@ create_remote_file_import_conflict_test(SuiteCtx) ->
         ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
     )),
 
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
+        #file_spec{name = FileName, content = RemoteContent},
+        #file_spec{name = ImportedConflictingFileName, content = StorageContent}
+    ]),
+
     %% created => 1 (the conflicting-name import) and deleted => 0 are the crux:
     %% the remote file, having no storage counterpart, leaves no trace in the
     %% counters. The root follows the deterministic root_scan_verdict/1: the
@@ -447,6 +452,11 @@ create_file_import_race_test(SuiteCtx) ->
     ?assertMatch({ok, [_, _]}, lfm_proxy:get_children(
         ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
     )),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
+        #file_spec{name = FileName, content = LfmContent},
+        #file_spec{name = ImportedConflictingFileName, content = StorageContent}
+    ]),
 
     %% the root's verdict was computed before the import (and thus before the
     %% racing LFM create could bump the root's logical mtime), so it follows
@@ -952,6 +962,9 @@ create_list_race_test(SuiteCtx) ->
     ), ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS),
     storage_import_test_utils:assert_file_content(ImportingProviderCtx, LeftFilePath, Content),
     storage_import_test_utils:assert_file_content(NonImportingProviderCtx, LeftFilePath, Content),
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = LeftFileName, content = Content}
+    ),
 
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 3,
@@ -1007,7 +1020,8 @@ time_warp_between_scans_test(SuiteCtx) ->
     %% crossing the threshold starts the scan
     time_test_utils:simulate_seconds_passing(2),
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx).
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx).
 
 
 %% A backward time warp DURING a scan: the clock is warped (far) back while the
@@ -1055,7 +1069,8 @@ time_warp_during_scan_test(SuiteCtx) ->
         ScanStartTimeMillis div 1000 + ?SCAN_INTERVAL_SECONDS + 1
     ),
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx).
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx).
 
 
 %%%===================================================================

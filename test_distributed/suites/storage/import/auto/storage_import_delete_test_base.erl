@@ -293,6 +293,9 @@ recreate_file_deleted_by_sync_test(SuiteCtx) ->
     ),
     storage_import_test_utils:assert_file_content(
         ImportingProviderCtx, SpaceFilePath, RecreatedContent
+    ),
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = RecreatedContent}
     ).
 
 
@@ -348,6 +351,10 @@ imported_file_delete_recreate_lifecycle_test(SuiteCtx) ->
         {ok, _},
         storage_file_tree_test_utils:stat(ImportingProviderSelector, ImportedStorageId, StorageFileId),
         ?STORAGE_IMPORT_ATTEMPTS
+    ),
+
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = RecreatedContent}
     ),
 
     %% the storage file disappears - scan 2 must delete the recreated file from

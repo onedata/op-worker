@@ -392,6 +392,7 @@ chmod_file_update_test(SuiteCtx) ->
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
     storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
     assert_children_hash_changed(ImportingProviderSelector, SpaceId, RootStorageFileId),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
@@ -444,6 +445,7 @@ chmod_file_update_in_batched_dir_test(SuiteCtx) ->
     assert_children_hash_changed(ImportingProviderSelector, SpaceId, TestDirStorageFileId),
     %% ...and NOT via TestDirName's own mtime, which a child's chmod alone does not bump
     assert_children_mtime_unchanged(ImportingProviderSelector, SpaceId, TestDirStorageFileId),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -922,6 +924,7 @@ update_timestamps_file_import_test(SuiteCtx) ->
     ExpectedTimes = #{atime => NewTimestamp, mtime => NewTimestamp},
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestFilePath, ExpectedTimes),
     storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, ExpectedTimes),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
@@ -1271,6 +1274,7 @@ should_not_detect_timestamp_update_test(SuiteCtx) ->
         {ok, #file_attr{atime = 1, mtime = 1}},
         lfm_proxy:stat(ImportingProviderNode, SessionId, {path, SpaceTestFilePath})
     ),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -1426,6 +1430,9 @@ should_not_import_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
     storage_import_test_utils:assert_file_content(
         ImportingProviderCtx, SpaceFilePath, RecreatedContent
     ),
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = RecreatedContent}
+    ),
     %% the recreated file is LFM-created, the deleted-but-open one marker-guarded
     LfmCreatedCount = 1,
     ReplicatedCount = 0,
@@ -1441,6 +1448,7 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
     ),
 
     #{
+        file_name := FileName,
         recreated_file_guid := RecreatedFileGuid,
         recreated_content := RecreatedContent,
         suffixed_storage_file_id := SuffixedStorageFileId
@@ -1472,6 +1480,9 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
     assert_file_content_by_guid(
         NonImportingProviderCtx, RecreatedFileGuid, ChangedContent,
         ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
+    ),
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = ChangedContent}
     ).
 
 
@@ -2030,6 +2041,7 @@ empty_dir_with_protection_flags_should_not_be_updated_test_base(TestCaseName, Su
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{
         mode => ?DEFAULT_DIR_PERMS
     }),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -2042,6 +2054,7 @@ empty_dir_with_protection_flags_should_not_be_updated_test_base(TestCaseName, Su
 
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{mode => NewMode}),
     storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceDirPath, #{mode => NewMode}),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 3,
         <<"created">> => 0,
@@ -2499,6 +2512,8 @@ should_not_reimport_deleted_but_still_opened_file_test(SuiteCtx) ->
 
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+
     %% the scan must not have reimported the marker-guarded storage file
     ?assertMatch({ok, []}, lfm_proxy:get_children(
         ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
@@ -2679,7 +2694,7 @@ should_not_invalidate_file_after_replication_test(SuiteCtx) ->
         ?FUNCTION_NAME, undefined, SuiteCtx
     ),
 
-    #object{guid = FileGuid} = storage_import_test_utils:create_file_tree_via_remote_provider(
+    #object{guid = FileGuid, name = FileName} = storage_import_test_utils:create_file_tree_via_remote_provider(
         TestCaseCtx, #file_spec{content = Content}
     ),
 
@@ -2713,6 +2728,11 @@ should_not_invalidate_file_after_replication_test(SuiteCtx) ->
     ?assertMatch(
         {ok, #file_attr{size = ContentSize}},
         lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, ?FILE_REF(FileGuid))
+    ),
+
+    %% Read content only after checking distribution: a read could restore an invalidated replica.
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = Content}
     ),
 
     %% created => 0 / deleted => 0 is the crux: the replicated storage file was
