@@ -55,3 +55,11 @@ spaces:
       - provider: "oneprovider-3"
         storage_name: "posix"
         size: '1000000000'
+  - name: space_krk  # space supported by a single provider - for testing how the others treat it
+    user: *space_owner
+    users:
+      - user: *user2
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "posix"
+        size: '1000000000'

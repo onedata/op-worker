@@ -21,7 +21,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include("rest_test_utils.hrl").
+-include("api/rest_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -208,26 +208,38 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ExpectedDistributionFun = fun(S, StoragePath) -> #{
         <<"distributionPerProvider">> => #{
             DomainP1 => #{
-                <<"distributionPerStorage">> => #{
-                    StorageP1 =>
-                        #{<<"blocks">> => [[0, S]], <<"physicalSize">> => S}
-                },
-                <<"locationsPerStorage">> => #{
-                    StorageP1 => StoragePath
-                },
+                <<"success">> => true,
                 <<"virtualSize">> => S,
-                <<"success">> => true
+                <<"distributionPerStorageBackend">> => #{
+                    StorageP1 => #{
+                        <<"success">> => true, 
+                        <<"blocks">> => [[0, S]], 
+                        <<"physicalSize">> => S
+                    }
+                },
+                <<"locationsPerStorageBackend">> => #{
+                    StorageP1 => #{
+                        <<"success">> => true, 
+                        <<"location">> => StoragePath
+                    }
+                }
             },
             DomainP2 => #{
-                <<"distributionPerStorage">> => #{
-                    StorageP2 =>
-                        #{<<"blocks">> => [],  <<"physicalSize">> => 0}
-                },
-                <<"locationsPerStorage">> => #{
-                    StorageP2 => null
-                },
+                <<"success">> => true,
                 <<"virtualSize">> => S,
-                <<"success">> => true
+                <<"distributionPerStorageBackend">> => #{
+                    StorageP2 => #{
+                        <<"success">> => true, 
+                        <<"blocks">> => [],  
+                        <<"physicalSize">> => 0
+                    }
+                },
+                <<"locationsPerStorageBackend">> => #{
+                    StorageP2 => #{
+                        <<"success">> => true, 
+                        <<"location">> => null
+                    }
+                }
             }
         },
         <<"type">> => atom_to_binary(?REGULAR_FILE_TYPE)
@@ -599,8 +611,8 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
-            test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
-            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
+            test_utils:set_env(Worker, ?APP_NAME, public_block_size_threshold, 0),
+            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_threshold, 0)
         end, ?config(op_worker_nodes, NewConfig1)),
         application:start(ssl),
         application:ensure_all_started(hackney),
@@ -617,7 +629,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    true = worker_pool:stop_pool(?VERIFY_POOL),
+    ok = worker_pool:stop_sup_pool(?VERIFY_POOL),
     application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
@@ -640,16 +652,6 @@ init_per_testcase(list_transfers, Config) ->
     OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space4">>, <<"user1">>]),
     init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
-init_per_testcase(Case, Config) when
-    Case =:= create_share;
-    Case =:= get_share;
-    Case =:= get_file_shares;
-    Case =:= update_share_name;
-    Case =:= delete_share
-->
-    initializer:mock_share_logic(Config),
-    init_per_testcase(all, Config);
-
 init_per_testcase(_Case, Config) ->
     Config2 = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:mock_auth_manager(Config2),
@@ -668,21 +670,6 @@ end_per_testcase(list_transfers = Case, Config) ->
     OldPrivs = ?config(old_privs, Config),
     initializer:testmaster_mock_space_user_privileges(Workers, <<"space2">>, <<"user1">>, OldPrivs),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, changes),
-    end_per_testcase(all, Config);
-
-end_per_testcase(Case, Config) when
-    Case =:= create_share;
-    Case =:= get_share;
-    Case =:= get_file_shares;
-    Case =:= update_share_name;
-    Case =:= delete_share
-->
-    initializer:unmock_share_logic(Config),
-    end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

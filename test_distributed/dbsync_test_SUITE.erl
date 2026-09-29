@@ -515,11 +515,19 @@ assert_broadcast(SrcProviderId, RecvProviders) ->
     RecvProviders3 = lists:foldl(fun({ProviderId, Docs}, RecvProviders2) ->
         case LowProviderId =< ProviderId andalso ProviderId =< HighProviderId of
             true ->
-                Docs3 = lists:foldl(fun
-                    (RecvDoc, {[Doc | LDocs], RDocs}) when Doc =:= RecvDoc ->
-                        {LDocs, RDocs};
-                    (RecvDoc, {LDocs, [Doc | RDocs]}) when Doc =:= RecvDoc ->
-                        {LDocs, RDocs}
+                % Docs are matched by membership rather than by position - the
+                % order in which they arrive is not guaranteed. A batch of at least
+                % dbsync_handler_spawn_size changes is broadcast from a process
+                % spawned per batch, so messages carrying consecutive batches race
+                % with each other (each is ordered only with respect to itself).
+                Docs3 = lists:foldl(fun(RecvDoc, {LDocs, RDocs}) ->
+                    case lists:member(RecvDoc, LDocs) of
+                        true ->
+                            {lists:delete(RecvDoc, LDocs), RDocs};
+                        false ->
+                            ?assert(lists:member(RecvDoc, RDocs)),
+                            {LDocs, lists:delete(RecvDoc, RDocs)}
+                    end
                 end, Docs, RecvDocs),
                 case Docs3 of
                     {[], []} -> RecvProviders2;

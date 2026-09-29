@@ -31,8 +31,9 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
 
--export([create_in_zone/4, create_in_zone/5, delete_in_zone/1]).
+-export([create_in_zone/4, create_in_zone/5, update_in_zone/2, delete_in_zone/1]).
 -export([get/1, get_shared_data/2]).
 -export([force_fetch/1]).
 -export([support_space/4]).
@@ -43,7 +44,6 @@
 -export([get_provider/2]).
 -export([get_spaces/1]).
 -export([is_imported/1, is_local_storage_readonly/1, is_storage_readonly/2]).
--export([is_local_storage_supporting_space/2]).
 -export([supports_access_type/3]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
@@ -89,6 +89,35 @@ create_in_zone(Name, ImportedStorage, Readonly, QosParameters, StorageId) ->
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
         provider_logic:force_fetch()
     end)).
+
+
+-spec update_in_zone(storage:id(), onedata_storage:update_spec()) ->
+    ok | errors:error().
+update_in_zone(StorageId, #storage_update_spec{
+    name = MaybeName,
+    readonly = MaybeNewReadonly,
+    imported = MaybeNewImported,
+    qos_parameters = MaybeQosParams
+}) ->
+    Diff = maps_utils:remove_undefined(#{
+        <<"name">> => MaybeName,
+        <<"imported">> => MaybeNewImported,
+        <<"readonly">> => MaybeNewReadonly,
+        <<"qosParameters">> => MaybeQosParams
+    }),
+    case maps_utils:is_empty(Diff) of
+        true ->
+            ok;
+        false ->
+            Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+                operation = update,
+                gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+                data = Diff
+            }),
+            ?ON_SUCCESS(Result, fun(_) ->
+                storage_logic:force_fetch(StorageId)
+            end)
+    end.
 
 
 -spec delete_in_zone(storage:id()) -> ok | errors:error().
@@ -266,14 +295,6 @@ is_storage_readonly(StorageId, SpaceId) ->
         {ok, #document{value = #od_storage{readonly = Readonly}}} ->
             {ok, Readonly};
         Error -> Error
-    end.
-
-
--spec is_local_storage_supporting_space(storage:id(), od_space:id()) -> boolean().
-is_local_storage_supporting_space(StorageId, SpaceId) ->
-    case space_logic:get_local_storages(SpaceId) of
-        {ok, LocalStorageIds} -> lists:member(StorageId, LocalStorageIds);
-        _ -> false
     end.
 
 

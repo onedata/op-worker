@@ -71,6 +71,8 @@ assert_operation_supported(qos_summary, private)                     -> ok;    %
 assert_operation_supported(dataset_summary, private)                 -> ok;
 assert_operation_supported(download_url, private)                    -> ok;    % gs only
 assert_operation_supported(download_url, public)                     -> ok;    % gs only
+assert_operation_supported(download_status, private)                 -> ok;    % gs only
+assert_operation_supported(download_status, public)                  -> ok;    % gs only
 assert_operation_supported(hardlinks, private)                       -> ok;
 assert_operation_supported({hardlinks, _}, private)                  -> ok;
 assert_operation_supported(symlink_value, public)                    -> ok;
@@ -212,6 +214,10 @@ data_spec(#op_req{gri = #gri{aspect = download_url}}) -> #{
     optional => #{<<"follow_symlinks">> => {boolean, any}}
 };
 
+data_spec(#op_req{gri = #gri{aspect = download_status}}) -> #{
+    required => #{<<"code">> => {binary, non_empty}}
+};
+
 data_spec(#op_req{gri = #gri{aspect = archive_recall_log}}) ->
     audit_log_browse_opts:json_data_spec();
 
@@ -300,7 +306,22 @@ authorize(#op_req{auth = Auth, gri = #gri{aspect = download_url, scope = Scope},
         public ->
             fun file_id:is_share_guid/1
     end,
-    lists:all(Predicate, maps:get(<<"file_ids">>, Data)).
+    lists:all(Predicate, maps:get(<<"file_ids">>, Data));
+
+%% Possession of a valid download code, combined with a session match against
+%% the session that originally created it, is sufficient authorization to poll
+%% its status. The code itself acts as a capability token. If the code is
+%% missing or expired, defer the decision to `get/2` -- it will return
+%% ?ERROR_NOT_FOUND so the polling GUI can stop polling cleanly (instead of the
+%% misleading ?ERR_FORBIDDEN we would otherwise emit here).
+authorize(#op_req{auth = #auth{session_id = AuthSessionId}, gri = #gri{aspect = download_status}, data = Data}, _) ->
+    Code = maps:get(<<"code">>, Data),
+    case file_download_code:verify(Code) of
+        {true, DownloadArgs} ->
+            AuthSessionId =:= download_args:get_session_id(DownloadArgs);
+        false ->
+            true
+    end.
 
 
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
@@ -340,7 +361,12 @@ validate(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
     FileIds = maps:get(<<"file_ids">>, Data),
     lists:foreach(fun(Guid) ->
         middleware_utils:assert_file_managed_locally(Guid)
-    end, FileIds).
+    end, FileIds);
+
+validate(#op_req{gri = #gri{aspect = download_status}}, _) ->
+    %% No GUID-based locality check -- the code is implicitly local (it was
+    %% created on this provider). Existence is checked in `get/2`.
+    ok.
 
 
 %% @doc {@link middleware_handler} callback create/1.
@@ -507,10 +533,25 @@ get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     FileGuids = maps:get(<<"file_ids">>, Data),
     FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
     case page_file_content_download:gen_file_download_url(SessionId, FileGuids, FollowSymlinks) of
-        {ok, URL} ->
-            {ok, value, URL};
+        {ok, Result} ->
+            {ok, value, Result};
         {error, _} = Error ->
             Error
+    end;
+
+get(#op_req{gri = #gri{aspect = download_status}, data = Data}, _) ->
+    Code = maps:get(<<"code">>, Data),
+    case file_download_code:get_streaming_status(Code) of
+        {ok, unknown} ->
+            {ok, value, #{<<"status">> => <<"unknown">>}};
+        {ok, pending} ->
+            {ok, value, #{<<"status">> => <<"pending">>}};
+        {ok, started} ->
+            {ok, value, #{<<"status">> => <<"started">>}};
+        {ok, {failed, ErrorJson}} ->
+            {ok, value, #{<<"status">> => <<"failed">>, <<"error">> => ErrorJson}};
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND
     end;
 
 get(#op_req{auth = ?USER(_UserId, SessId), data = Data, gri = #gri{id = FileGuid, aspect = hardlinks}}, _) ->

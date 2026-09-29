@@ -13,9 +13,13 @@
 -module(api_file_metadata_delete_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
+-include("api/api_file_metadata_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
+-include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% API
 -export([
@@ -185,12 +189,12 @@ delete_metadata_test_base(
             ],
             randomly_select_scenarios = RandomlySelectScenario,
             data_spec = begin
-                DataSpec1 = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                DataSpec1 = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                     FileGuid, ShareId, DataSpec
                 ),
                 case MetadataType of
                     <<"xattrs">> -> DataSpec1;
-                    _ -> api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(DataSpec1)
+                    _ -> api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(DataSpec1)
                 end
             end
         },
@@ -216,6 +220,30 @@ delete_metadata_test_base(
 %% @private
 -spec build_setup_fun(test_setup_variant(), file_id:file_guid(), api_test_utils:metadata_type(),
     Metadata :: term(), [node()]) -> onenv_api_test_runner:verify_fun().
+build_setup_fun(preset_initial_metadata, FileGuid, <<"xattrs">>, FullXattrSet, Nodes) ->
+    fun() ->
+        % Only removed xattrs are restored. Rewriting unchanged ones (e.g. acl kept
+        % in file_meta, unlike the rest kept in custom_metadata) creates changes that
+        % can't be awaited and may later override deletion made on other provider
+        % (see onenv_api_test_runner COMMON PITFALLS 1).
+        RandNode = lists_utils:random_element(Nodes),
+        {ok, CurrXattrs} = api_test_utils:get_xattrs(RandNode, FileGuid),
+        XattrsToRestore = maps:filter(fun(Key, Value) ->
+            maps:find(Key, CurrXattrs) /= {ok, Value}
+        end, FullXattrSet),
+        maps:size(XattrsToRestore) > 0 andalso ct:pal("Xattrs setup: restoring ~tp on ~tp", [
+            maps:keys(XattrsToRestore), RandNode
+        ]),
+
+        maps:foreach(fun(Key, Value) ->
+            ?assertEqual(ok, lfm_proxy:set_xattr(
+                RandNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), #xattr{name = Key, value = Value}
+            ), ?ATTEMPTS)
+        end, XattrsToRestore),
+        lists:foreach(fun(Node) ->
+            ?assertEqual({ok, FullXattrSet}, api_test_utils:get_xattrs(Node, FileGuid), ?ATTEMPTS)
+        end, Nodes)
+    end;
 build_setup_fun(preset_initial_metadata, FileGuid, MetadataType, Metadata, Nodes) ->
     fun() ->
         % Check to prevent race condition in tests (see onenv_api_test_runner
@@ -238,7 +266,12 @@ build_verify_fun(preset_initial_metadata, FileGuid, <<"xattrs">>, FullXattrSet, 
         (expected_failure, #api_test_ctx{node = TestNode}) ->
             ?assertMatch({ok, FullXattrSet}, api_test_utils:get_xattrs(TestNode, FileGuid), ?ATTEMPTS),
             true;
-        (expected_success, #api_test_ctx{data = #{<<"keys">> := Keys}}) ->
+        (expected_success, #api_test_ctx{
+            scenario_type = ScenarioType,
+            node = TestNode,
+            data = #{<<"keys">> := Keys}
+        }) ->
+            ct:pal("Xattrs delete: removed ~tp on ~tp (~tp)", [Keys, TestNode, ScenarioType]),
             ExpXattrs = maps:without(Keys, FullXattrSet),
             lists:foreach(fun(Node) ->
                 ?assertEqual({ok, ExpXattrs}, api_test_utils:get_xattrs(Node, FileGuid), ?ATTEMPTS)
@@ -286,7 +319,7 @@ build_verify_fun(no_initial_metadata, FileGuid, MetadataType, _ExpMetadata, Node
     onenv_api_test_runner:prepare_args_fun().
 build_delete_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         Aspect = case MetadataType of
             <<"json">> -> json_metadata;
@@ -309,7 +342,7 @@ build_delete_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
     onenv_api_test_runner:prepare_args_fun().
 build_delete_metadata_prepare_rest_args_fun(MetadataType, FileGuid) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {FileId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {FileId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #rest_args{
             method = delete,

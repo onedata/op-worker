@@ -45,7 +45,7 @@
     simple_rename_test/1,
     update_times_test/1,
     default_permissions_test/1,
-    creating_handle_in_create_test/1,
+    create_file_test/1,
     creating_handle_in_open_test/1,
     file_written_req_test/1,
     file_read_req_test/1
@@ -66,7 +66,7 @@ all() ->
         simple_rename_test,
         update_times_test,
         default_permissions_test,
-        creating_handle_in_create_test,
+        create_file_test,
         creating_handle_in_open_test,
         file_written_req_test,
         file_read_req_test
@@ -748,28 +748,37 @@ update_times_test(Config) ->
         end, [SessId1, SessId2, SessId3, SessId4]).
 
 
-creating_handle_in_create_test(Config) ->
+create_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
 
-    {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, <<"/space_name2/handle_test_dir">>),
+    {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, <<"/space_name2/create_file_test_dir">>),
+
+    ExpStorageId = initializer:get_supporting_storage_id(W, <<"space_id2">>),
+    ExpProviderId = rpc:call(W, oneprovider, get_id, []),
 
     BaseReq = #create_file{mode = 8#777},
 
-    Resp1 = ?file_req(W, SessId, DirGuid, BaseReq#create_file{
-        name = <<"file1">>
-    }),
-    Resp2 = ?file_req(W, ?ROOT_SESS_ID, DirGuid, BaseReq#create_file{
-        name = <<"file2">>
-    }),
+    lists:foreach(fun({CreatorSessId, Name}) ->
+        Resp = ?file_req(W, CreatorSessId, DirGuid, BaseReq#create_file{name = Name}),
 
-    #fuse_response{fuse_response = #file_created{handle_id = HandleId1}} =
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_created{}}, Resp1),
-    #fuse_response{fuse_response = #file_created{handle_id = HandleId2}} =
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_created{}}, Resp2),
+        #fuse_response{fuse_response = #file_created{
+            handle_id = HandleId,
+            file_location = FileLocation
+        }} = ?assertMatch(
+            #fuse_response{status = #status{code = ?OK}, fuse_response = #file_created{}},
+            Resp
+        ),
+        ?assertMatch(<<_/binary>>, HandleId),
 
-    ?assertMatch(<<_/binary>>, HandleId1),
-    ?assertMatch(<<_/binary>>, HandleId2).
+        % creating a file entails creating its counterpart on the storage
+        ?assertMatch(#file_location{
+            file_id = <<_/binary>>,
+            storage_id = ExpStorageId,
+            provider_id = ExpProviderId,
+            storage_file_created = true
+        }, FileLocation)
+    end, [{SessId, <<"file1">>}, {?ROOT_SESS_ID, <<"file2">>}]).
 
 
 creating_handle_in_open_test(Config) ->

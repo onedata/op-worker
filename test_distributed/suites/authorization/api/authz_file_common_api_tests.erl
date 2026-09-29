@@ -12,7 +12,12 @@
 -module(authz_file_common_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
+-include("authz/authz_api_test_runner.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -36,7 +41,7 @@ test_get_parent(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{name = <<"file1">>}],
+        files = [#authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
         available_in_public_data_mode = false,
@@ -56,7 +61,7 @@ test_get_file_path(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{name = <<"file1">>}],
+        files = [#authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_for_share_guid = false, % TODO VFS-6057
         available_in_public_data_mode = false, % TODO VFS-6057
@@ -77,7 +82,7 @@ test_resolve_guid(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{name = <<"file1">>}],
+        files = [#authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_for_share_guid = not_a_file_guid_based_operation,
         available_in_public_data_mode = false,
@@ -106,11 +111,12 @@ test_stat(SpaceId) ->
         true -> [?SPACE_READ_DATA];
         false -> []
     end,
+    ct:pal("Resolving attrs: ~tp", [Attributes]),
 
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             required_perms = RequiredPerms,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->

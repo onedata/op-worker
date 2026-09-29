@@ -12,9 +12,10 @@
 -module(trash_test_SUITE).
 -author("Jakub Kudzia").
 
--include("permissions_test.hrl").
+-include("authz/authz_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("distribution_assert.hrl").
+-include("file/distribution_assert.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -62,7 +63,8 @@
     files_from_trash_are_not_reimported/1,
     deletion_lasting_for_4_days_should_succeed/1,
     deletion_lasting_for_40_days_should_succeed/1,
-    deletion_lasting_for_40_days_should_fail_if_session_is_not_refreshed_within_expected_time/1
+    deletion_lasting_for_40_days_should_fail_if_session_is_not_refreshed_within_expected_time/1,
+    partially_deleted_files_should_be_cleaned_up/1
 ]).
 
 
@@ -98,9 +100,10 @@ all() -> ?ALL([
     qos_set_on_space_directory_does_not_affect_files_in_trash,
     files_from_trash_are_not_reimported,
     deletion_lasting_for_4_days_should_succeed,
-    deletion_lasting_for_40_days_should_succeed
+    deletion_lasting_for_40_days_should_succeed,
     % TODO VFS-7348 this test should pass when deletion is scheduled as user not by root
-    % deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time
+    % deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time,
+    partially_deleted_files_should_be_cleaned_up
 ]).
 
 -define(SPACE1_PLACEHOLDER, space1).
@@ -333,7 +336,7 @@ schedule_eviction_transfer_on_space_evicts_trash(_Config) ->
     ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size, Size]), FileGuid, ?ATTEMPTS),
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
     % as otherwise it will skip eviction.
-    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    % @TODO VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
     ?assertEqual({ok, [[0, Size]]},
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(P1Node, FileGuid, P2Id), ?ATTEMPTS),
 
@@ -411,7 +414,8 @@ move_to_trash_should_work(_Config) ->
         <<"mtime">> => global_clock:timestamp_seconds(),
         <<"size">> => 10,
         <<"mode">> => <<"664">>,
-        <<"autoDetectAttributes">> => false
+        <<"autoDetectAttributes">> => false,
+        <<"verifyExistence">> => false
     })).
 
 move_to_trash_and_schedule_deletion_should_work(_Config) ->
@@ -451,7 +455,8 @@ move_to_trash_and_schedule_deletion_should_work(_Config) ->
         <<"mtime">> => global_clock:timestamp_seconds(),
         <<"size">> => Size,
         <<"mode">> => <<"664">>,
-        <<"autoDetectAttributes">> => false
+        <<"autoDetectAttributes">> => false,
+        <<"verifyExistence">> => false
     })).
 
 move_to_trash_should_fail_if_user_does_not_have_sufficient_perms(_Config) ->
@@ -534,6 +539,32 @@ deletion_lasting_for_40_days_should_fail_if_session_is_not_refreshed_within_expe
     % (offline sessions are valid for a month)
     TimeWarp = 40 * 24 * 3600, % 40 days
     long_lasting_deletion_test_base(Config, 1, TimeWarp, 1, failure).
+
+
+partially_deleted_files_should_be_cleaned_up(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    DirName = ?RAND_DIR_NAME,
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, space_dir:guid(?SPACE_ID1), DirName, ?DEFAULT_DIR_PERMS),
+    {[_ChildDirGuid1, ChildDirGuid2] = DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{2, 0}, {0, 8}], DirGuid),
+    DirCtx = file_ctx:new_by_guid(DirGuid),
+
+    {ok, [First, Second | _], _} = lfm_proxy:get_children_attrs(
+        P1Node, UserSessIdP1, #file_ref{guid = ChildDirGuid2}, #{tune_for_large_continuous_listing => false}, [?attr_guid]),
+
+    remove_file_meta(P1Node, First#file_attr.guid), % remove file meta of a file at the edge of listing batch
+    remove_file_meta(P1Node, Second#file_attr.guid), % remove file meta of a file in the middle of a listing batch
+    %% @TODO VFS-12755 currently not working as removing dir's file meta removes its link tree and therefore its children
+    %%  cannot be listed anymore
+%%    remove_file_meta(P1Node, ChildDirGuid1), % remove file meta of a non-empty dir 
+
+    schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID, DirName),
+
+    lists:foreach(fun(Guid) ->
+        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(P1Node, UserSessIdP1, #file_ref{guid = Guid}), ?ATTEMPTS),
+        check_parent_link_missing(P1Node, Guid)
+    end, DirGuids ++ FileGuids).
+
 
 %===================================================================
 % Test base functions
@@ -664,7 +695,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= deletion_lasting_for_4_days_should_succeed orelse
@@ -727,3 +758,13 @@ await_traverse_finished(TaskId, Attempts) ->
         timer:seconds(Attempts) ->
             ct:fail("Traverse ~ts not finished in expected time", [TaskId])
     end.
+
+
+remove_file_meta(Node, Guid) ->
+    ok = rpc:call(Node, file_meta, delete_without_link, [file_id:guid_to_uuid(Guid)]).
+
+
+check_parent_link_missing(Node, Guid) ->
+    {ok, #document{value = #file_meta{parent_uuid = ParentUuid, name = MissingName}}} =
+        rpc:call(Node, file_meta, get_including_deleted, [file_id:guid_to_uuid(Guid)]),
+    ?assertEqual({error, not_found}, rpc:call(Node, file_meta_forest, get, [ParentUuid, all, MissingName]), ?ATTEMPTS).

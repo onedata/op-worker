@@ -187,7 +187,7 @@
 %% Model for caching handle details fetched from OZ
 -record(od_handle, {
     public_handle :: od_handle:public_handle(),
-    metadata_prefix :: od_handle:metadata_prefix() | undefined,
+    metadata_schema :: od_handle:metadata_schema() | undefined,
     metadata :: od_handle:metadata() | undefined,
 
     % Direct relations to other entities
@@ -276,7 +276,8 @@
 
 -record(file_download_code, {
     expires :: time:seconds(),
-    download_args :: download_args:record()
+    download_args :: download_args:record(),
+    streaming_status = pending :: file_download_code:streaming_status()
 }).
 
 -record(offline_access_credentials, {
@@ -294,6 +295,9 @@
     status :: undefined | session:status(),
     accessed :: undefined | time:seconds(),
     type :: undefined | session:type(),
+    client_type :: undefined | session:client_type(),
+    client_options :: [session:client_option()],
+    client_system_properties :: [session:client_system_property()],
     mode = normal :: session:mode(),
     identity :: aai:subject(),
     credentials :: undefined | auth_manager:credentials(),
@@ -505,9 +509,33 @@
 -record(deletion_marker, {}).
 
 
+%% Everything a storage helper needs before LUMA substitutes the per-user
+%% credentials: the timeout and the two halves of the parameter set, kept as
+%% the flat binary maps the C++ helper layer consumes. helper_spec:describe/1
+%% turns those maps back into the contract's typed records.
+-record(helper_spec, {
+    name :: helper_spec:name(),
+    %% Undefined means the storage helper's own default applies.
+    timeout :: undefined | onedata_storage:operation_timeout(),
+    configuration = #{} :: helper_spec:configuration(),
+    credentials = #{} :: helper_spec:credentials()
+}).
+
+
 -record(storage_config, {
-    helper :: helpers:helper(),
-    luma_config :: storage:luma_config()
+    helper_spec :: helper_spec:t(),
+    luma_config :: storage:luma_config(),
+    %% Namespaces this storage's entries in the LUMA DB - see luma_db. A fresh
+    %% namespace is drawn on every LUMA config change, which makes all entries
+    %% stored so far unreachable in a single write. 'undefined' is the original,
+    %% unnamespaced keyspace, retained by storages that never changed their LUMA
+    %% config (and by all storages predating the mechanism).
+    luma_db_namespace :: undefined | luma_db:namespace(),
+    %% Namespaces that no longer back any lookup and whose entries are still to
+    %% be deleted - see luma_db_garbage_collector. A namespace lands here in the
+    %% very write that supersedes it, so it can never be lost; the live namespace
+    %% is never among them.
+    stale_luma_db_namespaces = [] :: [undefined | luma_db:namespace()]
 }).
 
 
@@ -620,11 +648,6 @@
     current_run :: undefined | autocleaning:run_id(),
     % record describing configuration of auto-cleaning per given space
     config :: undefined | autocleaning:config()
-}).
-
--record(helper_handle, {
-    handle :: helpers_nif:helper_handle(),
-    timeout = infinity :: timeout()
 }).
 
 %% Model for storing file's location data
@@ -799,7 +822,7 @@
     task_id :: traverse:id(),
     callback_module :: traverse:callback_module(),
     % storage traverse specific fields
-    storage_file_id :: helper:name(),
+    storage_file_id :: helper_spec:name(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
     iterator_module :: storage_traverse:iterator_type(),
@@ -972,7 +995,7 @@
     % Mapping of providers to their data output and destinations
     stats_out = #{} :: #{od_provider:id() => histogram:histogram()},
     % Providers mapping to providers they recently sent data to
-    active_channels = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
+    active_channels = #{} :: #{od_provider:id() => [od_provider:id()]}
 }).
 
 %% Model used for communication between providers during
@@ -1075,6 +1098,10 @@
     % incarnation is incremented every time when status is changed to initializing ;
     % it is used to evaluate if collection is outdated (see dir_stats_collection_behaviour:acquire/1)
     incarnation = 0 :: non_neg_integer(),
+
+    % number of times the initialization traverse has been automatically restarted due to errors
+    % in the current enable cycle; reset to 0 on every fresh transition to initializing
+    initialization_retry_count = 0 :: non_neg_integer(),
 
     % information about next status transition that is expected to be executed after ongoing transition is finished
     pending_status_transition :: dir_stats_service_state:pending_status_transition(),

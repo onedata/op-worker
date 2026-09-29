@@ -12,7 +12,7 @@
 -module(harvesting_stream_test_SUITE).
 -author("Jakub Kudzia").
 
--include("logic_tests_common.hrl").
+-include("graph_sync/logic_tests_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
@@ -122,11 +122,15 @@ all() -> ?ALL([
             __TimeoutInMillis = timer:seconds(__Timeout),
             receive
                 ?HARVEST_METADATA_CALLED(
-                    __SpaceId,
-                    __Destination,
+                    __RecvSpaceId,
+                    __RecvDestination,
                     __ReceivedBatch,
-                    __HarvestingStreamPid
-                ) ->
+                    __RecvHarvestingStreamPid
+                ) when
+                    __RecvSpaceId =:= __SpaceId,
+                    __RecvDestination =:= __Destination,
+                    __RecvHarvestingStreamPid =:= __HarvestingStreamPid
+                ->
                     __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedBatch],
                     AssertFun(__SpaceId, __Destination, sequential_subtract(__Seqs, __ReceivedSeqs),
                         __HarvestingStreamPid, __Timeout)
@@ -148,20 +152,25 @@ all() -> ?ALL([
     ExpHarvestingStreamPid, Timeout
 ), (
     (fun AssertFun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout) ->
-        Stopwatch = stopwatch:start(),
+        __Stopwatch = stopwatch:start(),
         __TimeoutInMillis = timer:seconds(__Timeout),
         receive
             __HM = ?HARVEST_METADATA_CALLED(
-                __SpaceId,
-                __Destination,
+                __RecvSpaceId,
+                __RecvDestination,
                 __ReceivedBatch,
-                __HarvestingStreamPid
-            ) ->
-                ElapsedTime = stopwatch:read_seconds(Stopwatch),
+                __RecvHarvestingStreamPid
+            ) when
+                __RecvSpaceId =:= __SpaceId,
+                __RecvDestination =:= __Destination,
+                __RecvHarvestingStreamPid =:= __HarvestingStreamPid
+            ->
+                __ElapsedTime = stopwatch:read_seconds(__Stopwatch),
                 __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedBatch],
                 case sequential_subtract(__Seqs, __ReceivedSeqs) of
-                    __Seqs ->
-                        AssertFun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, max(__Timeout - ElapsedTime, 0));
+                    __SeqsLeft when __SeqsLeft =:= __Seqs ->
+                        AssertFun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid,
+                            max(__Timeout - __ElapsedTime, 0));
                     _ ->
                         __Args = [
                             {module, ?MODULE},

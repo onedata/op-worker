@@ -12,7 +12,7 @@
 -module(gs_token_logic_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("logic_tests_common.hrl").
+-include("graph_sync/logic_tests_common.hrl").
 
 %% export for ct
 -export([

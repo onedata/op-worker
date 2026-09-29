@@ -58,16 +58,19 @@
 
 -spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update_cache(Id, Diff, Default) ->
+    %% @TODO VFS-13002 - this hook should not be executed in the calling process
     run_in_critical_section(Id, fun() ->
-        PrevVal = case get_from_cache(Id) of
-            {ok, #document{value = V}} -> V;
-            {error, not_found} -> #od_user{}
+        {IsNewUserDoc, PrevVal} = case get_from_cache(Id) of
+            {ok, #document{value = V}} ->
+                {false, V};
+            {error, not_found} ->
+                {true, #od_user{}}
         end,
         case datastore_model:update(?CTX, Id, Diff, Default) of
             {ok, #document{value = NewVal}} = Res ->
-                ok = handle_new_doc(Id, PrevVal, NewVal),
-                ok = handle_new_spaces(Id, PrevVal, NewVal),
-                ok = handle_spaces_removed(Id, PrevVal, NewVal),
+                IsNewUserDoc andalso handle_new_doc(Id),
+                handle_new_spaces(Id, PrevVal, NewVal),
+                handle_spaces_removed(Id, PrevVal, NewVal),
                 Res;
             {error, _} = Error ->
                 Error
@@ -160,8 +163,10 @@ handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces
         [] ->
             ok;
         SpacesDiff ->
-            lists:foreach(fun special_dirs:set_up_for_new_space/1, SpacesDiff),
-            user_root_dir:report_new_spaces_appeared([UserId], SpacesDiff)
+            % Local spaces are properly set up in when space doc appears (see od_space),
+            % here only essentials are created so provider proxy can work.
+            lists:foreach(fun special_dirs:set_up_for_new_proxy_space/1, SpacesDiff),
+            ok = user_root_dir:report_new_spaces_appeared([UserId], SpacesDiff)
     end.
 
 
@@ -170,15 +175,14 @@ handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces
 handle_spaces_removed(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces = NewSpaces}) ->
     % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
     case PrevSpaces -- NewSpaces of
-        [] -> ok;
-        SpacesDiff -> user_root_dir:report_spaces_removed([UserId], SpacesDiff)
+        [] ->
+            ok;
+        SpacesDiff ->
+            ok = user_root_dir:report_spaces_removed([UserId], SpacesDiff)
     end.
 
 
 %% @private
--spec handle_new_doc(id(), PrevVal :: record(), NewVal :: record()) -> ok.
-handle_new_doc(UserId, #od_user{username = undefined}, _) ->
-    % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
-    special_dirs:report_new_user(UserId);
-handle_new_doc(_, _, _) ->
-    ok.
+-spec handle_new_doc(id()) -> ok.
+handle_new_doc(UserId) ->
+    ok = special_dirs:report_new_user(UserId).

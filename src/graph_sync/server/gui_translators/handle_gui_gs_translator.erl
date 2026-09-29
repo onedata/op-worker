@@ -28,13 +28,13 @@
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{aspect = instance, scope = public}, #{
     <<"url">> := PublicHandle,
-    <<"metadataPrefix">> := MetadataPrefix,
+    <<"metadataSchema">> := MetadataSchema,
     <<"metadataString">> := MetadataString,
     <<"handleServiceId">> := HandleServiceId
 }) ->
     #{
         <<"url">> => PublicHandle,
-        <<"metadataPrefix">> => MetadataPrefix,
+        <<"metadataSchema">> => MetadataSchema,
         <<"metadataString">> => MetadataString,
         <<"handleService">> => gri:serialize(#gri{
             type = op_handle_service,

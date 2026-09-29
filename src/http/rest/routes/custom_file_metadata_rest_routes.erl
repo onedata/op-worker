@@ -30,7 +30,7 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Remove file json metadata
+    %% Remove file JSON metadata
     {<<"/data/:id/metadata/json">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{
@@ -40,7 +40,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file json metadata
+    %% Get file JSON metadata
     {<<"/data/:id/metadata/json">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -51,7 +51,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file json metadata
+    %% Set file JSON metadata
     {<<"/data/:id/metadata/json">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = {as_is, <<"metadata">>},
@@ -63,7 +63,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove file rdf metadata
+    %% Remove file RDF metadata
     {<<"/data/:id/metadata/rdf">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{
@@ -73,7 +73,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file rdf metadata
+    %% Get file RDF metadata
     {<<"/data/:id/metadata/rdf">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/rdf+xml">>],
@@ -84,7 +84,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file rdf metadata
+    %% Set file RDF metadata
     {<<"/data/:id/metadata/rdf">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = {as_is, <<"metadata">>},

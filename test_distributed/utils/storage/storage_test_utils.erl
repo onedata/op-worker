@@ -1,36 +1,47 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions used in tests that operate on provider's
-%%% storage via RPC.
+%%% Utility functions for tests that verify how logical file operations are
+%%% reflected on a provider's storage. Backs the assertion macros of
+%%% storage_test.hrl.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_test_utils).
 -author("Jakub Kudzia").
 
 -include("modules/logical_file_manager/lfm.hrl").
--include("storage_files_test_SUITE.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("kernel/include/file.hrl").
 
-%% API
+%% API - works with any storage backend
 -export([
-    assert_file_info/5,
-
-    read_file/2, read_file_info/2, list_dir/2,
-    space_path/2, file_path/3,
-    get_space_mount_point/2, get_supporting_storage_id/2,
-    storage_mount_point/2, get_helper/2,
-    is_supporting_storage_posix_compatible/2, is_posix_compatible_storage/2,
+    get_supporting_storage_id/2, get_storage_file_id/2,
 
     ensure_file_created_on_storage/2,
     ensure_dir_created_on_storage/2,
+    reset_space_dir/3,
 
+    % assert on the storage file only if the space is supported by a POSIX
+    % compatible storage, otherwise no-op - safe to call from generic test code
     assert_file_owner_on_posix_storage/4,
     assert_file_attrs_on_posix_storage/5
+]).
+%% API - POSIX compatible storages only
+-export([
+    assert_file_info/5,
+    assert_owner_and_mode/4,
+
+    read_file/2, read_file_info/2, get_file_info/2, list_dir/2,
+    remove_dir/2,
+    space_path/2, file_path/3,
+    storage_mount_point/2, get_mount_point_file_info/2
 ]).
 
 
@@ -39,10 +50,12 @@
 %%%===================================================================
 
 
+-spec assert_file_info(#{atom() => term()}, node(), binary(), pos_integer(), non_neg_integer()) ->
+    ok | no_return().
 assert_file_info(ExpectedValues, Worker, FilePath, Line, Attempts) when Attempts >= 0 ->
     try
-        {ok, FI} = storage_test_utils:read_file_info(Worker, FilePath),
-        maps:map(fun(Field, ExpectedValue) ->
+        {ok, FI} = read_file_info(Worker, FilePath),
+        maps:foreach(fun(Field, ExpectedValue) ->
             assert_field(Field, ExpectedValue, FI)
         end, ExpectedValues)
     catch
@@ -71,7 +84,21 @@ assert_file_info(ExpectedValues, Worker, FilePath, Line, Attempts) when Attempts
             assert_file_info(ExpectedValues, Worker, FilePath, Line, Attempts - 1)
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Asserts that the file is owned and permitted exactly as the given #file_info{},
+%% typically one read before the file was removed, to check that whatever recreated
+%% it made it indistinguishable from the original.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_owner_and_mode(node(), #file_info{}, binary(), non_neg_integer()) ->
+    ok | no_return().
+assert_owner_and_mode(Worker, #file_info{uid = Uid, gid = Gid, mode = Mode}, FilePath, Attempts) ->
+    assert_file_info(#{uid => Uid, gid => Gid, mode => Mode}, Worker, FilePath, ?LINE, Attempts).
+
+
 %% @private
+-spec assert_field(atom(), term(), #file_info{}) -> ok | no_return().
 assert_field(Field, ExpectedValue, Record) ->
     case get_record_field(Record, Field) of
         ExpectedValue ->
@@ -81,33 +108,65 @@ assert_field(Field, ExpectedValue, Record) ->
     end.
 
 %% @private
+-spec get_record_field(#file_info{}, atom()) -> term().
 get_record_field(Record, Field) ->
     FieldsList = record_info(fields, file_info),
     Index = lists_utils:index_of(Field, FieldsList),
     element(Index + 1, Record).
 
 
+-spec read_file(node(), binary()) -> {ok, binary()} | {error, term()}.
 read_file(Worker, FilePath) ->
     rpc:call(Worker, file, read_file, [FilePath]).
 
 
+-spec read_file_info(node(), binary()) -> {ok, #file_info{}} | {error, term()}.
 read_file_info(Worker, FilePath) ->
     rpc:call(Worker, file, read_file_info, [FilePath]).
 
 
+%% @doc Like read_file_info/2, but for a file that is required to exist.
+-spec get_file_info(node(), binary()) -> #file_info{} | no_return().
+get_file_info(Worker, FilePath) ->
+    {ok, FileInfo} = ?assertMatch({ok, _}, read_file_info(Worker, FilePath)),
+    FileInfo.
+
+
+-spec list_dir(node(), binary()) -> {ok, [file:filename()]} | {error, term()}.
 list_dir(Worker, DirPath) ->
     rpc:call(Worker, file, list_dir, [DirPath]).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes a directory with all its content behind the provider's back - the file
+%% metadata still marks the directory, as well as all its ancestors, as created
+%% on the storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_dir(node(), binary()) -> ok | no_return().
+remove_dir(Worker, DirPath) ->
+    ?assertEqual(ok, rpc:call(Worker, file, del_dir_r, [DirPath])),
+    ?assertEqual({error, ?ENOENT}, read_file_info(Worker, DirPath)),
+    ok.
+
+
+%% @doc Path of the space dir on the storage supporting the space.
+-spec space_path(node(), od_space:id()) -> binary().
 space_path(Worker, SpaceId) ->
     file_path(Worker, SpaceId, <<"">>).
 
 
+%% @doc Path of a file on the storage supporting the space, given its path
+%% relative to the space dir.
+-spec file_path(node(), od_space:id(), file_meta:path()) -> binary().
 file_path(Worker, SpaceId, FilePath) ->
     SpaceMnt = get_space_mount_point(Worker, SpaceId),
     filename:join([SpaceMnt, FilePath]).
 
 
+%% @private
+-spec get_space_mount_point(node(), od_space:id()) -> binary().
 get_space_mount_point(Worker, SpaceId) ->
     {ok, StorageId} = get_supporting_storage_id(Worker, SpaceId),
     IsImportedStorage = rpc:call(Worker, storage, is_imported, [StorageId]),
@@ -118,28 +177,53 @@ get_space_mount_point(Worker, SpaceId) ->
     end.
 
 
+-spec get_supporting_storage_id(node(), od_space:id()) -> {ok, storage:id()} | {error, term()}.
 get_supporting_storage_id(Worker, SpaceId) ->
     rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId]).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Id under which the given file is kept on the storage supporting its space.
+%% Unlike the path of a file in a space, this depends on the storage: a canonical
+%% one mirrors the path, while a flat one derives the id from the file uuid (see
+%% storage_file_id). Resolve it while the file still exists - the id outlives the
+%% file, which is what lets a test check what became of the storage file after
+%% the file itself was deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_file_id(node(), file_id:file_guid()) -> helpers:file_id().
+get_storage_file_id(Worker, FileGuid) ->
+    FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [FileGuid]),
+    {StorageFileId, _} = rpc:call(Worker, file_ctx, get_storage_file_id, [FileCtx]),
+    StorageFileId.
+
+
+%% @private
+-spec get_helper(node(), storage:id()) -> helper_spec:t().
 get_helper(Worker, StorageId) ->
-    rpc:call(Worker, storage, get_helper, [StorageId]).
+    rpc:call(Worker, storage, get_helper_spec, [StorageId]).
 
 
+-spec storage_mount_point(node(), storage:id()) -> binary().
 storage_mount_point(Worker, StorageId) ->
     Helper = get_helper(Worker, StorageId),
-    HelperArgs = helper:get_args(Helper),
-    maps:get(<<"mountPoint">>, HelperArgs).
+    ConfigurationParams = helper_spec:get_configuration(Helper),
+    maps:get(<<"mountPoint">>, ConfigurationParams).
 
 
-is_supporting_storage_posix_compatible(Worker, SpaceId) ->
-    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Worker, SpaceId),
-    is_posix_compatible_storage(Worker, StorageId).
+%% @doc #file_info{} of the storage mount dir itself, which the provider neither
+%% creates nor removes - it is set up together with the storage.
+-spec get_mount_point_file_info(node(), storage:id()) -> #file_info{} | no_return().
+get_mount_point_file_info(Worker, StorageId) ->
+    get_file_info(Worker, storage_mount_point(Worker, StorageId)).
 
 
+%% @private
+-spec is_posix_compatible_storage(node(), storage:id()) -> boolean().
 is_posix_compatible_storage(Worker, StorageId) ->
-    Helper = storage_test_utils:get_helper(Worker, StorageId),
-    helper:is_posix_compatible(Helper).
+    Helper = get_helper(Worker, StorageId),
+    helper_spec:is_posix_compatible(Helper).
 
 
 -spec ensure_file_created_on_storage(node(), file_id:file_guid()) -> ok.
@@ -162,6 +246,23 @@ ensure_dir_created_on_storage(Node, DirGuid) ->
     ok = lfm_proxy:unlink(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Brings the space dir on the storage back to the state from before the space was
+%% supported: the dir with all its content is removed and the provider is made to
+%% forget it had ever created it, so that the next operation in the space creates
+%% (and chowns) it anew.
+%% @end
+%%--------------------------------------------------------------------
+-spec reset_space_dir(node(), od_space:id(), storage:id()) -> ok | no_return().
+reset_space_dir(Node, SpaceId, StorageId) ->
+    ok = rpc:call(Node, dir_location, delete, [space_dir:uuid(SpaceId)]),
+    SDHandle = sd_test_utils:new_handle(Node, SpaceId, <<"/">>, StorageId),
+    sd_test_utils:recursive_rm(Node, SDHandle, true),
+    ?assertMatch({ok, []}, sd_test_utils:ls(Node, SDHandle, 0, 1)),
+    ok.
+
+
 -spec assert_file_owner_on_posix_storage(node(), od_space:id(), file_meta:path(), session:id()) ->
     ok | no_return().
 assert_file_owner_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessionId) ->
@@ -171,9 +272,9 @@ assert_file_owner_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessi
 -spec assert_file_attrs_on_posix_storage(node(), od_space:id(), file_meta:path(), session:id(), map()) ->
     ok | no_return().
 assert_file_attrs_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessionId, ExpAttrs) ->
-    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Node, SpaceId),
+    {ok, StorageId} = get_supporting_storage_id(Node, SpaceId),
 
-    case storage_test_utils:is_posix_compatible_storage(Node, StorageId) of
+    case is_posix_compatible_storage(Node, StorageId) of
         true ->
             {ok, UserId} = rpc:call(Node, session, get_user_id, [ExpOwnerSessionId]),
             {ok, UidAndGidAttrs} = rpc:call(Node, luma, map_to_storage_credentials, [
@@ -185,7 +286,7 @@ assert_file_attrs_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessi
             },
 
             StorageFilePath = get_storage_file_path(Node, SpaceId, LogicalFilePath),
-            ?ASSERT_FILE_INFO(ExpOwnerPosixAttrs, Node, StorageFilePath);
+            assert_file_info(ExpOwnerPosixAttrs, Node, StorageFilePath, ?LINE, 0);
         false ->
             ok
     end.
@@ -200,4 +301,4 @@ assert_file_attrs_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessi
 -spec get_storage_file_path(node(), od_space:id(), file_meta:path()) -> binary().
 get_storage_file_path(Node, SpaceId, LogicalPath) ->
     [_Sep, _SpaceName | PathTokens] = filepath_utils:split(LogicalPath),
-    storage_test_utils:file_path(Node, SpaceId, filepath_utils:join(PathTokens)).
+    file_path(Node, SpaceId, filepath_utils:join(PathTokens)).

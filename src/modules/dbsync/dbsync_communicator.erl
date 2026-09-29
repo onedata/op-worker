@@ -122,8 +122,7 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
                 ?debug("Cannot broadcast changes batch to provider ~tp due to "
                        "no available connection", [ProviderId]);
             {error, Reason} ->
-                ?warning("Cannot broadcast changes batch to provider ~tp "
-                "due to: ~tp", [ProviderId, Reason])
+                ?warning(?autoformat_with_msg("Cannot broadcast changes batch to provider", [ProviderId, Reason]))
         end
     end, Hops),
     Multipath.

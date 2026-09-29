@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2021-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -22,8 +22,14 @@
 %%% API
 %%%===================================================================
 
--spec set_privileges(od_space:id(), od_user:id(), privileges:privileges(privileges:space_privilege())) -> ok.
-% hack necessary as unfortunately there are some ct_run.py suites not run using onenv :(
+%% @doc Accepts raw ids as well as selectors, as some suites are still run
+%% outside onenv and have no selectors to refer to entities with.
+-spec set_privileges(
+    od_space:id() | oct_background:entity_selector(),
+    od_user:id() | oct_background:entity_selector(),
+    privileges:privileges(privileges:space_privilege())
+) ->
+    ok.
 set_privileges(SpaceId, UserId, SpacePrivs) when is_binary(SpaceId), is_binary(UserId) ->
     ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, SpacePrivs),
     opt:force_fetch_entity(od_space, SpaceId);

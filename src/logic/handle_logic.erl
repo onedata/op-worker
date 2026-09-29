@@ -58,11 +58,11 @@ force_fetch(SessionId, HandleId) ->
     od_handle_service:id(),
     od_handle:resource_type(), 
     od_handle:resource_id(),
-    od_handle:metadata_prefix(),
+    od_handle:metadata_schema(),
     od_handle:metadata()
 ) ->
     {ok, od_handle:id()} | errors:error().
-create(SessionId, HandleServiceId, ResourceType, ResourceId, MetadataPrefix, Metadata) ->
+create(SessionId, HandleServiceId, ResourceType, ResourceId, MetadataSchema, Metadata) ->
     {ok, UserId} = session:get_user_id(SessionId),
     Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
         operation = create,
@@ -72,7 +72,7 @@ create(SessionId, HandleServiceId, ResourceType, ResourceId, MetadataPrefix, Met
             <<"handleServiceId">> => HandleServiceId,
             <<"resourceType">> => ResourceType,
             <<"resourceId">> => ResourceId,
-            <<"metadataPrefix">> => MetadataPrefix,
+            <<"metadataSchema">> => MetadataSchema,
             <<"metadata">> => Metadata
         },
         subscribe = true

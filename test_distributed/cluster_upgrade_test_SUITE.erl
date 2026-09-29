@@ -8,6 +8,14 @@
 %%% @doc
 %%% This test verifies if cluster upgrade procedures (employed during software
 %%% upgrades) work as expected.
+%%%
+%%% Each upgrade_from_<release>_* case prepares data the way the given release
+%%% left it and runs a single cluster upgrade step. Just like during an actual
+%%% upgrade, the step runs on the current code, so documents stored in an older
+%%% record version are upgraded to the current one when first read - before the
+%%% step gets to process them. That is why the cases assert in terms of the
+%%% current records. Record upgrades themselves are covered by
+%%% datastore_record_upgrade_test.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(cluster_upgrade_test_SUITE).
@@ -19,7 +27,7 @@
 -include("modules/storage/import/storage_import.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
--include("luma_test_utils.hrl").
+-include("luma/luma_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -39,6 +47,7 @@
     upgrade_from_21_02_5_links_reconciliation_traverses/1,
     upgrade_from_21_02_8_upgrade_swift_storage/1,
     upgrade_from_21_02_8_luma/1,
+    upgrade_from_25_0_trash/1,
     upgrade_from_21_02_latest_restore_removed_views/1
 ]).
 
@@ -72,6 +81,7 @@ all() -> ?ALL([
     upgrade_from_21_02_5_links_reconciliation_traverses,
     upgrade_from_21_02_8_upgrade_swift_storage,
     upgrade_from_21_02_8_luma,
+    upgrade_from_25_0_trash,
     upgrade_from_21_02_latest_restore_removed_views
 ]).
 
@@ -432,7 +442,10 @@ upgrade_from_21_02_3_missing_dirs(Config) ->
 
 
 upgrade_from_21_02_5_links_reconciliation_traverses(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = AllWorkers = ?config(op_worker_nodes, Config),
+
+    % the module is mocked in initializer
+    test_utils:mock_unload(AllWorkers, file_links_reconciliation_traverse),
     
     rpc:call(Worker, file_links_reconciliation_traverse, start_for_space, [?SPACE1_ID]),
     ?assertMatch({ok, #document{value = #traverse_task{status = finished}}},
@@ -454,36 +467,30 @@ upgrade_from_21_02_8_upgrade_swift_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     TenantName = <<"some_project">>,
-    BaseHelperArgs = #{
+    BaseConfigurationParams = #{
         <<"authUrl">> => <<"some_url">>,
         <<"containerName">> => <<"some_container">>
     },
-    BaseHelperAdminCtx = #{
+    BaseCredentialsParams = #{
         <<"username">> => <<"user">>,
         <<"password">> => <<"password">>
     },
-    Helper = #helper{
-        name = ?SWIFT_HELPER_NAME,
-        args = BaseHelperArgs#{<<"tenantName">> => TenantName},
-        admin_ctx = BaseHelperAdminCtx
-    },
-    StorageName = ?RAND_STR(),
-    {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, undefined]),
-
-    ?assertMatch(
-        {ok, #document{value = #storage_config{helper = Helper}}},
-        rpc:call(Worker, storage_config, get, [StorageId])
-    ),
+    StorageId = ?RAND_STR(),
+    % storage as left by 21.02.8 (record version 3) - the upgrade step gets it already in the current record version
+    create_storage_configs_in_version_3(Worker, [{StorageId, {storage_config,
+        {helper, ?SWIFT_HELPER_NAME, BaseConfigurationParams#{<<"tenantName">> => TenantName}, BaseCredentialsParams},
+        {luma_config, ?AUTO_FEED, undefined, undefined}
+    }}]),
 
     ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
 
-    ExpNewHelper = #helper{
+    ExpNewHelper = #helper_spec{
         name = ?SWIFT_HELPER_NAME,
-        args = BaseHelperArgs,
-        admin_ctx = BaseHelperAdminCtx#{<<"projectName">> => TenantName}
+        configuration = BaseConfigurationParams,
+        credentials = BaseCredentialsParams#{<<"projectName">> => TenantName}
     },
     ?assertMatch(
-        {ok, #document{value = #storage_config{helper = ExpNewHelper}}},
+        {ok, #document{value = #storage_config{helper_spec = ExpNewHelper}}},
         rpc:call(Worker, storage_config, get, [StorageId])
     ),
 
@@ -491,7 +498,7 @@ upgrade_from_21_02_8_upgrade_swift_storage(Config) ->
     ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
 
     ?assertMatch(
-        {ok, #document{value = #storage_config{helper = ExpNewHelper}}},
+        {ok, #document{value = #storage_config{helper_spec = ExpNewHelper}}},
         rpc:call(Worker, storage_config, get, [StorageId])
     ).
 
@@ -500,8 +507,14 @@ upgrade_from_21_02_8_luma(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     UserId = <<"user_id">>,
 
-    StoragesAutoLuma = lists:map(fun(Helper) -> setup_luma(Worker, Helper, UserId, ?AUTO_FEED) end, ?HELPERS_21_02_8),
-    StoragesLocalLuma = lists:map(fun(Helper) -> setup_luma(Worker, Helper, UserId, ?LOCAL_FEED) end, ?HELPERS_21_02_8),
+    % storages and LUMA entries as left by 21.02.8 - upgrading a storage record from version 3 leaves its
+    % luma_db_namespace undefined, which keeps the LUMA doc ids and links forest keys of 21.02.8 valid
+    create_storage_configs_in_version_3(Worker, [
+        {luma_storage_id(Feed, Helper), {storage_config, helper_21_02_8(Helper), {luma_config, Feed, undefined, undefined}}}
+        || Feed <- [?AUTO_FEED, ?LOCAL_FEED], Helper <- ?HELPERS_21_02_8
+    ]),
+    StoragesAutoLuma = lists:map(fun(Helper) -> setup_luma_21_02_8(Worker, Helper, UserId, ?AUTO_FEED) end, ?HELPERS_21_02_8),
+    StoragesLocalLuma = lists:map(fun(Helper) -> setup_luma_21_02_8(Worker, Helper, UserId, ?LOCAL_FEED) end, ?HELPERS_21_02_8),
 
     lists:foreach(fun({LumaStorageUser, Storage}) ->
         ?assertEqual({ok, LumaStorageUser}, rpc:call(Worker, luma_storage_users, get_or_acquire, [Storage, UserId])),
@@ -524,21 +537,79 @@ upgrade_from_21_02_8_luma(Config) ->
         ?assertEqual({ok, LumaStorageUser}, rpc:call(Worker, luma_storage_users, get_or_acquire, [ChangedStorage, UserId]))
     end, StoragesLocalLuma).
 
+
+upgrade_from_25_0_trash(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SpaceGuid = space_dir:guid(?SPACE1_ID),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId1, SpaceGuid, <<"dir">>, ?DEFAULT_DIR_MODE),
+    {ok, _FileGuid} = lfm_proxy:create(Worker, SessId1, DirGuid, <<"file">>, ?DEFAULT_FILE_MODE),
+    rpc:call(Worker, trash_dir, move_to_trash, [file_ctx:new_by_guid(DirGuid), rpc:call(Worker, user_ctx, new, [?ROOT_SESS_ID])]),
+    
+    {L, _} = rpc:call(Worker, trash_dir, list, [?SPACE1_ID]),
+    ?assertEqual(1, length(L)),
+    
+    ?assertEqual({ok, 9}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [8])),
+    
+    % disable safe mode, so the waiting async upgrade process can start
+    ok = rpc:call(Worker, safe_mode, report_node_initialized, []),
+
+    ?assertEqual(0, length(element(1, rpc:call(Worker, trash_dir, list, [?SPACE1_ID]))), 20).
+
 %%%===================================================================
 %%% Helper functions
 %%%===================================================================
 
-setup_luma(Worker, Helper, UserId, Feed) ->
-    HelperName = helper:get_name(Helper),
-    StorageDoc = #document{
-        key = <<"storage_id_", (atom_to_binary(Feed))/binary, "_", HelperName/binary>>,
-        value = #storage_config{helper = Helper, luma_config = luma_config:new(Feed)}
-    },
-    rpc:call(Worker, storage_config, create, [StorageDoc#document.key, StorageDoc#document.value]),
+%% Docs are written straight to disc, so that the first read of each runs the record upgrade.
+%% Their fold links go through memory instead, as that is where storage_config:list_all/0 reads
+%% them from (a disc only fold link would stay invisible to it).
+create_storage_configs_in_version_3(Worker, StorageIdsAndRecords) ->
+    test_utils:mock_new(Worker, storage_config, [passthrough]),
+    test_utils:mock_expect(Worker, storage_config, get_record_version, fun() -> 3 end),
+    lists:foreach(fun({StorageId, Record}) ->
+        ?assertMatch({ok, _}, rpc:call(Worker, datastore_model, save, [
+            #{model => storage_config, memory_driver => undefined},
+            #document{key = StorageId, value = Record}
+        ]))
+    end, StorageIdsAndRecords),
+    test_utils:mock_unload(Worker, [storage_config]),
 
+    lists:foreach(fun({StorageId, _Record}) ->
+        ?assertMatch({ok, _}, rpc:call(Worker, datastore_model, add_links, [
+            storage_config:get_ctx(), <<"storage_config">>, ?MODEL_ALL_TREE_ID, {StorageId, <<>>}
+        ]))
+    end, StorageIdsAndRecords).
+
+
+helper_21_02_8(#helper_spec{name = Name, configuration = Configuration, credentials = Credentials}) ->
+    {helper, Name, Configuration, Credentials}.
+
+
+luma_storage_id(Feed, Helper) ->
+    <<"storage_id_", (atom_to_binary(Feed))/binary, "_", (helper_spec:get_name(Helper))/binary>>.
+
+
+%% In 21.02.8 neither the LUMA doc id nor the links forest key had a luma generation component.
+setup_luma_21_02_8(Worker, Helper, UserId, Feed) ->
+    StorageId = luma_storage_id(Feed, Helper),
+    {ok, StorageDoc} = rpc:call(Worker, storage_config, get, [StorageId]),
     LumaStorageUser = rpc:call(Worker, luma_storage_user, new,
-        [UserId, #{<<"storageCredentials">> => helper:get_admin_ctx(Helper)}, StorageDoc]),
-    ok = rpc:call(Worker, luma_db, store, [StorageDoc, UserId, luma_storage_users, LumaStorageUser, Feed]),
+        [UserId, #{<<"storageCredentials">> => helper_spec:get_credentials(Helper)}, StorageDoc]),
+
+    Table = luma_storage_users,
+    TableBin = atom_to_binary(Table),
+    DocId = datastore_key:new_from_digest([StorageId, TableBin, UserId]),
+    LumaDbCtx = luma_db:get_ctx(),
+    ?assertMatch({ok, _}, rpc:call(Worker, datastore_model, save, [LumaDbCtx, #document{
+        key = DocId,
+        value = #luma_db{table = Table, record = LumaStorageUser, storage_id = StorageId, feed = Feed}
+    }])),
+    ForestKey = <<"LUMA_DB_LINKS##", TableBin/binary, "##", StorageId/binary>>,
+    ProviderId = rpc:call(Worker, oneprovider, get_id, []),
+    ?assertMatch({ok, _}, rpc:call(Worker, datastore_model, add_links, [
+        LumaDbCtx, ForestKey, ProviderId, {UserId, DocId}
+    ])),
     {LumaStorageUser, StorageDoc}.
 
 
@@ -611,7 +682,7 @@ upgrade_from_21_02_latest_restore_removed_views(Config) ->
         {SimpleSpatialFunction, undefined, true}
     ]),
 
-    ?assertEqual({ok, 9}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [8])),
+    ?assertEqual({ok, 11}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [10])),
 
     % After upgrade views should be restored
     lists:foreach(fun({ViewName, IsSpatial}) ->
@@ -620,7 +691,7 @@ upgrade_from_21_02_latest_restore_removed_views(Config) ->
     end, Views),
 
     % Assert upgrade is idempotent
-    ?assertEqual({ok, 9}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [8])),
+    ?assertEqual({ok, 11}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [10])),
     lists:foreach(fun({ViewName, IsSpatial}) ->
         ?assertMatch({ok, _}, GetViewFun(ViewName)),
         ?assertMatch({ok, _}, QueryView(ViewName, IsSpatial))
@@ -711,8 +782,8 @@ init_per_testcase(Case = upgrade_from_21_02_8_luma, Config) ->
     test_utils:mock_new(Worker, provider_logic, [passthrough]),
     test_utils:mock_expect(Worker, provider_logic, get_storages, fun() ->
         {ok,
-            [<<"storage_id_auto_", (helper:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8] ++
-                [<<"storage_id_local_", (helper:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8]
+            [<<"storage_id_auto_", (helper_spec:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8] ++
+                [<<"storage_id_local_", (helper_spec:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8]
         }
     end),
     test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
@@ -720,6 +791,12 @@ init_per_testcase(Case = upgrade_from_21_02_8_luma, Config) ->
     end),
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+init_per_testcase(Case = upgrade_from_25_0_trash, Config) ->
+    Config1 = initializer:setup_storage(Config),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config1, "env_desc.json"), Config1),
+
+    init_per_testcase(?DEFAULT_CASE(Case), Config1);
 
 init_per_testcase(Case = upgrade_from_21_02_latest_restore_removed_views, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -741,8 +818,8 @@ init_per_testcase(Case = upgrade_from_21_02_latest_restore_removed_views, Config
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
-    test_utils:mock_expect(Worker, gs_channel_service, is_connected, fun() -> true end),
-    Config.
+    test_utils:mock_expect(Worker, gs_channel_service, is_connected_and_initialized, fun() -> true end),
+    lfm_proxy:init(Config).
 
 
 end_per_testcase(Case = upgrade_from_21_02_2_tmp_dir, Config) ->
@@ -760,6 +837,11 @@ end_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Con
     test_utils:mock_unload(Worker, [provider_logic]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
+end_per_testcase(Case = upgrade_from_25_0_trash, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker, [provider_logic]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
 end_per_testcase(Case = upgrade_from_21_02_latest_restore_removed_views, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [provider_logic, space_logic]),
@@ -767,8 +849,8 @@ end_per_testcase(Case = upgrade_from_21_02_latest_restore_removed_views, Config)
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker, [storage_logic, gs_channel_service]),
-    ok.
+    test_utils:mock_unload(Worker, [storage_logic, storage_config, gs_channel_service]),
+    lfm_proxy:teardown(Config).
 
 
 end_per_suite(_Config) ->

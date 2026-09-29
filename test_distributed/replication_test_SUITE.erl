@@ -471,6 +471,7 @@ read_should_synchronize_file(Config) ->
             {ok, ref}
         end
     ),
+    test_utils:mock_expect(Workers, provider_logic, get_domain, fun(_) -> {ok, <<"dummy-domain">>} end),
 
     % when
     {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
@@ -1321,9 +1322,15 @@ override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
         fun(_Client, SpId) when SpId =:= SpaceId ->
             {ok, Providers}
         end),
-    test_utils:mock_expect(Workers, space_logic, is_supported,
+    test_utils:mock_expect(Workers, space_logic, is_supported_by,
         fun(_Client, SpId, ProvId) when SpId =:= SpaceId ->
             lists:member(ProvId, Providers)
+        end),
+    % all the providers support the space with a writable storage, which is what
+    % makes every request for the file's content servable where it was made
+    test_utils:mock_expect(Workers, space_logic, has_readonly_support_from,
+        fun(SpId, _ProvId) when SpId =:= SpaceId ->
+            false
         end),
     test_utils:mock_expect(Workers, space_logic, get_support_size,
         fun(SpId, _ProvId) when SpId =:= SpaceId ->

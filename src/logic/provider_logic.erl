@@ -38,7 +38,7 @@
 -export([get_storages/0, get_storages/1]).
 -export([has_storage/1]).
 -export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
--export([supports_space/1, supports_space/2, supports_space/3]).
+-export([supports_space/1]).
 -export([get_support_size/1]).
 -export([map_idp_user_to_onedata/2, map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
@@ -313,24 +313,9 @@ has_eff_user(SessionId, ProviderId, UserId) ->
 
 -spec supports_space(od_space:id()) -> boolean().
 supports_space(SpaceId) ->
-    supports_space(?ROOT_SESS_ID, ?SELF, SpaceId).
-
-
--spec supports_space(od_provider:doc(), od_space:id()) ->
-    boolean().
-supports_space(#document{value = #od_provider{eff_spaces = Spaces}}, SpaceId) ->
-    maps:is_key(SpaceId, Spaces).
-
-
--spec supports_space(gs_client_worker:client(), od_provider:id(), od_space:id()) ->
-    boolean().
-supports_space(SessionId, ProviderId, SpaceId) ->
-    case get(SessionId, ProviderId) of
-        {ok, ProviderDoc = #document{}} ->
-            supports_space(ProviderDoc, SpaceId);
-        _ ->
-            false
-    end.
+    % NOTE: this function is the only source of truth regarding local support
+    % (combines all necessary checks)
+    space_logic:is_supported_locally(SpaceId).
 
 
 -spec get_support_size(od_space:id()) -> {ok, integer()} | {error, term()}.
@@ -718,7 +703,7 @@ fetch_service_configuration(onezone) ->
     URL = oneprovider:get_oz_url(?ZONE_CONFIGURATION_PATH),
     DeprecatedURL = oneprovider:get_oz_url(?DEPRECATED_ZONE_CONFIGURATION_PATH),
     SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
-    fetch_configuration(URL, DeprecatedURL, SslOpts);
+    fetch_configuration(URL, DeprecatedURL, oneprovider:get_oz_domain(), SslOpts);
 
 fetch_service_configuration({oneprovider, Domain, Hostname}) ->
     URL = str_utils:format_bin("https://~ts~ts", [
@@ -728,7 +713,7 @@ fetch_service_configuration({oneprovider, Domain, Hostname}) ->
         Hostname, ?DEPRECATED_PROVIDER_CONFIGURATION_PATH
     ]),
     SslOpts = provider_connection_ssl_opts(Domain),
-    fetch_configuration(URL, DeprecatedURL, SslOpts).
+    fetch_configuration(URL, DeprecatedURL, Domain, SslOpts).
 
 
 %%--------------------------------------------------------------------
@@ -738,15 +723,15 @@ fetch_service_configuration({oneprovider, Domain, Hostname}) ->
 %% If the resource with default URL is not found, the older path is attempted.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_configuration(URL, DeprecatedURL :: URL, [http_client:ssl_opt()]) ->
+-spec fetch_configuration(URL, DeprecatedURL :: URL, binary(), [http_client:ssl_opt()]) ->
     {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}
     when URL :: binary().
-fetch_configuration(URL, DeprecatedURL, SslOpts) ->
-    case http_get_configuration(URL, SslOpts) of
+fetch_configuration(URL, DeprecatedURL, Domain, SslOpts) ->
+    case http_get_configuration(URL, Domain, SslOpts) of
         {error, {bad_response, 404, _}} ->
-            case http_get_configuration(DeprecatedURL, SslOpts) of
+            case http_get_configuration(DeprecatedURL, Domain, SslOpts) of
                 {error, Error} -> {error, Error};
                 Success -> Success
             end;
@@ -762,13 +747,14 @@ fetch_configuration(URL, DeprecatedURL, SslOpts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec http_get_configuration(
-    URL :: string() | binary(), SslOpts :: [http_client:ssl_opt()]
+    string() | binary(), binary(),
+    [http_client:ssl_opt()]
 ) ->
     {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
-http_get_configuration(URL, SslOpts) ->
-    case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
+http_get_configuration(URL, Domain, SslOpts) ->
+    case http_client:get(URL, #{<<"host">> => Domain}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
             {ok, json_utils:decode(JsonBody)};
         {ok, Code, _, Body} ->

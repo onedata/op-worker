@@ -12,7 +12,7 @@
 -module(gs_share_logic_test_SUITE).
 -author("Lukasz Opiola").
 
--include("logic_tests_common.hrl").
+-include("graph_sync/logic_tests_common.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
@@ -410,8 +410,8 @@ init_per_suite(Config) ->
 init_per_testcase(get_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     % Access to cached shares depends on checking if provider supports given space
-    ok = test_utils:mock_expect(Nodes, provider_logic, supports_space,
-        fun(?ROOT_SESS_ID, ?DUMMY_PROVIDER_ID, Space) ->
+    ok = test_utils:mock_expect(Nodes, space_logic, is_supported_locally,
+        fun(Space) ->
             Space == ?SPACE_1 orelse Space == ?SPACE_2
         end),
     init_per_testcase(default, Config);

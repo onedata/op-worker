@@ -12,11 +12,22 @@
 -ifndef(DATA_DISTRIBUTION_HRL).
 -define(DATA_DISTRIBUTION_HRL, 1).
 
+%% Dir distribution
 
+% used as a result in middleware_worker
+-record(provider_dir_distribution, {
+    logical_size :: file_meta:size() | undefined,
+    virtual_size :: file_meta:size() | undefined,
+    physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size() | errors:error()},
+    locations_per_storage = #{} :: data_distribution:locations_per_storage() | #{storage:id() => errors:error()}
+}).
+
+
+% used in provider communication via provider_rpc
+% NOTE: translated to protobuf
 -record(provider_dir_distribution_get_result, {
-    logical_size :: file_meta:size(),
-    virtual_size :: file_meta:size(),
-    physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size()}
+    current_dir_size_stats :: provider_dir_distribution:current_dir_size_stats_result(),
+    locations_per_storage = #{} :: data_distribution:locations_per_storage() | #{storage:id() => errors:error()}
 }).
 
 -record(dir_distribution_gather_result, {
@@ -25,6 +36,7 @@
     }
 }).
 
+%% Reg distribution
 
 % NOTE: translated to protobuf
 -record(provider_reg_distribution_get_result, {
@@ -39,16 +51,11 @@
     }
 }).
 
-
--record(symlink_distribution_get_result, {
-    virtual_size = 0 :: 0, % symlink has always 0 virtual size
-    storages_per_provider = #{} :: #{oneprovider:id() => [storage:id()]}
-}).
+%% Common
 
 -record(data_distribution_gather_result, {
     distribution ::
         data_distribution:dir_distribution() |
-        data_distribution:symlink_distribution() |
         data_distribution:reg_distribution()
 }).
 

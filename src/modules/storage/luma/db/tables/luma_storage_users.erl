@@ -40,33 +40,35 @@
 
 -type key() :: od_user:id().
 -type record() :: luma_storage_user:user().
--type storage() :: storage:id() | storage:data().
 
 -export_type([key/0, record/0]).
+
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec get_or_acquire(storage(), key()) ->
+
+-spec get_or_acquire(storage:data(), key()) ->
     {ok, record()} | {error, term()}.
-get_or_acquire(Storage, UserId) ->
-    luma_db:get_or_acquire(Storage, UserId, ?MODULE, fun() ->
-        acquire(Storage, UserId)
+get_or_acquire(StorageData, UserId) ->
+    luma_db:get_or_acquire(StorageData, UserId, ?MODULE, fun() ->
+        acquire(StorageData, UserId)
     end).
 
--spec store(storage(), luma_onedata_user:user_map(), luma_storage_user:user_map()) ->
+
+-spec store(storage:data(), luma_onedata_user:user_map(), luma_storage_user:user_map()) ->
     {ok, od_user:id()} | {error, term()}.
-store(Storage, UserId, StorageUserMap) when is_binary(UserId) ->
+store(StorageData, UserId, StorageUserMap) when is_binary(UserId) ->
     OnedataUserMap = luma_onedata_user:to_json(luma_onedata_user:new(UserId)),
-    store(Storage, OnedataUserMap, StorageUserMap);
-store(Storage, OnedataUserMap, StorageUserMap) when is_map(OnedataUserMap) ->
+    store(StorageData, OnedataUserMap, StorageUserMap);
+store(StorageData, OnedataUserMap, StorageUserMap) when is_map(OnedataUserMap) ->
     case luma_sanitizer:sanitize_onedata_user(OnedataUserMap) of
         {ok, OnedataUserMap2} ->
-            HelperName = storage:get_helper_name(Storage),
+            HelperName = storage:get_helper_name(StorageData),
             case luma_sanitizer:sanitize_storage_user(StorageUserMap, HelperName) of
                 {ok, StorageUserMap2} ->
-                    store_internal(Storage, OnedataUserMap2, StorageUserMap2, ?LOCAL_FEED);
+                    store_internal(StorageData, OnedataUserMap2, StorageUserMap2, ?LOCAL_FEED);
                 Error ->
                     Error
             end;
@@ -75,100 +77,108 @@ store(Storage, OnedataUserMap, StorageUserMap) when is_map(OnedataUserMap) ->
     end.
 
 
--spec update(storage(), od_user:id(), luma_storage_user:user_map()) -> ok | {error, term()}.
-update(Storage, UserId, StorageUserMap) ->
-    PrevStorageUser = case storage:is_posix_compatible(Storage) of
+-spec update(storage:data(), od_user:id(), luma_storage_user:user_map()) -> ok | {error, term()}.
+update(StorageData, UserId, StorageUserMap) ->
+    PrevStorageUser = case storage:is_posix_compatible(StorageData) of
         true ->
             % fetch current version of record, because
             % it is possible that associated uid will be changed
             % so we must be able to delete reverse mapping
-            case luma_db:get(Storage, UserId, ?MODULE) of
+            case luma_db:get(StorageData, UserId, ?MODULE) of
                 {ok, Record} -> Record;
                 {error, not_found} -> undefined
             end;
         false ->
             undefined
     end,
-    case luma_db:update(Storage, UserId, ?MODULE, StorageUserMap) of
+    case luma_db:update(StorageData, UserId, ?MODULE, StorageUserMap) of
         {ok, StorageUser} ->
-            maybe_update_reverse_mapping(Storage, PrevStorageUser, StorageUser, UserId, ?LOCAL_FEED);
+            maybe_update_reverse_mapping(StorageData, PrevStorageUser, StorageUser, UserId, ?LOCAL_FEED);
         Error ->
             Error
     end.
 
 
--spec delete(storage:id(), key()) -> ok.
-delete(StorageId, UserId) ->
-    delete(StorageId, UserId, storage:is_posix_compatible(StorageId)).
+-spec delete(storage:data(), key()) -> ok.
+delete(StorageData, UserId) ->
+    delete(StorageData, UserId, storage:is_posix_compatible(StorageData)).
 
 
--spec delete(storage:id(), key(), DeleteReverseMapping :: boolean()) -> ok.
-delete(StorageId, UserId, false) ->
-    luma_db:delete(StorageId, UserId, ?MODULE);
-delete(StorageId, UserId, true) ->
-    Uid = case luma_db:get(StorageId, UserId, ?MODULE) of
+-spec delete(storage:data(), key(), DeleteReverseMapping :: boolean()) -> ok.
+delete(StorageData, UserId, false) ->
+    luma_db:delete(StorageData, UserId, ?MODULE);
+delete(StorageData, UserId, true) ->
+    Uid = case luma_db:get(StorageData, UserId, ?MODULE) of
         {ok, StorageUser} ->
             StorageCredentials = luma_storage_user:get_storage_credentials(StorageUser),
             binary_to_integer(maps:get(<<"uid">>, StorageCredentials));
         {error, not_found} ->
             undefined
     end,
-    case delete(StorageId, UserId, false) of
+    case delete(StorageData, UserId, false) of
         ok when Uid =/= undefined ->
-            delete_reverse_mapping(StorageId, Uid);
+            delete_reverse_mapping(StorageData, Uid);
         ok ->
             ok
     end.
 
 
--spec clear_all(storage:id()) -> ok.
-clear_all(StorageId) ->
-    luma_db:clear_all(StorageId, ?MODULE).
+-spec clear_all(storage:data()) -> ok.
+clear_all(StorageData) ->
+    luma_db:clear_all(StorageData, ?MODULE).
 
--spec store_posix_compatible_mapping(storage(), od_user:id(), luma:uid(), luma:feed()) ->
+
+-spec store_posix_compatible_mapping(storage:data(), od_user:id(), luma:uid(), luma:feed()) ->
     ok | {error, term()}.
-store_posix_compatible_mapping(Storage, UserId, Uid, Feed) ->
+store_posix_compatible_mapping(StorageData, UserId, Uid, Feed) ->
     StorageUser = luma_storage_user:new_posix_user(Uid),
-    luma_db:store(Storage, UserId, ?MODULE, StorageUser, Feed).
+    luma_db:store(StorageData, UserId, ?MODULE, StorageUser, Feed).
 
--spec get_and_describe(storage(), key()) ->
+
+-spec get_and_describe(storage:data(), key()) ->
     {ok, luma_storage_user:user_map()} | {error, term()}.
-get_and_describe(Storage, UserId) ->
-    luma_db:get_and_describe(Storage, UserId, ?MODULE).
+get_and_describe(StorageData, UserId) ->
+    luma_db:get_and_describe(StorageData, UserId, ?MODULE).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
+%% @private
 -spec acquire(storage:data(), key()) ->
     {luma_db:cache_policy(), record(), luma:feed()} | {error, term()}.
-acquire(Storage, UserId) ->
-    Result = case storage:get_luma_feed(Storage) of
-        ?AUTO_FEED -> acquire_default_mapping(Storage, UserId);
-        ?EXTERNAL_FEED -> acquire_mapping_from_external_feed(Storage, UserId);
+acquire(StorageData, UserId) ->
+    Result = case storage:get_luma_feed(StorageData) of
+        ?AUTO_FEED -> acquire_default_mapping(StorageData, UserId);
+        ?EXTERNAL_FEED -> acquire_mapping_from_external_feed(StorageData, UserId);
         ?LOCAL_FEED -> {error, not_found}
     end,
     case Result of
         {error, _} = Error ->
             Error;
         {_, Record, Feed} ->
-            maybe_add_reverse_mapping(Storage, Record, UserId, Feed),
+            maybe_add_reverse_mapping(StorageData, Record, UserId, Feed),
             Result
     end.
 
 
+%% @private
 -spec acquire_mapping_from_external_feed(storage:data(), key()) ->
     {luma_db:cache_policy(), record(), luma:feed()} | {error, term()}.
-acquire_mapping_from_external_feed(Storage, UserId) ->
-    case luma_external_feed:map_onedata_user_to_credentials(UserId, Storage) of
+acquire_mapping_from_external_feed(StorageData, UserId) ->
+    case luma_external_feed:map_onedata_user_to_credentials(UserId, StorageData) of
         {ok, StorageUserMap} ->
-            {cache, luma_storage_user:new(UserId, StorageUserMap, Storage), ?EXTERNAL_FEED};
+            {cache, luma_storage_user:new(UserId, StorageUserMap, StorageData), ?EXTERNAL_FEED};
         {error, luma_external_feed_error} ->
             {error, not_found};
         OtherError ->
             OtherError
     end.
 
+
+%% @private
 -spec acquire_default_mapping(storage:data(), key()) ->
     {luma_db:cache_policy(), record(), luma:feed()}.
 acquire_default_mapping(Storage, UserId) ->
@@ -176,33 +186,38 @@ acquire_default_mapping(Storage, UserId) ->
     {nocache, StorageUser, ?AUTO_FEED}.
 
 
--spec store_internal(storage(), luma_onedata_user:user_map(), luma_storage_user:user_map(), luma:feed()) ->
+%% @private
+-spec store_internal(storage:data(), luma_onedata_user:user_map(), luma_storage_user:user_map(), luma:feed()) ->
     {ok, od_user:id()} | {error, term()}.
-store_internal(Storage, OnedataUserMap, StorageUserMap, Feed) ->
+store_internal(StorageData, OnedataUserMap, StorageUserMap, Feed) ->
     OnedataUser = luma_onedata_user:new(OnedataUserMap),
     UserId = luma_onedata_user:get_user_id(OnedataUser),
-    Record = luma_storage_user:new(UserId, StorageUserMap, Storage),
-    case luma_db:store(Storage, UserId, ?MODULE, Record, Feed, ?NO_OVERWRITE, []) of
+    Record = luma_storage_user:new(UserId, StorageUserMap, StorageData),
+    case luma_db:store(StorageData, UserId, ?MODULE, Record, Feed, ?NO_OVERWRITE, []) of
         ok ->
-            maybe_add_reverse_mapping(Storage, Record, OnedataUserMap, Feed),
+            maybe_add_reverse_mapping(StorageData, Record, OnedataUserMap, Feed),
             {ok, UserId};
         {error, _} = Error ->
             Error
     end.
 
--spec maybe_add_reverse_mapping(storage(), record(), luma_onedata_user:user_map() | od_user:id(), luma:feed()) ->
+
+%% @private
+-spec maybe_add_reverse_mapping(storage:data(), record(), luma_onedata_user:user_map() | od_user:id(), luma:feed()) ->
     ok | {error, term()}.
-maybe_add_reverse_mapping(Storage, StorageUser, OnedataUserMap, Feed) ->
-    case storage:is_posix_compatible(Storage) of
+maybe_add_reverse_mapping(StorageData, StorageUser, OnedataUserMap, Feed) ->
+    case storage:is_posix_compatible(StorageData) of
         true ->
-            add_reverse_mapping(Storage, StorageUser, OnedataUserMap, Feed);
+            add_reverse_mapping(StorageData, StorageUser, OnedataUserMap, Feed);
         false ->
             ok
     end.
 
--spec maybe_update_reverse_mapping(storage(), record(), record(), od_user:id(), luma:feed()) -> ok | {error, term()}.
-maybe_update_reverse_mapping(Storage, PrevStorageUser, StorageUser, UserId, Feed) ->
-    case storage:is_posix_compatible(Storage) of
+
+%% @private
+-spec maybe_update_reverse_mapping(storage:data(), record(), record(), od_user:id(), luma:feed()) -> ok | {error, term()}.
+maybe_update_reverse_mapping(StorageData, PrevStorageUser, StorageUser, UserId, Feed) ->
+    case storage:is_posix_compatible(StorageData) of
         true ->
             PrevStorageCredentials = luma_storage_user:get_storage_credentials(PrevStorageUser),
             StorageCredentials = luma_storage_user:get_storage_credentials(StorageUser),
@@ -210,29 +225,32 @@ maybe_update_reverse_mapping(Storage, PrevStorageUser, StorageUser, UserId, Feed
                 true ->
                     ok;
                 false ->
-                    delete_reverse_mapping(Storage, binary_to_integer(maps:get(<<"uid">>, PrevStorageCredentials))),
-                    add_reverse_mapping(Storage, StorageUser, UserId, Feed)
+                    delete_reverse_mapping(StorageData, binary_to_integer(maps:get(<<"uid">>, PrevStorageCredentials))),
+                    add_reverse_mapping(StorageData, StorageUser, UserId, Feed)
             end;
         false ->
             ok
     end.
 
--spec add_reverse_mapping(storage(), record(), luma_onedata_user:user_map() | od_user:id(), luma:feed()) ->
+
+%% @private
+-spec add_reverse_mapping(storage:data(), record(), luma_onedata_user:user_map() | od_user:id(), luma:feed()) ->
     ok | {error, term()}.
-add_reverse_mapping(Storage, Record, OnedataUserMap, Feed) ->
+add_reverse_mapping(StorageData, Record, OnedataUserMap, Feed) ->
     StorageCredentials = luma_storage_user:get_storage_credentials(Record),
     Uid = binary_to_integer(maps:get(<<"uid">>, StorageCredentials)),
-    case storage:is_posix_compatible(Storage) andalso storage:is_imported(Storage) of
+    case storage:is_posix_compatible(StorageData) andalso storage:is_imported(StorageData) of
         true ->
-            luma_onedata_users:update_or_store_uid_mapping(Storage, Uid, OnedataUserMap, Feed);
+            luma_onedata_users:update_or_store_uid_mapping(StorageData, Uid, OnedataUserMap, Feed);
         false ->
             ok
     end.
 
 
--spec delete_reverse_mapping(storage(), luma:uid()) -> ok | {error, term()}.
-delete_reverse_mapping(Storage, Uid) ->
-    case storage:is_posix_compatible(Storage) andalso storage:is_imported(Storage) of
-        true -> luma_onedata_users:delete_uid_mapping(storage:get_id(Storage), Uid, false);
+%% @private
+-spec delete_reverse_mapping(storage:data(), luma:uid()) -> ok | {error, term()}.
+delete_reverse_mapping(StorageData, Uid) ->
+    case storage:is_posix_compatible(StorageData) andalso storage:is_imported(StorageData) of
+        true -> luma_onedata_users:delete_uid_mapping(StorageData, Uid, false);
         false -> ok
     end.

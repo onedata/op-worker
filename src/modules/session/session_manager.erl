@@ -22,7 +22,8 @@
 
 %% API
 -export([
-    reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4,
+    reuse_or_create_fuse_session/3,
+    reuse_or_create_fuse_session/7,
     reuse_or_create_rest_session/2,
     reuse_or_create_incoming_provider_session/1,
     reuse_or_create_outgoing_provider_session/2,
@@ -45,46 +46,53 @@
 -define(SESSION_INITIALIZATION_RETRIES, op_worker:get_env(session_initialization_retries, 8)).
 
 % Log not more often than once every 5 min
--define(THROTTLE_LOG(SessionId, Log), utils:throttle({?MODULE, ?FUNCTION_NAME, SessionId}, 300, fun() -> Log end)).
+-define(THROTTLE_LOG(SessId, Log), utils:throttle({?MODULE, ?FUNCTION_NAME, SessId}, 300, fun() -> Log end)).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
--spec reuse_or_create_fuse_session(Nonce :: binary(), aai:subject(),
-    auth_manager:credentials()) -> {ok, session:id()} | error().
+-spec reuse_or_create_fuse_session(Nonce :: binary(), aai:subject(), auth_manager:credentials()) ->
+    {ok, session:id()} | error().
 reuse_or_create_fuse_session(Nonce, Identity, Credentials) ->
-    reuse_or_create_fuse_session(Nonce, Identity, normal, Credentials).
+    reuse_or_create_fuse_session(Nonce, Identity, normal, Credentials, oneclient, [], []).
 
 
--spec reuse_or_create_fuse_session(Nonce :: binary(), aai:subject(), session:mode(),
-    auth_manager:credentials()) -> {ok, session:id()} | error().
-reuse_or_create_fuse_session(Nonce, Identity, SessMode, Credentials) ->
-    SessionId = datastore_key:new_from_digest([<<"fuse">>, Nonce]),
-    reuse_or_create_session(SessionId, fuse, SessMode, Identity, Credentials).
+-spec reuse_or_create_fuse_session(
+    Nonce :: binary(),
+    aai:subject(), session:mode(),
+    auth_manager:credentials(),
+    session:client_type(),
+    [session:client_option()],
+    [session:client_system_property()]
+) -> {ok, session:id()} | error().
+reuse_or_create_fuse_session(Nonce, Identity, SessMode, Credentials, SessClientType, ClientOptions, ClientSystemProperties) ->
+    SessId = datastore_key:new_from_digest([<<"fuse">>, Nonce]),
+    reuse_or_create_session(SessId, fuse, SessClientType, ClientOptions, ClientSystemProperties,
+        SessMode, Identity, Credentials).
 
 
 -spec reuse_or_create_incoming_provider_session(aai:subject()) ->
     {ok, session:id()} | error().
 reuse_or_create_incoming_provider_session(?SUB(?ONEPROVIDER, ProviderId) = Identity) ->
-    SessionId = session_utils:get_provider_session_id(incoming, ProviderId),
-    reuse_or_create_session(SessionId, provider_incoming, Identity, undefined).
+    SessId = session_utils:get_provider_session_id(incoming, ProviderId),
+    reuse_or_create_session(SessId, provider_incoming, undefined, [], [], Identity, undefined).
 
 
--spec reuse_or_create_outgoing_provider_session(session:id(),
-    aai:subject()) -> {ok, session:id()} | error().
-reuse_or_create_outgoing_provider_session(SessionId, Identity) ->
-    reuse_or_create_session(SessionId, provider_outgoing, Identity, undefined).
+-spec reuse_or_create_outgoing_provider_session(session:id(), aai:subject()) ->
+    {ok, session:id()} | error().
+reuse_or_create_outgoing_provider_session(SessId, Identity) ->
+    reuse_or_create_session(SessId, provider_outgoing, undefined, [], [], Identity, undefined).
 
 
 -spec reuse_or_create_rest_session(aai:subject(), auth_manager:credentials()) ->
     {ok, session:id()} | error().
 reuse_or_create_rest_session(?SUB(user, UserId) = Identity, Credentials) ->
-    SessionId = datastore_key:new_from_digest([<<"rest">>, Credentials]),
+    SessId = datastore_key:new_from_digest([<<"rest">>, Credentials]),
     case provider_logic:has_eff_user(UserId) of
         true ->
-            reuse_or_create_session(SessionId, rest, Identity, Credentials);
+            reuse_or_create_session(SessId, rest, undefined, [], [], Identity, Credentials);
         false ->
             {error, {invalid_identity, Identity}}
     end.
@@ -93,14 +101,14 @@ reuse_or_create_rest_session(?SUB(user, UserId) = Identity, Credentials) ->
 -spec reuse_or_create_gui_session(aai:subject(), auth_manager:credentials()) ->
     {ok, session:id()} | error().
 reuse_or_create_gui_session(Identity, Credentials) ->
-    SessionId = datastore_key:new_from_digest([<<"gui">>, Credentials]),
-    reuse_or_create_session(SessionId, gui, Identity, Credentials).
+    SessId = datastore_key:new_from_digest([<<"gui">>, Credentials]),
+    reuse_or_create_session(SessId, gui, undefined, [], [], Identity, Credentials).
 
 
 -spec reuse_or_create_offline_session(session:id(), aai:subject(), auth_manager:credentials()) ->
     {ok, session:id()} | error().
-reuse_or_create_offline_session(SessionId, Identity, Credentials) ->
-    reuse_or_create_session(SessionId, offline, Identity, Credentials).
+reuse_or_create_offline_session(SessId, Identity, Credentials) ->
+    reuse_or_create_session(SessId, offline, undefined, [], [], Identity, Credentials).
 
 
 -spec create_root_session() -> {ok, session:id()} | error().
@@ -112,7 +120,9 @@ create_root_session() ->
             status = active,
             identity = ?ROOT_IDENTITY,
             credentials = ?ROOT_CREDENTIALS,
-            data_constraints = data_constraints:get_allow_all_constraints()
+            data_constraints = data_constraints:get_allow_all_constraints(),
+            client_options = [],
+            client_system_properties = []
         }
     }).
 
@@ -126,7 +136,9 @@ create_guest_session() ->
             status = active,
             identity = ?GUEST_IDENTITY,
             credentials = ?GUEST_CREDENTIALS,
-            data_constraints = data_constraints:get_allow_all_constraints()
+            data_constraints = data_constraints:get_allow_all_constraints(),
+            client_options = [],
+            client_system_properties = []
         }
     }).
 
@@ -135,30 +147,30 @@ create_guest_session() ->
 restart_dead_sessions() ->
     {ok, AllSessions} = session:list(),
 
-    lists:foreach(fun(#document{key = SessionId}) ->
-        restart_session_if_dead(SessionId)
+    lists:foreach(fun(#document{key = SessId}) ->
+        restart_session_if_dead(SessId)
     end, AllSessions).
 
 
--spec restart_session_if_dead(SessionId :: session:id()) -> ok.
-restart_session_if_dead(SessionId) ->
-    case session:update_doc_and_time(SessionId, fun try_to_clear_dead_connections/1) of
-        {ok, #document{key = SessionId}} ->
+-spec restart_session_if_dead(SessId :: session:id()) -> ok.
+restart_session_if_dead(SessId) ->
+    case session:update_doc_and_time(SessId, fun try_to_clear_dead_connections/1) of
+        {ok, #document{key = SessId}} ->
             ok;
         {error, update_not_needed} ->
             ok;
         {error, {supervisor_dead, SessType}} ->
-            restart_session(SessionId, SessType),
+            restart_session(SessId, SessType),
             ok;
         {error, internal_call} ->
-            ?THROTTLE_LOG(SessionId, ?warning("Internal call cleaning dead connections for session ~tp", [SessionId])),
+            ?THROTTLE_LOG(SessId, ?warning("Internal call cleaning dead connections for session ~tp", [SessId])),
             % Fix session document async as it cannot be done from the inside of tp process
             spawn(fun() ->
-                restart_session_if_dead(SessionId)
+                restart_session_if_dead(SessId)
             end),
             ok;
         {error, Reason} ->
-            ?error("Unexpected error cleaning dead connections for session ~tp: ~tp", [SessionId, Reason]),
+            ?error("Unexpected error cleaning dead connections for session ~tp: ~tp", [SessId, Reason]),
             ok
     end.
 
@@ -171,8 +183,8 @@ restart_session_if_dead(SessionId) ->
 %%--------------------------------------------------------------------
 -spec restore_session_on_slave_node(session:id(), pid(), node()) ->
     {ok, session:doc()} | {error, supervisor_alive}.
-restore_session_on_slave_node(SessionId, NewSup, NewSupNode) ->
-    session:update(SessionId, fun(#session{supervisor = Sup, connections = Cons} = Sess) ->
+restore_session_on_slave_node(SessId, NewSup, NewSupNode) ->
+    session:update(SessId, fun(#session{supervisor = Sup, connections = Cons} = Sess) ->
         case is_pid_alive(Sup) of
             true ->
                 {error, supervisor_alive};
@@ -193,8 +205,8 @@ restore_session_on_slave_node(SessionId, NewSup, NewSupNode) ->
 
 
 -spec terminate_session(session:id()) -> ok | error().
-terminate_session(SessionId) ->
-    case session:get(SessionId) of
+terminate_session(SessId) ->
+    case session:get(SessId) of
         {ok, #document{value = #session{supervisor = Sup, event_manager = EventManager, node = Node}}} ->
             try
                 event_manager:handle_session_termination(EventManager),
@@ -211,10 +223,10 @@ terminate_session(SessionId) ->
 
 
 -spec clean_terminated_session(session:id()) -> ok | error().
-clean_terminated_session(SessionId) ->
-    case session:get(SessionId) of
+clean_terminated_session(SessId) ->
+    case session:get(SessId) of
         {ok, #document{value = #session{connections = Cons}}} ->
-            session:delete(SessionId),
+            session:delete(SessId),
             % VFS-5155 Should connections be closed before session document is deleted?
             close_connections(Cons);
         {error, not_found} ->
@@ -233,24 +245,32 @@ clean_terminated_session(SessionId) ->
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
+    undefined | session:client_type(),
+    [session:client_option()],
+    [session:client_system_property()],
     aai:subject(),
     undefined | auth_manager:credentials()
 ) ->
-    {ok, SessionId} | error() when SessionId :: session:id().
-reuse_or_create_session(SessionId, SessType, Identity, Credentials) ->
-    reuse_or_create_session(SessionId, SessType, normal, Identity, Credentials).
+    {ok, SessId} | error() when SessId :: session:id().
+reuse_or_create_session(SessId, SessType, ClientType, ClientOptions, ClientSystemProperties, Identity, Credentials) ->
+    reuse_or_create_session(SessId, SessType, ClientType, ClientOptions, ClientSystemProperties, normal, Identity,
+        Credentials).
 
 
 %% @private
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
+    undefined | session:client_type(),
+    [session:client_option()],
+    [session:client_system_property()],
     session:mode(),
     aai:subject(),
     undefined | auth_manager:credentials()
 ) ->
-    {ok, SessionId} | error() when SessionId :: session:id().
-reuse_or_create_session(SessionId, SessType, SessMode, Identity, Credentials) ->
+    {ok, SessId} | error() when SessId :: session:id().
+reuse_or_create_session(SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties, SessMode, Identity,
+    Credentials) ->
     case get_caveats(Credentials) of
         {ok, Caveats} ->
             case data_constraints:get(Caveats) of
@@ -261,8 +281,8 @@ reuse_or_create_session(SessionId, SessType, SessMode, Identity, Credentials) ->
                             {error, invalid_token};
                         _ ->
                             reuse_or_create_session(
-                                SessionId, SessType, SessMode, Identity,
-                                Credentials, DataConstraints
+                                SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties, SessMode,
+                                Identity, Credentials, DataConstraints
                             )
                     end;
                 {error, invalid_constraints} ->
@@ -288,16 +308,20 @@ get_caveats(Credentials) ->
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
+    undefined | session:client_type(),
+    [session:client_option()],
+    [session:client_system_property()],
     session:mode(),
     aai:subject(),
     undefined | auth_manager:credentials(),
     DataConstraints :: data_constraints:constraints()
 ) ->
-    {ok, SessionId} | error() when SessionId :: session:id().
-reuse_or_create_session(SessionId, SessType, SessMode, Identity, Credentials, DataConstraints) ->
+    {ok, SessId} | error() when SessId :: session:id().
+reuse_or_create_session(SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
+    SessMode, Identity, Credentials, DataConstraints) ->
     reuse_or_create_session(
-        SessionId, SessType, SessMode, Identity, Credentials, DataConstraints,
-        ?SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 0
+        SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties, SessMode, Identity,
+        Credentials, DataConstraints, ?SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 0
     ).
 
 
@@ -314,6 +338,9 @@ reuse_or_create_session(SessionId, SessType, SessMode, Identity, Credentials, Da
 -spec reuse_or_create_session(
     session:id(),
     session:type(),
+    undefined | session:client_type(),
+    [session:client_option()],
+    [session:client_system_property()],
     session:mode(),
     aai:subject(),
     undefined | auth_manager:credentials(),
@@ -321,12 +348,16 @@ reuse_or_create_session(SessionId, SessType, SessMode, Identity, Credentials, Da
     ErrorSleep:: non_neg_integer(),
     Retries :: non_neg_integer()
 ) ->
-    {ok, SessionId} | error() when SessionId :: session:id().
+    {ok, SessId} | error() when SessId :: session:id().
 reuse_or_create_session(
-    SessionId, SessType, SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum
+    SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
+    SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum
 ) ->
     Sess = #session{
         type = SessType,
+        client_type = SessClientType,
+        client_options = ClientOptions,
+        client_system_properties = ClientSystemProperties,
         mode = SessMode,
         status = initializing,
         identity = Identity,
@@ -351,35 +382,35 @@ reuse_or_create_session(
                     {error, {invalid_identity, Identity}}
             end
     end,
-    case session:update_doc_and_time(SessionId, Diff) of
-        {ok, #document{key = SessionId, value = UpdatedSession}} ->
+    case session:update_doc_and_time(SessId, Diff) of
+        {ok, #document{key = SessId, value = UpdatedSession}} ->
             update_credentials_if_needed(SessType, Credentials, UpdatedSession),
             renew_connection_if_needed(SessType, UpdatedSession),
-            {ok, SessionId};
+            {ok, SessId};
         {error, not_found} = Error ->
-            case start_session(#document{key = SessionId, value = Sess}) of
+            case start_session(#document{key = SessId, value = Sess}) of
                 {error, already_exists} ->
                     maybe_retry_session_init(
-                        SessionId, SessType, SessMode, Identity, Credentials,
-                        DataConstraints, ErrorSleep, RetryNum, Error
+                        SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
+                        SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum, Error
                     );
                 Other ->
                     Other
             end;
         {error, {supervisor_dead, SessType}} ->
-            case restart_session(SessionId, SessType) of
+            case restart_session(SessId, SessType) of
                 {error, already_exists} = Error ->
                     maybe_retry_session_init(
-                        SessionId, SessType, SessMode, Identity, Credentials,
-                        DataConstraints, ErrorSleep, RetryNum, Error
+                        SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
+                        SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum, Error
                     );
                 Other ->
                     Other
             end;
         {error, initializing} = Error ->
             maybe_retry_session_init(
-                SessionId, SessType, SessMode, Identity, Credentials,
-                DataConstraints, ErrorSleep, RetryNum, Error
+                SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
+                SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum, Error
             );
         {error, Reason} ->
             {error, Reason}
@@ -424,6 +455,9 @@ renew_connection_if_needed(_, _) ->
 -spec maybe_retry_session_init(
     session:id(),
     session:type(),
+    session:client_type(),
+    [session:client_option()],
+    [session:client_system_property()],
     session:mode(),
     aai:subject(),
     undefined | auth_manager:credentials(),
@@ -432,9 +466,10 @@ renew_connection_if_needed(_, _) ->
     Retries :: non_neg_integer(),
     Error :: {error, term()}
 ) ->
-    {ok, SessionId} | error() when SessionId :: session:id().
+    {ok, SessId} | error() when SessId :: session:id().
 maybe_retry_session_init(
-    SessionId, SessType, SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum, Error
+    SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
+    SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum, Error
 ) ->
     MaxRetries = ?SESSION_INITIALIZATION_RETRIES,
     case RetryNum of
@@ -444,10 +479,10 @@ maybe_retry_session_init(
         _ ->
             % Other process is initializing session - wait
             timer:sleep(ErrorSleep),
-            ?debug("Waiting for session ~tp init", [SessionId]),
+            ?debug("Waiting for session ~tp init", [SessId]),
             reuse_or_create_session(
-                SessionId, SessType, SessMode, Identity, Credentials,
-                DataConstraints, ErrorSleep * 2, RetryNum + 1
+                SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
+                SessMode, Identity, Credentials, DataConstraints, ErrorSleep * 2, RetryNum + 1
             )
     end.
 
@@ -476,29 +511,29 @@ try_to_clear_dead_connections(#session{supervisor = Sup, connections = Cons, typ
 
 %% @private
 -spec start_session(session:doc()) -> {ok, session:id()} | error().
-start_session(#document{key = SessionId, value = #session{type = SessType}} = Doc) ->
+start_session(#document{key = SessId, value = #session{type = SessType}} = Doc) ->
     case supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [Doc, SessType]) of
         {ok, undefined} ->
             {error, already_exists};
         {ok, _} ->
-            {ok, SessionId};
+            {ok, SessId};
         Error ->
-            ?error("Session ~tp start error: ~tp", [SessionId, Error]),
-            session:delete_doc(SessionId),
+            ?error("Session ~tp start error: ~tp", [SessId, Error]),
+            session:delete_doc(SessId),
             Error
     end.
 
 
 %% @private
 -spec restart_session(session:id(), session:type()) -> {ok, session:id()} | error().
-restart_session(SessionId, SessType) ->
-    case supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessionId, SessType]) of
+restart_session(SessId, SessType) ->
+    case supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]) of
         {ok, undefined} ->
             {error, already_exists};
         {ok, _} ->
-            {ok, SessionId};
+            {ok, SessId};
         Error ->
-            ?error("Session ~tp restart error: ~tp", [SessionId, Error]),
+            ?error("Session ~tp restart error: ~tp", [SessId, Error]),
             Error
     end.
 

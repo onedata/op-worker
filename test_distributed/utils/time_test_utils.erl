@@ -1,12 +1,13 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions manipulating time used in ct tests.
+%%% Freezing and manipulating the clock of all the nodes of a CT test
+%%% environment - a thin wrapper over ctool's clock_freezer_mock.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(time_test_utils).
@@ -77,11 +78,12 @@ set_current_time_millis(Millis) ->
 set_current_time_seconds(Seconds) ->
     clock_freezer_mock:set_current_time_millis(Seconds * 1000).
 
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
--spec all_nodes(Config :: term()) -> ok.
+%% @private
+-spec all_nodes(Config :: term()) -> [node()].
 all_nodes(Config) ->
     ?config(oz_worker_nodes, Config, []) ++ ?config(op_worker_nodes, Config, []) ++
         ?config(oz_panel_nodes, Config, []) ++ ?config(op_panel_nodes, Config, []) ++

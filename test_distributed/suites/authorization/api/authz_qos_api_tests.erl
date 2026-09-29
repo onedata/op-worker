@@ -12,7 +12,12 @@
 -module(authz_qos_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
+-include("authz/authz_api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -34,7 +39,7 @@ test_add_qos_entry(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{name = <<"file1">>}],
+        files = [#authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
@@ -54,7 +59,7 @@ test_get_qos_entry(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 {ok, QosEntryId} = opt_qos:add_qos_entry(
@@ -83,7 +88,7 @@ test_remove_qos_entry(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 {ok, QosEntryId} = opt_qos:add_qos_entry(
@@ -112,7 +117,7 @@ test_get_effective_file_qos(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 {ok, _QosEntryId} = opt_qos:add_qos_entry(
@@ -140,7 +145,7 @@ test_check_qos_status(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_file_spec{
+        files = [#authz_file_spec{
             name = <<"file1">>,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 {ok, QosEntryId} = opt_qos:add_qos_entry(

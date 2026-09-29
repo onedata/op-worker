@@ -297,7 +297,7 @@ do_master_job(Job, MasterJobArgs) ->
 -spec do_master_job(master_job(), traverse:master_job_extended_args(), new_jobs_preprocessor()) ->
     {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, #{task_id := TaskId}, NewJobsPreprocessor) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     Job2 = Job#tree_traverse{file_ctx = FileCtx2},
     FileType = file_meta:get_effective_type(FileDoc),
     do_master_job_internal(FileType, Job2, TaskId, NewJobsPreprocessor).
@@ -426,6 +426,8 @@ do_dir_master_job(Job, TaskId, NewJobsPreprocessor, Sleep) ->
             {ok, #{slave_jobs => SlaveJobs, ChildrenMasterJobsKey => MasterJobs}};
         {error, ?EACCES, _Stacktrace} ->
             {ok, #{}}; % EACCES is expected error and can happen anytime, so error handling policy is not applied to it.
+        {error, ?ENOENT, _Stacktrace} ->
+            {ok, #{}}; % ENOENT can be returned when dir is deleted mid traverse.
         {error, Reason, Stacktrace} ->
             case {ListingErrorsHandlingPolicy, lists:member(Reason, ?LISTING_KNOWN_ERRORS)} of
                 {ignore_known, true} ->
@@ -482,10 +484,11 @@ list_children(#tree_traverse{
     end,
     try
         {ok, UserCtx} = acquire_user_ctx(Job, TaskId),
-        {ok, dir_req:list_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{
+        ListingOptions = BaseListingOpts#{
             limit => BatchSize,
             ignore_missing_links => ListingErrorsHandlingPolicy == ignore_known
-        })}
+        },
+        {ok, dir_req:list_children_ctxs(UserCtx, FileCtx, ListingOptions)}
     catch
         _Class:Reason:Stacktrace ->
             {error, datastore_runner:normalize_error(Reason), Stacktrace}
@@ -498,7 +501,7 @@ list_children(#tree_traverse{
 generate_children_jobs(MasterJob, TaskId, Children) ->
     {SlaveJobsReversed, MasterJobsReversed} = lists:foldl(fun(ChildCtx, {SlavesAcc, MastersAcc} = Acc) ->
         try
-            {ChildDoc, ChildCtx2} = file_ctx:get_file_doc(ChildCtx),
+            {ChildDoc, ChildCtx2} = file_ctx:get_file_doc_including_deleted(ChildCtx),
             FileType = file_meta:get_effective_type(ChildDoc),
             {Filename, ChildCtx3} = file_ctx:get_aliased_name(ChildCtx2, undefined),
             {ChildSlaves, ChildMasters} = generate_child_jobs(

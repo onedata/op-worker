@@ -407,6 +407,17 @@ handle_info({Ok, Socket, Data}, #state{
             ok = session_connections:register(SessId, self()),
             State2 = State1#state{status = ready},
             activate_socket(State2, false),
+            Ctx = user_ctx:new(SessId),
+            %% Only log connection information about Fuse clients (oneclient, ones3 or onedatafs)
+            case user_ctx:get_client_type(Ctx) of
+                undefined ->
+                    ok;
+                ClientType ->
+                    ClientOptions = user_ctx:get_client_options(Ctx),
+                    ClientSystemProperties = user_ctx:get_client_system_properties(Ctx),
+                    ?info(?autoformat_with_msg("Fuse client connected:",
+                        [ClientType, ClientOptions, ClientSystemProperties]))
+            end,
             {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_handshake' so

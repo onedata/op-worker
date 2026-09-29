@@ -50,6 +50,8 @@
     #get_file_children_attrs{},
     #get_recursive_file_list{},
 
+    #share_create_request{},
+
     #historical_dir_size_stats_get_request{},
 
     % Operations needed for a provider to create an archive. After it is created, archive content is protected with

@@ -70,7 +70,7 @@ translate_value(#gri{aspect = dir_stats_service_state, scope = private}, Result)
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space) ->
-    IsSpaceSupportedLocally = space_logic:is_supported(Space, oneprovider:get_id()),
+    IsSpaceSupportedLocally = space_logic:is_supported_locally(#document{key = SpaceId, value = Space}),
 
     {DirIdsJson, PreferableWriteBlockSize} = case IsSpaceSupportedLocally of
         true ->

@@ -21,9 +21,10 @@
 %% API
 -export([
     allow_onezone_as_frame_ancestor/1,
-    set_content_disposition_header/2,
+    set_file_download_headers/2,
 
-    send_data_chunk/4
+    send_data_chunk/4,
+    ascii_filename_fallback/1
 ]).
 
 
@@ -37,18 +38,24 @@ allow_onezone_as_frame_ancestor(Req) ->
     http_cors:allow_frame_ancestors(oneprovider:get_oz_url(), Req).
 
 
--spec set_content_disposition_header(cowboy_req:req(), file_meta:name()) ->
+-spec set_file_download_headers(cowboy_req:req(), file_meta:name()) ->
     cowboy_req:req().
-set_content_disposition_header(Req, FileName) ->
-    NormalizedFileName = normalize_filename(FileName),
-    %% @todo VFS-2073 - check if needed
-    %% FileNameUrlEncoded = http_utils:url_encode(FileName),
+set_file_download_headers(Req0, FileName) ->
+    % honour preexisting CT header if set beforehand
+    Req1 = case cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req0, undefined) of
+        undefined ->
+            {Type, Subtype, _Params} = cow_mimetypes:all(FileName),
+            cowboy_req:set_resp_header(?HDR_CONTENT_TYPE, [Type, "/", Subtype], Req0);
+        _ ->
+            Req0
+    end,
+
+    RFC5987Encoded = rfc5987:encode_filename(FileName),
+    AsciiFallback = ascii_filename_fallback(FileName),
     cowboy_req:set_resp_header(
         ?HDR_CONTENT_DISPOSITION,
-        <<"attachment; filename=\"", NormalizedFileName/binary, "\"">>,
-        %% @todo VFS-2073 - check if needed
-        %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
-        Req
+        [<<"attachment; filename=\"">>, AsciiFallback, <<"\"; filename*=UTF-8''">>, RFC5987Encoded],
+        Req1
     ).
 
 
@@ -87,15 +94,18 @@ send_data_chunk(Data, #{pid := ConnPid} = Req, MaxSentBlocksCount, RetryDelay) -
     end.
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Produces a safe ASCII fallback for the legacy filename= parameter.
+%% Replaces non-ASCII and quoted-string special chars with '_'.
+%% @end
+%%--------------------------------------------------------------------
+-spec ascii_filename_fallback(binary()) -> binary().
+ascii_filename_fallback(FileName) ->
+    << <<(ascii_fallback_byte(B))>> || <<B>> <= FileName >>.
 
 
 %% @private
--spec normalize_filename(file_meta:name()) -> file_meta:name().
-normalize_filename(FileName) ->
-    case re:run(FileName, <<"^ *$">>, [{capture, none}]) of
-        match -> <<"_">>;
-        nomatch -> FileName
-    end.
+-spec ascii_fallback_byte(byte()) -> byte().
+ascii_fallback_byte(B) when B >= 32, B < 127, B =/= $", B =/= $\\ -> B;
+ascii_fallback_byte(_) -> $_.

@@ -18,6 +18,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -record(storage_file_ctx, {
     name :: helpers:file_id(),
@@ -172,10 +173,19 @@ stat(StorageFileCtx = #storage_file_ctx{stat = undefined}) ->
                 stat = StatBuf,
                 stat_timestamp = ?NOW()
             }};
-        {error, ?ENOENT} ->
-            throw(?ENOENT);
-        {error, ?ENOTSUP} ->
-            throw(?ENOTSUP)
+        {error, Errno} ->
+            case errors:is_posix_code(Errno) of
+                true ->
+                    % any other POSIX error (e.g. ?ENOENT, or ?EIO from a remote HTTP
+                    % source) is surfaced as such by the callers rather than crashing
+                    throw(Errno);
+                false ->
+                    % should never happen - report an internal server error (logged with
+                    % a reference) rather than crash with a hard-to-translate case_clause
+                    throw(?report_internal_server_error(
+                        ?autoformat_with_msg("Unexpected storage stat error", [Errno])
+                    ))
+            end
     end;
 stat(StorageFileCtx = #storage_file_ctx{stat = StatBuf}) ->
     {StatBuf, StorageFileCtx}.

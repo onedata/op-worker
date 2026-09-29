@@ -12,8 +12,8 @@
 -module(api_file_upload_gui_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
--include("onenv_test_utils.hrl").
+-include("api/api_test_runner.hrl").
+-include("file/file_tree_test.hrl").
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 
@@ -28,7 +28,8 @@
     % parallel tests
     registering_upload_for_directory_should_fail_test/1,
     registering_upload_for_non_empty_file_should_fail_test/1,
-    registering_upload_for_not_owned_file_should_fail_test/1,
+    registering_upload_for_non_empty_file_with_truncate_flag_should_succeed_test/1,
+    registering_upload_without_write_access_should_fail_test/1,
     not_registered_upload_should_fail_test/1,
     upload_test/1,
 
@@ -45,7 +46,8 @@ groups() -> [
     {parallel_tests, [parallel], [
         registering_upload_for_directory_should_fail_test,
         registering_upload_for_non_empty_file_should_fail_test,
-        registering_upload_for_not_owned_file_should_fail_test,
+        registering_upload_for_non_empty_file_with_truncate_flag_should_succeed_test,
+        registering_upload_without_write_access_should_fail_test,
         not_registered_upload_should_fail_test,
         upload_test
     ]},
@@ -71,7 +73,7 @@ all() -> [
 
 
 registering_upload_for_directory_should_fail_test(_Config) ->
-    #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, #dir_spec{}
     ),
     ?assertMatch(
@@ -81,7 +83,7 @@ registering_upload_for_directory_should_fail_test(_Config) ->
 
 
 registering_upload_for_non_empty_file_should_fail_test(_Config) ->
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{content = crypto:strong_rand_bytes(5)}
     ),
     ?assertMatch(
@@ -90,18 +92,34 @@ registering_upload_for_non_empty_file_should_fail_test(_Config) ->
     ).
 
 
-registering_upload_for_not_owned_file_should_fail_test(_Config) ->
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
-        user1, space_krk, #file_spec{}
+registering_upload_for_non_empty_file_with_truncate_flag_should_succeed_test(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+    UserSessId = oct_background:get_user_session_id(user1, krakow),
+
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
+        user1, space_krk, #file_spec{content = crypto:strong_rand_bytes(5)}
+    ),
+    assert_file_size(Node, UserSessId, FileGuid, 5),
+
+    ?assertMatch({ok, _}, initialize_gui_upload(
+        krakow, user1, FileGuid, #{<<"truncateToZero">> => true}
+    )),
+    ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
+    assert_file_size(Node, UserSessId, FileGuid, 0, 1).
+
+
+registering_upload_without_write_access_should_fail_test(_Config) ->
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
+        user2, space_krk, #file_spec{mode = 8#070}
     ),
     ?assertMatch(
-        ?ERR_BAD_DATA(<<"guid">>, <<"file is not owned by user">>),
+        ?ERR_POSIX(?EACCES),
         initialize_gui_upload(krakow, user2, FileGuid)
     ).
 
 
 not_registered_upload_should_fail_test(_Config) ->
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{content = crypto:strong_rand_bytes(5)}
     ),
 
@@ -110,7 +128,7 @@ not_registered_upload_should_fail_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
 
     ?assertMatch(
-        upload_not_authorized,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, page_file_upload, handle_multipart_req, [
             #{size => 20, left => 1},
             ?USER(UserId, UserSessId),
@@ -124,7 +142,7 @@ not_registered_upload_should_fail_test(_Config) ->
 
 
 upload_test(_Config) ->
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
@@ -141,7 +159,7 @@ upload_test(_Config) ->
 stale_upload_file_should_be_deleted_test(_Config) ->
     set_upload_inactivity_period(krakow, 300),
 
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
 
@@ -175,7 +193,7 @@ stale_upload_file_should_be_deleted_test(_Config) ->
 upload_with_backward_time_warps_test(_Config) ->
     set_upload_inactivity_period(krakow, 300),
 
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
 
@@ -198,7 +216,7 @@ upload_with_backward_time_warps_test(_Config) ->
 upload_with_forward_time_warps_test(_Config) ->
     set_upload_inactivity_period(krakow, 300),
 
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
@@ -289,12 +307,24 @@ assert_file_does_not_exist(ProviderSelector, UserSelector, FileGuid) ->
 ) ->
     {ok, term()} | errors:error().
 initialize_gui_upload(ProviderSelector, UserSelector, FileGuid) ->
+    initialize_gui_upload(ProviderSelector, UserSelector, FileGuid, #{}).
+
+
+%% @private
+-spec initialize_gui_upload(
+    oct_background:entity_selector(),
+    oct_background:entity_selector(),
+    file_id:file_guid(),
+    json_utils:json_term()
+) ->
+    {ok, term()} | errors:error().
+initialize_gui_upload(ProviderSelector, UserSelector, FileGuid, Options) ->
     UserId = oct_background:get_user_id(UserSelector),
     UserSessId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
     Node = oct_background:get_random_provider_node(ProviderSelector),
 
     rpc:call(Node, gs_rpc, handle, [
-        ?USER(UserId, UserSessId), <<"initializeFileUpload">>, #{<<"guid">> => FileGuid}
+        ?USER(UserId, UserSessId), <<"initializeFileUpload">>, Options#{<<"guid">> => FileGuid}
     ]).
 
 
@@ -429,15 +459,28 @@ assert_file_uploaded(ProviderSelector, UserSelector, FileGuid, ExpSize) ->
     UserSessId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
     Node = oct_background:get_random_provider_node(ProviderSelector),
 
-    ?assertMatch(
-        {ok, #file_attr{size = ExpSize}},
-        lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid)),
-        ?ATTEMPTS
-    ),
+    assert_file_size(Node, UserSessId, FileGuid, ExpSize),
     {ok, FileHandle} = lfm_proxy:open(Node, UserSessId, ?FILE_REF(FileGuid), read),
     {ok, Data} = ?assertMatch({ok, _}, lfm_proxy:read(Node, FileHandle, 0, ExpSize)),
     ?assert(lists:all(fun(X) -> X == true end, [$a == Char || <<Char>> <= Data])),
     lfm_proxy:close(Node, FileHandle).
+
+
+%% @private
+-spec assert_file_size(node(), session:id(), file_id:file_guid(), non_neg_integer()) -> ok.
+assert_file_size(Node, SessionId, FileGuid, ExpSize) ->
+    assert_file_size(Node, SessionId, FileGuid, ExpSize, ?ATTEMPTS).
+
+
+%% @private
+-spec assert_file_size(node(), session:id(), file_id:file_guid(), non_neg_integer(), non_neg_integer()) -> ok.
+assert_file_size(Node, SessionId, FileGuid, ExpSize, Attempts) ->
+    ?assertMatch(
+        {ok, #file_attr{size = ExpSize}},
+        lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid)),
+        Attempts
+    ),
+    ok.
 
 
 %% @private

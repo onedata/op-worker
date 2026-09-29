@@ -52,17 +52,17 @@
 
 -spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update_cache(Id, Diff, Default) ->
+    %% @TODO VFS-13002 - this hook should not be executed in the calling process
     run_in_critical_section(Id, fun() ->
         PrevVal = case get_from_cache(Id) of
             {ok, #document{value = V}} -> V;
             {error, not_found} -> #od_space{}
         end,
-        % TODO VFS-12743 what if an error is returned here? will the record be cached? will it be logged?
         case datastore_model:update(?CTX, Id, Diff, Default) of
-            {ok, #document{value = #od_space{eff_users = UsersMap} = NewVal}} = Res ->
+            {ok, #document{value = #od_space{eff_users = UsersMap} = NewVal} = UpdatedDoc} ->
                 handle_name_change(Id, PrevVal, NewVal, maps:keys(UsersMap)),
                 handle_support_change(Id, PrevVal, NewVal, maps:keys(UsersMap)),
-                Res;
+                {ok, UpdatedDoc};
             {error, _} = Error ->
                 Error
         end
@@ -115,10 +115,8 @@ run_after(_Function, _Args, Result) ->
 
 
 -spec run_after(doc()) -> {ok, doc()}.
-run_after(Doc = #document{key = SpaceId, value = Space = #od_space{harvesters = Harvesters}}) ->
-    ProviderId = oneprovider:get_id(),
-
-    case space_logic:is_supported(Space, ProviderId) of
+run_after(#document{key = SpaceId, value = #od_space{harvesters = Harvesters}} = SpaceDoc) ->
+    case space_logic:is_supported_locally(SpaceDoc) of
         false ->
             ok;
         true ->
@@ -136,15 +134,15 @@ run_after(Doc = #document{key = SpaceId, value = Space = #od_space{harvesters = 
             ok = critical_section:run({handle_space_support_parameters_change, SpaceId}, fun() ->
                 case space_logic:get(?ROOT_SESS_ID, SpaceId) of
                     {ok, CurrentDoc} ->
-                        ok = handle_space_support_parameters_change(ProviderId, CurrentDoc);
+                        ok = handle_space_support_parameters_change(CurrentDoc);
                     ?ERROR_NOT_FOUND ->
                         ok
                 end
             end),
-    
+
             ok = dbsync_worker:start_streams([SpaceId])
     end,
-    {ok, Doc}.
+    {ok, SpaceDoc}.
 
 
 %%%===================================================================
@@ -201,7 +199,7 @@ handle_support_change(SpaceId, #od_space{providers = PrevProviders}, #od_space{p
         {0, 0} ->
             ok;
         {0, _} ->
-            ok = special_dirs:set_up_for_new_space(SpaceId),
+            ok = special_dirs:set_up_for_new_local_space(SpaceId),
             % Fetch docs of co-supporting providers to trigger connection establishment
             % (see od_provider:ensure_connected_to_peer/1).
             lists:foreach(fun provider_logic:get/1, maps:keys(maps:remove(ProviderId, NewProviders))),
@@ -214,13 +212,13 @@ handle_support_change(SpaceId, #od_space{providers = PrevProviders}, #od_space{p
 
 
 %% @private
--spec handle_space_support_parameters_change(oneprovider:id(), doc()) ->
+-spec handle_space_support_parameters_change(doc()) ->
     ok | no_return().
-handle_space_support_parameters_change(ProviderId, #document{key = SpaceId, value = #od_space{
+handle_space_support_parameters_change(#document{key = SpaceId, value = #od_space{
     support_parameters_registry = SupportParametersRegistry
 }}) ->
     SupportParameters = try
-        support_parameters_registry:get_entry(ProviderId, SupportParametersRegistry)
+        support_parameters_registry:get_entry(oneprovider:get_id(), SupportParametersRegistry)
     catch _:_ ->
         % possible race when revoking space in oz when support parameters were already
         % removed but provider is still visible as supporting this space

@@ -21,7 +21,7 @@
 -export([init/1, is_current_proc_cache/0, flush/0, flush/1, flush/2, check_flush/0,
     verify_flush_ans/3]).
 % File/UUID API
--export([get_uuid/0, get_local_location/0, get_all_locations/0,
+-export([get_uuid/0, get_local_location/0, get_local_location_including_deleted/0, get_all_locations/0,
     cache_location_change/2, clear_location_changes/0]).
 % Doc API
 -export([get_doc/1, get_doc_including_deleted/1, save_doc/1, cache_doc/1, delete_doc/2, attach_blocks/1,
@@ -244,6 +244,11 @@ get_uuid() ->
 -spec get_local_location() -> file_location:doc() | {error, not_found}.
 get_local_location() ->
     get_doc(file_location:local_id(get(?MAIN_KEY))).
+
+
+-spec get_local_location_including_deleted() -> file_location:doc() | {error, not_found}.
+get_local_location_including_deleted() ->
+    get_doc_including_deleted(file_location:local_id(get(?MAIN_KEY))).
 
 %%-------------------------------------------------------------------
 %% @doc

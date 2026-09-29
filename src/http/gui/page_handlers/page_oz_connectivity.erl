@@ -31,7 +31,7 @@
 %%--------------------------------------------------------------------
 -spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
 handle(<<"GET">>, Req) ->
-    Status = case gs_channel_service:is_connected() of
+    Status = case gs_channel_service:is_connected_and_initialized() of
         true -> <<"ok">>;
         false -> <<"error">>
     end,
