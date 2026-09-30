@@ -519,7 +519,7 @@ init_etses_for_space_on_all_nodes(SpaceId) ->
     lists:foreach(fun
         (ok) ->
             ok;
-        ({badrpc, _} = Error) ->
+        (Error) ->
             ?error("Could not initialize etses for space: ~tp.~nReason: ~tp", [SpaceId, Error]),
             error({etses_not_ready, Error})
     end, Res).
@@ -538,10 +538,16 @@ init_etses_on_current_node() ->
     qos_eff_cache:init_group().
 
 
+% node_manager may be busy with periodic tasks for longer than the default call timeout
+% (5 s) on an overloaded node - the etses must be initialized anyway.
+-define(INIT_ETSES_TIMEOUT, timer:minutes(1)).
+
 %% @private
 -spec init_etses_for_space_on_current_node(od_space:id() | all) -> ok.
 init_etses_for_space_on_current_node(SpaceId) ->
-    gen_server2:call(?NODE_MANAGER_NAME, {apply, ?MODULE, init_etses_for_space_internal, [SpaceId]}).
+    gen_server2:call(
+        ?NODE_MANAGER_NAME, {apply, ?MODULE, init_etses_for_space_internal, [SpaceId]}, ?INIT_ETSES_TIMEOUT
+    ).
 
 
 %% @private

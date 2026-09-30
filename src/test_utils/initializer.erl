@@ -129,6 +129,7 @@
 -define(TEMPORARY_TOKENS_GENERATION, 1).
 -define(DEFAULT_ONEZONE_DOMAIN, <<"onezone.test">>).
 -define(OFFLINE_ACCESS_TOKEN_EXPIRATION, 3600 * 24 * 7). % 1 week
+-define(INIT_ETSES_ATTEMPTS, 5).
 
 %%%===================================================================
 %%% API
@@ -959,7 +960,11 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
-        rpc:call(DomainWorker, node_manager_plugin, init_etses_for_space_on_all_nodes, [all])
+        ?assertEqual(
+            ok,
+            rpc:call(DomainWorker, node_manager_plugin, init_etses_for_space_on_all_nodes, [all]),
+            ?INIT_ETSES_ATTEMPTS
+        )
     end, get_different_domain_workers(Config)),
 
     cluster_logic_mock_setup(AllWorkers),
