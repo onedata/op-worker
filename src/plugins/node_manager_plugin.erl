@@ -67,6 +67,10 @@
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
+% node_manager may be busy with periodic tasks for longer than the default call timeout
+% (5 s) on an overloaded node - the etses must be initialized anyway.
+-define(INIT_ETSES_TIMEOUT, timer:minutes(1)).
+
 
 %%%===================================================================
 %%% node_manager_plugin_default callbacks
@@ -537,10 +541,6 @@ init_etses_on_current_node() ->
     permissions_cache:init_group(),
     qos_eff_cache:init_group().
 
-
-% node_manager may be busy with periodic tasks for longer than the default call timeout
-% (5 s) on an overloaded node - the etses must be initialized anyway.
--define(INIT_ETSES_TIMEOUT, timer:minutes(1)).
 
 %% @private
 -spec init_etses_for_space_on_current_node(od_space:id() | all) -> ok.
