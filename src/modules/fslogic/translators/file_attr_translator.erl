@@ -78,6 +78,10 @@ get_attr_as_json(?attr_path, #file_attr{path = Path}) ->
     Path;
 get_attr_as_json(?attr_parent_guid, #file_attr{parent_guid = ParentGuid}) ->
     utils:convert_defined(map_parent_id(ParentGuid), fun file_id:check_guid_to_objectid/1);
+get_attr_as_json(?attr_is_imported, #file_attr{is_imported = unknown}) ->
+    <<"unknown">>;
+get_attr_as_json(?attr_is_imported, #file_attr{is_imported = IsImported}) ->
+    IsImported;
 get_attr_as_json(?attr_gid, #file_attr{gid = Gid}) ->
     Gid;
 get_attr_as_json(?attr_uid, #file_attr{uid = Uid}) ->

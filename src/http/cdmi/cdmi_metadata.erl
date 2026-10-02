@@ -108,7 +108,7 @@ update_user_metadata(SessionId, FileRef, UserMetadata, AllURIMetadataNames) ->
     BodyMetadataNames = maps:keys(BodyMetadata),
     DeleteAttributeFunction = fun
         (?ACL_XATTR_NAME) ->
-            ?lfm_check(lfm:remove_acl(SessionId, FileRef));
+            mi_file_perms:remove_acl(SessionId, FileRef);
         (Name) ->
             ?lfm_check(lfm:remove_xattr(SessionId, FileRef, Name))
     end,
@@ -120,7 +120,7 @@ update_user_metadata(SessionId, FileRef, UserMetadata, AllURIMetadataNames) ->
                 ?debug_exception("Acl conversion error", Class, Reason, Stacktrace),
                 throw(?ERR_BAD_DATA(?err_ctx(), <<"acl">>, undefined))
             end,
-            ?lfm_check(lfm:set_acl(SessionId, FileRef, ACL));
+            mi_file_perms:set_acl(SessionId, FileRef, ACL);
         ({Name, Value}) ->
             ?lfm_check(lfm:set_xattr(
                 SessionId, FileRef,

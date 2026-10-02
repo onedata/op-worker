@@ -96,7 +96,7 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             ?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"not a regular file">>);
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = Size}} ->
-            ?lfm_check(lfm:check_perms(SessionId, FileRef, write)),
+            mi_file_perms:check_file_access(SessionId, FileRef, write),
 
             case Size == 0 of
                 true ->

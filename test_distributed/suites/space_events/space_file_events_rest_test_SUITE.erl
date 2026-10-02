@@ -182,7 +182,7 @@ invalid_args_test(_Config) ->
     AllowedAttrs = [
         <<"name">>, <<"parentFileId">>, <<"index">>, <<"type">>, <<"activePermissionsType">>,
         <<"posixPermissions">>, <<"acl">>, <<"originProviderId">>, <<"directShareIds">>,
-        <<"ownerUserId">>, <<"hardlinkCount">>, <<"symlinkValue">>, <<"creationTime">>,
+        <<"ownerUserId">>, <<"hardlinkCount">>, <<"symlinkValue">>, <<"isImported">>, <<"creationTime">>,
         <<"atime">>, <<"mtime">>, <<"ctime">>, <<"size">>, <<"isFullyReplicatedLocally">>,
         <<"localReplicationRate">>
     ],

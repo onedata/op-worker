@@ -27,7 +27,6 @@
     reuse_or_create_rest_session/2,
     reuse_or_create_incoming_provider_session/1,
     reuse_or_create_outgoing_provider_session/2,
-    reuse_or_create_proxied_session/5,
     reuse_or_create_gui_session/2,
     reuse_or_create_offline_session/3,
     create_root_session/0, create_guest_session/0
@@ -85,25 +84,6 @@ reuse_or_create_incoming_provider_session(?SUB(?ONEPROVIDER, ProviderId) = Ident
     {ok, session:id()} | error().
 reuse_or_create_outgoing_provider_session(SessId, Identity) ->
     reuse_or_create_session(SessId, provider_outgoing, undefined, [], [], Identity, undefined).
-
-
--spec reuse_or_create_proxied_session(
-    session:id(),
-    ProxyVia :: oneprovider:id(),
-    auth_manager:credentials(),
-    session:type(),
-    session:mode()
-) ->
-    {ok, session:id()} | error().
-reuse_or_create_proxied_session(SessId, ProxyVia, Credentials, SessionType, SessMode) ->
-    case auth_manager:verify_credentials(Credentials) of
-        {ok, #auth{subject = ?SUB(user, _) = Identity}, _TokenValidUntil} ->
-            reuse_or_create_session(
-                SessId, SessionType, undefined, [], [], SessMode, Identity, Credentials, ProxyVia
-            );
-        Error ->
-            Error
-    end.
 
 
 -spec reuse_or_create_rest_session(aai:subject(), auth_manager:credentials()) ->
@@ -274,7 +254,7 @@ clean_terminated_session(SessId) ->
     {ok, SessId} | error() when SessId :: session:id().
 reuse_or_create_session(SessId, SessType, ClientType, ClientOptions, ClientSystemProperties, Identity, Credentials) ->
     reuse_or_create_session(SessId, SessType, ClientType, ClientOptions, ClientSystemProperties, normal, Identity,
-        Credentials, undefined).
+        Credentials).
 
 
 %% @private
@@ -291,25 +271,6 @@ reuse_or_create_session(SessId, SessType, ClientType, ClientOptions, ClientSyste
     {ok, SessId} | error() when SessId :: session:id().
 reuse_or_create_session(SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties, SessMode, Identity,
     Credentials) ->
-    reuse_or_create_session(SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties, SessMode, Identity,
-        Credentials, undefined).
-
-
-%% @private
--spec reuse_or_create_session(
-    session:id(),
-    session:type(),
-    undefined | session:client_type(),
-    [session:client_option()],
-    [session:client_system_property()],
-    session:mode(),
-    aai:subject(),
-    undefined | auth_manager:credentials(),
-    ProxyVia :: oneprovider:id() | undefined
-) ->
-    {ok, SessId} | error() when SessId :: session:id().
-reuse_or_create_session(SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties, SessMode, Identity,
-    Credentials, ProxyVia) ->
     case get_caveats(Credentials) of
         {ok, Caveats} ->
             case data_constraints:get(Caveats) of
@@ -321,7 +282,7 @@ reuse_or_create_session(SessId, SessType, SessClientType, ClientOptions, ClientS
                         _ ->
                             reuse_or_create_session(
                                 SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties, SessMode,
-                                Identity, Credentials, DataConstraints, ProxyVia
+                                Identity, Credentials, DataConstraints
                             )
                     end;
                 {error, invalid_constraints} ->
@@ -353,15 +314,14 @@ get_caveats(Credentials) ->
     session:mode(),
     aai:subject(),
     undefined | auth_manager:credentials(),
-    DataConstraints :: data_constraints:constraints(),
-    ProxyVia :: undefined | oneprovider:id()
+    DataConstraints :: data_constraints:constraints()
 ) ->
     {ok, SessId} | error() when SessId :: session:id().
 reuse_or_create_session(SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
-    SessMode, Identity, Credentials, DataConstraints, ProxyVia) ->
+    SessMode, Identity, Credentials, DataConstraints) ->
     reuse_or_create_session(
         SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties, SessMode, Identity,
-        Credentials, DataConstraints, ProxyVia, ?SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 0
+        Credentials, DataConstraints, ?SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 0
     ).
 
 
@@ -385,14 +345,13 @@ reuse_or_create_session(SessId, SessType, SessClientType, ClientOptions, ClientS
     aai:subject(),
     undefined | auth_manager:credentials(),
     DataConstraints :: data_constraints:constraints(),
-    ProxyVia :: undefined | oneprovider:id(),
     ErrorSleep:: non_neg_integer(),
     Retries :: non_neg_integer()
 ) ->
     {ok, SessId} | error() when SessId :: session:id().
 reuse_or_create_session(
     SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
-    SessMode, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, RetryNum
+    SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum
 ) ->
     Sess = #session{
         type = SessType,
@@ -403,8 +362,7 @@ reuse_or_create_session(
         status = initializing,
         identity = Identity,
         credentials = Credentials,
-        data_constraints = DataConstraints,
-        proxy_via = ProxyVia
+        data_constraints = DataConstraints
     },
     Diff = fun
         (#session{status = inactive}) ->
@@ -434,7 +392,7 @@ reuse_or_create_session(
                 {error, already_exists} ->
                     maybe_retry_session_init(
                         SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
-                        SessMode, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, RetryNum, Error
+                        SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum, Error
                     );
                 Other ->
                     Other
@@ -444,7 +402,7 @@ reuse_or_create_session(
                 {error, already_exists} = Error ->
                     maybe_retry_session_init(
                         SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
-                        SessMode, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, RetryNum, Error
+                        SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum, Error
                     );
                 Other ->
                     Other
@@ -452,7 +410,7 @@ reuse_or_create_session(
         {error, initializing} = Error ->
             maybe_retry_session_init(
                 SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
-                SessMode, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, RetryNum, Error
+                SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum, Error
             );
         {error, Reason} ->
             {error, Reason}
@@ -470,10 +428,7 @@ update_credentials_if_needed(_SessType, Credentials, #session{credentials = Cred
     ok;
 update_credentials_if_needed(offline, NewCredentials, Session) ->
     update_credentials(NewCredentials, Session);
-update_credentials_if_needed(fuse, NewCredentials, #session{proxy_via = <<_/binary>>} = Session) ->
-    update_credentials(NewCredentials, Session);
 update_credentials_if_needed(_, _, _) ->
-    % neither offline nor a proxy fuse session
     ok.
 
 
@@ -507,7 +462,6 @@ renew_connection_if_needed(_, _) ->
     aai:subject(),
     undefined | auth_manager:credentials(),
     DataConstraints :: data_constraints:constraints(),
-    ProxyVia :: undefined | oneprovider:id(),
     ErrorSleep:: non_neg_integer(),
     Retries :: non_neg_integer(),
     Error :: {error, term()}
@@ -515,7 +469,7 @@ renew_connection_if_needed(_, _) ->
     {ok, SessId} | error() when SessId :: session:id().
 maybe_retry_session_init(
     SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
-    SessMode, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, RetryNum, Error
+    SessMode, Identity, Credentials, DataConstraints, ErrorSleep, RetryNum, Error
 ) ->
     MaxRetries = ?SESSION_INITIALIZATION_RETRIES,
     case RetryNum of
@@ -528,7 +482,7 @@ maybe_retry_session_init(
             ?debug("Waiting for session ~tp init", [SessId]),
             reuse_or_create_session(
                 SessId, SessType, SessClientType, ClientOptions, ClientSystemProperties,
-                SessMode, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep * 2, RetryNum + 1
+                SessMode, Identity, Credentials, DataConstraints, ErrorSleep * 2, RetryNum + 1
             )
     end.
 

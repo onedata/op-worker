@@ -19,14 +19,11 @@
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([stress_test/1, stress_test_base/1]).
 
--export([
-    db_sync_test/1, proxy_test1/1, proxy_test2/1,
-    db_sync_test_base/1, proxy_test1_base/1, proxy_test2_base/1
-]).
+-export([db_sync_test/1, db_sync_test_base/1]).
 
 -define(STRESS_CASES, []).
 -define(STRESS_NO_CLEARING_CASES, [
-    proxy_test1, proxy_test2, db_sync_test
+    db_sync_test
 ]).
 
 all() ->
@@ -62,47 +59,11 @@ db_sync_test_base(Config) ->
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
     ct:print("db_sync_test many_ops_test"),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {2,0,0}, Attempts, Dirs, Files),
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {2, 1}, Attempts, Dirs, Files),
     ct:print("db_sync_test distributed_modification_test"),
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts),
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2, 1}, Attempts),
     ct:print("db_sync_test distributed_delete_test"),
-    multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
-
-%%%===================================================================
-
-proxy_test1(Config) ->
-    ?PERFORMANCE(Config, [
-        {parameters, [
-            [{name, dirs_num}, {value, 15}, {description, "Number of directorines with single parent."}],
-            [{name, files_num}, {value, 25}, {description, "Number of files with single parent."}]
-        ]},
-        {description, "Performs multiple file operations on space 2."}
-    ]).
-proxy_test1_base(Config) ->
-    Dirs = ?config(dirs_num, Config),
-    Files = ?config(files_num, Config),
-    ct:print("proxy_test1 many_ops_test"),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user2">>, {0,2,1}, 0, Dirs, Files),
-    ct:print("proxy_test1 distributed_modification_test"),
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user2">>, {0,2,1}, 0).
-
-%%%===================================================================
-
-proxy_test2(Config) ->
-    ?PERFORMANCE(Config, [
-        {parameters, [
-            [{name, dirs_num}, {value, 15}, {description, "Number of directorines with single parent."}],
-            [{name, files_num}, {value, 25}, {description, "Number of files with single parent."}]
-        ]},
-        {description, "Performs multiple file operations on space 3."}
-    ]).
-proxy_test2_base(Config) ->
-    Dirs = ?config(dirs_num, Config),
-    Files = ?config(files_num, Config),
-    ct:print("proxy_test2 many_ops_test"),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user3">>, {0,2,1}, 0, Dirs, Files),
-    ct:print("proxy_test2 distributed_modification_test"),
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,2,1}, 0).
+    multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {2, 1}, Attempts).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

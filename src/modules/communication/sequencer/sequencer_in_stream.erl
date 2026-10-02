@@ -45,13 +45,11 @@
 %%                        waiting to be forwarded
 -record(state, {
     session_id :: session:id(),
-    proxy_session_id :: undefined | session:id(),
     sequencer_manager :: pid(),
     stream_id :: stream_id(),
     sequence_number = 0 :: sequence_number(),
     sequence_number_ack = -1 :: -1 | sequence_number(),
     messages = #{} :: #{sequence_number() => #client_message{}},
-    is_proxy :: boolean(),
     session_type :: session:type()
 }).
 
@@ -103,14 +101,12 @@ init([SeqMan, StmId, SessId]) ->
     ?debug("Initializing sequencer in stream for session ~tp", [SessId]),
     process_flag(trap_exit, true),
     register_stream(SeqMan, StmId),
-    {ok, #document{value = #session{type = SessionType, proxy_via = ProxyVia}}} = session:get(SessId),
-    IsProxy = SessionType =:= provider_incoming orelse SessionType =:= provider_outgoing orelse ProxyVia =/= undefined,
+    {ok, #document{value = #session{type = SessionType}}} = session:get(SessId),
     self() ! reset_stream,
     {ok, receiving, #state{
         sequencer_manager = SeqMan,
         session_id = SessId,
         stream_id = StmId,
-        is_proxy = IsProxy,
         session_type = SessionType
     }, ?RECEIVING_TIMEOUT}.
 
@@ -134,8 +130,7 @@ terminate(Reason, StateName, #state{
     stream_id = StmId,
     sequence_number = SeqNum,
     session_id = SessId,
-    sequencer_manager = SeqMan,
-    is_proxy = IsProxy
+    sequencer_manager = SeqMan
 } = State) ->
     ?log_terminate(Reason, {StateName, State}),
     case SeqNum of
@@ -146,7 +141,7 @@ terminate(Reason, StateName, #state{
                 stream_id = StmId,
                 sequence_number = SeqNum - 1
             },
-            case communicate(IsProxy, Msg, SessId, false) of
+            case communicate(Msg, SessId, false) of
                 ok ->
                     ok;
                 {error, _Reason2} ->
@@ -205,9 +200,8 @@ receiving(cast, #client_message{} = Msg, State) ->
             {next_state, requesting, NewState, ?REQUESTING_TIMEOUT}
     end;
 
-receiving(info, reset_stream, #state{session_id = SessId,
-    stream_id = StmId, is_proxy = IsProxy} = State) ->
-    send_message_stream_reset(StmId, SessId, IsProxy),
+receiving(info, reset_stream, #state{session_id = SessId, stream_id = StmId} = State) ->
+    send_message_stream_reset(StmId, SessId),
     {next_state, receiving, State, ?RECEIVING_TIMEOUT};
 
 receiving(info, Msg, State) ->
@@ -315,10 +309,9 @@ unregister_stream(#state{sequencer_manager = SeqMan, stream_id = StmId}) ->
 %% Sends a message stream reset request to the remote client.
 %% @end
 %%--------------------------------------------------------------------
--spec send_message_stream_reset(StmId :: stream_id(),
-    SessId :: session:id(), IsProxy :: boolean()) -> ok.
-send_message_stream_reset(StmId, SessId, IsProxy) ->
-    communicate(IsProxy, #message_stream_reset{stream_id = StmId}, SessId, true).
+-spec send_message_stream_reset(StmId :: stream_id(), SessId :: session:id()) -> ok.
+send_message_stream_reset(StmId, SessId) ->
+    communicate(#message_stream_reset{stream_id = StmId}, SessId, true).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -334,9 +327,8 @@ send_message_acknowledgement(#state{sequence_number = SeqNum,
 send_message_acknowledgement(#state{sequence_number = SeqNum} = State) when SeqNum < 1 ->
     State;
 
-send_message_acknowledgement(#state{stream_id = StmId, sequence_number = SeqNum,
-    session_id = SessId, is_proxy = IsProxy} = State) ->
-    communicate(IsProxy, #message_acknowledgement{
+send_message_acknowledgement(#state{stream_id = StmId, sequence_number = SeqNum, session_id = SessId} = State) ->
+    communicate(#message_acknowledgement{
         stream_id = StmId, sequence_number = SeqNum - 1
     }, SessId, true),
     State#state{sequence_number_ack = SeqNum - 1}.
@@ -366,9 +358,8 @@ maybe_send_message_acknowledgement(#state{sequence_number = SeqNum,
 %%--------------------------------------------------------------------
 -spec send_message_request(UpperSeqNum :: sequence_number(),
     State :: #state{}) -> ok.
-send_message_request(UpperSeqNum, #state{stream_id = StmId,
-    sequence_number = LowerSeqNum, session_id = SessId, is_proxy = IsProxy}) ->
-    communicate(IsProxy, #message_request{
+send_message_request(UpperSeqNum, #state{stream_id = StmId, sequence_number = LowerSeqNum, session_id = SessId}) ->
+    communicate(#message_request{
         stream_id = StmId,
         lower_sequence_number = LowerSeqNum,
         upper_sequence_number = UpperSeqNum
@@ -475,13 +466,9 @@ forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
 %% Communicates with client or provider.
 %% @end
 %%--------------------------------------------------------------------
--spec communicate(IsProxy :: boolean(), Message :: term(), session:id(),
-    InfinityRetry :: boolean()) -> ok | {error, Reason :: term()}.
-communicate(false, Msg, SessionID, true) ->
+-spec communicate(Message :: term(), session:id(), InfinityRetry :: boolean()) ->
+    ok | {error, Reason :: term()}.
+communicate(Msg, SessionID, true) ->
     communicator:send_to_oneclient(SessionID, Msg, infinity);
-communicate(false, Msg, SessionID, _) ->
-    communicator:send_to_oneclient(SessionID, Msg);
-communicate(true, Msg, SessionID, true) ->
-    communicator:send_to_provider(SessionID, Msg, undefined, infinity);
-communicate(true, Msg, SessionID, _) ->
-    communicator:send_to_provider(SessionID, Msg).
+communicate(Msg, SessionID, _) ->
+    communicator:send_to_oneclient(SessionID, Msg).

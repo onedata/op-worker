@@ -17,6 +17,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/file_popularity/file_popularity_view.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -25,7 +26,9 @@
     save/7, update/6, update/7, get/1, get/2,
     delete/2, list/1, list/4, save_db_view/6, delete_db_view/1,
     query/3, get_json/2, exists_on_provider/3, update_reduce_function/3,
-    build_cdmi_object_id_in_js/0]).
+    build_cdmi_object_id_in_js/0
+]).
+-export([restore_after_couchbase_upgrade_from_4_5_to_6_6/1]).
 
 %% datastore_model callbacks
 -export([
@@ -66,6 +69,46 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Due to couchbase upgrade from version 4.5 to 6.6 the javascript language
+%% construct `for ... of`, used in map function wrapper, no longer works.
+%% Couchbase will not even start after upgrade if there were any saved
+%% views. To fix this, all views are removed from db before upgrade
+%% and after it they must be restored.
+%% @end
+%%--------------------------------------------------------------------
+-spec restore_after_couchbase_upgrade_from_4_5_to_6_6(od_space:id()) -> ok.
+restore_after_couchbase_upgrade_from_4_5_to_6_6(SpaceId) ->
+    SpaceName = case space_logic:get_name(?ROOT_SESS_ID, SpaceId) of
+        {ok, Name} -> Name;
+        ?ERR -> <<"unknown">>
+    end,
+    ?info("Upgrading views in space '~ts' (~ts)...", [SpaceName, SpaceId]),
+
+    ViewsCount = view_links:foldl(SpaceId, fun(ViewName, CountAcc) ->
+        ?info("* ~ts", [ViewName]),
+
+        try
+            {ok, Doc} = index:get(ViewName, SpaceId),
+            view_changes:handle(Doc),
+            CountAcc + 1
+        catch Class:Reason:Stacktrace ->
+            ?error_exception(
+                "ExceptionLog: Failed to upgrade view ~ts in space '~ts' (~ts)",
+                [ViewName, SpaceName, SpaceId],
+                Class, Reason, Stacktrace
+            ),
+            CountAcc
+        end
+    end, 0),
+
+    case ViewsCount of
+        0 -> ?info("No views present in space '~ts' (~ts)", [SpaceName, SpaceId]);
+        _ -> ?info("Successfully upgraded views in space '~ts' (~ts)", [SpaceName, SpaceId])
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -520,9 +563,10 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
 
         function filterHiddenValues(object) {
             var filtered = {}
-            for (var key of Object.keys(object))
+            Object.keys(object).forEach(key => {
                 if (!key.startsWith('_'))
                     filtered[key] = object[key];
+            });
             return filtered;
         };
 
@@ -578,9 +622,10 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
 
             if(result) {
                 if ('list' in result) {
-                    for (var keyValuePair of result['list'])
+                    result['list'].forEach(keyValuePair => {
                         if(isValidKey(keyValuePair[0]))
                             emit(keyValuePair[0], keyValuePair[1]);
+                    });
                 }
                 else if(isValidKey(result[0])){
                     emit(result[0], result[1]);

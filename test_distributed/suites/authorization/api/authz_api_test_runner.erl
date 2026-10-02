@@ -1278,14 +1278,9 @@ run_special_dirs_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         TestCaseCtx = init_test_case(TestCaseName, SpaceOwnerSelector, TestSuiteCtx),
 
         % NOTE: requests to global root dir via fslogic worker are automatically rejected with not_found
-        ExpectedError = case {SpecialDir, ReturnedErrors} of
-            {global_root_dir, errno_errors} ->
-                {error, ?ENOENT};
-            _ ->
-                case ReturnedErrors of
-                    api_errors -> ?ERROR_NOT_SUPPORTED;
-                    errno_errors -> {error, ?ENOTSUP}
-                end
+        ExpectedError = case ReturnedErrors of
+            api_errors -> ?ERROR_NOT_SUPPORTED;
+            errno_errors -> {error, ?ENOTSUP}
         end,
 
         assert_operation(#{}, ExpectedError, TestCaseCtx#authz_test_case_ctx{

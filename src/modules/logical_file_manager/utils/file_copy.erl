@@ -72,8 +72,8 @@ copy(_SessId, SourceGuid, SourceGuid, _TargetName, _Options) ->
     % attempt to copy file to itself
     {error, ?EINVAL};
 copy(SessId, SourceGuid, TargetParentGuid, TargetName, Options) ->
-    {ok, SourcePath} = lfm:get_file_path(SessId, SourceGuid),
-    {ok, TargetParentPath} = lfm:get_file_path(SessId, TargetParentGuid),
+    SourcePath = mi_file_tree:get_path(SessId, ?FILE_REF(SourceGuid)),
+    TargetParentPath = mi_file_tree:get_path(SessId, ?FILE_REF(TargetParentGuid)),
     Recursive = maps:get(recursive, Options, ?DEFAULT_RECURSIVE_OPT),
     case filepath_utils:is_equal_or_descendant(TargetParentPath, SourcePath) of
         {true, _} when Recursive ->
@@ -277,8 +277,8 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
             ok = lfm:set_xattr(SessId, ?FILE_REF(TargetGuid), Xattr)
     end, Xattrs),
 
-    {ok, Acl} = lfm:get_acl(SessId, ?FILE_REF(SourceGuid)),
-    lfm:set_acl(SessId, ?FILE_REF(TargetGuid), Acl),
+    Acl = mi_file_perms:get_acl(SessId, ?FILE_REF(SourceGuid)),
+    mi_file_perms:set_acl(SessId, ?FILE_REF(TargetGuid), Acl),
     lfm:set_perms(SessId, ?FILE_REF(TargetGuid), Mode).
 
 

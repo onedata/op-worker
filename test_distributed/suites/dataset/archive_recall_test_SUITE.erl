@@ -722,7 +722,7 @@ recall_to_recalling_dir_test_base(Method) ->
         opt_archives:get_recall_details(krakow, SessId, RecallRootFileGuid), ?ATTEMPTS),
     
     {ok, NestedRecallRootFileGuid} = ?assertMatch({ok, _}, opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
-    ?assertEqual({ok, RecallRootFileGuid}, lfm_proxy:get_parent(Node, SessId, #file_ref{guid = NestedRecallRootFileGuid})).
+    ?assertEqual({ok, RecallRootFileGuid}, opt_file_tree:get_parent(Node, SessId, #file_ref{guid = NestedRecallRootFileGuid})).
 
 
 recall_error_test_base(Spec, FunName) ->

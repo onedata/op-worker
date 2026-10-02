@@ -89,13 +89,14 @@
 
 -spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {record(), file_ctx:ctx()}.
 resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
-    % For spaces not supported locally (accessed via provider proxy) effective value cache is not initialized.
+    % TODO VFS-12851 restrict attrs available for special dirs sub trees
+    % For spaces not supported locally (accessed by e.g. listing user root dir) effective value cache is not initialized.
     % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
-    IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx0) andalso
+    IsNotLocallySupportedSpace = file_ctx:is_space_dir_const(FileCtx0) andalso
         not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx0)),
 
     FileCtx1 = case maps:get(check_perms, Opts, true) of
-        true when IsRemoteOnlySpace ->
+        true when IsNotLocallySupportedSpace ->
             FileCtx0;
         true ->
             RequiredPrivs = [
@@ -130,12 +131,12 @@ resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
         options = Opts#{attributes => FinalRequestedAttributes}
     },
     {FinalState, FinalFileAttrRecord} = lists:foldl(fun
-        ({_, effective, _}, {AccState, AccFileAttrRecord}) when IsRemoteOnlySpace ->
+        ({_, effective, _}, {AccState, AccFileAttrRecord}) when IsNotLocallySupportedSpace ->
             {AccState, AccFileAttrRecord};
         ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttrRecord}) ->
             {StageState, StageFileAttrRecord} = resolve_stage(AccState, AttrsSubset, StageFun),
             {StageState, merge_records(AccFileAttrRecord, StageFileAttrRecord)}
-        end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx1)}}, ?STAGES),
+    end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx1)}}, ?STAGES),
     {FinalFileAttrRecord, FinalState#state.file_ctx}.
 
 
@@ -185,7 +186,8 @@ resolve_file_meta_attrs(#state{user_ctx = UserCtx, current_stage_attrs = Attrs} 
         symlink_value = resolve_symlink_value(FileDoc),
         type = file_meta:get_effective_type(FileDoc),
         hardlink_count = resolve_link_count(FileCtx2, ShareId, Attrs),
-        is_deleted = file_meta:is_deleted(FileDoc)
+        is_deleted = file_meta:is_deleted(FileDoc),
+        is_imported = file_meta:is_imported(FileDoc)
     }}.
 
 

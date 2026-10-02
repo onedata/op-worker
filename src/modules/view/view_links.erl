@@ -21,6 +21,7 @@
 
 %% API
 -export([add_link/3, list/4, delete_links/2, get_view_id/2]).
+-export([foreach/2, foldl/3, foldl/5]).
 
 -define(CTX, (index:get_ctx())).
 -define(LINK_PREFIX, <<"INDEXES">>).
@@ -89,6 +90,44 @@ get_view_id(ViewName, TreeIds, SpaceId) ->
             {error, ?EINVAL};
         {error, Reason} ->
             {error, Reason}
+    end.
+
+
+-spec foreach(od_space:id(), fun((index:name()) -> ok)) -> ok.
+foreach(SpaceId, Callback) ->
+    foldl(SpaceId, fun(ViewName, _) -> Callback(ViewName) end, ok),
+    ok.
+
+
+-spec foldl(
+    od_space:id(),
+    fun((index:name(), AccIn :: term()) -> AccOut :: term()),
+    InitialAcc :: term()
+) ->
+    term().
+foldl(SpaceId, Callback, InitialAcc) ->
+    foldl(SpaceId, Callback, InitialAcc, undefined, 0).
+
+
+-spec foldl(
+    od_space:id(),
+    fun((index:name(), AccIn :: term()) -> AccOut :: term()),
+    InitialAcc :: term(),
+    undefined | index:name(),
+    non_neg_integer()
+) ->
+    term().
+foldl(SpaceId, Callback, InitialAcc, PrevViewName, Offset) ->
+    Limit = op_worker:get_env(view_links_fold_limit, 1000),
+    {ok, ViewNames} = list(SpaceId, PrevViewName, Offset, Limit),
+
+    {LastViewName, NewAcc} = lists:foldl(fun(ViewName, {_, AccIn}) ->
+        {ViewName, Callback(ViewName, AccIn)}
+    end, {<<>>, InitialAcc}, ViewNames),
+
+    case length(ViewNames) < Limit of
+        true -> NewAcc;
+        false -> foldl(SpaceId, Callback, NewAcc, LastViewName, 1)
     end.
 
 

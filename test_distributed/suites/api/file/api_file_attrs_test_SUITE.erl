@@ -2038,7 +2038,7 @@ gather_historical_dir_size_stats(DirGuid, ProviderPlaceholder) ->
 -spec get_file_storage_location(posix | s3, file_id:file_guid(), node(), session:id()) -> helpers:file_id().
 get_file_storage_location(posix, FileGuid, Node, SessId) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, FilePath} = lfm_proxy:get_file_path(Node, SessId, FileGuid),
+    {ok, FilePath} = opt_file_tree:get_path(Node, SessId, ?FILE_REF(FileGuid)),
     [_Sep, _SpaceName | PathTokens] = filename:split(FilePath),
     filename:join([<<"/">>, SpaceId | PathTokens]);
 get_file_storage_location(s3, FileGuid, _Node, _SessId) ->

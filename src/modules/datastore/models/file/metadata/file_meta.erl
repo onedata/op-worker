@@ -40,10 +40,11 @@
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    new_doc/7, new_doc/8, new_dir_doc/6, get_ancestors/1, get_locations_by_uuid/1, rename/4, ensure_synced/1,
+    new_doc/7, new_doc/8, new_doc/9, new_dir_doc/6, get_ancestors/1, get_locations_by_uuid/1, rename/4, ensure_synced/1,
     get_owner/1, get_type/1, get_effective_type/1, get_mode/1
 ]).
--export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, is_disambiguated/1, is_deleted/1]).
+-export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, is_disambiguated/1, 
+    is_deleted/1, is_imported/1]).
 -export([get_ctx_with_remote_set/2]).
 
 
@@ -716,6 +717,12 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope) ->
 -spec new_doc(undefined | uuid(), name(), onedata_file:type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id(), boolean()) -> doc().
 new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, IgnoreInChanges) ->
+    new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, IgnoreInChanges, false).
+
+
+-spec new_doc(undefined | uuid(), name(), onedata_file:type(), posix_permissions(), od_user:id(),
+    uuid(), od_space:id(), boolean(), boolean()) -> doc().
+new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, IgnoreInChanges, IsImported) ->
     #document{
         key = FileUuid,
         value = #file_meta{
@@ -724,7 +731,8 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, IgnoreInCh
             mode = Mode,
             owner = Owner,
             parent_uuid = ParentUuid,
-            provider_id = oneprovider:get_id()
+            provider_id = oneprovider:get_id(),
+            imported = IsImported
         },
         scope = Scope,
         ignore_in_changes = IgnoreInChanges
@@ -948,6 +956,11 @@ is_disambiguated(Name) ->
 -spec is_deleted(doc()) -> boolean().
 is_deleted(#document{value = #file_meta{deleted = Deleted1}, deleted = Deleted2}) ->
     Deleted1 orelse Deleted2.
+
+
+-spec is_imported(doc()) -> unknown | boolean().
+is_imported(#document{value = #file_meta{imported = IsImported}}) ->
+    IsImported.
 
 
 -spec get_provider_id(doc() | file_meta()) -> oneprovider:id().

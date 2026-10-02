@@ -25,6 +25,7 @@
 -include("api/api_test_runner.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("file/file_tree_test.hrl").
 -include("transfers/transfer_test.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -1821,7 +1822,7 @@ get_file_path(#transfer_test_suite_ctx{
 }, FileGuid) ->
     Node = oct_background:get_random_provider_node(CreationProviderSelector),
     SessionId = oct_background:get_user_session_id(UserSelector, CreationProviderSelector),
-    {ok, FilePath} = ?assertMatch({ok, _}, lfm_proxy:get_file_path(Node, SessionId, FileGuid)),
+    {ok, FilePath} = ?assertMatch({ok, _}, opt_file_tree:get_path(Node, SessionId, ?FILE_REF(FileGuid))),
     FilePath.
 
 

@@ -29,7 +29,7 @@
     custom_metadata => 3,
     dataset => 2,
     file_location => 6,
-    file_meta => 12,
+    file_meta => 13,
     index => 1,
     qos_entry => 2,
     replica_deletion => 3,

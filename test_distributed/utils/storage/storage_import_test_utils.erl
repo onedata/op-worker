@@ -204,6 +204,7 @@
 %% API - verification/assertions
 -export([
     verify_imported_tree/1, verify_imported_tree/2,
+    verify_imported_flags/1,
     verify_dir_stats/1, verify_dir_stats/2,
     assert_attrs/3, assert_attrs/4,
     assert_file_content/3,
@@ -763,6 +764,34 @@ verify_imported_tree(#storage_import_test_case_ctx{
         {ImportingProviderCtx, ?STORAGE_IMPORT_ATTEMPTS},
         {NonImportingProviderCtx, ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS}
     ]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Verifies that every node of the declared tree is marked as imported
+%% (file_meta.imported) on the importing provider. Only for trees created solely
+%% on the storage - a node created through Onedata is not imported. Call only
+%% after verify_imported_tree/1, so that the declared paths are guaranteed to exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_imported_flags(case_ctx()) -> ok.
+verify_imported_flags(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{storage_type = StorageType},
+    file_tree_spec = FileTreeSpec,
+    space_path = SpacePath,
+    importing_provider_ctx = #provider_ctx{node = Node, session_id = SessId}
+}) ->
+    TopLevelSpecs = filter_out_unobservable_dirs(StorageType, to_spec_list(FileTreeSpec)),
+    lists_utils:pforeach(fun({Path, _Spec}) ->
+        {ok, #file_attr{guid = Guid}} = ?assertMatch(
+            {ok, #file_attr{}}, lfm_proxy:stat(Node, SessId, {path, Path}), ?STORAGE_IMPORT_ATTEMPTS
+        ),
+        ?assertMatch(
+            {ok, #document{value = #file_meta{imported = true}}},
+            rpc:call(Node, file_meta, get, [file_id:guid_to_uuid(Guid)]),
+            ?STORAGE_IMPORT_ATTEMPTS
+        )
+    end, flatten_nodes(SpacePath, TopLevelSpecs), ?VERIFY_PARALLELISM).
 
 
 %%--------------------------------------------------------------------

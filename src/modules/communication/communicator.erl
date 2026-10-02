@@ -23,8 +23,7 @@
     send_to_oneclient/2, send_to_oneclient/3,
 
     send_to_provider/2, send_to_provider/3, send_to_provider/4, send_to_provider/5,
-    communicate_with_provider/2, communicate_with_provider/3,
-    stream_to_provider/4
+    communicate_with_provider/2, communicate_with_provider/3
 ]).
 
 % Pid of process that should receive response to send message.
@@ -73,9 +72,8 @@ send_to_oneclient(SessionId, Msg) ->
 %%--------------------------------------------------------------------
 -spec send_to_oneclient(session:id(), generic_message(), retries()) ->
     ok | error().
-send_to_oneclient(SessionId, #server_message{} = Msg0, Retries) ->
-    Msg1 = clproto_utils:fill_effective_session_info(Msg0, SessionId),
-    send_to_oneclient_internal(SessionId, Msg1, Retries);
+send_to_oneclient(SessionId, #server_message{} = Msg, Retries) ->
+    send_to_oneclient_internal(SessionId, Msg, Retries);
 send_to_oneclient(SessionId, Msg, RetriesLeft) ->
     ServerMsg = #server_message{message_body = Msg},
     send_to_oneclient(SessionId, ServerMsg, RetriesLeft).
@@ -123,8 +121,7 @@ send_to_provider(SessionId, Msg, RecipientPid, Retries) ->
     ensure_connected_error_handling_method()) -> ok | {ok | clproto_message_id:id()} | error().
 send_to_provider(SessionId, #client_message{} = Msg0, RecipientPid, Retries, EnsureConnectedErrorHandlingMethod) ->
     {MsgId, Msg1} = maybe_set_msg_id(Msg0, RecipientPid),
-    Msg2 = clproto_utils:fill_effective_session_info(Msg1, SessionId),
-    case {send_to_provider_internal(SessionId, Msg2, Retries, EnsureConnectedErrorHandlingMethod), RecipientPid} of
+    case {send_to_provider_internal(SessionId, Msg1, Retries, EnsureConnectedErrorHandlingMethod), RecipientPid} of
         {ok, undefined} ->
             ok;
         {ok, _} ->
@@ -163,8 +160,7 @@ communicate_with_provider(SessionId, Msg) ->
 communicate_with_provider(SessionId, #client_message{} = Msg0, Retries) ->
     {ok, MsgId} = clproto_message_id:generate(self()),
     Msg1 = Msg0#client_message{message_id = MsgId},
-    Msg2 = clproto_utils:fill_effective_session_info(Msg1, SessionId),
-    case send_to_provider_internal(SessionId, Msg2, Retries, ignore) of
+    case send_to_provider_internal(SessionId, Msg1, Retries, ignore) of
         ok ->
             await_response(MsgId);
         {error, no_connections} ->
@@ -177,29 +173,6 @@ communicate_with_provider(SessionId, #client_message{} = Msg0, Retries) ->
 communicate_with_provider(SessionId, Msg, Retries) ->
     ClientMsg = #client_message{message_body = Msg},
     communicate_with_provider(SessionId, ClientMsg, Retries).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sends stream message to peer provider.
-%% @end
-%%--------------------------------------------------------------------
--spec stream_to_provider(session:id(), generic_message(),
-    sequencer:stream_id(), recipient_pid()) ->
-    ok | {ok | clproto_message_id:id()} | error().
-stream_to_provider(SessionId, #client_message{} = Msg0, StmId, RecipientPid) ->
-    {MsgId, Msg} = maybe_set_msg_id(Msg0, RecipientPid),
-    case {sequencer:send_message(Msg, StmId, SessionId), RecipientPid} of
-        {ok, undefined} ->
-            ok;
-        {ok, _} ->
-            {ok, MsgId};
-        {Error, _} ->
-            Error
-    end;
-stream_to_provider(SessionId, Msg, StreamId, RecipientPid) ->
-    ClientMsg = #client_message{message_body = Msg},
-    stream_to_provider(SessionId, ClientMsg, StreamId, RecipientPid).
 
 
 %%%===================================================================

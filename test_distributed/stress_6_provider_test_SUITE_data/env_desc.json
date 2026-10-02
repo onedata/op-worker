@@ -301,26 +301,16 @@
                         "storage": "/mnt/st3",
                         "supported_size": 10000000000
                     },
-                    "p6": {
-                        "storage": "/mnt/st6",
-                        "supported_size": 10000000000
-                    }
-                }
-            },
-            "space2": {
-                "displayed_name": "space2",
-                "users": [
-                    "user1"
-                ],
-                "groups": [
-                ],
-                "providers": {
                     "p4": {
                         "storage": "/mnt/st4",
                         "supported_size": 10000000000
                     },
                     "p5": {
                         "storage": "/mnt/st5",
+                        "supported_size": 10000000000
+                    },
+                    "p6": {
+                        "storage": "/mnt/st6",
                         "supported_size": 10000000000
                     }
                 }

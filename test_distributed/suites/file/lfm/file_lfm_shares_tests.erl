@@ -222,12 +222,12 @@ share_get_parent_test() ->
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
-    ?assertEqual({ok, RootDirGuid}, lfm_proxy:get_parent(Node, SessId, ?FILE_REF(DirGuid))),
-    ?assertEqual({ok, DirGuid}, lfm_proxy:get_parent(Node, SessId, ?FILE_REF(FileGuid))),
+    ?assertEqual({ok, RootDirGuid}, opt_file_tree:get_parent(Node, SessId, ?FILE_REF(DirGuid))),
+    ?assertEqual({ok, DirGuid}, opt_file_tree:get_parent(Node, SessId, ?FILE_REF(FileGuid))),
 
     % the share root is where the tree ends when walked up through the share
-    ?assertEqual({ok, undefined}, lfm_proxy:get_parent(Node, SessId, ?FILE_REF(ShareDirGuid))),
-    ?assertEqual({ok, ShareDirGuid}, lfm_proxy:get_parent(Node, SessId, ?FILE_REF(ShareFileGuid))).
+    ?assertEqual({ok, undefined}, opt_file_tree:get_parent(Node, SessId, ?FILE_REF(ShareDirGuid))),
+    ?assertEqual({ok, ShareDirGuid}, opt_file_tree:get_parent(Node, SessId, ?FILE_REF(ShareFileGuid))).
 
 
 share_list_test() ->

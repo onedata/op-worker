@@ -77,8 +77,7 @@ session_creation_reuse_and_cleaning_test(Config) ->
         ?assertEqual([], lists:filter(fun(Ans) -> {ok, SessId} =/= Ans end, Answers)),
 
         % Check connections have been added to session
-        {ok, _EffSessId, Cons} = ?assertMatch({ok, _, _},
-            rpc:call(Worker1, session_connections, list, [SessId]), 10),
+        {ok, Cons} = ?assertMatch({ok, _}, rpc:call(Worker1, session_connections, list, [SessId]), 10),
         ?assertEqual(length(Answers), length(Cons)),
         SessId
     end, [
@@ -120,7 +119,7 @@ session_create_terminate_test(Config) ->
     end),
 
     % Check connection has been added to session
-    ?assertMatch({ok, _, [_]}, rpc:call(Worker, session_connections, list, [SessId]), 10),
+    ?assertMatch({ok, [_]}, rpc:call(Worker, session_connections, list, [SessId]), 10),
 
     {Supervisor1, Node1} = get_supervisor_and_node(Worker, SessId),
     ?assert(is_supervisor_alive(Worker, Supervisor1, Node1)),
@@ -287,8 +286,8 @@ session_getters_test(Config) ->
         end
     end, [{session, get_event_manager}, {session, get_sequencer_manager}]),
 
-    {ok, _, [Conn]} = ?assertMatch(
-        {ok, SessId, [_]},
+    {ok, [Conn]} = ?assertMatch(
+        {ok, [_]},
         rpc:call(Worker, session_connections, list, [SessId])
     ),
     ?assert(is_pid(Conn)),

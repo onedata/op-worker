@@ -380,7 +380,7 @@ map_results_to_time_series_store() ->
 map_results_to_tree_forest_store() ->
     IteratedItemDataSpec = #atm_file_data_spec{
         file_type = 'ANY',
-        attributes = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
+        attributes = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_AVAILABLE_FILE_ATTRS)])
     },
     FileObjects = file_tree_test_utils:create_and_sync_file_tree(
         user1, ?ATM_SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
@@ -440,7 +440,7 @@ map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
 map_from_file_list_to_object_list_store() ->
     UserSessionId = oct_background:get_user_session_id(user1, ?ATM_PROVIDER_SELECTOR),
 
-    FileAttrsToResolve = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)]),
+    FileAttrsToResolve = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_AVAILABLE_FILE_ATTRS)]),
     AtmFileDataSpec = #atm_file_data_spec{file_type = 'ANY', attributes = FileAttrsToResolve},
 
     FileObjects = file_tree_test_utils:create_and_sync_file_tree(

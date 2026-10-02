@@ -38,6 +38,7 @@
 % ignore this function as it uses record definitions without setting fields values
 -dialyzer({nowarn_function, supported_operations/0}).
 
+-include("middleware/middleware.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -102,8 +103,8 @@
 -define(SUPPORTED_OPERATIONS, [
     #resolve_guid{},
 
-    #get_parent{},
-    #get_file_path{},
+    #file_parent_get_request{},
+    #file_path_get_request{},
 
     #get_file_attr{},
     #get_file_children{},
