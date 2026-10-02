@@ -27,8 +27,10 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
+-export([verbose_info/2, verbose_error/3]).
 -export([get_preferable_write_block_size/1, upload_file/5]).
 
 
@@ -52,6 +54,23 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec verbose_info(string(), [term()]) -> ok.
+verbose_info(Format, Args) ->
+    are_verbose_logs_enabled() andalso ?info(Format, Args),
+    ok.
+
+
+-spec verbose_error(string(), [term()], errors:error()) -> ok.
+verbose_error(Format, Args, Error) ->
+    case are_verbose_logs_enabled() of
+        true ->
+            ErrorJson = errors:to_json(Error),
+            ?error(?autoformat_with_msg(Format, Args, [ErrorJson]));
+        false ->
+            ok
+    end.
 
 
 -spec get_preferable_write_block_size(od_space:id()) ->
@@ -172,3 +191,9 @@ write_req_body_to_file_in_blocks(
                     )
             end
     end.
+
+
+%% @private
+-spec are_verbose_logs_enabled() -> boolean().
+are_verbose_logs_enabled() ->
+    true == op_worker:get_env(file_upload_verbose_logs_enabled, false).

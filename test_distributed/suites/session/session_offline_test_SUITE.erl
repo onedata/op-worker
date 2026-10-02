@@ -12,7 +12,7 @@
 -module(session_offline_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/auth/offline_access_manager.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -403,7 +403,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(offline_session_should_work_as_any_other_session_test = Case, Config) ->
     % Await renewal of oz connection (it is teardown as part of test).
-    ?assertMatch(true, rpc:call(?NODE, gs_channel_service, is_connected, []), ?ATTEMPTS),
+    ?assertMatch(true, rpc:call(?NODE, gs_channel_service, is_connected_and_initialized, []), ?ATTEMPTS),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when

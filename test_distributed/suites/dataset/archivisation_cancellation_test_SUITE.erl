@@ -13,7 +13,7 @@
 -author("Michał Stanisz").
 
 
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dataset/archive.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -381,9 +381,9 @@ cancel_verification_dip_with_delete(_Config) ->
 cancel_preserved_archive_test(_Config) ->
     #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} = 
         setup_initial_environment(#test_config{}),
-    archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, krakow, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, krakow, ?ATTEMPTS),
     ?assertEqual(ok, cancel_archivisation(paris, ArchiveId, delete)),
-    archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, [paris, krakow], ?ATTEMPTS).
+    archive_check_test_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, [paris, krakow], ?ATTEMPTS).
 
 %===================================================================
 % Test bases
@@ -405,18 +405,18 @@ cancel_test_base(#test_config{
         archivisation_traverse -> ?ARCHIVE_BUILDING;
         archive_verification_traverse -> ?ARCHIVE_VERIFYING
     end,
-    archive_tests_utils:assert_archive_state(ArchiveToCancelId, InitialExpectedState, ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_state(ArchiveToCancelId, InitialExpectedState, ?ATTEMPTS),
     
     ?assertEqual(ok, cancel_archivisation(CancellingProvider, ArchiveToCancelId, PreservationPolicy)),
     
-    archive_tests_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLING(PreservationPolicy), ?ATTEMPTS),
+    archive_check_test_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLING(PreservationPolicy), ?ATTEMPTS),
     
     continue_mocked_jobs(),
     
     case PreservationPolicy of
         retain ->
-            archive_tests_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLED, ?ATTEMPTS),
-            archive_tests_utils:assert_archive_state(NotCancelledArchivesToCheck, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+            archive_check_test_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLED, ?ATTEMPTS),
+            archive_check_test_utils:assert_archive_state(NotCancelledArchivesToCheck, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
     
             case CancelledTraverse of
                 archivisation_traverse ->
@@ -494,7 +494,7 @@ setup_initial_environment(#test_config{
     dip_strategy = DipStrategy,
     nested_strategy = NestedStrategy
 }) ->
-    onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+    file_tree_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{
             layout = case Layout of
                 random -> lists_utils:random_element(?ARCHIVE_LAYOUTS);
@@ -620,7 +620,7 @@ continue_mocked_jobs() ->
 %===================================================================
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_check_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op",
             envs = [{op_worker, op_worker, [
@@ -632,7 +632,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 
 init_per_group(_Group, Config) ->

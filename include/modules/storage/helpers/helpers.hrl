@@ -18,6 +18,25 @@
     st_ctime, st_blksize, st_blocks
 }).
 
+%% Handle to a storage helper instance, through which all path based operations
+%% (stat, mkdir, unlink, truncate, xattrs, ...) are performed. It is resolved
+%% anew for every operation - see helper_handle module.
+-record(helper_handle, {
+    handle :: helpers_nif:helper_handle(),
+    timeout = infinity :: timeout()
+}).
+
+%% Handle to a file opened through a storage helper, through which the four data
+%% operations (read, write, fsync, release) are performed. Unlike the helper
+%% handle, it freezes the helper params as of the moment the file was opened.
+-record(file_handle, {
+    handle :: helpers_nif:file_handle(),
+    timeout :: timeout()
+}).
+
+%% NOTE: neither handle is persisted - both are transient wrappers around C++
+%% objects and do not outlive the node they were created on.
+
 %% Helper types
 -define(CEPH_HELPER_NAME, <<"ceph">>).
 -define(CEPHRADOS_HELPER_NAME, <<"cephrados">>).
@@ -32,22 +51,8 @@
 -define(HTTP_HELPER_NAME, <<"http">>).
 -define(NULL_DEVICE_HELPER_NAME, <<"nulldevice">>).
 
--define(POSIX_COMPATIBLE_HELPERS, [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
-                                   ?NFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME]).
-
--define(OBJECT_HELPERS, [?SWIFT_HELPER_NAME, ?S3_HELPER_NAME, ?CEPHRADOS_HELPER_NAME, ?CEPH_HELPER_NAME]).
--define(AUTO_IMPORT_HELPERS, [
-    ?POSIX_HELPER_NAME,
-    ?GLUSTERFS_HELPER_NAME,
-    ?NULL_DEVICE_HELPER_NAME,
-    ?WEBDAV_HELPER_NAME,
-    ?XROOTD_HELPER_NAME,
-    ?NFS_HELPER_NAME
-] ++ ?AUTO_IMPORT_OBJECT_HELPERS).
-
--define(AUTO_IMPORT_OBJECT_HELPERS, [
-    ?S3_HELPER_NAME
-]).
+%% NOTE: which storage types are posix compatible, are object storages or
+%% support importing data is defined in the storage_type module.
 
 %% Storage path types
 -define(CANONICAL_STORAGE_PATH, <<"canonical">>).
@@ -57,8 +62,6 @@
 -define(READWRITE, readwrite).
 -define(READONLY, readonly).
 
--define(DEFAULT_HELPER_TIMEOUT, 120000).
-
 %% This type determines the filename and path generation
 %% on the storage. Currently 2 modes are supported:
 %% - 'canonical' - posix-style
@@ -66,10 +69,11 @@
 -type storage_path_type() :: binary().
 -export_type([storage_path_type/0]).
 
--record(helper, {
-    name :: helper:name(),
-    args = #{} :: helper:args(),
-    admin_ctx = #{} :: helper:user_ctx()
-}).
+%% NOTE: #helper_spec{} is defined in datastore_models.hrl - it is persisted
+%% as part of the storage_config model, so changing it requires bumping that
+%% model's record struct.
+
+-define(CONFIDENTIAL_MASK, <<"*****">>).
+
 
 -endif.

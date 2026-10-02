@@ -70,6 +70,61 @@ translate_client_handshake_request_from_protobuf_test() ->
     {Internal, Protobuf} = get_client_handshake_request(Token, 1, [<<"18.01.01">>, <<"18.01.02">>]),
     ?assertEqual(Internal, clproto_translator:from_protobuf(Protobuf)).
 
+translate_client_handshake_request_client_type_from_protobuf_test() ->
+    Token = <<"DUMMY-TOKEN">>,
+    CompOpVersions = [<<"18.01.01">>, <<"18.01.02">>],
+    {Internal, Protobuf} = get_client_handshake_request(Token, 1, CompOpVersions),
+
+    lists:foreach(fun({ProtoType, ExpectedType}) ->
+        ProtobufWithType = Protobuf#'ClientHandshakeRequest'{client_type = ProtoType},
+        InternalWithType = Internal#client_handshake_request{client_type = ExpectedType},
+        ?assertEqual(InternalWithType, clproto_translator:from_protobuf(ProtobufWithType))
+    end, [
+        {'ONECLIENT_TYPE', oneclient},
+        {'ONEDATAFS_TYPE', onedatafs},
+        {'ONES3_TYPE',     ones3},
+        {undefined,        undefined}
+    ]).
+
+translate_client_handshake_request_client_options_from_protobuf_test() ->
+    Token = <<"DUMMY-TOKEN">>,
+    CompOpVersions = [<<"18.01.01">>, <<"18.01.02">>],
+    {Internal, Protobuf} = get_client_handshake_request(Token, 1, CompOpVersions),
+
+    Options = [
+        #'ClientOption'{name = <<"host">>, value = <<"example.com">>},
+        #'ClientOption'{name = <<"force-direct-io">>, value = <<"true">>}
+    ],
+    ProtobufWithOptions = Protobuf#'ClientHandshakeRequest'{client_options = Options},
+    InternalWithOptions = Internal#client_handshake_request{client_options = [{<<"host">>, <<"example.com">>}, {<<"force-direct-io">>, <<"true">>}]},
+    ?assertEqual(InternalWithOptions, clproto_translator:from_protobuf(ProtobufWithOptions)),
+
+    %% empty list when explicitly set to []
+    ProtobufNoOptions = Protobuf#'ClientHandshakeRequest'{client_options = []},
+    InternalNoOptions = Internal#client_handshake_request{client_options = []},
+    ?assertEqual(InternalNoOptions, clproto_translator:from_protobuf(ProtobufNoOptions)),
+
+    %% field absent from message - protobuf repeated fields default to [] so result is also []
+    ?assertEqual(Internal, clproto_translator:from_protobuf(Protobuf)).
+
+translate_client_handshake_request_client_system_properties_from_protobuf_test() ->
+    Token = <<"DUMMY-TOKEN">>,
+    CompOpVersions = [<<"18.01.01">>, <<"18.01.02">>],
+    {Internal, Protobuf} = get_client_handshake_request(Token, 1, CompOpVersions),
+
+    SystemProperties = [
+        #'ClientSystemProperty'{name = <<"os.name">>, value = <<"Linux">>},
+        #'ClientSystemProperty'{name = <<"os.arch">>, value = <<"x86_64">>}
+    ],
+    ProtobufWithProps = Protobuf#'ClientHandshakeRequest'{client_system_properties = SystemProperties},
+    InternalWithProps = Internal#client_handshake_request{client_system_properties = [{<<"os.name">>, <<"Linux">>}, {<<"os.arch">>, <<"x86_64">>}]},
+    ?assertEqual(InternalWithProps, clproto_translator:from_protobuf(ProtobufWithProps)),
+
+    %% empty list when not sent by client (protobuf repeated field default)
+    ProtobufNoProps = Protobuf#'ClientHandshakeRequest'{client_system_properties = []},
+    InternalNoProps = Internal#client_handshake_request{client_system_properties = []},
+    ?assertEqual(InternalNoProps, clproto_translator:from_protobuf(ProtobufNoProps)).
+
 translate_provider_handshake_request_from_protobuf_test() ->
     {Internal, Protobuf} = get_provider_handshake_request(<<"abcd">>, <<"token">>),
     ?assertEqual(Internal, clproto_translator:from_protobuf(Protobuf)).
@@ -327,7 +382,8 @@ get_token_auth(Val) ->
 get_client_handshake_request(Token, Nonce, CompOpVersions) ->
     {Internal, Protobuf} = get_token_auth(Token),
     {
-        #client_handshake_request{client_tokens = Internal, nonce = Nonce, compatible_oneprovider_versions = CompOpVersions, session_mode = normal},
+        #client_handshake_request{client_tokens = Internal, nonce = Nonce, compatible_oneprovider_versions = CompOpVersions,
+            session_mode = normal, client_options = [], client_system_properties = []},
         #'ClientHandshakeRequest'{macaroon = Protobuf, session_id = Nonce, compatible_oneprovider_versions = CompOpVersions, session_mode = 'NORMAL'}
     }.
 

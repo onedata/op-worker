@@ -12,10 +12,9 @@
 -module(api_dataset_crud_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
--include("api_test_runner.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/fslogic/data_access_control.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -73,7 +72,7 @@ establish_dataset_test(Config) ->
 
     #object{children = [#object{
         guid = FileGuid
-    }]} = onenv_file_test_utils:create_and_sync_file_tree(
+    }]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec([#dataset_spec{}])
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -100,8 +99,8 @@ establish_dataset_test(Config) ->
                     validate_result_fun = build_establish_dataset_validate_gs_call_result_fun(MemRef, Config)
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_data_spec_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     % Operations should be rejected even before checking if share exists
                     % (in case of using share file id) so it is not necessary to use
                     % valid share id
@@ -139,7 +138,7 @@ build_establish_dataset_setup_fun(MemRef, SpaceId) ->
             guid = FileGuid,
             name = FileName,
             type = FileType
-        }]} = onenv_file_test_utils:create_and_sync_file_tree(
+        }]} = file_tree_test_utils:create_and_sync_file_tree(
             user3, SpaceId, build_test_file_tree_spec()
         ),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -202,7 +201,7 @@ build_establish_dataset_validate_rest_call_result_fun(MemRef) ->
         DatasetId = maps:get(<<"datasetId">>, Body),
         api_test_memory:set(MemRef, dataset_id, DatasetId),
 
-        ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"datasets">>, DatasetId]),
+        ExpLocation = rest_test_utils:build_rest_url(TestNode, [<<"datasets">>, DatasetId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers))
     end.
 
@@ -282,7 +281,7 @@ get_dataset_test(Config) ->
         name = FileName,
         type = FileType,
         dataset = #dataset_object{id = DatasetId}
-    }]} = onenv_file_test_utils:create_and_sync_file_tree(
+    }]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec([
             #dataset_spec{state = State, protection_flags = ProtectionFlags}
         ])
@@ -305,7 +304,7 @@ get_dataset_test(Config) ->
             ct:pal(?FMT("Test get ~tp dataset after moving root file", [State])),
 
             NewFilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
-            onenv_file_test_utils:mv_and_sync_file(user3, FileGuid, NewFilePath),
+            file_tree_test_utils:mv_and_sync_file(user3, FileGuid, NewFilePath),
 
             DatasetRecordedFilePath = case State of
                 ?ATTACHED_DATASET -> NewFilePath;
@@ -319,7 +318,7 @@ get_dataset_test(Config) ->
 
             ct:pal(?FMT("Test get ~tp dataset after removing root file", [State])),
 
-            onenv_file_test_utils:rm_and_sync_file(user3, FileGuid),
+            file_tree_test_utils:rm_and_sync_file(user3, FileGuid),
 
             get_dataset_test_base(
                 DatasetId, undefined, detached, ProtectionFlags,
@@ -400,7 +399,7 @@ get_dataset_test_base(
     onenv_api_test_runner:prepare_args_fun().
 build_get_dataset_prepare_rest_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data),
 
         #rest_args{
             method = get,
@@ -414,7 +413,7 @@ build_get_dataset_prepare_rest_args_fun(DatasetId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_dataset_prepare_gs_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #gs_args{
             operation = get,
@@ -441,7 +440,7 @@ update_dataset_test(Config) ->
         name = FileName,
         type = FileType,
         dataset = #dataset_object{id = DatasetId}
-    }]} = onenv_file_test_utils:create_and_sync_file_tree(
+    }]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec([
             #dataset_spec{state = OriginalState, protection_flags = OriginalProtectionFlags}
         ])
@@ -519,7 +518,7 @@ update_dataset_test(Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_update_dataset_prepare_rest_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #rest_args{
             method = patch,
@@ -535,7 +534,7 @@ build_update_dataset_prepare_rest_args_fun(DatasetId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_update_dataset_prepare_gs_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #gs_args{
             operation = update,
@@ -618,7 +617,7 @@ delete_dataset_test(Config) ->
     Providers = [krakow, paris],
     SpaceId = oct_background:get_space_id(space_krk_par),
 
-    #object{children = Children} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{children = Children} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec(lists:map(fun(_) ->
             #dataset_spec{
                 state = random_dataset_state(),
@@ -670,7 +669,7 @@ delete_dataset_test(Config) ->
 build_delete_dataset_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         DatasetId = choose_dataset_to_remove(MemRef),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data),
+        {Id, _} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data),
         api_test_memory:set(MemRef, dataset_to_remove, Id),
 
         #rest_args{
@@ -686,7 +685,7 @@ build_delete_dataset_prepare_rest_args_fun(MemRef) ->
 build_delete_dataset_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         DatasetId = choose_dataset_to_remove(MemRef),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
         api_test_memory:set(MemRef, dataset_to_remove, Id),
 
         #gs_args{
@@ -722,7 +721,7 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
                 State = api_test_memory:get(MemRef, {dataset_state, DatasetId}),
 
                 lists:foreach(fun(Provider) ->
-                    Node = ?OCT_RAND_OP_NODE(Provider),
+                    Node = oct_background:get_random_provider_node(Provider),
                     UserSessId = oct_background:get_user_session_id(user2, Provider),
                     ListOpts = #{offset => 0, limit => 1000},
 
@@ -766,14 +765,14 @@ random_dataset_state() ->
 
 
 %% @private
--spec build_test_file_tree_spec() -> onenv_file_test_utils:file_spec().
+-spec build_test_file_tree_spec() -> file_tree_test_utils:object_spec().
 build_test_file_tree_spec() ->
     build_test_file_tree_spec([undefined]).
 
 
 %% @private
--spec build_test_file_tree_spec([onenv_dataset_test_utils:dataset_spec()]) ->
-    onenv_file_test_utils:file_spec().
+-spec build_test_file_tree_spec([dataset_test_utils:dataset_spec()]) ->
+    file_tree_test_utils:object_spec().
 build_test_file_tree_spec(DatasetSpecs) ->
     ChildrenSpec = lists:map(fun(DatasetSpec) ->
         case api_test_utils:randomly_choose_file_type_for_test() of
@@ -826,7 +825,7 @@ verify_dataset(
     CreationTime, RootFileGuid, RootFileType, RootFilePath
 ) ->
     lists:foreach(fun(Provider) ->
-        Node = ?OCT_RAND_OP_NODE(Provider),
+        Node = oct_background:get_random_provider_node(Provider),
         UserSessId = oct_background:get_user_session_id(UserId, Provider),
         ListOpts = #{offset => 0, limit => 1000},
 
@@ -886,11 +885,11 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             dir_stats_test_utils:disable_stats_counting(NewConfig),
             SpaceId = oct_background:get_space_id(space_krk_par),
-            ozt_spaces:set_privileges(SpaceId, ?OCT_USER_ID(user3), [
+            ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(user3), [
                 ?SPACE_MANAGE_DATASETS | privileges:space_member()
             ]),
             ozt_spaces:set_privileges(
-                SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
+                SpaceId, oct_background:get_user_id(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
             NewConfig
         end
@@ -899,7 +898,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
-    dir_stats_test_utils:enable_stats_counting(Config).
+    dir_stats_test_utils:unmock_stats_counting(Config).
 
 init_per_group(_Group, Config) ->
     time_test_utils:freeze_time(Config),
@@ -913,13 +912,13 @@ init_per_group(_Group, Config) ->
             undefined;
         2 ->
             ct:pal("Establishing dataset for space root dir"),
-            DatasetObj = onenv_dataset_test_utils:set_up_and_sync_dataset(user3, space_krk_par),
+            DatasetObj = dataset_test_utils:set_up_and_sync_dataset(user3, space_krk_par),
             DatasetObj#dataset_object.id
     end,
     [{space_dir_dataset, SpaceDirDatasetId} | NewConfig].
 
 end_per_group(_Group, Config) ->
-    onenv_dataset_test_utils:cleanup_all_datasets(space_krk_par),
+    dataset_test_utils:cleanup_all_datasets(space_krk_par),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 

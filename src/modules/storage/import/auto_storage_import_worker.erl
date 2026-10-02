@@ -84,7 +84,7 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    case gs_channel_service:is_connected() of
+    case gs_channel_service:is_connected_and_initialized() of
         true -> notify_connection_to_oz();
         false -> ok
     end,

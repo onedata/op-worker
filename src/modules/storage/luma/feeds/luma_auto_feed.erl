@@ -40,7 +40,7 @@
 %% This function returns automatic mapping of Onedata user to storage
 %% user.
 %% On POSIX compatible storages it generates uid basing on UserId.
-%% On POSIX incompatible storages it returns AdminCtx of the storage.
+%% On POSIX incompatible storages it returns admin credentials of the storage.
 %% @end
 %%--------------------------------------------------------------------
 -spec acquire_user_storage_credentials(storage:data(), od_user:id()) ->
@@ -51,8 +51,8 @@ acquire_user_storage_credentials(Storage, UserId) ->
             Uid = generate_uid(UserId),
             #{<<"uid">> => integer_to_binary(Uid)};
         false ->
-            Helper = storage:get_helper(Storage),
-            helper:get_admin_ctx(Helper)
+            HelperSpec = storage:get_helper_spec(Storage),
+            helper_spec:get_credentials(HelperSpec)
     end,
     StorageUserMap = #{<<"storageCredentials">> => StorageCredentials},
     {ok, luma_storage_user:new(UserId, StorageUserMap, Storage)}.

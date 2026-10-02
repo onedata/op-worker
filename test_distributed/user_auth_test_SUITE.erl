@@ -23,6 +23,7 @@
 %% export for ct
 -export([
     all/0,
+    init_per_suite/1, end_per_suite/1,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -285,8 +286,8 @@ auth_cache_user_access_blocked_event_test(Config) ->
 
     simulate_user_update_with_blocked_value(Nodes, ?USER_ID_1, true, 2),
     ?assertEqual(InitialBlockChangeEvents + 1, total_block_change_events(Nodes)),
-    ?assertMatch(?ERR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1A)),
-    ?assertMatch(?ERR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1B)),
+    ?assertMatch(?ERR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1A), ?ATTEMPTS),
+    ?assertMatch(?ERR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1B), ?ATTEMPTS),
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker2, TokenCredentials2A)),
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker1, TokenCredentials2B)),
     % no new entries should be added (verification was done on the same nodes as previously)
@@ -570,52 +571,53 @@ token_expiration(Config) ->
         rpc:call(Worker1, auth_manager, verify_credentials, [TokenCredentials1])
     ),
 
-    timer:sleep(timer:seconds(4)),
-
+    % The session watcher notices the expiration up to a few seconds after
+    % the caveat's deadline, so the removal is awaited rather than slept for
     ?assertMatch(
         {error, not_found},
-        rpc:call(Worker1, session, get, [SessId1])
+        rpc:call(Worker1, session, get, [SessId1]),
+        ?ATTEMPTS
     ),
     ?assertMatch(
         ?ERR_UNAUTHORIZED(_),
-        rpc:call(Worker1, auth_manager, verify_credentials, [TokenCredentials1])
+        rpc:call(Worker1, auth_manager, verify_credentials, [TokenCredentials1]),
+        ?ATTEMPTS
     ),
 
-    % But it is possible to update credentials and increase expiration
+    % But it is possible to update credentials and increase expiration.
+    % A nonce of its own - the same nonce yields the same session id, which would
+    % race with the teardown of the expired session above (see VFS-5126 in
+    % session_manager). The credentials are updated right after connecting, as
+    % AccessToken2 expires within a few seconds.
     AccessToken2 = initializer:create_access_token(?USER_ID_1, [#cv_time{
         valid_until = ?NOW() + 4
     }]),
     {ok, {_, SessId2}} = fuse_test_utils:connect_via_token(
-        Worker1, [], Nonce, AccessToken2
+        Worker1, [], <<Nonce/binary, "_updated">>, AccessToken2
     ),
-    ?assertMatch(
-        {ok, #document{value = #session{identity = ?SUB(user, ?USER_ID_1)}}},
-        rpc:call(Worker1, session, get, [SessId2])
-    ),
-
-    timer:sleep(timer:seconds(2)),
     ?assertMatch(
         {ok, #document{value = #session{identity = ?SUB(user, ?USER_ID_1)}}},
         rpc:call(Worker1, session, get, [SessId2])
     ),
 
     AccessToken3 = initializer:create_access_token(?USER_ID_1, [#cv_time{
-        valid_until = ?NOW() + 6
+        valid_until = ?NOW() + 12
     }]),
     rpc:call(Worker1, incoming_session_watcher, update_credentials, [
         SessId2, AccessToken3, undefined
     ]),
 
-    timer:sleep(timer:seconds(4)),
+    % AccessToken2 has expired by now, with a margin for the watcher's delay
+    timer:sleep(timer:seconds(8)),
     ?assertMatch(
         {ok, #document{value = #session{identity = ?SUB(user, ?USER_ID_1)}}},
         rpc:call(Worker1, session, get, [SessId2])
     ),
 
-    timer:sleep(timer:seconds(4)),
     ?assertMatch(
         {error, not_found},
-        rpc:call(Worker1, session, get, [SessId2])
+        rpc:call(Worker1, session, get, [SessId2]),
+        ?ATTEMPTS
     ).
 
 
@@ -624,12 +626,27 @@ token_expiration(Config) ->
 %%%===================================================================
 
 
+init_per_suite(Config) ->
+    Posthook = fun(NewConfig) ->
+        Workers = ?config(op_worker_nodes, NewConfig),
+        lists:foreach(fun(Worker) ->
+            ok = rpc:call(Worker, safe_mode, report_node_initialized, [])
+        end, Workers),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook} | Config].
+
+
+end_per_suite(_Config) ->
+    ok.
+
+
 init_per_testcase(auth_cache_expiration_with_time_warps_test = Case, Config) ->
     time_test_utils:freeze_time(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(auth_cache_user_access_blocked_event_test = Case, Config) ->
-    mock_file_meta(Config),
+    mock_irrelevant_od_user_posthook_logic(Config),
     mock_auth_cache_for_num_call_counting(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -659,7 +676,7 @@ end_per_testcase(auth_cache_size_test = Case, Config) ->
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(auth_cache_user_access_blocked_event_test = Case, Config) ->
-    unmock_file_meta(Config),
+    unmock_irrelevant_od_user_posthook_logic(Config),
     unmock_auth_cache(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -784,17 +801,21 @@ unmock_token_logic(Config) ->
 
 % mocks the irrelevant logic called in od_user posthook
 % (it is triggered by simulating od_user record changes)
-mock_file_meta(Config) ->
+mock_irrelevant_od_user_posthook_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, user_root_dir),
     test_utils:mock_expect(Workers, user_root_dir, report_new_spaces_appeared, fun(_, _) ->
         ok
+    end),
+    test_utils:mock_new(Workers, special_dirs),
+    test_utils:mock_expect(Workers, special_dirs, report_new_user, fun(_) ->
+        ok
     end).
 
 
-unmock_file_meta(Config) ->
+unmock_irrelevant_od_user_posthook_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, file_meta).
+    test_utils:mock_validate_and_unload(Workers, [user_root_dir, special_dirs]).
 
 
 mock_auth_cache_for_num_call_counting(Config) ->

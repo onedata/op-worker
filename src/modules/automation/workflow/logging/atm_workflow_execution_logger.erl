@@ -330,7 +330,7 @@ dump_to_op_logs(Logger = #atm_workflow_execution_logger{
     lists:foreach(fun(Log) ->
         AppendReq = atm_audit_log_store_container:build_audit_log_append_request(Log),
 
-        Severity = audit_log:severity_to_int(AppendReq#audit_log_append_request.severity),
+        Severity = binary_to_existing_atom(AppendReq#audit_log_append_request.severity),
         LogSource = AppendReq#audit_log_append_request.source,
         LogContent = AppendReq#audit_log_append_request.content,
 

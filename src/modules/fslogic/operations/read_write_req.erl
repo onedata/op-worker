@@ -73,7 +73,7 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
 %% @private
 -spec handle_empty_write(storage_driver:handle(), non_neg_integer()) -> ok.
 handle_empty_write(Handle, Offset) ->
-    case helper:is_getting_size_supported(storage:get_helper(storage_driver:get_storage_id(Handle))) of
+    case helper_spec:is_getting_size_supported(storage:get_helper_spec(storage_driver:get_storage_id(Handle))) of
         true ->
             ok = case storage_driver:stat(Handle) of
                 {ok, #statbuf{st_size = Size}} when Size < Offset ->

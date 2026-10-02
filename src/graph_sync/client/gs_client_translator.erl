@@ -247,7 +247,7 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = private}, R
         key = Id,
         value = #od_handle{
             public_handle = maps:get(<<"publicHandle">>, Result),
-            metadata_prefix = maps:get(<<"metadataPrefix">>, Result),
+            metadata_schema = maps:get(<<"metadataSchema">>, Result),
             metadata = maps:get(<<"metadata">>, Result),
             handle_service = maps:get(<<"handleServiceId">>, Result)
         }
@@ -258,7 +258,7 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
         key = Id,
         value = #od_handle{
             public_handle = maps:get(<<"publicHandle">>, Result),
-            metadata_prefix = maps:get(<<"metadataPrefix">>, Result),
+            metadata_schema = maps:get(<<"metadataSchema">>, Result),
             metadata = maps:get(<<"metadata">>, Result),
             handle_service = maps:get(<<"handleServiceId">>, Result)
         }
@@ -496,7 +496,7 @@ privileges_to_atoms(Map) ->
 
 
 %% @private
-% TODO VFS-VFS-12490 [file, dir] deprecated, left for BC, can be removed in 23.02.*
+% TODO VFS-12490 [file, dir] deprecated, left for BC, can be removed in 23.02.*
 -spec translate_share_file_type(json_utils:json_map()) -> onedata_file:type().
 translate_share_file_type(#{<<"fileType">> := <<"file">>}) -> ?REGULAR_FILE_TYPE;
 translate_share_file_type(#{<<"fileType">> := <<"REG">>}) -> ?REGULAR_FILE_TYPE;

@@ -21,6 +21,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 
@@ -117,6 +118,7 @@ data_spec(#gri{aspect = attrs}, _) ->
             id => {binary, guid}
         },
         at_least_one => #{
+            % WARNING: onedatafilerestclient relies on `mode` field, do not remove before changing it there
             <<"mode">> => {binary, ModeCheckFun(<<"mode">>)},
             <<"posixPermissions">> => {binary, ModeCheckFun(<<"posixPermissions">>)}
         }
@@ -170,6 +172,7 @@ data_spec(#gri{aspect = register_file}, _) -> #{
         <<"uid">> => {integer, {between, 0, ?UID_MAX}},
         <<"gid">> => {integer, {between, 0, ?GID_MAX}},
         <<"autoDetectAttributes">> => {boolean, any},
+        <<"verifyExistence">> => {boolean, any},
         <<"xattrs">> => {json, any},
         <<"json">> => {json, any},
         <<"rdf">> => {binary, any}
@@ -233,7 +236,22 @@ validate(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     StorageId = maps:get(<<"storageId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId),
     middleware_utils:assert_space_supported_with_storage(SpaceId, StorageId),
-    storage_import:assert_imported_storage(StorageId).
+    storage_import:assert_imported_storage(StorageId),
+
+    AutoDetectAttributes = maps:get(<<"autoDetectAttributes">>, Data, true),
+    HelperSpec = storage:get_helper_spec(StorageId),
+    StorageType= helper_spec:get_name(HelperSpec),
+    ConfigurationParams = HelperSpec#helper_spec.configuration,
+    IsHttpWithoutEmulateRangeRead = StorageType =:= ?HTTP_HELPER_NAME
+        andalso maps:get(<<"emulateRangeRead">>, ConfigurationParams, <<"false">>) =:= <<"false">>,
+    case IsHttpWithoutEmulateRangeRead andalso AutoDetectAttributes == false of
+        true ->
+            % in case of the HTTP helper without range read emulation, we don't allow overriding
+            % file attributes because reads from servers without support for range read will fail
+            throw(?ERR_BAD_VALUE_NOT_ALLOWED(?err_ctx(), <<"autoDetectAttributes">>, [true]));
+        false ->
+            ok
+    end.
 
 
 -spec create(middleware:req()) -> middleware:create_result().
@@ -321,7 +339,15 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
         end
     catch
         throw:{error, _} = Error ->
-            throw(Error);
+            case errors:is_known_error(Error) of
+                true ->
+                    throw(Error);
+                false ->
+                    throw(?report_internal_server_error(?autoformat_with_msg(
+                        "Unexpected error during file registration",
+                        [Error]
+                    )))
+            end;
         throw:PosixErrno ->
             throw(?ERR_POSIX(?err_ctx(), PosixErrno))
     end;

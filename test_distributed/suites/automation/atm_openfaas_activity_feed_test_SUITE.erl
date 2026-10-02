@@ -15,7 +15,7 @@
 -author("Lukasz Opiola").
 
 -include("modules/automation/atm_execution.hrl").
--include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 -include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -200,7 +200,7 @@ pod_status_monitor_error_handling_test(_Config) ->
         task_execution_id = <<"b">>,
         result_streamer_id = <<"c">>
     }),
-    ?await(atm_openfaas_pod_status_monitor_mock:has_received_internal_server_error_push_message(Client)).
+    ?await(atm_openfaas_activity_feed_client_mock:has_received_internal_server_error_push_message(Client)).
 
 
 result_streamer_registration_deregistration_test(_Config) ->
@@ -568,7 +568,7 @@ result_streamer_error_handling_test(_Config) ->
     atm_openfaas_result_streamer_mock:send_report(ClientGamma, #atm_openfaas_result_streamer_chunk_report{
         chunk = ?STREAM_CHUNK_ALPHA
     }),
-    ?await(atm_openfaas_result_streamer_mock:has_received_internal_server_error_push_message(ClientGamma)),
+    ?await(atm_openfaas_activity_feed_client_mock:has_received_internal_server_error_push_message(ClientGamma)),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
         ?ERR_BAD_MESSAGE(<<"bad-message">>),
         ?ERR_INTERNAL_SERVER_ERROR(undefined)

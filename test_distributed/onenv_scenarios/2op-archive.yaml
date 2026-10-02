@@ -67,7 +67,6 @@ oneprovider-1:
       accessKey: accessKey
       secretKey: verySecretKey
       insecure: true
-      archiveStorage: true
 
 oneprovider-2:
   external-storages:
@@ -78,7 +77,6 @@ oneprovider-2:
       accessKey: accessKey
       secretKey: verySecretKey
       insecure: true
-      archiveStorage: true
 
 storages:
   - s3

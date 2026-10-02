@@ -74,7 +74,11 @@ call(ProviderId, FileGuid, Request) ->
             {ok, ProviderResult};
         {ok, #provider_rpc_response{result = Error, status = error}} ->
             Error;
+        % Below two errors mean that peer provider does not recognize this request (see connection:handle_client_message/2).
+        % They can not be a result of a request itself, as it is wrapped in `provider_rpc_response` record.
         {ok, #status{code = ?EBADMSG}} ->
+            ?ERROR_NOT_SUPPORTED;
+        {ok, #status{code = ?EINVAL}} ->
             ?ERROR_NOT_SUPPORTED;
         {error, _} = Error ->
             Error

@@ -60,7 +60,7 @@
 
 -opaque ctx() :: #streaming_ctx{}.
 
--export_type([ctx/0]).
+-export_type([ctx/0, send_fun/0]).
 
 
 %%%===================================================================
@@ -125,7 +125,7 @@ set_range_policy(StreamingCtx, NewPolicy) ->
 
 
 -spec stream_bytes_range(ctx(), http_parser:bytes_range(), stream_state()) ->
-    tar_utils:stream() | undefined | no_return().
+    stream_state() | no_return().
 stream_bytes_range(StreamingCtx, Range, SendState) ->
     stream_bytes_range_internal(Range, 
         set_streaming_ctx_defaults(StreamingCtx), SendState, ?MIN_HTTP_SEND_RETRY_DELAY, 0

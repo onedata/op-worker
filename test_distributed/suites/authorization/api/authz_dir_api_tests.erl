@@ -12,10 +12,15 @@
 -module(authz_dir_api_tests).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
+-include("authz/authz_api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("space_setup_utils.hrl").
+-include("env/space_setup_utils.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -38,7 +43,7 @@ test_mkdir(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             required_perms = [?traverse_container, ?add_subcontainer]
         }],
@@ -68,7 +73,7 @@ test_get_children_attrs(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             required_perms = [?traverse_container, ?list_container]
         }],
@@ -94,10 +99,10 @@ test_get_child_attr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
+        files = [#authz_dir_spec{
             name = <<"dir1">>,
             required_perms = [?traverse_container],
-            children = [#ct_authz_file_spec{name = <<"file1">>}]
+            children = [#authz_file_spec{name = <<"file1">>}]
         }],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
@@ -120,17 +125,17 @@ test_mv_dir(SpaceId) ->
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
         files = [
-            #ct_authz_dir_spec{
+            #authz_dir_spec{
                 name = <<"dir1">>,
                 required_perms = [?traverse_container, ?delete_subcontainer],
                 children = [
-                    #ct_authz_dir_spec{
+                    #authz_dir_spec{
                         name = <<"dir11">>,
                         required_perms = [?delete]
                     }
                 ]
             },
-            #ct_authz_dir_spec{
+            #authz_dir_spec{
                 name = <<"dir2">>,
                 required_perms = [?traverse_container, ?add_subcontainer]
             }
@@ -158,11 +163,11 @@ test_rm_dir(SpaceId) ->
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
         files = [
-            #ct_authz_dir_spec{
+            #authz_dir_spec{
                 name = <<"dir1">>,
                 required_perms = [?traverse_container, ?delete_subcontainer],
                 children = [
-                    #ct_authz_dir_spec{
+                    #authz_dir_spec{
                         name = <<"dir2">>,
                         required_perms = [?delete, ?list_container]
                     }

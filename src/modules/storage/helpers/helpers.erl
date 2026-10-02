@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_helper_handle/2, clean_helper_cache/0, get_helper_cache_stats/0]).
+-export([get_helper_handle/2, prune_cache/0, get_helper_cache_stats/0]).
 -export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
     mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
@@ -33,11 +33,6 @@
 %% For tests
 -export([apply_helper_nif/3, receive_loop/2]).
 
--record(file_handle, {
-    handle :: helpers_nif:file_handle(),
-    timeout :: timeout()
-}).
-
 -type file_id() :: binary().
 %% Argument passed to ?MODULE:listobjects/5 function
 %% Listing objects starts from object with id == Marker.
@@ -47,12 +42,11 @@
 -type marker() :: binary().
 -type open_flag() :: rdwr | write | read.
 -type file_type_flag() :: reg | chr | blk | fifo | sock.
--type helper() :: #helper{}.
 -type helper_handle() :: #helper_handle{}.
 -type file_handle() :: #file_handle{}.
 -type stat() :: #statbuf{}.
 
--export_type([file_id/0, open_flag/0, file_type_flag/0, helper/0, helper_handle/0, file_handle/0,
+-export_type([file_id/0, open_flag/0, file_type_flag/0, helper_handle/0, file_handle/0,
     marker/0, stat/0]).
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
@@ -73,13 +67,13 @@
 %% record.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_handle(helper(), helper:user_ctx()) -> helper_handle().
-get_helper_handle(#helper{name = Name} = Helper, UserCtx) ->
-    {ok, Args} = helper:get_args_with_user_ctx(Helper, UserCtx),
-    {ok, Handle} = helpers_nif:get_helper_handle(Name, Args),
+-spec get_helper_handle(helper_spec:t(), helper_spec:credentials()) -> helper_handle().
+get_helper_handle(#helper_spec{name = Name} = HelperSpec, StorageCredentials) ->
+    {ok, HelperParams} = helper_spec:build_helper_params(HelperSpec, StorageCredentials),
+    {ok, Handle} = helpers_nif:get_helper_handle(Name, HelperParams),
     #helper_handle{
         handle = Handle,
-        timeout = helper:get_timeout(Helper)
+        timeout = helper_spec:get_effective_timeout(HelperSpec)
     }.
 
 %%--------------------------------------------------------------------
@@ -88,8 +82,8 @@ get_helper_handle(#helper{name = Name} = Helper, UserCtx) ->
 %% record.
 %% @end
 %%--------------------------------------------------------------------
--spec clean_helper_cache() -> ok | {error, Reason :: term()}.
-clean_helper_cache() ->
+-spec prune_cache() -> ok | {error, Reason :: term()}.
+prune_cache() ->
     helpers_nif:clean_helper_cache().
 
 %%--------------------------------------------------------------------
@@ -109,10 +103,10 @@ get_helper_cache_stats() ->
 %%--------------------------------------------------------------------
 -spec refresh_params(helper_handle() | file_handle(), map()) ->
     ok | {error, Reason :: term()}.
-refresh_params(#helper_handle{} = Handle, Args) ->
-    ?MODULE:apply_helper_nif(Handle, refresh_params, [Args]);
-refresh_params(#file_handle{} = Handle, Args) ->
-    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
+refresh_params(#helper_handle{} = Handle, HelperParams) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_params, [HelperParams]);
+refresh_params(#file_handle{} = Handle, HelperParams) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [HelperParams]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -351,8 +345,8 @@ open(#helper_handle{timeout = Timeout} = Handle, FileId, Flag) ->
 %%--------------------------------------------------------------------
 -spec refresh_helper_params(file_handle(), map()) ->
     ok | {error, Reason :: term()}.
-refresh_helper_params(Handle, Args) ->
-    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
+refresh_helper_params(Handle, HelperParams) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [HelperParams]).
 
 
 %%--------------------------------------------------------------------

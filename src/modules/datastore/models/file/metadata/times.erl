@@ -170,7 +170,8 @@ resolve_conflict(_Ctx, RemoteDoc, LocalDoc) ->
     
     case datastore_rev:is_greater(RemoteRev, LocalRev) of
         true ->
-            case {LocalDeleted, FinalValue} of
+            %% @TODO VFS-12347 - do not ignore creation time after it is reintroduced in dbsync
+            case {LocalDeleted, FinalValue#times{creation_time = 0}} of
                 {true, _} ->
                     case RemoteDeleted of
                         true -> {false, RemoteDoc};

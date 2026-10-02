@@ -18,6 +18,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([do_master_job/4]).
@@ -86,7 +87,9 @@ is_cancelling(ArchiveCtx) ->
 -spec update_children_count(tree_traverse:pool(), tree_traverse:id(), file_meta:uuid(), non_neg_integer()) ->
     ok.
 update_children_count(PoolName, TaskId, DirUuid, ChildrenCount) ->
-    ?extract_ok(traverse_task:update_additional_data(traverse_task:get_ctx(), PoolName, TaskId,
+    LogCtx = archivisation_logger:report_started("updating children count in traverse task",
+        ?autoformat(PoolName, TaskId, DirUuid, ChildrenCount)),
+    Result = ?extract_ok(traverse_task:update_additional_data(traverse_task:get_ctx(), PoolName, TaskId,
         fun(AD) ->
             PrevCountMap = get_count_map(AD),
             UpdatedMap = case PrevCountMap of
@@ -101,12 +104,16 @@ update_children_count(PoolName, TaskId, DirUuid, ChildrenCount) ->
             end,
             {ok, set_count_map(AD, UpdatedMap)}
         end
-    )).
+    )),
+    archivisation_logger:report_finished(LogCtx),
+    Result.
 
 
 -spec take_children_count(tree_traverse:pool(), tree_traverse:id(), file_meta:uuid()) ->
     non_neg_integer().
 take_children_count(PoolName, TaskId, DirUuid) ->
+    LogCtx = archivisation_logger:report_started("taking children count from traverse task",
+        ?autoformat(PoolName, TaskId, DirUuid)),
     {ok, AdditionalData} = traverse_task:get_additional_data(PoolName, TaskId),
     ChildrenCount = maps:get(DirUuid, get_count_map(AdditionalData)),
     ok = ?extract_ok(traverse_task:update_additional_data(traverse_task:get_ctx(), PoolName, TaskId,
@@ -114,6 +121,7 @@ take_children_count(PoolName, TaskId, DirUuid) ->
             {ok, set_count_map(AD, maps:remove(DirUuid, get_count_map(AD)))}
         end
     )),
+    archivisation_logger:report_finished(LogCtx),
     binary_to_integer(ChildrenCount).
 
 %%%===================================================================

@@ -13,7 +13,8 @@
 -module(api_file_metadata_get_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
+-include("api/api_file_metadata_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -130,8 +131,8 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, _Config) ->
     end,
     file_test_utils:await_sync(P2Node, FileGuid),
 
-    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-        api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+    DataSpec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
             FileGuid, ShareId, undefined
         )
     ),
@@ -217,8 +218,8 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
             }
     end,
 
-    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-        api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+    DataSpec = api_data_spec_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
             FileLayer5Guid, ShareId, #data_spec{
                 optional = QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
                 correct_values = #{
@@ -474,7 +475,7 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
                 forbidden_not_in_space = [user1]
             }
     end,
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+    DataSpec = api_data_spec_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
         FileLayer3Guid, ShareId, #data_spec{
             optional = QsParams = [<<"attribute">>, <<"inherited">>, <<"show_internal">>],
             correct_values = #{
@@ -915,7 +916,7 @@ get_metadata_test_base(
 build_get_metadata_prepare_rest_args_fun(MetadataType, ValidId, QsParams) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
+        {Id, Data2} = api_data_spec_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         Path = ?NEW_ID_METADATA_REST_PATH(Id, MetadataType),
 
@@ -929,7 +930,7 @@ build_get_metadata_prepare_rest_args_fun(MetadataType, ValidId, QsParams) ->
 %% @private
 build_get_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        {GriId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         Aspect = case MetadataType of
             <<"json">> -> json_metadata;

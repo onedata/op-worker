@@ -20,7 +20,7 @@
 %%%===================================================================
 
 %% API
--export([space_dir_id/2, flat/4, canonical/3]).
+-export([space_dir_id/2, flat/2, canonical/3]).
 
 %%%===================================================================
 %%% API functions
@@ -47,27 +47,11 @@ space_dir_id(SpaceId, StorageId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns StorageFileId on flat storage.
-%% If storage is flat but it's also an archiveStorage and the
-%% FslogicCanonicalPath points inside .__onedata__archive directory
-%% the canonical path is returned.
 %% @end
 %%--------------------------------------------------------------------
--spec flat(file_meta:path(), file_meta:uuid(), od_space:id(), storage:id() | storage:data()) -> helpers:file_id().
-flat(FslogicCanonicalPath, FileUuid, SpaceId, StorageDataOrId) ->
-    % if storage has `archiveStorage` param equal to true
-    % and the canonical path points inside the hidden .__onedata__archive directory
-    % the path is canonical, despite the fact that storage is flat
-    case storage:is_archive(StorageDataOrId) of
-        true ->
-            case archivisation_tree:is_in_archive(FslogicCanonicalPath) of
-                true ->
-                    canonical(FslogicCanonicalPath, SpaceId, storage:get_id(StorageDataOrId));
-                false ->
-                    raw_flat(FileUuid, SpaceId)
-            end;
-        false ->
-            raw_flat(FileUuid, SpaceId)
-    end.
+-spec flat(file_meta:uuid(), od_space:id()) -> helpers:file_id().
+flat(FileUuid, SpaceId) ->
+    raw_flat(FileUuid, SpaceId).
 
 
 %%--------------------------------------------------------------------

@@ -92,9 +92,18 @@ archive_regular_file(
     {ok, DatasetRootParentPath} = archive:get_dataset_root_parent_path(ArchiveDoc, UserCtx),
     RelativeFilePath = filepath_utils:relative(DatasetRootParentPath, ResolvedFilePath),
     
-    case archive:find_file(BaseArchiveDoc, RelativeFilePath, UserCtx) of
+    LookupLogCtx = archivisation_logger:report_started(
+        "looking up file in base archive", ?autoformat(RelativeFilePath)),
+    BaseArchiveFileLookupResult = archive:find_file(BaseArchiveDoc, RelativeFilePath, UserCtx),
+    archivisation_logger:report_finished(LookupLogCtx),
+    
+    case BaseArchiveFileLookupResult of
         {ok, BaseArchiveFileCtx} ->
-            case incremental_archive:has_file_changed(BaseArchiveFileCtx, FileCtx, UserCtx) of
+            ComparisonLogCtx = archivisation_logger:report_started(
+                "checking whether file changed since base archive", ?autoformat(RelativeFilePath)),
+            HasFileChanged = incremental_archive:has_file_changed(BaseArchiveFileCtx, FileCtx, UserCtx),
+            archivisation_logger:report_finished(ComparisonLogCtx),
+            case HasFileChanged of
                 true ->
                     copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx, CopyOpts);
                 false ->
@@ -133,9 +142,12 @@ archive_symlink(FileCtx, TargetParentCtx, ArchiveDoc, UserCtx) ->
             SymlinkPath
     end,
     {TargetName, _} = file_ctx:get_aliased_name(FileCtx, undefined),
+    LogCtx = archivisation_logger:report_started(
+        "creating symlink in archive", ?autoformat(TargetName, FinalSymlinkValue)),
     {ok, #file_attr{guid = Guid}} = lfm:make_symlink(
         user_ctx:get_session_id(UserCtx), ?FILE_REF(file_ctx:get_logical_guid_const(TargetParentCtx)),
         TargetName, FinalSymlinkValue),
+    archivisation_logger:report_finished(LogCtx),
     {ok, file_ctx:new_by_guid(Guid)}.
 
 %%%===================================================================
@@ -150,15 +162,26 @@ copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx, CopyOp
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentCtx),
 
+    CopyLogCtx = archivisation_logger:report_started(
+        "copying file content to archive", ?autoformat(FileGuid, FileName, TargetParentGuid)),
     {ok, CopyGuid, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, CopyOpts),
+    archivisation_logger:report_finished(CopyLogCtx),
 
     CopyCtx = file_ctx:new_by_guid(CopyGuid),
     ok = archivisation_checksum:file_calculate_and_save(CopyCtx, UserCtx),
 
     {FileSize, CopyCtx2} = file_ctx:get_local_storage_file_size(CopyCtx),
     {SDHandle, CopyCtx3} = storage_driver:new_handle(SessionId, CopyCtx2),
+    FlushLogCtx = archivisation_logger:report_started(
+        "flushing archived file buffer to storage", ?autoformat(CopyGuid, FileSize)),
     ok = storage_driver:flushbuffer(SDHandle, FileSize),
-    {ok, _CopyCtx4} = sd_utils:chmod(UserCtx, CopyCtx3, ?FILE_READONLY_STORAGE_PERMS).
+    archivisation_logger:report_finished(FlushLogCtx),
+
+    ChmodLogCtx = archivisation_logger:report_started(
+        "setting readonly perms on archived file", ?autoformat(CopyGuid)),
+    ChmodResult = sd_utils:chmod(UserCtx, CopyCtx3, ?FILE_READONLY_STORAGE_PERMS),
+    archivisation_logger:report_finished(ChmodLogCtx),
+    {ok, _CopyCtx4} = ChmodResult.
 
 
 -spec make_hardlink_to_file_in_base_archive(file_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), 
@@ -170,7 +193,10 @@ make_hardlink_to_file_in_base_archive(FileCtx, TargetParentCtx, BaseArchiveFileC
     TargetGuid = file_ctx:get_logical_guid_const(BaseArchiveFileCtx),
     TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentCtx),
 
+    LogCtx = archivisation_logger:report_started(
+        "creating hardlink to file in base archive", ?autoformat(Name, TargetGuid, TargetParentGuid)),
     {ok, #file_attr{guid = LinkGuid}} =
         lfm:make_link(SessionId, ?FILE_REF(TargetGuid), ?FILE_REF(TargetParentGuid), Name),
+    archivisation_logger:report_finished(LogCtx),
 
     {ok, file_ctx:new_by_guid(LinkGuid)}.

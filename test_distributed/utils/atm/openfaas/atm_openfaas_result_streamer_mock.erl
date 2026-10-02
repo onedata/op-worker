@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2022-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -27,7 +27,6 @@
 -export([deliver_chunk_report/2]).
 -export([deliver_deregistration_report/1]).
 -export([simulate_conclusion_failure/2]).
--export([has_received_internal_server_error_push_message/1]).
 
 
 %%%===================================================================
@@ -139,9 +138,6 @@ simulate_conclusion_failure(ClientRef, Flag) ->
     node_cache:put({should_simulate_conclusion_failure, ClientRef}, Flag).
 
 
--spec has_received_internal_server_error_push_message(test_websocket_client:client_ref()) -> boolean().
-has_received_internal_server_error_push_message(ClientRef) ->
-    node_cache:get({internal_server_error_received, ClientRef}, false).
 
 %%%===================================================================
 %%% Internal functions
@@ -156,7 +152,7 @@ handle_push_message(_ClientRef, <<"Bad request: ", _/binary>>) ->
     no_reply;
 handle_push_message(ClientRef, <<"Internal server error while processing the request">>) ->
     % this push message is received when an error occurs during report processing
-    node_cache:put({internal_server_error_received, ClientRef}, true),
+    atm_openfaas_activity_feed_client_mock:record_internal_server_error_push_message(ClientRef),
     no_reply;
 handle_push_message(ClientRef, Payload) ->
     try

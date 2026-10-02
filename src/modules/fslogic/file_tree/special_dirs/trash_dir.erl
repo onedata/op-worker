@@ -56,6 +56,13 @@
 ]).
 
 
+%% Debug functions
+-export([
+    list/1, list/2,
+    clear_all/1, clear_all/2, clear_all/3
+]).
+
+
 -define(NAME_UUID_SEPARATOR, "@@").
 -define(NAME_IN_TRASH(FileName, FileUuid), <<FileName/binary, ?NAME_UUID_SEPARATOR, FileUuid/binary>>).
 
@@ -200,6 +207,62 @@ is_logically_detached() -> true.
 -spec exists(file_meta:uuid()) -> boolean().
 exists(Uuid) ->
     file_meta:exists(Uuid).
+
+
+%%%===================================================================
+%%% Debug helpers - functions to be used in debug, should not be used in production code
+%%%===================================================================
+
+-spec list(od_space:id()) -> {[file_ctx:ctx()], file_listing:pagination_token()}.
+list(SpaceId) ->
+    list(SpaceId, file_listing:starting_opts_with_tune_for_cont_listing(false)).
+
+-spec list(od_space:id(), file_listing:options()) -> {[file_ctx:ctx()], file_listing:pagination_token()}.
+list(SpaceId, ListOpts) ->
+    {Children, NextPaginationToken, _} = dir_req:list_children_ctxs(user_ctx:new(?ROOT_SESS_ID),
+        file_ctx:new_by_guid(trash_dir:guid(SpaceId)), ListOpts),
+    {Children, NextPaginationToken}.
+
+
+% NOTE: this is best effort and is not guaranteed to work properly (mainly due to not having original parent uuid)
+-spec clear_all(od_space:id()) -> ok.
+clear_all(SpaceId) ->
+    clear_all(SpaceId, emit_events).
+
+-spec clear_all(od_space:id(), emit_events | no_events) -> ok.
+clear_all(SpaceId, EventsMode) ->
+    clear_all(SpaceId, EventsMode, undefined).
+
+-spec clear_all(od_space:id(), emit_events | no_events, file_listing:pagination_token() | undefined) -> ok.
+clear_all(SpaceId, EventsMode, Token) ->
+    EmitEventsFlag = EventsMode == emit_events,
+    {List, NextToken} = case Token of
+        undefined -> list(SpaceId);
+        _ -> list(SpaceId, #{pagination_token => Token})
+    end,
+    lists:foreach(fun(FileCtx) ->
+        % Cache deleted file meta in file_ctx so traverse can start on deleted file.
+        case file_ctx:get_and_cache_file_doc_including_deleted(FileCtx) of
+            {error, ?ERROR_NOT_FOUND} -> 
+                ok;
+            {error, _} = Error -> 
+                ?error(?autoformat_with_msg("Unexpected error during trash cleanup", Error));
+            {_, FileCtx1} ->
+                schedule_deletion_from_trash(FileCtx1, user_ctx:new(?ROOT_SESS_ID), EmitEventsFlag,
+                    space_dir:uuid(SpaceId), extract_name(FileCtx1))
+        end
+    end, List),
+    case file_listing:is_finished(NextToken) of
+        true -> ok;
+        false -> clear_all(SpaceId, EventsMode, NextToken)
+    end.
+
+
+-spec extract_name(file_ctx:ctx()) -> binary(). 
+extract_name(FileCtx) ->
+    {ExtendedName, _} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+    str_utils:join_binary(
+        lists:droplast(binary:split(ExtendedName, <<?NAME_UUID_SEPARATOR>>, [global])), <<?NAME_UUID_SEPARATOR>>).
 
 
 %%%===================================================================

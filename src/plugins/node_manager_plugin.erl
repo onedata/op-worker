@@ -31,6 +31,7 @@
 -export([before_cluster_upgrade/0]).
 -export([upgrade_cluster/1]).
 -export([before_listeners_start/0, after_listeners_stop/0]).
+-export([cluster_init_safe_mode_disabling_method/0]).
 -export([listeners/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
@@ -52,17 +53,23 @@
 % Human readable version is included to for logging purposes. It's the last version
 % where this cluster generation was the current one.
 -define(CLUSTER_GENERATIONS, [
-    {1, ?LINE_19_02},
-    {2, ?LINE_20_02(<<"0-beta3">>)},
-    {3, ?LINE_20_02(<<"1">>)},
-    {4, ?LINE_21_02(<<"2">>)},
-    {5, ?LINE_21_02(<<"3">>)},
-    {6, ?LINE_21_02(<<"5">>)},
-    {7, ?LINE_21_02(<<"8">>)},
-    {8, ?LINE_21_02(<<"9">>)},  % NOTE: adjust along with releases
-    {9, op_worker:get_release_version()}
+    {1, <<"19.02.5">>},
+    {2, <<"20.02.0-beta3">>},
+    {3, <<"21.02.1">>},
+    {4, <<"21.02.2">>},
+    {5, <<"21.02.3">>},
+    {6, <<"21.02.5">>},
+    {7, <<"21.02.8">>},
+    {8, <<"25.0">>},
+    {9, <<"25.1">>},
+    {10, <<"25.2">>},
+    {11, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
+
+% node_manager may be busy with periodic tasks for longer than the default call timeout
+% (5 s) on an overloaded node - the etses must be initialized anyway.
+-define(INIT_ETSES_TIMEOUT, timer:minutes(1)).
 
 
 %%%===================================================================
@@ -155,6 +162,7 @@ renamed_models() ->
 before_init() ->
     try
         op_worker_sup:start_link(),
+        start_custom_logger_handlers(),
         ok = helpers_nif:init()
     catch
         _:Error:Stacktrace ->
@@ -245,13 +253,13 @@ before_cluster_upgrade() ->
 -spec upgrade_cluster(node_manager:cluster_generation()) ->
     {ok, node_manager:cluster_generation()}.
 upgrade_cluster(3) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
     {ok, 4};
 upgrade_cluster(4) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
@@ -262,7 +270,7 @@ upgrade_cluster(4) ->
     end),
     {ok, 5};
 upgrade_cluster(5) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
@@ -296,7 +304,7 @@ upgrade_cluster(5) ->
     end),
     {ok, 6};
 upgrade_cluster(6) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
@@ -306,17 +314,17 @@ upgrade_cluster(6) ->
     end),
     {ok, 7};
 upgrade_cluster(7) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
-        storage:upgrade_after_swift_version_update_to_v3(),
+        storage_upgrader:upgrade_after_swift_version_update_to_v3(),
 
         % clear cached auto luma entries in db
         {ok, StorageIds} = provider_logic:get_storages(),
         lists:foreach(fun(StorageId) ->
             ?info("Clearing cached auto-feed LUMA entries for storage: ~ts", [StorageId]),
             case storage_config:get_luma_feed(StorageId) of
-                ?AUTO_FEED -> luma:clear_db(StorageId);
+                ?AUTO_FEED -> luma_crud_api:clear_db(StorageId);
                 _ -> ok
             end
         end, StorageIds)
@@ -325,19 +333,47 @@ upgrade_cluster(7) ->
     async_run_with_oz_connection_after_upgrade(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         lists:foreach(fun(SpaceId) ->
-            ?notice("Reinitializing stats for space `~ts` after upgrade", [SpaceId]),
+            ?notice("Reinitializing stats for space '~ts' after upgrade", [SpaceId]),
             dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
         end, SpaceIds)
     end),
     {ok, 8};
 upgrade_cluster(8) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Clearing trash of space '~ts' after upgrade", [SpaceId]),
+            trash_dir:clear_all(SpaceId, no_events)
+        end, SpaceIds)
+    end),
+    {ok, 9};
+upgrade_cluster(9) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Clearing trash of space '~ts' after upgrade", [SpaceId]),
+            trash_dir:clear_all(SpaceId, no_events)
+        end, SpaceIds),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Reinitializing stats for space '~ts' after upgrade", [SpaceId]),
+            dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
+        end, SpaceIds)
+    end),
+    {ok, 10};
+upgrade_cluster(10) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         lists:foreach(fun index:restore_after_couchbase_upgrade_from_4_5_to_6_6/1, SpaceIds)
     end),
-    {ok, 9}.
+    {ok, 11}.
 
 
 %%--------------------------------------------------------------------
@@ -357,6 +393,7 @@ before_listeners_start() ->
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
     file_upload_manager_watcher_service:setup_internal_service(),
+    luma_db_garbage_collector:setup_internal_service(),
     atm_warden_service:setup_internal_service(),
     atm_workflow_execution_api:init_engine(),
     gs_channel_service:trigger_pending_on_connect_to_oz_procedures().
@@ -376,11 +413,13 @@ before_listeners_start() ->
 after_listeners_stop() ->
     atm_supervision_worker:try_to_gracefully_stop_atm_workflow_executions(),
     atm_warden_service:terminate_internal_service(),
+    luma_db_garbage_collector:terminate_internal_service(),
     file_upload_manager_watcher_service:terminate_internal_service(),
     % GS connection should be closed at the end as other services
     % may still require access to synced documents
     % (though a working connection cannot be guaranteed here).
     gs_channel_service:terminate_internal_service().
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -391,6 +430,13 @@ after_listeners_stop() ->
 listeners() -> [
     https_listener
 ].
+
+
+%% @doc overrides {@link node_manager_plugin_default:cluster_init_safe_mode_disabling_method/0}
+-spec cluster_init_safe_mode_disabling_method() -> implicit_before_listeners_start | explicit.
+cluster_init_safe_mode_disabling_method() ->
+    explicit.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -477,7 +523,7 @@ init_etses_for_space_on_all_nodes(SpaceId) ->
     lists:foreach(fun
         (ok) ->
             ok;
-        ({badrpc, _} = Error) ->
+        (Error) ->
             ?error("Could not initialize etses for space: ~tp.~nReason: ~tp", [SpaceId, Error]),
             error({etses_not_ready, Error})
     end, Res).
@@ -499,7 +545,9 @@ init_etses_on_current_node() ->
 %% @private
 -spec init_etses_for_space_on_current_node(od_space:id() | all) -> ok.
 init_etses_for_space_on_current_node(SpaceId) ->
-    gen_server2:call(?NODE_MANAGER_NAME, {apply, ?MODULE, init_etses_for_space_internal, [SpaceId]}).
+    gen_server2:call(
+        ?NODE_MANAGER_NAME, {apply, ?MODULE, init_etses_for_space_internal, [SpaceId]}, ?INIT_ETSES_TIMEOUT
+    ).
 
 
 %% @private
@@ -518,7 +566,7 @@ init_etses_for_space_internal(Space) ->
 -spec await_zone_connection_and_run(Fun :: fun(() -> ok)) -> ok.
 await_zone_connection_and_run(Fun) ->
     ?info("Awaiting Onezone connection..."),
-    await_zone_connection_and_run(gs_channel_service:is_connected(), ?ZONE_CONNECTION_RETRIES, Fun).
+    await_zone_connection_and_run(gs_channel_service:is_connected_and_initialized(), ?ZONE_CONNECTION_RETRIES, Fun).
 
 -spec await_zone_connection_and_run(IsConnectedToZone :: boolean(), Retries :: integer(),
     Fun :: fun(() -> ok)) -> ok.
@@ -528,7 +576,7 @@ await_zone_connection_and_run(false, 0, _) ->
 await_zone_connection_and_run(false, Retries, Fun) ->
     ?warning("The Onezone connection is down. Next retry in 10 seconds..."),
     timer:sleep(timer:seconds(10)),
-    await_zone_connection_and_run(gs_channel_service:is_connected(), Retries - 1, Fun);
+    await_zone_connection_and_run(gs_channel_service:is_connected_and_initialized(), Retries - 1, Fun);
 await_zone_connection_and_run(true, _, Fun) ->
     Fun().
 
@@ -538,8 +586,26 @@ await_zone_connection_and_run(true, _, Fun) ->
 async_run_with_oz_connection_after_upgrade(Fun) ->
     spawn(fun() ->
         utils:wait_until(fun() -> not safe_mode:should_enforce() end, timer:seconds(10), infinity),
-        utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
+        utils:wait_until(fun gs_channel_service:is_connected_and_initialized/0, timer:seconds(10), infinity),
         ?catch_exceptions(Fun())
     end),
     ok.
 
+
+%% @private
+-spec start_custom_logger_handlers() -> ok.
+start_custom_logger_handlers() ->
+    LogDir = ctool:get_env(log_dir),
+    Config = ctool:get_env(logger_base_config),
+
+    ok = logger:add_handler(file_access_audit_log, logger_std_h, #{
+        level => debug,
+        config => Config#{file => filename:join(LogDir, op_worker:get_env(file_access_audit_log_file_name))},
+        filter_default => stop,
+        filters => [
+            {opw_file_access_domain, {fun logger_filters:domain/2, {log, equal, [onedata, opw, file_access]}}}
+        ],
+        formatter => {onedata_logger_formatter, #{
+            template =>  op_worker:get_env(file_access_audit_log_formatter_template)
+        }}
+    }).

@@ -92,6 +92,7 @@ find_direct_parent_and_sync_file(StorageFileCtx, Info) ->
 sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     SpaceDirGuid = space_dir:guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceDirGuid),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
@@ -109,7 +110,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                 false -> {false, undefined, FileName}
             end,
 
-            case map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, FileUuid) of
+            case map_to_existing_file_uuid(ParentUuid, StorageFileId, FileBaseName, FileUuid) of
                 {error, Reason} ->
                     % Link from Parent to FileBaseName is missing.
                     % We must check deletion marker to ensure that file may be synced.
@@ -175,9 +176,9 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     end.
 
 
--spec map_to_existing_file_uuid(file_meta:uuid(), file_meta:name(), file_meta:name(), file_meta:uuid() | undefined) ->
+-spec map_to_existing_file_uuid(file_meta:uuid(), helpers:file_id(), file_meta:name(), file_meta:uuid() | undefined) ->
     {ok, file_meta:uuid()} | {error, not_found | {conflicting_uuids, [file_meta:uuid()]}}.
-map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
+map_to_existing_file_uuid(ParentUuid, StorageFileId, FileBaseName, undefined) ->
     case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
         {ok, UuidsWithTreeIds} ->
             Filtered = lists:filter(fun({FileUuid, _}) ->
@@ -187,16 +188,16 @@ map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
                 case file_location:get_local(FileUuid) of
                     {ok, #document{value = #file_location{
                         storage_file_created = true,
-                        file_id = FileId
+                        file_id = LocalFileId
                     }}} ->
-                        binary:longest_common_suffix([FileId, FileName]) =:= size(FileName);
+                        LocalFileId =:= StorageFileId;
                     (_) ->
                         case dir_location:get(FileUuid) of
                             {ok, #document{value = #dir_location{
                                 storage_file_created = true,
-                                storage_file_id = FileId
+                                storage_file_id = LocalFileId
                             }}} ->
-                                binary:longest_common_suffix([FileId, FileName]) =:= size(FileName);
+                                LocalFileId =:= StorageFileId;
                             (_) ->
                                 false
                         end
@@ -571,7 +572,7 @@ delete_stalled_file_and_create_missing_parent(StorageFileCtx, FileCtx, Info) ->
 %%-------------------------------------------------------------------
 -spec maybe_import_file(storage_file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
-maybe_import_file(StorageFileCtx, Info) ->
+maybe_import_file(StorageFileCtx,  #{parent_ctx := ParentCtx} = Info) ->
     SDHandle = storage_file_ctx:get_handle_const(StorageFileCtx),
     % We must ensure that there was no race with deleting file.
     % We check whether file that we found on storage and that we want to import
@@ -580,8 +581,19 @@ maybe_import_file(StorageFileCtx, Info) ->
     case VerifyExistence of
         true ->
             case storage_driver:exists(SDHandle) of
-                true -> import_file(StorageFileCtx, Info);
-                false -> {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+                true ->
+                    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+                    ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
+                    % Check for possible race with deletion of opened file - in such a case file is not deleted 
+                    % on storage, but we do not want to reimport it.
+                    case deletion_marker:check(ParentUuid, FileName) of
+                        {error, not_found} ->
+                            import_file(StorageFileCtx, Info);
+                        {ok, _} ->
+                            {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+                    end;
+                false -> 
+                    {?FILE_UNMODIFIED, undefined, StorageFileCtx}
             end;
         false ->
             import_file(StorageFileCtx, Info)
@@ -660,13 +672,18 @@ try_to_delete_file(ParentCtx, ChildName) ->
 import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {OwnerId, StorageFileCtx2} = get_owner_id(StorageFileCtx),
+    % use id of user in case of manual file registration
+    FinalOwnerId = case {OwnerId, maps:get(manual, Info, false)} of
+        {?SPACE_OWNER_ID(_) = SpacceOwner, true} -> maps:get(user_id, Info, SpacceOwner);
+        _ -> OwnerId
+    end,
     ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
-    case create_location(FileUuid, StorageFileCtx2, OwnerId) of
+    case create_location(FileUuid, StorageFileCtx2, FinalOwnerId) of
         {ok, StorageFileCtx3} ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
             {#statbuf{st_mode = Mode}, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
-            {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
+            {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, FinalOwnerId,
                 ParentUuid, SpaceId, Info),
             % Size could not be updated in statistic as file_meta was created after file_location.
             % As a result file_meta_posthooks have been created during file_location creation - execute them now.
@@ -728,8 +745,8 @@ create_location(FileUuid, StorageFileCtx, OwnerId) ->
 -spec create_dir_location(file_meta:uuid(), storage_file_ctx:ctx()) -> {ok, storage_file_ctx:ctx()}.
 create_dir_location(FileUuid, StorageFileCtx) ->
     {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
-    Helper = storage:get_helper(Storage),
-    {SyncedGid, StorageFileCtx4} = case helper:is_posix_compatible(Helper) of
+    HelperSpec = storage:get_helper_spec(Storage),
+    {SyncedGid, StorageFileCtx4} = case helper_spec:is_posix_compatible(HelperSpec) of
         true ->
             {#statbuf{st_gid = StGid}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
             {StGid, StorageFileCtx3};
@@ -747,7 +764,7 @@ create_file_location(FileUuid, OwnerId, StorageFileCtx) ->
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
-    IsPosix = helper:is_posix_compatible(storage:get_helper(Storage)),
+    IsPosix = helper_spec:is_posix_compatible(storage:get_helper_spec(Storage)),
     {#statbuf{
         st_gid = StGid,
         st_size = StSize
@@ -934,8 +951,8 @@ maybe_import_nfs4_acl(_FileCtx, StorageFileCtx, _Info) ->
 import_nfs4_acl(FileCtx, StorageFileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    Helper = storage:get_helper(StorageId),
-    case not file_ctx:is_space_dir_const(FileCtx) andalso helper:is_nfs4_acl_supported(Helper) of
+    HelperSpec = storage:get_helper_spec(StorageId),
+    case not file_ctx:is_space_dir_const(FileCtx) andalso helper_spec:is_nfs4_acl_supported(HelperSpec) of
         false ->
             ok;
         true->
@@ -1260,8 +1277,8 @@ maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := false}, 
 maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}, ShouldUpdate) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    Helper = storage:get_helper(StorageId),
-    case not file_ctx:is_space_dir_const(FileCtx) andalso helper:is_nfs4_acl_supported(Helper) of
+    HelperSpec = storage:get_helper_spec(StorageId),
+    case not file_ctx:is_space_dir_const(FileCtx) andalso helper_spec:is_nfs4_acl_supported(HelperSpec) of
         false ->
             {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};
         true ->

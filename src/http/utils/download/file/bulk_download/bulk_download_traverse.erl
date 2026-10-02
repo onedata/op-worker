@@ -39,14 +39,11 @@
 %%% API
 %%%===================================================================
 
--spec start(bulk_download:id(), user_ctx:ctx(), fslogic_worker:file_guid(), 
-    tree_traverse:symlink_resolution_policy(), file_meta:path()) -> 
-    {ok, bulk_download:id()}.
-start(BulkDownloadId, UserCtx, Guid, SymlinksResolutionPolicy, InitialPath) ->
-    %% @TODO VFS-6212 start traverse with cleanup option
-    traverse_task:delete_ended(?POOL_NAME, BulkDownloadId),
+-spec start(bulk_download:id(), user_ctx:ctx(), fslogic_worker:file_guid(),
+    tree_traverse:symlink_resolution_policy(), file_meta:path()) -> {ok, bulk_download:id()}.
+start(TraverseId, UserCtx, Guid, SymlinksResolutionPolicy, InitialPath) ->
     Options = #{
-        task_id => BulkDownloadId,
+        task_id => TraverseId,
         batch_size => 1,
         listing_errors_handling_policy => ignore_known,
         children_master_jobs_mode => sync,
@@ -89,22 +86,22 @@ get_job(DocOrID) ->
 
 
 -spec task_finished(bulk_download:id(), traverse:pool()) -> ok.
-task_finished(BulkDownloadId, _PoolName) ->
-    Pid = get_main_pid(BulkDownloadId),
+task_finished(TraverseId, _PoolName) ->
+    Pid = get_main_pid(TraverseId),
     bulk_download_main_process:report_traverse_done(Pid),
     ok.
 
 
 -spec task_canceled(bulk_download:id(), traverse:pool()) -> ok.
-task_canceled(BulkDownloadId, PoolName) ->
-    task_finished(BulkDownloadId, PoolName).
+task_canceled(TraverseId, PoolName) ->
+    task_finished(TraverseId, PoolName).
 
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
     tree_traverse:master_job(), traverse:pool(), bulk_download:id(),
     traverse:job_status()) -> {ok, traverse:job_id()}  | {error, term()}.
-update_job_progress(Id, Job, Pool, BulkDownloadId, Status) ->
-    tree_traverse:update_job_progress(Id, Job, Pool, BulkDownloadId, Status, ?MODULE).
+update_job_progress(Id, Job, Pool, TraverseId, Status) ->
+    tree_traverse:update_job_progress(Id, Job, Pool, TraverseId, Status, ?MODULE).
 
 
 -spec do_master_job(tree_traverse:master_job() | tree_traverse:slave_job(), 
@@ -114,19 +111,19 @@ do_master_job(Job, MasterJobArgs) ->
 
 
 -spec do_slave_job(tree_traverse:slave_job(), bulk_download:id()) -> ok.
-do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_id = UserId, relative_path = RelativePath}, BulkDownloadId) ->
-    {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, BulkDownloadId),
-    #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttrs} = 
+do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_id = UserId, relative_path = RelativePath}, TraverseId) ->
+    {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TraverseId),
+    #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttrs} =
         attr_req:get_file_attr(UserCtx, FileCtx, ?BULK_DOWNLOAD_ATTRS),
-    Pid = get_main_pid(BulkDownloadId),
+    Pid = get_main_pid(TraverseId),
     bulk_download_main_process:report_next_file(Pid, FileAttrs, RelativePath),
     case slave_job_loop(Pid) of
-        ok -> 
+        ok ->
             ok;
-        error -> 
+        error ->
             ?debug("Canceling dir streaming traverse ~tp due to unexpected exit "
-                   "of download process ~tp.", [BulkDownloadId, Pid]),
-            ok = traverse:cancel(?POOL_NAME, BulkDownloadId)
+                   "of download process ~tp.", [TraverseId, Pid]),
+            ok = traverse:cancel(?POOL_NAME, TraverseId)
     end.
 
 
@@ -149,7 +146,7 @@ slave_job_loop(Pid) ->
 
 %% @private
 -spec get_main_pid(bulk_download:id()) -> pid().
-get_main_pid(BulkDownloadId) ->
+get_main_pid(TraverseId) ->
     {ok, #{ <<"main_pid">> := EncodedPid }} =
-        traverse_task:get_additional_data(?POOL_NAME, BulkDownloadId),
+        traverse_task:get_additional_data(?POOL_NAME, TraverseId),
     utils:decode_pid(EncodedPid).

@@ -1,13 +1,20 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Util functions for performing operations on storage using storage_driver
-%%% in tests.
+%%% in tests. Entries are addressed by a #sd_handle{} (built with new_handle/3,4),
+%%% which makes this the only test layer able to list a storage directory and
+%%% remove a storage subtree uniformly across storage types (see recursive_rm/2,3).
+%%%
+%%% NOTE: the operations are executed on the given op_worker node via rpc, with
+%%% the exception of the ones that merely compute on a handle already fetched
+%%% (new_child_handle/2, and the private type/2 and size/2) - those run on the
+%%% test node.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sd_test_utils).
@@ -19,19 +26,16 @@
 
 
 %% API
--export([get_storage_record/2, new_handle/3, new_handle/4, new_child_handle/2,
-    setup_test_files_structure/3, setup_test_files_structure/4, recursive_rm/3, get_storage_mountpoint_handle/3]).
--export([mkdir/3, create_file/3, create_file/4, write_file/4, read_file/4, unlink/3, chown/4,
-    chmod/3, stat/2, ls/4, rmdir/2, truncate/4, recursive_rm/2, open/3, listobjects/5, storage_ls/5]).
+-export([new_handle/3, new_handle/4, get_storage_mountpoint_handle/3,
+    setup_test_files_structure/3, setup_test_files_structure/4]).
+-export([mkdir/3, create_file/3, create_file/4, write_file/4, read_file/4, unlink/3,
+    stat/2, ls/4, recursive_rm/2, recursive_rm/3]).
 
 -define(DEFAULT_TIMEOUT, timer:minutes(1)).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-get_storage_record(Worker, StorageId) ->
-    rpc:call(Worker, storage, get, [StorageId]).
 
 get_storage_mountpoint_handle(Worker, SpaceId, Storage) ->
     new_handle(Worker, SpaceId, <<"">>, Storage).
@@ -46,9 +50,6 @@ new_handle(Worker, SpaceId, StorageFileId, Storage) ->
     StorageId = storage:get_id(Storage),
     new_handle(Worker, SpaceId, StorageFileId, StorageId).
 
-new_child_handle(ParentHandle, ChildName) ->
-    storage_driver:get_child_handle(ParentHandle, ChildName).
-
 mkdir(Worker, SDHandle, Mode) ->
     rpc:call(Worker, storage_driver, mkdir, [SDHandle, Mode, true]).
 
@@ -57,9 +58,6 @@ create_file(Worker, SDHandle, Mode) ->
 
 create_file(Worker, SDHandle, Mode, FileTypeFlag) ->
     ok = rpc:call(Worker, storage_driver, create, [SDHandle, Mode, FileTypeFlag]).
-
-open(Worker, SDHandle, Flag) ->
-    rpc:call(Worker, storage_driver, open_insecure, [SDHandle, Flag]).
 
 write_file(Node, SDHandle, Offset, Data) ->
     % this function opens and writes to file to ensure that file_handle is not deleted
@@ -87,7 +85,7 @@ write_file(Node, SDHandle, Offset, Data) ->
     end.
 
 read_file(Node, SDHandle, Offset, Size) ->
-    % this function opens and writes to file to ensure that file_handle is not deleted
+    % this function opens and reads the file to ensure that file_handle is not deleted
     % after RPC process dies
     Self = self(),
     rpc:call(Node, erlang, spawn, [fun() ->
@@ -114,68 +112,11 @@ read_file(Node, SDHandle, Offset, Size) ->
 unlink(Worker, SDHandle, Size) ->
     ok = rpc:call(Worker, storage_driver, unlink, [SDHandle, Size]).
 
-chown(Worker, SDHandle, Uid, Gid) ->
-    ok = rpc:call(Worker, storage_driver, chown, [SDHandle, Uid, Gid]).
-
-chmod(Worker, SDHandle, Mode) ->
-    ok = rpc:call(Worker, storage_driver, chmod, [SDHandle, Mode]).
-
 stat(Worker, SDHandle) ->
     rpc:call(Worker, storage_driver, stat, [SDHandle]).
 
 ls(Worker, SDHandle, Offset, Count) ->
     rpc:call(Worker, storage_driver, readdir, [SDHandle, Offset, Count]).
-
-listobjects(Worker, SDHandle, Marker, Offset, Count) ->
-    rpc:call(Worker, storage_driver, listobjects, [SDHandle, Marker, Offset, Count]).
-
-listobjects_continuous(Worker, SDHandle, Marker, Offset, Count) ->
-    case listobjects(Worker, SDHandle, Marker, Offset, Count) of
-        {error, _} = Error ->
-            Error;
-        {ok, {?END_OF_LISTING_MARKER, ChildrenWithAttrs}} ->
-            {ok, ChildrenWithAttrs};
-        {ok, {_, ChildrenWithAttrs}} when length(ChildrenWithAttrs) == Count ->
-            {ok, ChildrenWithAttrs};
-        {ok, {NextMarker, ChildrenWithAttrs}} ->
-            case listobjects_continuous(
-                Worker,
-                SDHandle,
-                NextMarker,
-                Offset + length(ChildrenWithAttrs),
-                Count - length(ChildrenWithAttrs)
-            ) of
-                {error, _} = Error2 -> Error2;
-                {ok, Tail} -> {ok, ChildrenWithAttrs ++ Tail}
-            end
-    end.
-
-storage_ls(Worker, SDHandle, Offset, Count, ?POSIX_HELPER_NAME) ->
-    ls(Worker, SDHandle, Offset, Count);
-storage_ls(Worker, SDHandle, Offset, Count, ?S3_HELPER_NAME) ->
-    listobjects_continuous(Worker, SDHandle, ?INITIAL_LISTING_MARKER, Offset, Count).
-
-rmdir(Worker, SDHandle) ->
-    rpc:call(Worker, storage_driver, rmdir, [SDHandle]).
-
-truncate(Worker, SDHandle, NewSize, CurrentSize) ->
-    ok = rpc:call(Worker, storage_driver, truncate, [SDHandle, NewSize, CurrentSize]).
-
-type(Worker, SDHandle) ->
-    case stat(Worker, SDHandle) of
-        {ok, #statbuf{st_mode = Mode}} ->
-            storage_driver:infer_type(Mode);
-        Error ->
-            Error
-    end.
-
-size(Worker, SDHandle) ->
-    case stat(Worker, SDHandle) of
-        {ok, #statbuf{st_size = Size}} ->
-            Size;
-        Error ->
-            Error
-    end.
 
 recursive_rm(Worker, SDHandle) ->
     recursive_rm(Worker, SDHandle, false).
@@ -191,8 +132,8 @@ recursive_rm(Worker, SDHandle = #sd_handle{storage_id = StorageId}, DoNotDeleteR
             end;
         {ok, ?DIRECTORY_TYPE} ->
             {ok, Storage} = rpc:call(Worker, storage, get, [StorageId]),
-            Helper = storage:get_helper(Storage),
-            HelperName = helper:get_name(Helper),
+            HelperSpec = storage:get_helper_spec(Storage),
+            HelperName = helper_spec:get_name(HelperSpec),
             case HelperName of
                 ?POSIX_HELPER_NAME ->
                     recursive_rm_posix(Worker, SDHandle, 0, 1000, DoNotDeleteRoot);
@@ -203,6 +144,48 @@ recursive_rm(Worker, SDHandle = #sd_handle{storage_id = StorageId}, DoNotDeleteR
             ok
     end.
 
+setup_test_files_structure(W, RootHandle, Structure) ->
+    setup_test_files_structure(W, RootHandle, Structure, [], [], false).
+
+setup_test_files_structure(W, RootHandle, Structure, OnlyGenerateNames) ->
+    setup_test_files_structure(W, RootHandle, Structure, [], [], OnlyGenerateNames).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+listobjects(Worker, SDHandle, Marker, Offset, Count) ->
+    rpc:call(Worker, storage_driver, listobjects, [SDHandle, Marker, Offset, Count]).
+
+%% @private
+rmdir(Worker, SDHandle) ->
+    rpc:call(Worker, storage_driver, rmdir, [SDHandle]).
+
+%% @private
+new_child_handle(ParentHandle, ChildName) ->
+    storage_driver:get_child_handle(ParentHandle, ChildName).
+
+%% @private
+type(Worker, SDHandle) ->
+    case stat(Worker, SDHandle) of
+        {ok, #statbuf{st_mode = Mode}} ->
+            storage_driver:infer_type(Mode);
+        Error ->
+            Error
+    end.
+
+%% @private
+size(Worker, SDHandle) ->
+    case stat(Worker, SDHandle) of
+        {ok, #statbuf{st_size = Size}} ->
+            Size;
+        Error ->
+            Error
+    end.
+
+%% @private
 recursive_rm_posix(Worker, SDHandle, Offset, Count, DoNotDeleteRoot) ->
     case ls(Worker, SDHandle, Offset, Count) of
         {ok, Children} when length(Children) < Count ->
@@ -224,6 +207,7 @@ recursive_rm_posix(Worker, SDHandle, Offset, Count, DoNotDeleteRoot) ->
             ok
     end.
 
+%% @private
 recursive_rm_s3(Worker, SDHandle, Marker, Offset, Count) ->
     {ok, {NextMarker, ChildrenAndStats}} = listobjects(Worker, SDHandle, Marker, Offset, Count),
     Children = [ChildId || {ChildId, _} <- ChildrenAndStats],
@@ -234,19 +218,14 @@ recursive_rm_s3(Worker, SDHandle, Marker, Offset, Count) ->
     end.
 
 
+%% @private
 rm_children(Worker, ParentHandle, ChildrenNames) ->
     lists:foreach(fun(ChildName) ->
         ChildHandle = new_child_handle(ParentHandle, ChildName),
         recursive_rm(Worker, ChildHandle)
     end, ChildrenNames).
 
-
-setup_test_files_structure(W, RootHandle, Structure) ->
-    setup_test_files_structure(W, RootHandle, Structure, [], [], false).
-
-setup_test_files_structure(W, RootHandle, Structure, OnlyGenerateNames) ->
-    setup_test_files_structure(W, RootHandle, Structure, [], [], OnlyGenerateNames).
-
+%% @private
 setup_test_files_structure(_W, _RootHandle, [], _CreatedDirs, _CreatedFiles, _OnlyGenerateNames) ->
     {[], []};
 setup_test_files_structure(W, RootHandle, [{Dirs, Files}], CreatedDirs, CreatedFiles, OnlyGenerateNames) ->
@@ -256,7 +235,7 @@ setup_test_files_structure(W, RootHandle, [{Dirs, Files}], CreatedDirs, CreatedF
             true ->
                 ok;
             false ->
-                ok = sd_test_utils:mkdir(W, SubDirHandle, ?DEFAULT_DIR_PERMS)
+                ok = mkdir(W, SubDirHandle, ?DEFAULT_DIR_PERMS)
         end,
         NewDirId = storage_driver:get_storage_file_id(SubDirHandle),
         [NewDirId | CreatedDirsIn]
@@ -269,7 +248,7 @@ setup_test_files_structure(W, RootHandle, [{Dirs, Files} | Rest], CreatedDirs, C
             true ->
                 ok;
             false ->
-                ok = sd_test_utils:mkdir(W, SubDirHandle, ?DEFAULT_DIR_PERMS)
+                ok = mkdir(W, SubDirHandle, ?DEFAULT_DIR_PERMS)
         end,
         {CreatedDirsIn2, CreatedFilesIn2} =
             setup_test_files_structure(W, SubDirHandle, Rest, CreatedDirsIn, CreatedFilesIn, OnlyGenerateNames),
@@ -278,6 +257,7 @@ setup_test_files_structure(W, RootHandle, [{Dirs, Files} | Rest], CreatedDirs, C
     end, {CreatedDirs, CreatedFiles}, lists:seq(1, Dirs)),
     {CreatedDirs2, create_files(W, RootHandle, Files, CreatedFiles2, OnlyGenerateNames)}.
 
+%% @private
 create_files(W, RootHandle, FilesNum, CreatedFiles, OnlyGenerateNames) ->
     lists:foldl(fun(I, CreatedFilesIn) ->
         SubDirHandle = new_child_handle(RootHandle, <<"file", (integer_to_binary(I))/binary>>),
@@ -285,7 +265,7 @@ create_files(W, RootHandle, FilesNum, CreatedFiles, OnlyGenerateNames) ->
             true ->
                 ok;
             false ->
-                ok = sd_test_utils:create_file(W, SubDirHandle, ?DEFAULT_FILE_PERMS)
+                ok = create_file(W, SubDirHandle, ?DEFAULT_FILE_PERMS)
         end,
         NewFileId = storage_driver:get_storage_file_id(SubDirHandle),
         [NewFileId | CreatedFilesIn]

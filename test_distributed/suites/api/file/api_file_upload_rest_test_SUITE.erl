@@ -13,11 +13,13 @@
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
--include("api_file_test_utils.hrl").
+-include("api/api_test_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("onenv_test_utils.hrl").
+-include("file/file_tree_test.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([
     all/0,
@@ -65,7 +67,7 @@ create_file_test(_Config) ->
             guid = FileGuid,
             name = UsedFileName
         }]
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
         mode = 8#704,
         shares = [#share_spec{}],
         % create a child file with full perms instead of default ones so that call to
@@ -101,7 +103,7 @@ create_file_test(_Config) ->
             validate_result_fun = build_create_file_validate_call_fun(MemRef, SpaceOwnerId),
             verify_fun = build_create_file_verify_fun(MemRef, DirGuid, Providers),
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     required = [<<"name">>],
                     optional = [<<"type">>, <<"mode">>, <<"offset">>, body, <<"update_existing">>, <<"posixPermissions">>],
@@ -168,7 +170,7 @@ create_file_test(_Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_create_file_prepare_args_fun(MemRef, ParentDirObjectId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {ParentId, Data1} = api_test_utils:maybe_substitute_bad_id(ParentDirObjectId, Data0),
+        {ParentId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(ParentDirObjectId, Data0),
 
         Data2 = case maps:get(<<"name">>, Data1, undefined) of
             name_placeholder ->
@@ -202,22 +204,31 @@ build_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
         ShouldResultInWrite = Offset > 0 orelse byte_size(DataSent) > 0,
 
         Type = maps:get(<<"type">>, Data, <<"REG">>),
-        Mode = maps:get(<<"mode">>, Data, undefined),
+        Mode = get_requested_mode(Data),
 
-        case {Type, Mode, ShouldResultInWrite, UserId == SpaceOwnerId} of
-            {<<"REG">>, <<"0544">>, true, false} ->
-                % It is possible to create file but setting perms forbidding write access
-                % and uploading some data at the same time should result in error for any
-                % user not being space owner
+        % It is possible to create file but setting perms forbidding write access
+        % and uploading some data at the same time should result in error for any
+        % user not being space owner
+        IsContentWriteForbidden = Type == <<"REG">> andalso Mode == <<"0544">> andalso ShouldResultInWrite,
+
+        % Missing parent dirs are created with the mode parameter (posixPermissions is
+        % not applied to them), so when it forbids write access nothing can be created
+        % inside the first of them by any user not being space owner
+        % TODO VFS-13869 remove once parent dirs are created with default permissions
+        IsParentDirWriteForbidden = maps:get(<<"mode">>, Data, undefined) == <<"0544">> andalso
+            maps:get(<<"path">>, Data, undefined) == nonexistent_path_with_create_parents_flag_placeholder,
+
+        case (IsContentWriteForbidden orelse IsParentDirWriteForbidden) andalso UserId /= SpaceOwnerId of
+            true ->
                 ?assertEqual(?HTTP_400_BAD_REQUEST, RespCode),
                 ?assertEqual(?REST_ERROR(?ERR_POSIX(?EACCES)), RespBody),
                 api_test_memory:set(MemRef, success, false);
-            _ ->
+            false ->
                 ?assertEqual(?HTTP_201_CREATED, RespCode),
 
                 #{<<"fileId">> := FileObjectId} = ?assertMatch(#{<<"fileId">> := <<_/binary>>}, RespBody),
 
-                ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"data">>, FileObjectId]),
+                ExpLocation = rest_test_utils:build_rest_url(TestNode, [<<"data">>, FileObjectId]),
                 ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, RespHeaders)),
 
                 {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
@@ -251,14 +262,9 @@ build_create_file_verify_fun(MemRef, DirGuid, Providers) ->
                         <<"REG">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
                         <<"DIR">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
                     end,
-                    ExpMode = case maps:get(<<"posixPermissions">>, Data, undefined) of
-                        undefined -> 
-                            case maps:get(<<"mode">>, Data, undefined) of
-                                undefined -> DefaultMode;
-                                ModeBin -> binary_to_integer(ModeBin, 8)
-                            end;
-                        PosixPermissionsBin -> 
-                            binary_to_integer(PosixPermissionsBin, 8)
+                    ExpMode = case get_requested_mode(Data) of
+                        undefined -> DefaultMode;
+                        ModeBin -> binary_to_integer(ModeBin, 8)
                     end,
 
                     lists:foreach(fun(Provider) ->
@@ -292,6 +298,7 @@ create_file_at_path_test(_Config) ->
         oct_background:get_provider_nodes(paris)
     ]),
     SpaceOwnerId = oct_background:get_user_id(user2),
+    User3Id = oct_background:get_user_id(user3),
 
     #object{
         guid = DirGuid,
@@ -306,7 +313,7 @@ create_file_at_path_test(_Config) ->
                 name = ChildDirName,
                 type = ?DIRECTORY_TYPE
             }]
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
+    } = file_tree_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
         mode = 8#704,
         shares = [#share_spec{}],
         % create a child file with full perms instead of default ones so that call to
@@ -348,7 +355,7 @@ create_file_at_path_test(_Config) ->
             validate_result_fun = build_create_file_validate_call_fun(MemRef, SpaceOwnerId),
             verify_fun = build_rest_create_file_at_path_verify_fun(MemRef, Providers),
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     required = [<<"path">>],
                     optional = [<<"type">>, <<"mode">>, <<"offset">>, body, <<"update_existing">>, <<"posixPermissions">>],
@@ -373,7 +380,26 @@ create_file_at_path_test(_Config) ->
                     },
 
                     bad_values = [
-                        {bad_id, ChildFileObjectId, ?ERR_POSIX(?ENOTDIR)},
+                        {bad_id, ChildFileObjectId, {rest, {error_fun, fun(#api_test_ctx{
+                            client = ?USER(UserId),
+                            data = Data
+                        }) ->
+                            IsFileItselfTheParent = lists:member(maps:get(<<"path">>, Data, undefined), [
+                                filename_only_without_create_parents_flag_placeholder,
+                                filename_only_with_create_parents_flag_placeholder
+                            ]),
+                            case {UserId, maps:get(<<"type">>, Data, <<"REG">>), IsFileItselfTheParent} of
+                                {User3Id, <<"DIR">>, true} ->
+                                    % Same as in create_file_test - permissions are checked
+                                    % before file type and nobody has ?add_subcontainer perm
+                                    % on a regular file
+                                    ?ERR_POSIX(?EACCES);
+                                _ ->
+                                    % Resolving any path token under a regular file fails
+                                    % on file type check, without checking permissions
+                                    ?ERR_POSIX(?ENOTDIR)
+                            end
+                        end}}},
                         {<<"path">>, filepath_utils:join([ChildFileName, <<"dir1/file.txt">>]), ?ERR_POSIX(?ENOTDIR)},
                         {<<"path">>, <<"/a/b/\0null\0/">>, ?ERR_BAD_VALUE_FILE_PATH},
                         {<<"path">>, nonexistent_path_without_create_parents_flag_placeholder, ?ERR_POSIX(?ENOENT)},
@@ -410,7 +436,7 @@ create_file_at_path_test(_Config) ->
 build_rest_create_file_at_path_prepare_args_fun(MemRef, RelRootDirGuid) ->
     fun(#api_test_ctx{data = Data0, node = TestNode}) ->
         {ok, RelRootDirObjectId} = file_id:guid_to_objectid(RelRootDirGuid),
-        {ParentId, Data1} = api_test_utils:maybe_substitute_bad_id(RelRootDirObjectId, Data0),
+        {ParentId, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(RelRootDirObjectId, Data0),
         ChildDirName = api_test_memory:get(MemRef, child_dir_name),
         Name = str_utils:rand_hex(10),
         api_test_memory:set(MemRef, name, Name),
@@ -477,14 +503,9 @@ build_rest_create_file_at_path_verify_fun(MemRef, Providers) ->
                         <<"REG">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
                         <<"DIR">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
                     end,
-                    ExpMode = case maps:get(<<"posixPermissions">>, Data, undefined) of
-                        undefined ->
-                            case maps:get(<<"mode">>, Data, undefined) of
-                                undefined -> DefaultMode;
-                                ModeBin -> binary_to_integer(ModeBin, 8)
-                            end;
-                        PosixPermissionsBin ->
-                            binary_to_integer(PosixPermissionsBin, 8)
+                    ExpMode = case get_requested_mode(Data) of
+                        undefined -> DefaultMode;
+                        ModeBin -> binary_to_integer(ModeBin, 8)
                     end,
 
                     lists:foreach(fun(Provider) ->
@@ -510,6 +531,13 @@ build_rest_create_file_at_path_verify_fun(MemRef, Providers) ->
                     ?assertMatch({error, _}, lfm_proxy:stat(TestNode, ?ROOT_SESS_ID, {path, FilePath}))
             end
     end.
+
+
+%% @private
+-spec get_requested_mode(map()) -> undefined | binary().
+get_requested_mode(Data) ->
+    % Same precedence as in file_content_rest_handler - posixPermissions wins over mode
+    maps:get(<<"posixPermissions">>, Data, maps:get(<<"mode">>, Data, undefined)).
 
 
 %% @private
@@ -543,7 +571,7 @@ update_file_content_test(_Config) ->
         oct_background:get_provider_nodes(paris)
     ]),
 
-    #object{guid = DirGuid, shares = [DirShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid, shares = [DirShareId]} = file_tree_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{
             mode = 8#704,
             shares = [#share_spec{}],
@@ -580,7 +608,7 @@ update_file_content_test(_Config) ->
             validate_result_fun = build_update_file_content_validate_call_fun(),
             verify_fun = build_update_file_content_verify_fun(MemRef, OriginalFileContent),
 
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            data_spec = api_data_spec_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     optional = [body, <<"offset">>],
                     correct_values = #{
@@ -639,7 +667,7 @@ build_update_file_content_prepare_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         FileGuid = api_test_memory:get(MemRef, file_guid),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
+        {Id, Data1} = api_data_spec_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
 
         #rest_args{
             method = put,

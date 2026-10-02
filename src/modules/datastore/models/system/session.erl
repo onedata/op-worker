@@ -48,6 +48,10 @@
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
 -type type() :: fuse | rest | gui | offline | provider_outgoing | provider_incoming | root | guest.
+-type client_type() :: oneclient | onedatafs | ones3.
+-type client_option() :: {binary(), binary()}.
+-type client_system_property() :: {binary(), binary()}.
+
 % Supported session modes:
 % - normal
 % - public_data - special session mode in which user traverses public data shares tree
@@ -66,7 +70,9 @@
 -export_type([
     id/0, record/0, doc/0,
     ttl/0, grace_period/0,
-    type/0, mode/0, status/0
+    type/0,
+    client_type/0, client_option/0, client_system_property/0,
+    mode/0, status/0
 ]).
 
 -define(CTX, #{
@@ -176,8 +182,8 @@ delete_doc(SessId) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(SessId) ->
     ?update_counter(?EXOMETER_NAME(active_sessions), -1),
-    session_helpers:delete_helpers(SessId),
     session_handles:remove_handles(SessId),
+    session_remote_handles:remove_all(SessId),
     session_open_files:invalidate_entries(SessId),
     datastore_model:delete(?CTX, SessId).
 

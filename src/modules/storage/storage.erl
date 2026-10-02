@@ -29,15 +29,18 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/6, get/1, get_all/0, exists/1, delete/1, clear_storages/0]).
-
-%% Functions to retrieve storage details in Onepanel compatible format
--export([describe/1, describe_luma_config/1]).
+-export([
+    create/1,
+    update/2,
+    describe/1, get/1, get_all/0, exists/1,
+    delete/1, clear_storages/0
+]).
 
 %%% Functions to retrieve storage details
 -export([
-    get_id/1, get_block_size/1, get_helper/1, get_helper_name/1,
-    get_luma_feed/1, get_luma_config/1
+    get_id/1, get_block_size/1, get_helper_spec/1, get_helper_name/1,
+    get_luma_feed/1, get_luma_config/1,
+    get_luma_db_namespace/1, get_stale_luma_db_namespaces/1, with_luma_db_namespace/2
 ]).
 -export([
     fetch_shared_data/2,
@@ -45,18 +48,9 @@
     fetch_provider_id_of_remote_storage/2,
     fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2
 ]).
--export([is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2, is_archive/1]).
+-export([is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
--export([verify_configuration/3]).
-
-%%% Functions to modify storage details
--export([update_name/2, update_luma_config/2]).
--export([set_qos_parameters/2, update_readonly_and_imported/3]).
--export([
-    update_helper_args/2, update_helper_admin_ctx/2, update_helper/2,
-    upgrade_after_swift_version_update_to_v3/0, upgrade_after_swift_version_update_to_v3/1
-]).
 
 %%% Support related functions
 -export([support_space/4, update_space_support_size/3, revoke_space_support/2]).
@@ -76,56 +70,39 @@
 -type imported() :: boolean().
 -type readonly() :: boolean().
 
-%% @formatter:off
--type config() :: #{
-    readonly => readonly(),
-    importedStorage => imported()
-}.
-%% @formatter:on
-
 -export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0, access_type/0,
-    imported/0, readonly/0, config/0]).
+    imported/0, readonly/0]).
 
 -compile({no_auto_import, [get/1]}).
+
+
+-define(WAIT_FOR_SUPPORT_INTERVAL, 500).
+-define(WAIT_FOR_SUPPORT_ATTEMPTS, 6).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec create(name(), helpers:helper(), luma_config(),
-    imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
-create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    Result = case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
-        {ok, Id} ->
-            case storage_config:create(Id, Helper, LumaConfig) of
-                {ok, Id} ->
-                    on_storage_created(Id),
-                    {ok, Id};
-                StorageConfigError ->
-                    case storage_logic:delete_in_zone(Id) of
-                        ok ->
-                            ok;
-                        {error, _} = DeleteError ->
-                            ?error("Could not revert creation of storage ~tp in Onezone: ~tp", [
-                                Id, DeleteError
-                            ])
-                    end,
-                    StorageConfigError
-            end;
-        StorageLogicError ->
-            StorageLogicError
-    end,
-    case Result of
-        {ok, StorageId} ->
-            ?notice("Successfully added storage '~ts' with Id: '~ts'", [Name, StorageId]);
-        {error, _} = Error ->
-            ?error("Failed to add storage '~ts' due to: ~tp", [Name, Error])
-    end,
-    Result.
+
+-spec create(onedata_storage:create_spec()) -> {ok, storage:id()} | {error, term()}.
+create(StorageCreateSpec) ->
+    storage_creator:create(StorageCreateSpec).
 
 
--spec get(id() | data()) -> {ok, data()} | {error, term()}.
+-spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
+update(StorageId, UpdateSpec) ->
+    lock_on_storage_by_id(StorageId, fun() ->
+        storage_updater:update(StorageId, UpdateSpec)
+    end).
+
+
+-spec describe(storage:id()) -> {ok, onedata_storage:description()} | errors:error().
+describe(StorageId) ->
+    storage_describer:describe(StorageId).
+
+
+-spec get(id() | data() | storage_config:doc()) -> {ok, data()} | {error, term()}.
 get(StorageId) when is_binary(StorageId) ->
     storage_config:get(StorageId);
 get(StorageData = #document{}) ->
@@ -135,47 +112,6 @@ get(StorageData = #document{}) ->
 -spec get_all() -> {ok, [data()]} | {error, term()}.
 get_all() ->
     storage_config:list_all().
-
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns map describing the storage. The data is redacted to
-%% remove sensitive information.
-%% @end
-%%-------------------------------------------------------------------
--spec describe(id() | data()) -> {ok, json_utils:json_term()} | {error, term()}.
-describe(StorageId) when is_binary(StorageId) ->
-    case get(StorageId) of
-        {ok, StorageData} -> describe(StorageData);
-        {error, _} = Error -> Error
-    end;
-describe(StorageData) ->
-    StorageId = get_id(StorageData),
-    Helper = get_helper(StorageData),
-    AdminCtx = helper:get_redacted_admin_ctx(Helper),
-    HelperArgs = helper:get_args(Helper),
-    Base = maps:merge(HelperArgs, AdminCtx),
-    {ok, LumaConfigDescription} = describe_luma_config(StorageData),
-    BaseWithLuma = maps:merge(Base, LumaConfigDescription),
-    {ok, BaseWithLuma#{
-        <<"id">> => StorageId,
-        <<"name">> => fetch_name_of_local_storage(StorageId),
-        <<"type">> => helper:get_name(Helper),
-        <<"importedStorage">> => is_imported(StorageId),
-        <<"readonly">> => is_local_storage_readonly(StorageId),
-        <<"qosParameters">> => fetch_qos_parameters_of_local_storage(StorageId)
-    }}.
-
-
--spec describe_luma_config(id() | data()) -> {ok, json_utils:json_map()}.
-describe_luma_config(StorageId) when is_binary(StorageId) ->
-    case get(StorageId) of
-        {ok, StorageData} -> describe(StorageData);
-        {error, _} = Error -> Error
-    end;
-describe_luma_config(StorageData) ->
-    LumaConfig = get_luma_config(StorageData),
-    {ok, luma_config:describe(LumaConfig)}.
 
 
 -spec exists(id()) -> boolean().
@@ -205,10 +141,14 @@ delete(StorageId) ->
 %% @private
 -spec delete_insecure(id()) -> ok | {error, term()}.
 delete_insecure(StorageId) ->
+    {ok, StorageData} = get(StorageId),
+
     case storage_logic:delete_in_zone(StorageId) of
         ok ->
             ok = storage_config:delete(StorageId),
-            luma:clear_db(StorageId);
+            % the storage config is gone, so this is the last moment its stale
+            % namespaces can still be reached
+            luma_crud_api:clear_db_with_stale_namespaces(StorageData);
         Error ->
             Error
     end.
@@ -225,16 +165,6 @@ clear_storages() ->
     % provider was deregistered, so clear only local data
     storage_config:delete_all().
 
-
--spec verify_configuration(id() | name(), config(), helpers:helper()) -> ok | {error, term()}.
-verify_configuration(IdOrName, Config, Helper) ->
-    try
-        sanitize_readonly_option(IdOrName, Config),
-        check_helper_against_readonly_option(Config, Helper),
-        check_helper_against_imported_option(Config, Helper)
-    catch
-        throw:Error -> Error
-    end.
 
 %%%===================================================================
 %%% Functions to retrieve storage details
@@ -255,17 +185,17 @@ get_id(StorageData) ->
 %%--------------------------------------------------------------------
 -spec get_block_size(id()) -> non_neg_integer() | undefined.
 get_block_size(StorageId) ->
-    helper:get_block_size(get_helper(StorageId)).
+    helper_spec:get_block_size(get_helper_spec(StorageId)).
 
 
--spec get_helper(data() | id()) -> helpers:helper().
-get_helper(StorageDataOrId) ->
-    storage_config:get_helper(StorageDataOrId).
+-spec get_helper_spec(data() | id()) -> helper_spec:t().
+get_helper_spec(StorageDataOrId) ->
+    storage_config:get_helper_spec(StorageDataOrId).
 
--spec get_helper_name(data() | id()) -> helper:name().
+-spec get_helper_name(data() | id()) -> helper_spec:name().
 get_helper_name(StorageDataOrId) ->
-    Helper = storage_config:get_helper(StorageDataOrId),
-    helper:get_name(Helper).
+    HelperSpec = storage_config:get_helper_spec(StorageDataOrId),
+    helper_spec:get_name(HelperSpec).
 
 -spec get_luma_feed(id() | data()) -> luma_feed().
 get_luma_feed(Storage) ->
@@ -274,6 +204,27 @@ get_luma_feed(Storage) ->
 -spec get_luma_config(id() | data()) -> luma_config().
 get_luma_config(StorageData) ->
     storage_config:get_luma_config(StorageData).
+
+
+-spec get_luma_db_namespace(id() | data()) -> undefined | luma_db:namespace().
+get_luma_db_namespace(Storage) ->
+    storage_config:get_luma_db_namespace(Storage).
+
+
+-spec get_stale_luma_db_namespaces(id() | data()) -> [undefined | luma_db:namespace()].
+get_stale_luma_db_namespaces(Storage) ->
+    storage_config:get_stale_luma_db_namespaces(Storage).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage data addressing a different LUMA DB namespace than the
+%% storage's current one. Nothing is written - see storage_config.
+%% @end
+%%--------------------------------------------------------------------
+-spec with_luma_db_namespace(data(), undefined | luma_db:namespace()) -> data().
+with_luma_db_namespace(StorageData, Namespace) ->
+    storage_config:with_luma_db_namespace(StorageData, Namespace).
 
 
 -spec fetch_shared_data(id(), od_space:id()) -> od_storage:doc().
@@ -345,128 +296,8 @@ is_local(StorageId) ->
 
 -spec is_posix_compatible(id() | data()) -> boolean().
 is_posix_compatible(StorageDataOrId) ->
-    Helper = get_helper(StorageDataOrId),
-    helper:is_posix_compatible(Helper).
-
-
--spec is_archive(id() | data()) -> boolean().
-is_archive(StorageDataOrId) ->
-    Helper = get_helper(StorageDataOrId),
-    helper:is_archive_storage(Helper).
-
-%%%===================================================================
-%%% Functions to modify storage details
-%%%===================================================================
-
--spec update_name(id(), NewName :: name()) -> ok.
-update_name(StorageId, NewName) ->
-    storage_logic:update_name(StorageId, NewName).
-
-
--spec update_luma_config(id(), Diff :: luma_config:diff()) ->
-    ok | {error, term()}.
-update_luma_config(StorageId, Diff) ->
-    UpdateFun = fun(LumaConfig) ->
-        luma_config:update(LumaConfig, Diff)
-    end,
-    case storage_config:update_luma_config(StorageId, UpdateFun) of
-        ok ->
-            luma:clear_db(StorageId);
-        {error, no_update} ->
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec update_readonly_and_imported(id(), readonly(), imported()) -> ok | {error, term()}.
-update_readonly_and_imported(StorageId, Readonly, Imported) ->
-    storage_logic:update_readonly_and_imported(StorageId, Readonly, Imported).
-
-
--spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
-set_qos_parameters(StorageId, QosParameters) ->
-    case storage_logic:set_qos_parameters(StorageId, QosParameters) of
-        ok ->
-            {ok, Spaces} = storage_logic:get_spaces(StorageId),
-            lists:foreach(fun(SpaceId) ->
-                ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId)
-            end, Spaces);
-        Error -> Error
-    end.
-
-
--spec update_helper_args(id(), helper:args()) -> ok | {error, term()}.
-update_helper_args(StorageId, Changes) when is_map(Changes) ->
-    UpdateFun = fun(Helper) -> helper:update_args(Helper, Changes) end,
-    update_helper(StorageId, UpdateFun).
-
-
--spec update_helper_admin_ctx(id(), helper:user_ctx()) -> ok | {error, term()}.
-update_helper_admin_ctx(StorageId, Changes) ->
-    UpdateFun = fun(Helper) -> helper:update_admin_ctx(Helper, Changes) end,
-    update_helper(StorageId, UpdateFun).
-
-
--spec update_helper(id(), fun((helpers:helper()) -> helpers:helper())) ->
-    ok | {error, term()}.
-update_helper(StorageId, UpdateFun) ->
-    case storage_config:update_helper(StorageId, UpdateFun) of
-        ok -> on_helper_changed(StorageId);
-        {error, no_changes} -> ok;
-        {error, _} = Error -> Error
-    end.
-
-
--spec upgrade_after_swift_version_update_to_v3() -> ok.
-upgrade_after_swift_version_update_to_v3() ->
-    {ok, StorageList} = storage:get_all(),
-    lists:foreach(fun storage:upgrade_after_swift_version_update_to_v3/1, StorageList).
-
-
--spec upgrade_after_swift_version_update_to_v3(data()) -> ok.
-upgrade_after_swift_version_update_to_v3(StorageData) ->
-    case storage:get_helper_name(StorageData) of
-        ?SWIFT_HELPER_NAME ->
-            StorageId = storage:get_id(StorageData),
-            StorageName = storage:fetch_name_of_local_storage(StorageId),
-
-            ?info("Upgrading swift storage '~ts' (~ts)...", [StorageName, StorageId]),
-
-            ok = upgrade_swift_helper_after_swift_version_update_to_v3(StorageId),
-            % Existing luma entries will not work as they lack necessary projectName
-            ok = luma:clear_db(StorageId),
-
-            ?info("Successfully upgraded swift storage '~ts' (~ts)", [StorageName, StorageId]);
-        _ ->
-            ok
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates helper to reflect changes made in feature/VFS-12688-try-to-update-swift-to-v3
-%% (tenantName is moved from helper args to admin ctx as projectName)
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_swift_helper_after_swift_version_update_to_v3(id()) -> ok | {error, term()}.
-upgrade_swift_helper_after_swift_version_update_to_v3(StorageId) ->
-    storage:update_helper(StorageId, fun(Helper = #helper{
-        args = Args,
-        admin_ctx = AdminCtx
-    }) ->
-        case maps:take(<<"tenantName">>, Args) of
-            {ProjectName, NewArgs} ->
-                {ok, Helper#helper{
-                    args = NewArgs,
-                    admin_ctx = AdminCtx#{<<"projectName">> => ProjectName}
-                }};
-            error ->
-                % ensure update is idempotent
-                {ok, Helper}
-        end
-    end).
+    HelperSpec = get_helper_spec(StorageDataOrId),
+    helper_spec:is_posix_compatible(HelperSpec).
 
 
 %%%===================================================================
@@ -492,9 +323,17 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
                     on_space_supported(SpaceId, StorageId),
                     {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
                     {ok, StorageName} = storage_logic:get_name_of_local_storage(StorageId),
-                    ?notice("New space has been supported: '~ts' (~ts) with ~ts quota on storage '~ts' (~ts)", [
-                        SpaceName, SpaceId, str_utils:format_byte_size(SupportSize), StorageName, StorageId
-                    ]),
+                    ?notice(
+                        "New support has been granted:~n"
+                        "> Space:    '~ts' (~ts)~n"
+                        "> Storage:  '~ts' (~ts)~n"
+                        "> Size:     ~ts", [
+                            SpaceName, SpaceId,
+                            StorageName, StorageId,
+                            str_utils:format_byte_size(SupportSize)
+                        ]
+                    ),
+                    wait_for_space_support(SpaceId),
                     {ok, SpaceId};
                 {error, _} = SupportError ->
                     ok = dir_stats_service_state:clean(SpaceId),
@@ -502,6 +341,31 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
             end;
         ValidateError ->
             ValidateError
+    end.
+
+
+%% @private
+-spec wait_for_space_support(od_space:id()) -> ok.
+wait_for_space_support(SpaceId) ->
+    try
+        ?info("Awaiting synchronization of support-related documents (id: ~ts)...", [SpaceId]),
+        utils:wait_until(
+            fun() ->
+                case space_logic:is_supported_locally(SpaceId) of
+                    true ->
+                        true;
+                    false ->
+                        provider_logic:force_fetch(),
+                        false
+                end
+            end,
+            ?WAIT_FOR_SUPPORT_INTERVAL,
+            ?WAIT_FOR_SUPPORT_ATTEMPTS
+        ),
+        ?notice("Support-related documents synchronized, the space is fully functional (id: ~ts)", [SpaceId])
+    catch error:timeout ->
+        ?warning("Timeout synchronizing support-related documents, the space will not be functional "
+            "for some time - until the synchronization is completed in the background (id: ~ts)", [SpaceId])
     end.
 
 
@@ -571,6 +435,10 @@ supports_any_space(StorageData) ->
 %% @private
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
+    % NOTE: registration is best effort and reports its own failures - by this
+    % point the storage is in Onezone and in the local datastore, with no
+    % compensation left to undo either, so a failure to reach rtransfer must not
+    % turn a created storage into a reported failure
     rtransfer_config:add_storage(StorageId).
 
 
@@ -589,62 +457,11 @@ on_space_unsupported(SpaceId, StorageId) ->
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
     auto_storage_import_worker:notify_space_unsupported(SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId),
+    files_monitoring_manager:notify_space_unsupported(SpaceId),
     dir_stats_service_state:clean(SpaceId).
-
-
-%% @private
--spec on_helper_changed(StorageId :: id()) -> ok.
-on_helper_changed(StorageId) ->
-    fslogic_event_emitter:emit_helper_params_changed(StorageId),
-    % TODO VFS-11947 consider error handling here and error propagation / rollback
-    rtransfer_config:add_storage(StorageId),
-    helpers_reload:refresh_helpers_by_storage(StorageId).
 
 
 %% @private
 -spec lock_on_storage_by_id(id(), fun(() -> Result)) -> Result.
 lock_on_storage_by_id(Identifier, Fun) ->
     critical_section:run({storage_id, Identifier}, Fun).
-
-
-%% @private
--spec check_helper_against_readonly_option(config(), helpers:helper()) -> ok.
-check_helper_against_readonly_option(#{readonly := true}, _Helper) ->
-    ok;
-check_helper_against_readonly_option(#{readonly := false}, Helper) ->
-    case helper:supports_storage_access_type(Helper, ?READWRITE) of
-        false ->
-            HelperName = helper:get_name(Helper),
-            throw(?ERR_REQUIRES_READONLY_STORAGE(?err_ctx(), HelperName));
-        true ->
-            ok
-    end.
-
-%% @private
--spec check_helper_against_imported_option(config(), helpers:helper()) -> ok.
-check_helper_against_imported_option(#{importedStorage := false}, _Helper) ->
-    ok;
-check_helper_against_imported_option(#{importedStorage := true}, Helper) ->
-    case helper:is_import_supported(Helper) of
-        false ->
-            HelperName = helper:get_name(Helper),
-            throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(?err_ctx(), HelperName, ?OBJECT_HELPERS));
-        true ->
-            ok
-    end.
-
-
-%% @private
--spec sanitize_readonly_option(id() | name(), config()) -> ok.
-sanitize_readonly_option(IdOrName, #{
-    readonly := Readonly,
-    importedStorage := Imported
-}) ->
-    case {
-        utils:to_boolean(Readonly),
-        utils:to_boolean(Imported)
-    } of
-        {false, _} -> ok;
-        {true, false} -> throw(?ERR_REQUIRES_IMPORTED_STORAGE(?err_ctx(), IdOrName));
-        {true, true} -> ok
-    end.

@@ -12,7 +12,7 @@
 -module(gs_handle_logic_test_SUITE).
 -author("Lukasz Opiola").
 
--include("logic_tests_common.hrl").
+-include("graph_sync/logic_tests_common.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
@@ -160,7 +160,7 @@ create_test(Config) ->
             ?HANDLE_H_SERVICE(<<"newHandle">>),
             ?HANDLE_RESOURCE_TYPE(<<"newHandle">>),
             ?HANDLE_RESOURCE_ID(<<"newHandle">>),
-            ?HANDLE_METADATA_PREFIX(<<"newHandle">>),
+            ?HANDLE_METADATA_SCHEMA(<<"newHandle">>),
             ?HANDLE_METADATA(<<"newHandle">>)
         ])
     ),
@@ -173,7 +173,7 @@ create_test(Config) ->
             <<"badHService">>,
             ?HANDLE_RESOURCE_TYPE(<<"newHandle">>),
             ?HANDLE_RESOURCE_ID(<<"newHandle">>),
-            ?HANDLE_METADATA_PREFIX(<<"newHandle">>),
+            ?HANDLE_METADATA_SCHEMA(<<"newHandle">>),
             ?HANDLE_METADATA(<<"newHandle">>)
         ])
     ),

@@ -149,14 +149,14 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
 
     {ok, {Sock, SessionId}} = fuse_test_utils:connect_as_user(Config, Worker1, User, [{active, true}]),
 
-    {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
+    {Before, _SizesBefore} = datastore_pool_test_utils:get_pools_entries_and_sizes(Worker1, memory),
 
     client_simulation_test_utils:simulate_client(Config, Args, Sock, SpaceDirGuid, Close),
     timer:sleep(timer:seconds(30)),
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {After, _SizesAfter} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
-    Res = pool_utils:get_documents_diff(Worker1, After, Before, Close),
+    {After, _SizesAfter} = datastore_pool_test_utils:get_pools_entries_and_sizes(Worker1, memory),
+    Res = datastore_pool_test_utils:get_documents_diff(Worker1, After, Before, Close),
     ?assertEqual([], Res),
 
     client_simulation_test_utils:verify_streams(Config, Close).

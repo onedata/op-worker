@@ -49,6 +49,10 @@
 -define(REF_TO_TIDS_CLEARING_DELAY, 15000).
 -define(REF_TO_TIDS_CLEARING_MSG(__Ref), {clear_ref_to_tids_association, __Ref}).
 
+% Thrown when the file's local location has been deleted concurrently
+% (see assert_local_location_not_deleted/0).
+-define(LOCAL_LOCATION_DELETED, local_location_deleted).
+
 -define(PREFETCH_PRIORITY,
     op_worker:get_env(default_prefetch_priority, 96)).
 -define(MAX_RETRIES, op_worker:get_env(synchronizer_max_retries, 0)).
@@ -575,6 +579,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
     } = State0
 ) ->
     try
+        assert_local_location_not_deleted(),
         State = case FG of
             undefined ->
                 FileGuid = file_ctx:get_logical_guid_const(FileCtx),
@@ -652,6 +657,19 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                 end
         end
     catch
+        throw:?LOCAL_LOCATION_DELETED ->
+            % The file's local location was deleted concurrently (delete race during
+            % synchronization - possibly a deletion propagated from a remote provider);
+            % there is nothing to synchronize.
+            ?debug("Synchronization of file ~tp skipped - its local location was deleted",
+                [fslogic_cache:get_uuid()]),
+            {reply, {error, not_found}, State0, ?DIE_AFTER};
+        throw:?EROFS ->
+            % the blocks cannot be fetched onto a readonly storage - not a failure
+            % of this provider, but a request that another one has to serve
+            ?debug("Refused to fetch blocks of file ~tp onto a readonly storage",
+                [file_ctx:get_logical_guid_const(FileCtx)]),
+            {reply, {error, ?EROFS}, State0, ?DIE_AFTER};
         Class:Reason:Stacktrace ->
             ?error_exception("Unable to start transfer ~tp", [TransferId], Class, Reason, Stacktrace),
             {reply, {error, Reason}, State0, ?DIE_AFTER}
@@ -744,13 +762,11 @@ handle_info(?FLUSH_BLOCKS, State) ->
 handle_info(?FLUSH_EVENTS, State) ->
     {noreply, flush_events(State), ?DIE_AFTER};
 
-handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries, file_ctx = FileCtx} = State) ->
+handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries} = State) ->
     {Block, _Priority, _AffectedFroms, FinishedFroms, State1} =
         disassociate_ref(Ref, State),
     {FinishedBlocks, ExcludeSessions, EndedTransfers, State2} =
         disassociate_froms(FinishedFroms, State1),
-
-    flush_archive_helper_buffer_if_applicable(FileCtx),
 
     {Ans, State3} = flush_blocks(State2, ExcludeSessions, FinishedBlocks,
         EndedTransfers =/= []),
@@ -1353,6 +1369,14 @@ is_sequential(_, _State) ->
     false.
 
 %% @private
+-spec assert_local_location_not_deleted() -> ok | no_return().
+assert_local_location_not_deleted() ->
+    case fslogic_cache:get_local_location_including_deleted() of
+        #document{deleted = true} -> throw(?LOCAL_LOCATION_DELETED);
+        _ -> ok
+    end.
+
+%% @private
 -spec start_transfers([block()], transfer:id() | undefined, #state{}, priority()) ->
     NewRequests :: [job()].
 start_transfers(InitialBlocks, TransferId, State, Priority) ->
@@ -1375,17 +1399,21 @@ start_transfers(InitialBlocks, TransferId, State, Priority, MaxJobRestarts) ->
     end, 0, ProvidersAndBlocks),
 
     SpaceId = State#state.space_id,
-    assert_smaller_than_local_support_size(TotalSize, SpaceId),
-
     FileGuid = State#state.file_guid,
     DestStorageId = State#state.dest_storage_id,
     DestFileId = State#state.dest_file_id,
+
+    assert_smaller_than_local_support_size(TotalSize, SpaceId),
+    assert_dest_storage_not_readonly(TotalSize, DestStorageId, SpaceId),
+
     lists:flatmap(
         fun({ProviderId, Blocks, {SrcStorageId, SrcFileId}}) ->
+            {ok, ProviderDomain} = provider_logic:get_domain(ProviderId),
             lists:map(
                 fun(#file_block{offset = O, size = S} = FetchedBlock) ->
                     Request = #{
                         provider_id => ProviderId,
+                        provider_domain => ProviderDomain,
                         file_guid => FileGuid,
                         src_storage_id => SrcStorageId,
                         src_file_id => SrcFileId,
@@ -1638,7 +1666,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
 
         Ans
     catch
-        throw:{error, unregistered_oneprovider} when IgnoreUnregisteredOneproviderError -> []
+        throw:?ERR_UNREGISTERED_ONEPROVIDER when IgnoreUnregisteredOneproviderError -> []
     end,
 
     {FinalAns, set_events_timer(cancel_caching_blocks_timer(
@@ -1940,22 +1968,25 @@ assert_smaller_than_local_support_size(TotalSize, SpaceId) ->
     end.
 
 
--spec flush_archive_helper_buffer_if_applicable(file_ctx:ctx()) -> ok.
-flush_archive_helper_buffer_if_applicable(FileCtx) ->
-    {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
-    case storage:is_archive(Storage) of
-        true ->
-            {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
-            case archivisation_tree:is_in_archive(CanonicalPath) of
-                true ->
-                    {SDHandle, FileCtx4} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx3),
-                    {FileSize, _} = file_ctx:get_local_storage_file_size(FileCtx4),
-                    ok = storage_driver:flushbuffer(SDHandle, FileSize);
-                false ->
-                    ok
-            end;
-        false ->
-            ok
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Rtransfer writes the fetched blocks to the destination storage straight
+%% through the helper, past the access type check that guards every operation
+%% going via the storage driver (see helpers_runner:run_and_handle_error/4).
+%% As this is the only place in which fetches are started, it is also the only
+%% place that can keep them off a readonly storage.
+%% A request that has nothing to fetch writes nothing, so it is left alone -
+%% that is what a read of a fully available replica boils down to.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_dest_storage_not_readonly(non_neg_integer(), storage:id(), od_space:id()) -> ok.
+assert_dest_storage_not_readonly(0, _DestStorageId, _SpaceId) ->
+    ok;
+assert_dest_storage_not_readonly(_TotalSize, DestStorageId, SpaceId) ->
+    case storage:is_storage_readonly(DestStorageId, SpaceId) of
+        true -> throw(?EROFS);
+        false -> ok
     end.
 
 

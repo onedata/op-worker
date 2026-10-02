@@ -36,13 +36,14 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/file_meta_forest.hrl").
 
--export([list/2]).
+-export([list/2, starting_opts_with_tune_for_cont_listing/1]).
 -export([build_index/1, build_index/2]).
 -export([encode_pagination_token/1, decode_pagination_token/1]). 
 -export([encode_index/1, decode_index/1]).
 -export([is_finished/1, get_last_listed_filename/1]).
 -export([infer_pagination_token/3]).
 -export([default_limit/0]).
+
 
 -record(list_index, {
     file_name :: file_meta:name(),
@@ -102,6 +103,11 @@ list(FileUuid, ListOpts) ->
         _ ->
             list_internal(list, FileUuid, ListOpts, [])
     end.
+
+
+-spec starting_opts_with_tune_for_cont_listing(boolean()) -> options().
+starting_opts_with_tune_for_cont_listing(TuneForLargeContinuousListing) ->
+    #{tune_for_large_continuous_listing => TuneForLargeContinuousListing}.
 
 
 -spec build_index(file_meta:name() | undefined) -> index().

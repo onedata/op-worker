@@ -57,7 +57,6 @@ get_models() -> [
     sd_handle,
     custom_metadata,
     times,
-    helper_handle,
     file_popularity,
     space_transfer_stats,
     space_transfer_stats_cache,

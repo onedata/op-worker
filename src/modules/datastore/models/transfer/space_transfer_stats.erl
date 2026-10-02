@@ -34,7 +34,9 @@
 -type space_transfer_stats() :: #space_transfer_stats{}.
 -type doc() :: datastore_doc:doc(space_transfer_stats()).
 
--export_type([space_transfer_stats/0, doc/0]).
+-type transfer_type() :: binary().
+
+-export_type([space_transfer_stats/0, doc/0, transfer_type/0]).
 
 % Some functions from transfer_histograms module require specifying
 % start time parameter. But there is no conception of start time for
@@ -59,7 +61,7 @@
 %% space (provider is assumed to be the calling one).
 %% @end
 %%-------------------------------------------------------------------
--spec key(TransferType :: binary(), SpaceId :: od_space:id()) -> binary().
+-spec key(transfer_type(), od_space:id()) -> binary().
 key(TransferType, SpaceId) ->
     key(oneprovider:get_id(), TransferType, SpaceId).
 
@@ -70,8 +72,7 @@ key(TransferType, SpaceId) ->
 %% transfer type and space id.
 %% @end
 %%-------------------------------------------------------------------
--spec key(ProviderId :: od_provider:id(), TransferType :: binary(),
-    SpaceId :: od_space:id()) -> binary().
+-spec key(od_provider:id(), transfer_type(), od_space:id()) -> binary().
 key(ProviderId, TransferType, SpaceId) ->
     datastore_key:adjacent_from_digest([ProviderId, TransferType], SpaceId).
 
@@ -92,7 +93,7 @@ get(TransferStatsId) ->
 %% calling this fun.
 %% @end
 %%-------------------------------------------------------------------
--spec get(TransferType :: binary(), SpaceId :: od_space:id()) ->
+-spec get(transfer_type(), od_space:id()) ->
     {ok, doc()} | {error, term()}.
 get(TransferType, SpaceId) ->
     ?MODULE:get(key(TransferType, SpaceId)).
@@ -103,7 +104,7 @@ get(TransferType, SpaceId) ->
 %% Returns space transfers stats for given transfer type, provider and space.
 %% @end
 %%-------------------------------------------------------------------
--spec get(od_provider:id(), TransferType :: binary(), od_space:id()) ->
+-spec get(od_provider:id(), transfer_type(), od_space:id()) ->
     {ok, doc()} | {error, term()}.
 get(ProviderId, TransferType, SpaceId) ->
     ?MODULE:get(key(ProviderId, TransferType, SpaceId)).
@@ -116,16 +117,9 @@ get_last_update(#space_transfer_stats{last_update = LastUpdateMap}) ->
     end, ?START_TIME, LastUpdateMap).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sends stats to onf_transfer_stats_aggregator process instead of updating doc
-%% manually.
-%% @end
-%%--------------------------------------------------------------------
--spec update_with_cache(TransferType :: binary(), SpaceId :: od_space:id(),
-    BytesPerProvider :: #{od_provider:id() => size()}) -> ok.
-update_with_cache(?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider) ->
-    transfer_onf_stats_aggregator:update_statistics(SpaceId, BytesPerProvider).
+-spec update_with_cache(transfer_type(), od_space:id(), #{od_provider:id() => size()}) -> ok.
+update_with_cache(TransferType, SpaceId, BytesPerProvider) ->
+    transfer_stats_cache_aggregator:update_statistics(TransferType, SpaceId, BytesPerProvider).
 
 
 %%--------------------------------------------------------------------
@@ -135,9 +129,7 @@ update_with_cache(?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider) ->
 %% if one doesn't exists already.
 %% @end
 %%--------------------------------------------------------------------
--spec update(TransferType :: binary(), SpaceId :: od_space:id(),
-    BytesPerProvider :: #{od_provider:id() => size()}
-) ->
+-spec update(transfer_type(), od_space:id(), #{od_provider:id() => size()}) ->
     ok | {error, term()}.
 update(TransferType, SpaceId, BytesPerProvider) ->
     Key = key(TransferType, SpaceId),
@@ -203,7 +195,7 @@ delete(TransferStatsId) ->
 %% Deletes space transfer stats document for given space and transfer type.
 %% @end
 %%-------------------------------------------------------------------
--spec delete(TransferType :: binary(), SpaceId :: od_space:id()) ->
+-spec delete(transfer_type(), od_space:id()) ->
     ok | {error, term()}.
 delete(TransferType, SpaceId) ->
     delete(key(TransferType, SpaceId)).
