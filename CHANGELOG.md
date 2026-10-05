@@ -42,6 +42,10 @@
     served by another supporting Oneprovider that holds the content.
 -   **VFS-6934** Web GUI: Fixed rounding percentage values in data
     distribution.
+-   **VFS-2073** Improved content-disposition headers sent during file
+    downloads to properly support filename encoding in modern browsers.
+    Implemented concrete content-type headers (MIME types) rather than
+    the generic application/octet-stream.
 
 ### 25.1
 
