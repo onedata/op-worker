@@ -308,6 +308,7 @@ append_file_not_changing_mtime_update_test(SuiteCtx) ->
         name = FileName, content = <<InitialContent/binary, AppendedContent/binary>>
     },
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, UpdatedFileSpec),
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
@@ -332,6 +333,7 @@ append_empty_file_update_test(SuiteCtx) ->
 
     UpdatedFileSpec = #file_spec{name = FileName, content = AppendedContent},
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, UpdatedFileSpec),
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
@@ -358,6 +360,7 @@ truncate_file_update_test(SuiteCtx) ->
         name = FileName, content = binary:part(InitialContent, 0, TruncatedSize)
     },
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, TruncatedFileSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, TruncatedFileSpec),
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
@@ -393,6 +396,7 @@ chmod_file_update_test(SuiteCtx) ->
     storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
     assert_children_hash_changed(ImportingProviderSelector, SpaceId, RootStorageFileId),
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
@@ -446,6 +450,7 @@ chmod_file_update_in_batched_dir_test(SuiteCtx) ->
     %% ...and NOT via TestDirName's own mtime, which a child's chmod alone does not bump
     assert_children_mtime_unchanged(ImportingProviderSelector, SpaceId, TestDirStorageFileId),
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -483,6 +488,9 @@ move_file_update_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, #file_spec{
         name = DstFileName, content = Content
     }),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, #file_spec{
+        name = DstFileName, content = Content
+    }),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 1,
@@ -517,6 +525,10 @@ copy_file_update_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
+        #file_spec{name = SrcFileName, content = Content},
+        #file_spec{name = DstFileName, content = Content}
+    ]),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, [
         #file_spec{name = SrcFileName, content = Content},
         #file_spec{name = DstFileName, content = Content}
     ]),
@@ -558,6 +570,7 @@ change_file_content_constant_size_test(SuiteCtx) ->
 
     UpdatedFileSpec = #file_spec{name = FileName, content = ChangedContent},
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, UpdatedFileSpec),
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
@@ -584,6 +597,7 @@ change_file_content_update_test(SuiteCtx) ->
 
     UpdatedFileSpec = #file_spec{name = FileName, content = ChangedContent},
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, UpdatedFileSpec),
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
@@ -639,6 +653,7 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
 
     UpdatedFileSpec = #file_spec{name = FileName, content = ChangedContent},
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, UpdatedFileSpec),
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
@@ -682,6 +697,9 @@ replace_file_with_dir_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, #dir_spec{name = FileName, children = [
+        #file_spec{name = ChildFileName, content = ChildContent}
+    ]}),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, #dir_spec{name = FileName, children = [
         #file_spec{name = ChildFileName, content = ChildContent}
     ]}),
     %% the new dir + its child on POSIX; only the child (object) on S3
@@ -738,6 +756,7 @@ replace_empty_dir_with_file_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, #file_spec{name = DirName, content = NewContent}),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, #file_spec{name = DirName, content = NewContent}),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 1,
@@ -779,6 +798,7 @@ replace_non_empty_dir_with_file_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, #file_spec{name = DirName, content = NewContent}),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, #file_spec{name = DirName, content = NewContent}),
     %% scan 1: the dir + its child on POSIX, only the child on S3
     Scan1Created = case StorageType of posix -> 2; s3 -> 1 end,
     {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
@@ -861,6 +881,9 @@ replace_remotely_created_non_empty_dir_with_file_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(
         TestCaseCtx, #file_spec{name = DirName, content = NewContent}
     ),
+    storage_import_test_utils:verify_dir_stats(
+        TestCaseCtx, #file_spec{name = DirName, content = NewContent}
+    ),
     %% the replaced entities must be gone by guid on both providers
     lists:foreach(fun(Guid) ->
         ?assertMatch(
@@ -925,6 +948,7 @@ update_timestamps_file_import_test(SuiteCtx) ->
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestFilePath, ExpectedTimes),
     storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, ExpectedTimes),
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
@@ -979,6 +1003,11 @@ create_file_in_dir_update_test(SuiteCtx) ->
         #dir_spec{name = UntouchedDirName}
     ],
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedTreeSpec),
+    StatsTreeSpec = case StorageType of
+        posix -> UpdatedTreeSpec;
+        s3 -> [Spec || Spec <- UpdatedTreeSpec, Spec =/= #dir_spec{name = UntouchedDirName}]
+    end,
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, StatsTreeSpec),
     ?IF_POSIX(StorageType, begin
         assert_children_mtime_changed(ImportingProviderSelector, SpaceId, TouchedDirStorageFileId),
         assert_children_hash_unchanged(ImportingProviderSelector, SpaceId, RootStorageFileId),
@@ -1031,6 +1060,10 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
     ], SuiteCtx),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    case StorageType of
+        posix -> storage_import_test_utils:verify_dir_stats(TestCaseCtx);
+        s3 -> storage_import_test_utils:verify_dir_stats(TestCaseCtx, OtherFileSpecs)
+    end,
     %% root's own verdict is re-run once per listing batch. POSIX: 6 children /
     %% batch size 2 => reads at offsets 0,2,4,6 (sizes 2,2,2,0) = 4 passes.
     %% S3: only the 4 files count as root's children and there is no extra
@@ -1071,6 +1104,11 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
         | OtherFileSpecs
     ],
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedTreeSpec),
+    StatsTreeSpec = case StorageType of
+        posix -> UpdatedTreeSpec;
+        s3 -> [Spec || Spec <- UpdatedTreeSpec, Spec =/= #dir_spec{name = UntouchedDirName}]
+    end,
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, StatsTreeSpec),
     ?IF_POSIX(StorageType, begin
         %% TouchedDir's mtime advanced (a child was added), which routes it through
         %% the hash-computing branch even under detect_modifications=false - so both
@@ -1177,6 +1215,7 @@ update_nfs_acl_test(SuiteCtx) ->
     %% the file was imported with the initial ACL applied - readable by both
     %% users (read_acl granted to EVERYONE@)
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     InitialAclJson = storage_import_test_utils:expected_imported_acl_json(
         InitialAcl, User1FullName, User1Id
     ),
@@ -1231,6 +1270,7 @@ should_not_process_file_with_unchanged_attrs_hash_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -1275,6 +1315,7 @@ should_not_detect_timestamp_update_test(SuiteCtx) ->
         lfm_proxy:stat(ImportingProviderNode, SessionId, {path, SpaceTestFilePath})
     ),
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -1314,6 +1355,7 @@ update_syncs_files_after_import_failed_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 1,
@@ -1367,6 +1409,9 @@ update_syncs_files_after_previous_update_failed_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
 
     storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = Content}
+    ),
+    storage_import_test_utils:verify_dir_stats(
         TestCaseCtx, #file_spec{name = FileName, content = Content}
     ),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
@@ -1433,6 +1478,9 @@ should_not_import_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(
         TestCaseCtx, #file_spec{name = FileName, content = RecreatedContent}
     ),
+    storage_import_test_utils:verify_dir_stats(
+        TestCaseCtx, #file_spec{name = FileName, content = RecreatedContent}
+    ),
     %% the recreated file is LFM-created, the deleted-but-open one marker-guarded
     LfmCreatedCount = 1,
     ReplicatedCount = 0,
@@ -1482,6 +1530,9 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
         ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
     ),
     storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = ChangedContent}
+    ),
+    storage_import_test_utils:verify_dir_stats(
         TestCaseCtx, #file_spec{name = FileName, content = ChangedContent}
     ).
 
@@ -1615,6 +1666,11 @@ changing_max_depth_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
         #dir_spec{name = Dir1Name}, File1Spec
     ]),
+    Scan1StatsTree = case StorageType of
+        posix -> [#dir_spec{name = Dir1Name}, File1Spec];
+        s3 -> [File1Spec]
+    end,
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, Scan1StatsTree),
     Dir2Path = filepath_utils:join([SpacePath, Dir1Name, Dir2Name]),
     File2Path = filepath_utils:join([SpacePath, Dir1Name, File2Name]),
     File3Path = filepath_utils:join([SpacePath, Dir1Name, Dir2Name, File3Name]),
@@ -1642,6 +1698,13 @@ changing_max_depth_test(SuiteCtx) ->
         #dir_spec{name = Dir1Name, children = [#dir_spec{name = Dir2Name}, File2Spec]},
         File1Spec
     ]),
+    Scan2DirChildren = case StorageType of
+        posix -> [#dir_spec{name = Dir2Name}, File2Spec];
+        s3 -> [File2Spec]
+    end,
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, [
+        #dir_spec{name = Dir1Name, children = Scan2DirChildren}, File1Spec
+    ]),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(ImportingProviderNode, SessionId, {path, File3Path})),
 
     CreatedByScans12 = Scan1Created + Scan2Created,
@@ -1656,6 +1719,7 @@ changing_max_depth_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3, #{max_depth => 3}),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     CreatedByScans123 = CreatedByScans12 + Scan3Created,
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 3,
@@ -1693,6 +1757,9 @@ force_start_test(SuiteCtx) ->
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = Content}
+    ),
+    storage_import_test_utils:verify_dir_stats(
         TestCaseCtx, #file_spec{name = FileName, content = Content}
     ),
     {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
@@ -1760,6 +1827,7 @@ force_stop_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2, #{}, ?LARGE_IMPORT_SCAN_ATTEMPTS),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => skip,
@@ -1873,6 +1941,9 @@ file_with_protection_flags_should_not_be_updated_test_base(TestCaseName, SuiteCt
     storage_import_test_utils:verify_imported_tree(
         TestCaseCtx, #file_spec{name = FileName, content = UpdatedContent}
     ),
+    storage_import_test_utils:verify_dir_stats(
+        TestCaseCtx, #file_spec{name = FileName, content = UpdatedContent}
+    ),
     %% with the flags unset, the append is applied on both storages; the chmod is
     %% POSIX-only (a no-op on object storage), so its effect is asserted there only
     ExpectedAttrs = with_posix_mode(
@@ -1973,6 +2044,7 @@ file_with_protection_flags_should_not_be_deleted_test_base(TestCaseName, SuiteCt
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 3,
         <<"created">> => 0,
@@ -2042,6 +2114,7 @@ empty_dir_with_protection_flags_should_not_be_updated_test_base(TestCaseName, Su
         mode => ?DEFAULT_DIR_PERMS
     }),
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -2055,6 +2128,7 @@ empty_dir_with_protection_flags_should_not_be_updated_test_base(TestCaseName, Su
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{mode => NewMode}),
     storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceDirPath, #{mode => NewMode}),
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 3,
         <<"created">> => 0,
@@ -2130,6 +2204,7 @@ empty_dir_with_protection_flags_should_not_be_deleted_test_base(TestCaseName, Su
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 3,
         <<"created">> => 0,
@@ -2243,6 +2318,11 @@ dir_and_its_child_with_protection_flags_should_not_be_updated_test_base(TestCase
             #file_spec{name = FileName, content = UpdatedContent}
         ]}
     ),
+    storage_import_test_utils:verify_dir_stats(
+        TestCaseCtx, #dir_spec{name = DirName, children = [
+            #file_spec{name = FileName, content = UpdatedContent}
+        ]}
+    ),
     lists:foreach(fun(ProviderCtx) ->
         storage_import_test_utils:assert_attrs(ProviderCtx, SpaceDirPath, #{mode => NewMode}),
         storage_import_test_utils:assert_attrs(ProviderCtx, SpaceFilePath, #{
@@ -2336,6 +2416,7 @@ dir_and_its_child_with_protection_flags_should_not_be_deleted_test_base(TestCase
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
     %% the (emulated/real) directory + its child are deleted on both storage types
     Deleted = storage_import_test_utils:expected_deleted_count(TestCaseCtx),
     Scan1Created = storage_import_test_utils:expected_created_count(TestCaseCtx),
@@ -2513,6 +2594,7 @@ should_not_reimport_deleted_but_still_opened_file_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
 
     %% the scan must not have reimported the marker-guarded storage file
     ?assertMatch({ok, []}, lfm_proxy:get_children(
@@ -2732,6 +2814,9 @@ should_not_invalidate_file_after_replication_test(SuiteCtx) ->
 
     %% Read content only after checking distribution: a read could restore an invalidated replica.
     storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = Content}
+    ),
+    storage_import_test_utils:verify_dir_stats(
         TestCaseCtx, #file_spec{name = FileName, content = Content}
     ),
 

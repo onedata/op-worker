@@ -236,6 +236,10 @@ create_remote_file_import_conflict_test(SuiteCtx) ->
         #file_spec{name = FileName, content = RemoteContent},
         #file_spec{name = ImportedConflictingFileName, content = StorageContent}
     ]),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, [
+        #file_spec{name = FileName, content = RemoteContent},
+        #file_spec{name = ImportedConflictingFileName, content = StorageContent}
+    ]),
 
     %% created => 1 (the conflicting-name import) and deleted => 0 are the crux:
     %% the remote file, having no storage counterpart, leaves no trace in the
@@ -457,6 +461,10 @@ create_file_import_race_test(SuiteCtx) ->
         #file_spec{name = FileName, content = LfmContent},
         #file_spec{name = ImportedConflictingFileName, content = StorageContent}
     ]),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, [
+        #file_spec{name = FileName, content = LfmContent},
+        #file_spec{name = ImportedConflictingFileName, content = StorageContent}
+    ]),
 
     %% the root's verdict was computed before the import (and thus before the
     %% racing LFM create could bump the root's logical mtime), so it follows
@@ -531,6 +539,7 @@ close_file_import_race_test(SuiteCtx) ->
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
     ?assertMatch({error, ?ENOENT}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     )),
@@ -599,6 +608,7 @@ delete_file_reimport_race_test(SuiteCtx) ->
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
 
     %% created => 0 is the crux: the deleted file was not reimported (it still
     %% counts one "unmodified" - it was listed before the deletion). The space
@@ -715,6 +725,7 @@ remote_delete_file_reimport_race_test_base(TestCaseName, SuiteCtx, CreatingProvi
     %% not reimported: the space stays empty on both providers, while the
     %% storage file stays untouched
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
     ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     )),
@@ -784,6 +795,7 @@ delete_opened_file_reimport_race_test(SuiteCtx) ->
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
     ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     )),
@@ -843,6 +855,9 @@ create_delete_race_test(SuiteCtx) ->
 
     %% the file survives, with its content, on both providers
     storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, [#file_spec{name = FileName, content = Content}]
+    ),
+    storage_import_test_utils:verify_dir_stats(
         TestCaseCtx, [#file_spec{name = FileName, content = Content}]
     ),
 
@@ -965,6 +980,9 @@ create_list_race_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(
         TestCaseCtx, #file_spec{name = LeftFileName, content = Content}
     ),
+    storage_import_test_utils:verify_dir_stats(
+        TestCaseCtx, #file_spec{name = LeftFileName, content = Content}
+    ),
 
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 3,
@@ -1021,7 +1039,8 @@ time_warp_between_scans_test(SuiteCtx) ->
     time_test_utils:simulate_seconds_passing(2),
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
     storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx).
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx).
 
 
 %% A backward time warp DURING a scan: the clock is warped (far) back while the
@@ -1047,6 +1066,7 @@ time_warp_during_scan_test(SuiteCtx) ->
 
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         %% the recorded stop time must never precede the start time - with the
         %% clock warped back mid-scan it is clamped to the start time
@@ -1070,7 +1090,8 @@ time_warp_during_scan_test(SuiteCtx) ->
     ),
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
     storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx).
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx).
 
 
 %%%===================================================================
