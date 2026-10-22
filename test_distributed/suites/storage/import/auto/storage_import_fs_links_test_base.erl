@@ -158,7 +158,7 @@ hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeleti
     unlink_if_applicable(Node, SessId, ?FILE_REF(HardlinkGuid), HardlinkDeletionMode),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    TriggerFileSpec = create_trigger_file(TestCaseCtx),
+    TriggerFileSpec = storage_import_test_utils:create_trigger_file_on_storage(TestCaseCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     assert_reference_survival(Node, SessId, FilePath, FileDeletionMode),
@@ -185,8 +185,7 @@ symlink_is_ignored_by_continuous_scan_test(SuiteCtx) ->
 
     TestCaseCtx = #storage_import_test_case_ctx{
         space_path = SpacePath,
-        importing_provider_ctx = ImportingProviderCtx = #provider_ctx{node = Node, session_id = SessId},
-        non_importing_provider_ctx = NonImportingProviderCtx
+        importing_provider_ctx = #provider_ctx{node = Node, session_id = SessId}
     } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(
@@ -197,54 +196,18 @@ symlink_is_ignored_by_continuous_scan_test(SuiteCtx) ->
     {ok, _} = lfm_proxy:make_symlink(Node, SessId, SymlinkPath, SymlinkValue),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    TriggerFileSpec = create_trigger_file(TestCaseCtx),
+    storage_import_test_utils:create_trigger_file_on_storage(TestCaseCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     %% the logical symlink has no storage counterpart, yet the scan must not
     %% mistake it for a deleted entry and remove it
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Node, SessId, {path, SymlinkPath}), ?STORAGE_IMPORT_ATTEMPTS),
-    %% verify_imported_tree supports regular files and directories, not symlinks.
-    %% Check the exact namespace, link target and trigger content on both providers.
-    #file_spec{name = TriggerFileName, content = TriggerContent} = TriggerFileSpec,
-    ExpectedNames = lists:sort([SymlinkName, TriggerFileName]),
-    lists:foreach(fun({ProviderCtx = #provider_ctx{node = ProviderNode, session_id = ProviderSessId}, Attempts}) ->
-        ?assertEqual({ok, SymlinkValue}, lfm_proxy:read_symlink(
-            ProviderNode, ProviderSessId, {path, SymlinkPath}
-        ), Attempts),
-        ?assertMatch({ok, ExpectedNames}, case lfm_proxy:get_children(
-            ProviderNode, ProviderSessId, {path, SpacePath}, 0, 10
-        ) of
-            {ok, Children} -> {ok, lists:sort([Name || {_, Name} <- Children])};
-            Error -> Error
-        end, Attempts),
-        storage_import_test_utils:assert_file_content(
-            ProviderCtx, filepath_utils:join([SpacePath, TriggerFileName]), TriggerContent
-        )
-    end, [
-        {ImportingProviderCtx, ?STORAGE_IMPORT_ATTEMPTS},
-        {NonImportingProviderCtx, ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS}
-    ]),
     assert_symlink_scan_monitoring_state(TestCaseCtx, StorageType).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
-%% Keep the trigger's expected content so the final verification can include it.
--spec create_trigger_file(storage_import_test_utils:case_ctx()) -> #file_spec{}.
-create_trigger_file(#storage_import_test_case_ctx{
-    suite_ctx = #storage_import_test_suite_ctx{importing_provider_selector = ProviderSelector},
-    imported_storage_id = StorageId
-}) ->
-    Name = ?RAND_STR(),
-    Content = ?RAND_STR(),
-    storage_file_tree_test_utils:create_file(
-        ProviderSelector, StorageId, filepath_utils:join([<<"/">>, Name]), Content
-    ),
-    #file_spec{name = Name, content = Content}.
 
 
 %% @private

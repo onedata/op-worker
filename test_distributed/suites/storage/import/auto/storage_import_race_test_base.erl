@@ -232,14 +232,12 @@ create_remote_file_import_conflict_test(SuiteCtx) ->
         ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
     )),
 
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
+    ExpectedFileTreeSpec = [
         #file_spec{name = FileName, content = RemoteContent},
         #file_spec{name = ImportedConflictingFileName, content = StorageContent}
-    ]),
-    storage_import_test_utils:verify_dir_stats(TestCaseCtx, [
-        #file_spec{name = FileName, content = RemoteContent},
-        #file_spec{name = ImportedConflictingFileName, content = StorageContent}
-    ]),
+    ],
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, ExpectedFileTreeSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, ExpectedFileTreeSpec),
 
     %% created => 1 (the conflicting-name import) and deleted => 0 are the crux:
     %% the remote file, having no storage counterpart, leaves no trace in the
@@ -457,14 +455,12 @@ create_file_import_race_test(SuiteCtx) ->
         ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
     )),
 
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
+    ExpectedFileTreeSpec = [
         #file_spec{name = FileName, content = LfmContent},
         #file_spec{name = ImportedConflictingFileName, content = StorageContent}
-    ]),
-    storage_import_test_utils:verify_dir_stats(TestCaseCtx, [
-        #file_spec{name = FileName, content = LfmContent},
-        #file_spec{name = ImportedConflictingFileName, content = StorageContent}
-    ]),
+    ],
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, ExpectedFileTreeSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, ExpectedFileTreeSpec),
 
     %% the root's verdict was computed before the import (and thus before the
     %% racing LFM create could bump the root's logical mtime), so it follows
@@ -854,12 +850,9 @@ create_delete_race_test(SuiteCtx) ->
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
 
     %% the file survives, with its content, on both providers
-    storage_import_test_utils:verify_imported_tree(
-        TestCaseCtx, [#file_spec{name = FileName, content = Content}]
-    ),
-    storage_import_test_utils:verify_dir_stats(
-        TestCaseCtx, [#file_spec{name = FileName, content = Content}]
-    ),
+    ExpectedFileTreeSpec = [#file_spec{name = FileName, content = Content}],
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, ExpectedFileTreeSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, ExpectedFileTreeSpec),
 
     %% deleted => 0 is the crux; the mid-scan-created file leaves no trace in
     %% the counters, and the root's verdict - fixed before the racing create by
@@ -977,12 +970,9 @@ create_list_race_test(SuiteCtx) ->
     ), ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS),
     storage_import_test_utils:assert_file_content(ImportingProviderCtx, LeftFilePath, Content),
     storage_import_test_utils:assert_file_content(NonImportingProviderCtx, LeftFilePath, Content),
-    storage_import_test_utils:verify_imported_tree(
-        TestCaseCtx, #file_spec{name = LeftFileName, content = Content}
-    ),
-    storage_import_test_utils:verify_dir_stats(
-        TestCaseCtx, #file_spec{name = LeftFileName, content = Content}
-    ),
+    ExpectedFileSpec = #file_spec{name = LeftFileName, content = Content},
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, ExpectedFileSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, ExpectedFileSpec),
 
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 3,
