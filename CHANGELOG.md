@@ -37,9 +37,6 @@
 -   **VFS-12973** Allowed creating directories in spaces supported by a
     readonly storage. Previously, such an attempt failed with EROFS
     error.
--   **VFS-12901** Fixed downloading and reading files whose content is
-    not present on the local readonly storage - such requests are now
-    served by another supporting Oneprovider that holds the content.
 -   **VFS-6934** Web GUI: Fixed rounding percentage values in data
     distribution.
 -   **VFS-2073** Improved content-disposition headers sent during file
