@@ -37,6 +37,24 @@ storage_config_upgrade_test_() ->
     LumaApiKey = <<"lumaApiKey">>,
     AutoFeedLumaConfig = {luma_config, ?AUTO_FEED, undefined, undefined},
     ExternalFeedLumaConfig = {luma_config, ?EXTERNAL_FEED, LumaUrl, LumaApiKey},
+    WebdavConfiguration = #{<<"endpoint">> => <<"https://webdav.example.com">>, <<"storagePathType">> => ?FLAT_STORAGE_PATH},
+    HttpConfiguration = #{<<"endpoint">> => <<"https://http.example.com">>, <<"storagePathType">> => ?FLAT_STORAGE_PATH},
+    OAuth2Credentials = #{
+        <<"credentialsType">> => <<"oauth2">>,
+        <<"credentials">> => <<"credentials">>,
+        <<"onedataAccessToken">> => <<"onedataAccessToken">>,
+        <<"adminId">> => <<"adminId">>
+    },
+    GlusterfsConfiguration = #{
+        <<"volume">> => <<"volume">>,
+        <<"hostname">> => <<"hostname">>,
+        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
+    },
+    NfsConfiguration = #{
+        <<"host">> => <<"host">>,
+        <<"volume">> => <<"/volume">>,
+        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
+    },
 
     upgrade_steps_tests(storage_config, [
         {1, "writable storage without LUMA",
@@ -85,6 +103,76 @@ storage_config_upgrade_test_() ->
                 ExternalFeedLumaConfig
             },
             {storage_config, {helper_spec, ?S3_HELPER_NAME, 120000, Args, AdminCtx}, ExternalFeedLumaConfig, undefined, []}
+        },
+        {4, "storage with nothing to move or drop keeps its LUMA DB namespaces",
+            {storage_config, {helper_spec, ?S3_HELPER_NAME, 120000, Args, AdminCtx},
+                ExternalFeedLumaConfig, <<"namespace2">>, [undefined, <<"namespace1">>]},
+            {storage_config, {helper_spec, ?S3_HELPER_NAME, 120000, Args, AdminCtx},
+                ExternalFeedLumaConfig, <<"namespace2">>, [undefined, <<"namespace1">>]}
+        },
+        {4, "WebDAV storage with the OAuth2 IdP among the configuration params",
+            {storage_config,
+                {helper_spec, ?WEBDAV_HELPER_NAME, undefined, WebdavConfiguration#{<<"oauth2IdP">> => <<"idp">>},
+                    OAuth2Credentials},
+                AutoFeedLumaConfig, undefined, []
+            },
+            {storage_config,
+                {helper_spec, ?WEBDAV_HELPER_NAME, undefined, WebdavConfiguration,
+                    OAuth2Credentials#{<<"oauth2IdP">> => <<"idp">>}},
+                AutoFeedLumaConfig, undefined, []
+            }
+        },
+        {4, "HTTP storage with the OAuth2 IdP among both the configuration and the credentials params",
+            {storage_config,
+                {helper_spec, ?HTTP_HELPER_NAME, undefined, HttpConfiguration#{<<"oauth2IdP">> => <<"oldIdp">>},
+                    OAuth2Credentials#{<<"oauth2IdP">> => <<"newIdp">>}},
+                AutoFeedLumaConfig, undefined, []
+            },
+            {storage_config,
+                {helper_spec, ?HTTP_HELPER_NAME, undefined, HttpConfiguration,
+                    OAuth2Credentials#{<<"oauth2IdP">> => <<"newIdp">>}},
+                AutoFeedLumaConfig, undefined, []
+            }
+        },
+        {4, "S3 storage with the params left from the storage's args",
+            {storage_config,
+                {helper_spec, ?S3_HELPER_NAME, undefined, Args#{
+                    <<"blockSize">> => <<"0">>,
+                    <<"maximumCanonicalObjectSize">> => <<"67108864">>,
+                    <<"skipStorageDetection">> => <<"false">>
+                }, AdminCtx},
+                AutoFeedLumaConfig, undefined, []
+            },
+            {storage_config,
+                {helper_spec, ?S3_HELPER_NAME, undefined, Args#{<<"blockSize">> => <<"0">>}, AdminCtx},
+                AutoFeedLumaConfig, undefined, []
+            }
+        },
+        {4, "GlusterFS storage with a block size",
+            {storage_config,
+                {helper_spec, ?GLUSTERFS_HELPER_NAME, undefined, GlusterfsConfiguration#{
+                    <<"blockSize">> => <<"4194304">>,
+                    <<"skipStorageDetection">> => <<"true">>
+                }, #{}},
+                AutoFeedLumaConfig, undefined, []
+            },
+            {storage_config,
+                {helper_spec, ?GLUSTERFS_HELPER_NAME, undefined, GlusterfsConfiguration, #{}},
+                AutoFeedLumaConfig, undefined, []
+            }
+        },
+        {4, "NFS storage keeps the param read only by the storage helper",
+            {storage_config,
+                {helper_spec, ?NFS_HELPER_NAME, undefined, NfsConfiguration#{
+                    <<"tcpSyncnt">> => <<"2">>,
+                    <<"skipStorageDetection">> => <<"false">>
+                }, #{}},
+                AutoFeedLumaConfig, undefined, []
+            },
+            {storage_config,
+                {helper_spec, ?NFS_HELPER_NAME, undefined, NfsConfiguration#{<<"tcpSyncnt">> => <<"2">>}, #{}},
+                AutoFeedLumaConfig, undefined, []
+            }
         }
     ]).
 
