@@ -30,7 +30,9 @@
 %%% throwing, so a returned error must leave the same line as an exception.
 %%%
 %%% Besides, a failure in printing the diff to the log must end as the rest
-%%% of the update's failures do, in an error returned to the caller.
+%%% of the update's failures do, in an error returned to the caller; and a
+%%% refusal, which is thrown, must leave the same line in the log as a
+%%% returned error.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater_test).
@@ -245,6 +247,17 @@ unprintable_diff_fails_the_update_with_an_error_test_() ->
     end}.
 
 
+%% A refusal is thrown, not returned, and must leave the same line in the log
+%% as a returned error does.
+refused_update_is_logged_test_() ->
+    {setup, fun mock_missing_storage_config/0, fun unmock_missing_storage_config/1, fun() ->
+        UpdateSpec = #storage_update_spec{type = <<"posix">>},
+
+        ?assertEqual(?ERROR_NOT_FOUND, storage_updater:update(?STORAGE_ID, UpdateSpec)),
+        ?assertEqual(1, count_error_logs_containing(<<"Failed to update storage '", ?STORAGE_ID/binary, "'">>))
+    end}.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -285,8 +298,24 @@ unmock_logger(_) ->
 
 
 %% @private
+mock_missing_storage_config() ->
+    mock_logger(),
+    meck:new(storage_config, [no_link]),
+    meck:expect(storage_config, get, fun(_StorageId) -> {error, not_found} end).
+
+
+%% @private
+unmock_missing_storage_config(_) ->
+    meck:unload().
+
+
+%% @private
 count_failed_compensation_logs(StepName) ->
-    Pattern = <<"FAILED to compensate step '", StepName/binary, "'">>,
+    count_error_logs_containing(<<"FAILED to compensate step '", StepName/binary, "'">>).
+
+
+%% @private
+count_error_logs_containing(Pattern) ->
     length([
         FormattedLog
         || {_Pid, {onedata_logger, log, [error, _Metadata, FormattedLog]}, _Result} <- meck:history(onedata_logger),

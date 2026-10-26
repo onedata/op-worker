@@ -55,26 +55,29 @@
 
 -spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 update(StorageId, UpdateSpec) ->
-    try
+    Result = try
         % printed inside the try, as printing walks the diff by its type and may
         % raise like the rest of the update
         ?info("Gathered storage (id: '~ts') update diff: ~n~ts", [
             StorageId, storage_crud_utils:pretty_print_spec(UpdateSpec)
         ]),
         do_update(StorageId, UpdateSpec)
-    of
-        ok ->
-            ?info("Successfully updated storage '~ts'", [StorageId]),
-            ok;
-        {error, _} = Error ->
-            ?error(?autoformat_with_msg("Failed to update storage '~ts'", [StorageId], Error)),
-            Error
     catch Class:Reason:Stacktrace ->
+        % a refusal is thrown as a known error, which is returned with no log
+        % line of its own - it is logged below, with the returned errors
         ?examine_exception(
             "Unexpected error when updating storage '~ts'", [StorageId],
             Class, Reason, Stacktrace
         )
-    end.
+    end,
+
+    case Result of
+        ok ->
+            ?info("Successfully updated storage '~ts'", [StorageId]);
+        {error, _} = Error ->
+            ?error(?autoformat_with_msg("Failed to update storage '~ts'", [StorageId], Error))
+    end,
+    Result.
 
 
 -spec update_helper_spec(storage:id(), fun((helper_spec:t()) -> {ok, helper_spec:t()} | {error, term()})) ->

@@ -31,29 +31,32 @@ create(StorageCreateSpec) ->
     StorageName = StorageCreateSpec#storage_create_spec.name,
     StorageType = StorageCreateSpec#storage_create_spec.type,
 
-    try
+    Result = try
         % printed inside the try, as printing walks the spec by its type and may
         % raise like the rest of the create
         ?info("Gathered storage configuration for '~ts' (~ts) - parameters: ~n~ts", [
             StorageName, StorageType, storage_crud_utils:pretty_print_spec(StorageCreateSpec)
         ]),
         do_create(StorageCreateSpec)
-    of
-        {ok, StorageId} = Result ->
-            ?notice("Successfully added storage '~ts' (~ts) with Id: '~ts'", [
-                StorageName, StorageType, StorageId
-            ]),
-            Result;
-        {error, _} = Error ->
-            ?error(?autoformat_with_msg("Failed to add storage '~ts' (~ts)", [StorageName, StorageType], Error)),
-            Error
     catch Class:Reason:Stacktrace ->
+        % a refusal is thrown as a known error, which is returned with no log
+        % line of its own - it is logged below, with the returned errors
         ?examine_exception(
             "Unexpected error when adding storage '~ts' (~ts)",
             [StorageName, StorageType],
             Class, Reason, Stacktrace
         )
-    end.
+    end,
+
+    case Result of
+        {ok, StorageId} ->
+            ?notice("Successfully added storage '~ts' (~ts) with Id: '~ts'", [
+                StorageName, StorageType, StorageId
+            ]);
+        {error, _} = Error ->
+            ?error(?autoformat_with_msg("Failed to add storage '~ts' (~ts)", [StorageName, StorageType], Error))
+    end,
+    Result.
 
 
 %%%===================================================================
