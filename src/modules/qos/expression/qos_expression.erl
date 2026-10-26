@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -26,6 +26,7 @@
 -export([convert_from_old_version_rpn/1]).
 
 -export([try_assigning_storages/3, get_matching_storages_in_space/2]).
+-export([normalize_storage_parameters/1]).
 
 -type operator() :: binary(). % all possible listed in macro ?OPERATORS in qos.hrl
 -type comparator() :: binary(). % all possible listed in macro ?COMPARATORS in qos.hrl
@@ -156,9 +157,39 @@ get_matching_storages_in_space(SpaceId, QosExpression) ->
     end, #{}, SpaceStorages),
     filter_storages(QosExpression, AllStoragesWithParams).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Turns into a number every QoS parameter value of a storage that an
+%% expression reads as a number - one that the scanner gives as a single
+%% number token - so that comparisons such as 'priority > 1' match it. The
+%% values come from the REST API as strings; any other value is left as it is,
+%% as an expression reads it.
+%% @end
+%%--------------------------------------------------------------------
+-spec normalize_storage_parameters(od_storage:qos_parameters()) -> od_storage:qos_parameters().
+normalize_storage_parameters(QosParameters) ->
+    maps:map(fun(_Key, Value) -> normalize_storage_parameter_value(Value) end, QosParameters).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec normalize_storage_parameter_value(binary() | number()) -> binary() | number().
+normalize_storage_parameter_value(Value) when is_binary(Value) ->
+    case unicode:characters_to_list(Value) of
+        Chars when is_list(Chars) ->
+            case qos_expression_scanner:string(Chars) of
+                {ok, [{number, _Line, Number}], _EndLine} -> Number;
+                _ -> Value
+            end;
+        _NotUtf8 ->
+            Value
+    end;
+normalize_storage_parameter_value(Value) ->
+    Value.
+
 
 %% @private
 -spec call_expression_scanner(infix()) -> scanner_tokens().

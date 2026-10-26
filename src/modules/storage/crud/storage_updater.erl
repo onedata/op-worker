@@ -56,12 +56,13 @@
 -spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 update(StorageId, UpdateSpec) ->
     Result = try
+        NormalizedSpec = storage_crud_utils:normalize_qos_parameters(UpdateSpec),
         % printed inside the try, as printing walks the diff by its type and may
         % raise like the rest of the update
         ?info("Gathered storage (id: '~ts') update diff: ~n~ts", [
-            StorageId, storage_crud_utils:pretty_print_spec(UpdateSpec)
+            StorageId, storage_crud_utils:pretty_print_spec(NormalizedSpec)
         ]),
-        do_update(StorageId, UpdateSpec)
+        do_update(StorageId, NormalizedSpec)
     catch Class:Reason:Stacktrace ->
         % a refusal is thrown as a known error, which is returned with no log
         % line of its own - it is logged below, with the returned errors

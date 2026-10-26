@@ -32,12 +32,13 @@ create(StorageCreateSpec) ->
     StorageType = StorageCreateSpec#storage_create_spec.type,
 
     Result = try
+        NormalizedSpec = storage_crud_utils:normalize_qos_parameters(StorageCreateSpec),
         % printed inside the try, as printing walks the spec by its type and may
         % raise like the rest of the create
         ?info("Gathered storage configuration for '~ts' (~ts) - parameters: ~n~ts", [
-            StorageName, StorageType, storage_crud_utils:pretty_print_spec(StorageCreateSpec)
+            StorageName, StorageType, storage_crud_utils:pretty_print_spec(NormalizedSpec)
         ]),
-        do_create(StorageCreateSpec)
+        do_create(NormalizedSpec)
     catch Class:Reason:Stacktrace ->
         % a refusal is thrown as a known error, which is returned with no log
         % line of its own - it is logged below, with the returned errors

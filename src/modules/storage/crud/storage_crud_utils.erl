@@ -30,6 +30,7 @@
 
 %% API
 -export([
+    normalize_qos_parameters/1,
     pretty_print_spec/1,
     verify_storage_path_type/1,
     verify_configuration/4,
@@ -40,6 +41,23 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Stores as numbers the QoS parameters that an expression reads as numbers,
+%% see qos_expression:normalize_storage_parameters/1. An update without QoS
+%% parameters keeps them undefined, as they replace all the previous ones.
+%% @end
+%%--------------------------------------------------------------------
+-spec normalize_qos_parameters(onedata_storage:create_spec() | onedata_storage:update_spec()) ->
+    onedata_storage:create_spec() | onedata_storage:update_spec().
+normalize_qos_parameters(Spec = #storage_create_spec{qos_parameters = QosParameters}) ->
+    Spec#storage_create_spec{qos_parameters = qos_expression:normalize_storage_parameters(QosParameters)};
+normalize_qos_parameters(Spec = #storage_update_spec{qos_parameters = undefined}) ->
+    Spec;
+normalize_qos_parameters(Spec = #storage_update_spec{qos_parameters = QosParameters}) ->
+    Spec#storage_update_spec{qos_parameters = qos_expression:normalize_storage_parameters(QosParameters)}.
 
 
 -spec pretty_print_spec(onedata_storage:create_spec() | onedata_storage:update_spec()) ->

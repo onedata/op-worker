@@ -10,6 +10,8 @@
 %%% update log at info level, leaves of its secrets. Besides the helper
 %%% credentials, a spec carries the API key of an external LUMA feed, and an
 %%% update that changes only the LUMA config carries no credentials at all.
+%%% They also cover the normalization of the QoS parameters that a create
+%%% and an update start with.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_crud_utils_test).
@@ -71,6 +73,32 @@ absent_luma_api_key_is_not_masked_test() ->
     }),
 
     ?assertEqual(nomatch, string:find(Printed, ?CONFIDENTIAL_MASK)).
+
+
+create_spec_qos_parameters_are_normalized_test() ->
+    #storage_create_spec{qos_parameters = QosParameters} = storage_crud_utils:normalize_qos_parameters(
+        #storage_create_spec{type = <<"posix">>, qos_parameters = #{<<"priority">> => <<"2">>}}
+    ),
+
+    ?assertEqual(#{<<"priority">> => 2}, QosParameters).
+
+
+update_spec_qos_parameters_are_normalized_test() ->
+    #storage_update_spec{qos_parameters = QosParameters} = storage_crud_utils:normalize_qos_parameters(
+        #storage_update_spec{type = <<"posix">>, qos_parameters = #{<<"priority">> => <<"2">>}}
+    ),
+
+    ?assertEqual(#{<<"priority">> => 2}, QosParameters).
+
+
+%% The QoS parameters of an update replace all the previous ones, so an update
+%% that doesn't name them must keep them undefined.
+update_spec_without_qos_parameters_keeps_them_undefined_test() ->
+    #storage_update_spec{qos_parameters = QosParameters} = storage_crud_utils:normalize_qos_parameters(
+        #storage_update_spec{type = <<"posix">>}
+    ),
+
+    ?assertEqual(undefined, QosParameters).
 
 
 %%%===================================================================

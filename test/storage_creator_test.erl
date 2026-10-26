@@ -10,6 +10,8 @@
 %%% printed to the log by its type, and a failure there must end as the rest of
 %%% the create's failures do, in an error returned to the caller; and a refusal,
 %%% which is thrown, must leave the same line in the log as a returned error.
+%%% Besides, the QoS parameters must reach Onezone as numbers where a QoS
+%%% expression reads them as numbers.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_creator_test).
@@ -59,6 +61,26 @@ refused_create_is_logged_test_() ->
     end}.
 
 
+%% Onepanel passes the QoS parameters as the REST request had them, as strings.
+create_sends_normalized_qos_parameters_to_onezone_test_() ->
+    {setup, fun mock_create_up_to_onezone/0, fun unmock_create_up_to_onezone/1, fun() ->
+        Spec = #storage_create_spec{
+            type = <<"posix">>,
+            name = <<"some-storage">>,
+            luma = #luma_spec{feed = auto},
+            qos_parameters = #{<<"priority">> => <<"2">>, <<"region">> => <<"eu">>},
+            credentials = #posix_helper_credentials{uid = 0}
+        },
+
+        storage_creator:create(Spec),
+
+        ?assertEqual(
+            #{<<"priority">> => 2, <<"region">> => <<"eu">>},
+            meck:capture(first, storage_logic, create_in_zone, '_', 4)
+        )
+    end}.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -88,6 +110,27 @@ mock_refusing_path_type_check() ->
 
 %% @private
 unmock_refusing_path_type_check(_) ->
+    meck:unload().
+
+
+%% @private
+%% Everything the create does before it writes to Onezone passes, and the write
+%% to Onezone fails, which ends the create there.
+mock_create_up_to_onezone() ->
+    mock_logger(),
+    meck:new([helper_spec, storage_crud_utils], [passthrough, no_link]),
+    meck:new(storage_logic, [no_link]),
+    meck:expect(helper_spec, build, fun(_Spec) -> helper_spec_not_inspected end),
+    meck:expect(storage_crud_utils, verify_storage_path_type, fun(_HelperSpec) -> ok end),
+    meck:expect(storage_crud_utils, verify_configuration, fun(_Name, _Readonly, _Imported, _HelperSpec) -> ok end),
+    meck:expect(storage_crud_utils, run_diagnostics, fun(_HelperSpec, _LumaFeed, _Mode) -> ok end),
+    meck:expect(storage_logic, create_in_zone, fun(_Name, _Imported, _Readonly, _QosParameters) ->
+        {error, onezone_write_not_reached_in_test}
+    end).
+
+
+%% @private
+unmock_create_up_to_onezone(_) ->
     meck:unload().
 
 

@@ -27,8 +27,8 @@
 -type name() :: binary().
 
 -type qos_param_key() :: binary().
-% a value that a QoS expression reads as a number is a number (see
-% qos_expression_scanner), any other value a binary
+% op-worker stores as numbers the values that a QoS expression reads as
+% numbers (qos_expression:normalize_storage_parameters/1), the others as binaries
 -type qos_param_value() :: binary() | number().
 -type qos_parameters() :: #{qos_param_key() => qos_param_value()}.
 

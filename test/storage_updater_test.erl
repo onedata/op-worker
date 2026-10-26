@@ -32,7 +32,8 @@
 %%% Besides, a failure in printing the diff to the log must end as the rest
 %%% of the update's failures do, in an error returned to the caller; and a
 %%% refusal, which is thrown, must leave the same line in the log as a
-%%% returned error.
+%%% returned error. And the QoS parameters must reach Onezone as numbers where
+%%% a QoS expression reads them as numbers.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater_test).
@@ -259,6 +260,26 @@ refused_update_is_logged_test_() ->
 
 
 %%%===================================================================
+%%% QoS parameters tests
+%%%===================================================================
+
+
+%% Onepanel passes the QoS parameters as the REST request had them, as strings.
+update_sends_normalized_qos_parameters_to_onezone_test_() ->
+    {setup, fun mock_update_up_to_onezone/0, fun unmock_update_up_to_onezone/1, fun() ->
+        storage_updater:update(?STORAGE_ID, #storage_update_spec{
+            type = <<"posix">>,
+            qos_parameters = #{<<"priority">> => <<"2">>, <<"region">> => <<"eu">>}
+        }),
+
+        #storage_update_spec{qos_parameters = QosParameters} = meck:capture(
+            first, storage_logic, update_in_zone, '_', 2
+        ),
+        ?assertEqual(#{<<"priority">> => 2, <<"region">> => <<"eu">>}, QosParameters)
+    end}.
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -295,6 +316,30 @@ mock_logger() ->
 %% @private
 unmock_logger(_) ->
     meck:unload(onedata_logger).
+
+
+%% @private
+%% Everything the update does before it writes to Onezone passes, with no change
+%% to the helper or to LUMA, and the write to Onezone fails, which ends the
+%% update there.
+mock_update_up_to_onezone() ->
+    mock_logger(),
+    meck:new([storage_config, storage_logic], [no_link]),
+    meck:new(helper_spec, [passthrough, no_link]),
+    meck:expect(storage_config, get, fun(StorageId) ->
+        {ok, #document{key = StorageId, value = #storage_config{helper_spec = helper_spec_not_inspected}}}
+    end),
+    meck:expect(helper_spec, get_name, fun(_HelperSpec) -> <<"posix">> end),
+    meck:expect(helper_spec, update, fun(_HelperSpec, _UpdateSpec) -> {error, no_change} end),
+    meck:expect(storage_logic, get, fun(_StorageId) -> {ok, #document{value = #od_storage{}}} end),
+    meck:expect(storage_logic, update_in_zone, fun(_StorageId, _UpdateSpec) ->
+        {error, onezone_write_not_reached_in_test}
+    end).
+
+
+%% @private
+unmock_update_up_to_onezone(_) ->
+    meck:unload().
 
 
 %% @private
