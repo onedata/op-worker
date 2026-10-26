@@ -28,12 +28,18 @@
 %%% in which Onezone and the provider end up disagreeing about a storage, and
 %%% both compensations report a failure by returning an error rather than by
 %%% throwing, so a returned error must leave the same line as an exception.
+%%%
+%%% Besides, a failure in printing the diff to the log must end as the rest
+%%% of the update's failures do, in an error returned to the caller.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater_test).
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/posix.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(STORAGE_ID, <<"dummyStorageId">>).
@@ -218,6 +224,24 @@ failed_compensation_does_not_stop_the_others_test_() ->
         ]),
 
         ?assert(receive step_a_compensated -> true after 0 -> false end)
+    end}.
+
+
+%%%===================================================================
+%%% Failure handling tests
+%%%===================================================================
+
+
+%% A type that no helper spec module serves makes the print of the diff raise;
+%% it must end as the rest of the update's failures do.
+unprintable_diff_fails_the_update_with_an_error_test_() ->
+    {setup, fun mock_logger/0, fun unmock_logger/1, fun() ->
+        UpdateSpec = #storage_update_spec{
+            type = <<"unknown">>,
+            credentials = #posix_helper_credentials_diff{uid = 0}
+        },
+
+        ?assertMatch(?ERR_INTERNAL_SERVER_ERROR(_, _), storage_updater:update(?STORAGE_ID, UpdateSpec))
     end}.
 
 

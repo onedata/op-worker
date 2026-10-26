@@ -55,11 +55,14 @@
 
 -spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 update(StorageId, UpdateSpec) ->
-    ?info("Gathered storage (id: '~ts') update diff: ~n~ts", [
-        StorageId, storage_crud_utils:pretty_print_spec(UpdateSpec)
-    ]),
-
-    try do_update(StorageId, UpdateSpec) of
+    try
+        % printed inside the try, as printing walks the diff by its type and may
+        % raise like the rest of the update
+        ?info("Gathered storage (id: '~ts') update diff: ~n~ts", [
+            StorageId, storage_crud_utils:pretty_print_spec(UpdateSpec)
+        ]),
+        do_update(StorageId, UpdateSpec)
+    of
         ok ->
             ?info("Successfully updated storage '~ts'", [StorageId]),
             ok;
