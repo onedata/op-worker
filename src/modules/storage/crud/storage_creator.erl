@@ -98,7 +98,11 @@ do_create(StorageCreateSpec = #storage_create_spec{
 
 
 %% @private
--spec build_luma_config(onedata_storage:luma_spec()) -> luma_config:config().
+-spec build_luma_config(onedata_storage:luma_spec()) -> luma_config:config() | no_return().
+build_luma_config(#luma_spec{feed = external, url = undefined}) ->
+    % refused as the update refuses it - every request to the feed would go
+    % nowhere, and no user but root could reach the storage
+    throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), url));
 build_luma_config(#luma_spec{feed = external, url = Url, api_key = ApiKey}) ->
     luma_config:new_with_external_feed(Url, ApiKey);
 build_luma_config(#luma_spec{feed = Feed}) ->

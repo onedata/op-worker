@@ -81,6 +81,22 @@ create_sends_normalized_qos_parameters_to_onezone_test_() ->
     end}.
 
 
+%% Onepanel's model has the feed's URL optional; with no URL every request to the
+%% feed would go nowhere.
+external_luma_feed_without_url_is_refused_before_onezone_test_() ->
+    {setup, fun mock_create_up_to_onezone/0, fun unmock_create_up_to_onezone/1, fun() ->
+        Spec = #storage_create_spec{
+            type = <<"posix">>,
+            name = <<"some-storage">>,
+            luma = #luma_spec{feed = external},
+            credentials = #posix_helper_credentials{uid = 0}
+        },
+
+        ?assertMatch(?ERR_MISSING_REQUIRED_VALUE(_, url), storage_creator:create(Spec)),
+        ?assertEqual(0, meck:num_calls(storage_logic, create_in_zone, '_'))
+    end}.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
