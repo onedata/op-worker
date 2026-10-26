@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -27,7 +27,9 @@
 -type name() :: binary().
 
 -type qos_param_key() :: binary().
--type qos_param_value() :: binary().
+% a value that a QoS expression reads as a number is a number (see
+% qos_expression_scanner), any other value a binary
+-type qos_param_value() :: binary() | number().
 -type qos_parameters() :: #{qos_param_key() => qos_param_value()}.
 
 -export_type([id/0, record/0, doc/0, diff/0]).
