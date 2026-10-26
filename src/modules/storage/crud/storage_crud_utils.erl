@@ -143,14 +143,33 @@ check_helper_against_imported_option(true, HelperSpec) ->
 %% @private
 -spec redact_confidential_data(onedata_storage:create_spec() | onedata_storage:update_spec()) ->
     onedata_storage:create_spec() | onedata_storage:update_spec().
-redact_confidential_data(Spec = #storage_create_spec{type = Type, credentials = Credentials}) ->
-    RedactedCredentials = helper_spec:redact_confidential_credentials(Type, Credentials),
-    Spec#storage_create_spec{credentials = RedactedCredentials};
-redact_confidential_data(Spec = #storage_update_spec{credentials = undefined}) ->
-    Spec;
-redact_confidential_data(Spec = #storage_update_spec{type = Type, credentials = CredentialsDiff}) ->
-    RedactedCredentialsDiff = helper_spec:redact_confidential_credentials_diff(Type, CredentialsDiff),
-    Spec#storage_update_spec{credentials = RedactedCredentialsDiff}.
+redact_confidential_data(Spec = #storage_create_spec{type = Type, luma = Luma, credentials = Credentials}) ->
+    Spec#storage_create_spec{
+        luma = redact_luma_api_key(Luma),
+        credentials = helper_spec:redact_confidential_credentials(Type, Credentials)
+    };
+redact_confidential_data(Spec = #storage_update_spec{type = Type, luma = Luma, credentials = CredentialsDiff}) ->
+    Spec#storage_update_spec{
+        luma = redact_luma_api_key(Luma),
+        credentials = redact_confidential_credentials_diff(Type, CredentialsDiff)
+    }.
+
+
+%% @private
+-spec redact_luma_api_key(undefined | onedata_storage:luma_spec()) -> undefined | onedata_storage:luma_spec().
+redact_luma_api_key(undefined) ->
+    undefined;
+redact_luma_api_key(LumaSpec = #luma_spec{}) ->
+    helper_spec_utils:redact_record_fields_if_defined(LumaSpec, [#luma_spec.api_key]).
+
+
+%% @private
+-spec redact_confidential_credentials_diff(onedata_storage:type(), undefined | onedata_storage:helper_credentials_diff()) ->
+    undefined | onedata_storage:helper_credentials_diff().
+redact_confidential_credentials_diff(_Type, undefined) ->
+    undefined;
+redact_confidential_credentials_diff(Type, CredentialsDiff) ->
+    helper_spec:redact_confidential_credentials_diff(Type, CredentialsDiff).
 
 
 %%--------------------------------------------------------------------
