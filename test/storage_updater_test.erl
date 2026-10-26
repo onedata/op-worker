@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of the storage update saga, covering the two things about it that
-%%% are easy to break while reshuffling the code.
+%%% Unit tests of the storage update saga, covering the three things about it
+%%% that are easy to break while reshuffling the code.
 %%%
 %%% The first is the LUMA DB namespace bookkeeping - which namespace a storage
 %%% reads through, and which ones are recorded for the garbage collector to
@@ -23,6 +23,11 @@
 %%% applied with nothing to take it back. The write is therefore the only thing
 %%% the step reports on; that the propagation which follows it cannot fail the
 %%% step is covered by rtransfer_config_test.
+%%%
+%%% The third is what a failed compensation leaves in the log. It is the one way
+%%% in which Onezone and the provider end up disagreeing about a storage, and
+%%% both compensations report a failure by returning an error rather than by
+%%% throwing, so a returned error must leave the same line as an exception.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater_test).
@@ -176,6 +181,47 @@ luma_only_change_does_not_touch_rtransfer_test_() ->
 
 
 %%%===================================================================
+%%% Compensation reporting tests
+%%%===================================================================
+
+
+compensation_returning_error_is_logged_test_() ->
+    {setup, fun mock_logger/0, fun unmock_logger/1, fun() ->
+        storage_updater:run_compensations([{<<"step-a">>, fun() -> {error, not_found} end}]),
+
+        ?assertEqual(1, count_failed_compensation_logs(<<"step-a">>))
+    end}.
+
+
+compensation_crashing_is_logged_test_() ->
+    {setup, fun mock_logger/0, fun unmock_logger/1, fun() ->
+        storage_updater:run_compensations([{<<"step-a">>, fun() -> error(crash) end}]),
+
+        ?assertEqual(1, count_failed_compensation_logs(<<"step-a">>))
+    end}.
+
+
+successful_compensation_logs_no_failure_test_() ->
+    {setup, fun mock_logger/0, fun unmock_logger/1, fun() ->
+        storage_updater:run_compensations([{<<"step-a">>, fun() -> ok end}]),
+
+        ?assertEqual(0, count_failed_compensation_logs(<<"step-a">>))
+    end}.
+
+
+failed_compensation_does_not_stop_the_others_test_() ->
+    {setup, fun mock_logger/0, fun unmock_logger/1, fun() ->
+        Self = self(),
+        storage_updater:run_compensations([
+            {<<"step-b">>, fun() -> {error, not_found} end},
+            {<<"step-a">>, fun() -> Self ! step_a_compensated, ok end}
+        ]),
+
+        ?assert(receive step_a_compensated -> true after 0 -> false end)
+    end}.
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -200,6 +246,28 @@ mock_update_in_op_deps() ->
 %% @private
 unmock_update_in_op_deps(_) ->
     meck:unload().
+
+
+%% @private
+mock_logger() ->
+    meck:new(onedata_logger, [passthrough, no_link]),
+    meck:expect(onedata_logger, should_log, fun(_Loglevel) -> true end),
+    meck:expect(onedata_logger, log, fun(_Loglevel, _Metadata, _FormattedLog) -> ok end).
+
+
+%% @private
+unmock_logger(_) ->
+    meck:unload(onedata_logger).
+
+
+%% @private
+count_failed_compensation_logs(StepName) ->
+    Pattern = <<"FAILED to compensate step '", StepName/binary, "'">>,
+    length([
+        FormattedLog
+        || {_Pid, {onedata_logger, log, [error, _Metadata, FormattedLog]}, _Result} <- meck:history(onedata_logger),
+        string:find(FormattedLog, Pattern) /= nomatch
+    ]).
 
 
 %% @private

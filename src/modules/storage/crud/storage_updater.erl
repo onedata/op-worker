@@ -31,6 +31,8 @@
 -export([rotate_luma_db_namespace/1, build_rollback_storage_config/3]).
 %% Export for unit testing of what the first saga step reports
 -export([update_in_op/4]).
+%% Export for unit testing of what a failed compensation leaves in the log
+-export([run_compensations/1]).
 -endif.
 
 
@@ -459,13 +461,24 @@ run_compensations([]) ->
     ok;
 run_compensations([{Name, Compensation} | Rest]) ->
     ?warning("Storage update saga - compensating step: ~ts", [Name]),
+    case run_compensation(Compensation) of
+        ok ->
+            ok;
+        {error, _} = Error ->
+            ?error(
+                "Storage update saga - FAILED to compensate step '~ts'; manual "
+                "intervention may be required to restore consistent state~nError: ~tp",
+                [Name, Error]
+            )
+    end,
+    run_compensations(Rest).
+
+
+%% @private
+-spec run_compensation(fun(() -> ok | {error, term()})) -> ok | {error, term()}.
+run_compensation(Compensation) ->
     try
         Compensation()
     catch Class:Reason:Stacktrace ->
-        ?warning(
-            "Storage update saga - FAILED to compensate step; "
-            "manual intervention may be required to restore consistent state"
-        ),
         ?examine_exception(Class, Reason, Stacktrace)
-    end,
-    run_compensations(Rest).
+    end.
