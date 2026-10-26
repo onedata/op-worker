@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @copyright (C) 2017 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
@@ -87,10 +87,16 @@ update(LumaConfig = #luma_config{
         {false, false} ->
             {error, no_update};
         {false, true} ->
-            {ok, LumaConfig#luma_config{
+            % an update of the storage that names the feed's settings it
+            % already has changes nothing - and must not, as a change of the
+            % LUMA config rotates the storage's LUMA DB namespace
+            case LumaConfig#luma_config{
                 url = maps:get(url, Diff, Url),
                 api_key = maps:get(api_key, Diff, ApiKey)
-            }};
+            } of
+                LumaConfig -> {error, no_update};
+                NewLumaConfig -> {ok, NewLumaConfig}
+            end;
         {true, false} ->
             {ok, #luma_config{
                 feed = NewFeed,

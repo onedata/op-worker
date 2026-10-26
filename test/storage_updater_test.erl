@@ -33,7 +33,8 @@
 %%% of the update's failures do, in an error returned to the caller; and a
 %%% refusal, which is thrown, must leave the same line in the log as a
 %%% returned error. And the QoS parameters must reach Onezone as numbers where
-%%% a QoS expression reads them as numbers.
+%%% a QoS expression reads them as numbers, and an update that names no LUMA
+%%% setting must leave the LUMA config as it is.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater_test).
@@ -280,6 +281,27 @@ update_sends_normalized_qos_parameters_to_onezone_test_() ->
 
 
 %%%===================================================================
+%%% LUMA config tests
+%%%===================================================================
+
+
+%% A change of the LUMA config rotates the storage's LUMA DB namespace and runs
+%% the diagnostics on every node, so an update that names no LUMA setting - here
+%% the empty LUMA spec that comes with a rename - must do neither.
+update_without_luma_change_keeps_the_storage_config_test_() ->
+    {setup, fun mock_update_of_external_feed_storage/0, fun unmock_update_of_external_feed_storage/1, fun() ->
+        ?assertEqual(ok, storage_updater:update(?STORAGE_ID, #storage_update_spec{
+            type = <<"posix">>,
+            name = <<"new-name">>,
+            luma = #luma_spec{}
+        })),
+
+        ?assertEqual(0, meck:num_calls(storage_config, update, '_')),
+        ?assertEqual(0, meck:num_calls(storage_crud_utils, run_diagnostics, '_'))
+    end}.
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -339,6 +361,33 @@ mock_update_up_to_onezone() ->
 
 %% @private
 unmock_update_up_to_onezone(_) ->
+    meck:unload().
+
+
+%% @private
+%% A storage on the external feed, whose update with no change to the helper
+%% writes to Onezone and passes.
+mock_update_of_external_feed_storage() ->
+    mock_logger(),
+    meck:new([storage_config, storage_logic, fslogic_event_emitter], [no_link]),
+    meck:new([helper_spec, storage_crud_utils], [passthrough, no_link]),
+    meck:expect(storage_config, get, fun(StorageId) ->
+        {ok, #document{key = StorageId, value = #storage_config{
+            helper_spec = helper_spec_not_inspected,
+            luma_config = luma_config:new_with_external_feed(<<"https://luma.example.com">>, undefined)
+        }}}
+    end),
+    meck:expect(storage_config, update, fun(StorageId, _Diff) -> {ok, #document{key = StorageId}} end),
+    meck:expect(helper_spec, get_name, fun(_HelperSpec) -> <<"posix">> end),
+    meck:expect(helper_spec, update, fun(_HelperSpec, _UpdateSpec) -> {error, no_change} end),
+    meck:expect(storage_crud_utils, run_diagnostics, fun(_HelperSpec, _LumaFeed, _Mode) -> ok end),
+    meck:expect(fslogic_event_emitter, emit_helper_params_changed, fun(_StorageId) -> ok end),
+    meck:expect(storage_logic, get, fun(_StorageId) -> {ok, #document{value = #od_storage{}}} end),
+    meck:expect(storage_logic, update_in_zone, fun(_StorageId, _UpdateSpec) -> ok end).
+
+
+%% @private
+unmock_update_of_external_feed_storage(_) ->
     meck:unload().
 
 
