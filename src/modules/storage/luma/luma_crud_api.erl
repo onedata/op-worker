@@ -349,10 +349,9 @@ clear_all_tables(StorageData) ->
 -spec clear_all_tables(storage:data(), undefined | luma_db:namespace()) -> ok.
 clear_all_tables(StorageData, Namespace) ->
     NamespacedStorageData = storage:with_luma_db_namespace(StorageData, Namespace),
+    StorageId = storage:get_id(StorageData),
 
-    ?info("Clearing LUMA DB tables for storage '~ts' (namespace: ~tp)", [
-        storage:get_id(StorageData), Namespace
-    ]),
+    ?info("Clearing LUMA DB tables for storage '~ts' (namespace: ~tp)", [StorageId, Namespace]),
 
     Tables = [
         {luma_storage_users, fun luma_storage_users:clear_all/1},
@@ -362,11 +361,13 @@ clear_all_tables(StorageData, Namespace) ->
         {luma_onedata_groups, fun luma_onedata_groups:clear_all/1}
     ],
     lists:foreach(fun({TableName, ClearFun}) ->
-        ?info("Clearing LUMA table '~ts'", [TableName]),
+        ?debug("Clearing LUMA table '~ts' for storage '~ts' (namespace: ~tp)", [
+            TableName, StorageId, Namespace
+        ]),
         ClearFun(NamespacedStorageData)
     end, Tables),
 
-    ?info("Successfully cleared LUMA DB").
+    ?info("Cleared LUMA DB tables for storage '~ts' (namespace: ~tp)", [StorageId, Namespace]).
 
 
 %% @private
