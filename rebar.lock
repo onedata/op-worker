@@ -117,7 +117,7 @@
  {<<"observer_cli">>,{pkg,<<"observer_cli">>,<<"1.6.2">>},1},
  {<<"onenv_ct">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/onenv-ct.git",
-       {ref,"653da8d185d921fc687fcd7169daeb888ef88048"}},
+       {ref,"c4c24c424a3f9a84afd165ead392861b82049072"}},
   0},
  {<<"opw_panel_contracts">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/opw-panel-contracts.git",
