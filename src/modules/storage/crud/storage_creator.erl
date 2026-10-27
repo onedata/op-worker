@@ -104,6 +104,9 @@ build_luma_config(#luma_spec{feed = external, url = undefined}) ->
     % refused as the update refuses it - every request to the feed would go
     % nowhere, and no user but root could reach the storage
     throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), url));
+build_luma_config(#luma_spec{feed = external, url = <<>>}) ->
+    % refused for the same reason
+    throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), url));
 build_luma_config(#luma_spec{feed = external, url = Url, api_key = ApiKey}) ->
     luma_config:new_with_external_feed(Url, ApiKey);
 build_luma_config(#luma_spec{feed = Feed}) ->

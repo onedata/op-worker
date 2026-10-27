@@ -86,6 +86,10 @@ update(LumaConfig = #luma_config{
     case {FeedHasChanged, NewFeed =:= ?EXTERNAL_FEED} of
         {false, false} ->
             {error, no_update};
+        {_, true} when is_map_key(url, Diff), map_get(url, Diff) =:= <<>> ->
+            % every request to the feed would go nowhere, and no user but root
+            % could reach the storage
+            ?ERR_BAD_VALUE_EMPTY(?err_ctx(), url);
         {false, true} ->
             % an update of the storage that names the feed's settings it
             % already has changes nothing - and must not, as a change of the

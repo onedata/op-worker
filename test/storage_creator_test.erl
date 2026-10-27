@@ -99,6 +99,21 @@ external_luma_feed_without_url_is_refused_before_onezone_test_() ->
     end}.
 
 
+%% The parser takes an empty string as well.
+external_luma_feed_with_empty_url_is_refused_before_onezone_test_() ->
+    {setup, fun mock_create_up_to_onezone/0, fun unmock_create_up_to_onezone/1, fun() ->
+        Spec = #storage_create_spec{
+            type = <<"posix">>,
+            name = <<"some-storage">>,
+            luma = #luma_spec{feed = external, url = <<>>},
+            credentials = #posix_helper_credentials{uid = 0}
+        },
+
+        ?assertMatch(?ERR_BAD_VALUE_EMPTY(_, url), storage_creator:create(Spec)),
+        ?assertEqual(0, meck:num_calls(storage_logic, create_in_zone, '_'))
+    end}.
+
+
 %% Onepanel's model has the credentials optional, while every use of an HTTP
 %% storage requires them unless its credentials type is none. The diagnostics
 %% skip HTTP, so nothing else stops such a create.
