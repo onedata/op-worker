@@ -125,9 +125,16 @@ clear_stale_db_namespace(StorageIdOrData, Namespace) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec clear_space_entries(storage:id() | storage:data(), od_space:id()) -> ok | {error, term()}.
-clear_space_entries(StorageIdOrData, SpaceId) ->
-    StorageData = ensure_storage_data(StorageIdOrData),
-
+clear_space_entries(StorageId, SpaceId) when is_binary(StorageId) ->
+    case storage:get(StorageId) of
+        {ok, StorageData} ->
+            clear_space_entries(StorageData, SpaceId);
+        {error, not_found} ->
+            % the storage was deleted once the space's support was revoked, and
+            % its deletion cleared its LUMA DB in every namespace
+            ok
+    end;
+clear_space_entries(StorageData, SpaceId) ->
     % NOTE: no event - this is called when the space is being unsupported, so the
     % clients are losing access to it altogether
     luma_spaces_display_defaults:delete(StorageData, SpaceId),
