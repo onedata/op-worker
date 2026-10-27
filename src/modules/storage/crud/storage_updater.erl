@@ -158,7 +158,9 @@ do_update(StorageId, UpdateSpec) ->
 %% previous namespace back off the list, which is required, as the rollback
 %% makes it live again. The only entry it can lose is one the garbage collector
 %% has finished cleaning in the meantime, which merely costs one more (empty)
-%% pass over it.
+%% pass over it. Nor can the collector clear the namespace revived here: the
+%% saga holds the storage's lock throughout, and the collector checks each
+%% namespace under that lock before clearing it.
 %% @end
 %%--------------------------------------------------------------------
 -spec build_rollback_storage_config(storage_config:record(), storage_config:record(), boolean()) ->
