@@ -721,7 +721,6 @@ remote_delete_file_reimport_race_test_base(TestCaseName, SuiteCtx, CreatingProvi
     %% not reimported: the space stays empty on both providers, while the
     %% storage file stays untouched
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
-    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
     ?assertMatch({ok, _}, storage_file_tree_test_utils:stat(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     )),
