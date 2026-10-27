@@ -296,7 +296,7 @@ update_without_luma_change_keeps_the_storage_config_test_() ->
         ?assertEqual(ok, storage_updater:update(?STORAGE_ID, #storage_update_spec{
             type = <<"posix">>,
             name = <<"new-name">>,
-            luma = #luma_spec{}
+            luma = #luma_spec_diff{}
         })),
 
         ?assertEqual(0, meck:num_calls(storage_config, update, '_')),

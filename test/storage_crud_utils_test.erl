@@ -49,7 +49,7 @@ create_spec_hides_luma_api_key_test() ->
 update_spec_hides_luma_api_key_test() ->
     Printed = pretty_print(#storage_update_spec{
         type = <<"posix">>,
-        luma = external_luma_spec(?API_KEY),
+        luma = external_luma_spec_diff(?API_KEY),
         credentials = #posix_helper_credentials_diff{uid = 0}
     }),
 
@@ -61,7 +61,7 @@ update_spec_hides_luma_api_key_test() ->
 update_spec_without_credentials_hides_luma_api_key_test() ->
     Printed = pretty_print(#storage_update_spec{
         type = <<"posix">>,
-        luma = external_luma_spec(?API_KEY),
+        luma = external_luma_spec_diff(?API_KEY),
         credentials = undefined
     }),
 
@@ -72,7 +72,7 @@ update_spec_without_credentials_hides_luma_api_key_test() ->
 absent_luma_api_key_is_not_masked_test() ->
     Printed = pretty_print(#storage_update_spec{
         type = <<"posix">>,
-        luma = #luma_spec{feed = auto}
+        luma = #luma_spec_diff{feed = auto}
     }),
 
     ?assertEqual(nomatch, string:find(Printed, ?CONFIDENTIAL_MASK)).
@@ -163,3 +163,8 @@ pretty_print(Spec) ->
 %% @private
 external_luma_spec(ApiKey) ->
     #luma_spec{feed = external, url = <<"https://luma.example.com">>, api_key = ApiKey}.
+
+
+%% @private
+external_luma_spec_diff(ApiKey) ->
+    #luma_spec_diff{feed = external, url = <<"https://luma.example.com">>, api_key = ApiKey}.

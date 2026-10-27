@@ -321,8 +321,8 @@ infer_new_value(NewValue, PrevValue) -> {NewValue /= PrevValue, NewValue}.
 
 
 %% @private
--spec build_luma_diff(onedata_storage:luma_spec()) -> luma_config:diff().
-build_luma_diff(#luma_spec{feed = Feed, url = Url, api_key = ApiKey}) ->
+-spec build_luma_diff(onedata_storage:luma_spec_diff()) -> luma_config:diff().
+build_luma_diff(#luma_spec_diff{feed = Feed, url = Url, api_key = ApiKey}) ->
     maps_utils:remove_undefined(#{
         feed => Feed,
         url => Url,

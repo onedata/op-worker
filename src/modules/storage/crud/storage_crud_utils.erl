@@ -198,11 +198,14 @@ redact_confidential_data(Spec = #storage_update_spec{type = Type, luma = Luma, c
 
 
 %% @private
--spec redact_luma_api_key(undefined | onedata_storage:luma_spec()) -> undefined | onedata_storage:luma_spec().
+-spec redact_luma_api_key(undefined | onedata_storage:luma_spec() | onedata_storage:luma_spec_diff()) ->
+    undefined | onedata_storage:luma_spec() | onedata_storage:luma_spec_diff().
 redact_luma_api_key(undefined) ->
     undefined;
 redact_luma_api_key(LumaSpec = #luma_spec{}) ->
-    helper_spec_utils:redact_record_fields_if_defined(LumaSpec, [#luma_spec.api_key]).
+    helper_spec_utils:redact_record_fields_if_defined(LumaSpec, [#luma_spec.api_key]);
+redact_luma_api_key(LumaSpecDiff = #luma_spec_diff{}) ->
+    helper_spec_utils:redact_record_fields_if_defined(LumaSpecDiff, [#luma_spec_diff.api_key]).
 
 
 %% @private
@@ -235,6 +238,11 @@ get_record_def(storage_update_spec, N) ->
 get_record_def(luma_spec, N) ->
     case record_info(size, luma_spec) - 1 of
         N -> record_info(fields, luma_spec);
+        _ -> no
+    end;
+get_record_def(luma_spec_diff, N) ->
+    case record_info(size, luma_spec_diff) - 1 of
+        N -> record_info(fields, luma_spec_diff);
         _ -> no
     end;
 get_record_def(ceph_helper_credentials, N) ->
