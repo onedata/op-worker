@@ -121,7 +121,7 @@
   0},
  {<<"opw_panel_contracts">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/opw-panel-contracts.git",
-       {ref,"5ad9c6e5b1c66b762dd867da26449cb7dbda7ea7"}},
+       {ref,"bb7b59043d9ea63dcc9454b8f9858c4b7253fbd0"}},
   0},
  {<<"parse_trans">>,{pkg,<<"parse_trans">>,<<"3.3.1">>},2},
  {<<"plain_fsm">>,{pkg,<<"plain_fsm">>,<<"1.4.2">>},2},
