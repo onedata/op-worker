@@ -33,6 +33,7 @@
     normalize_qos_parameters/1,
     pretty_print_spec/1,
     verify_storage_path_type/1,
+    verify_credentials/1,
     verify_configuration/4,
     run_diagnostics/3
 ]).
@@ -86,6 +87,29 @@ verify_storage_path_type(HelperSpec) ->
             throw(?ERR_BAD_VALUE_NOT_ALLOWED(
                 ?err_ctx(), <<"storagePathType">>, SupportedStoragePathTypes
             ))
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks the storage's own credentials the way every use of the storage checks
+%% them before it makes a helper (see helper_spec:build_helper_params/2), so that
+%% credentials which would fail every use are refused before anything is
+%% written. The diagnostics don't cover it, as they skip some storage types.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_credentials(helper_spec:t()) -> ok | no_return().
+verify_credentials(HelperSpec) ->
+    case helper_spec:validate_credentials(HelperSpec, helper_spec:get_credentials(HelperSpec)) of
+        ok ->
+            ok;
+        {error, {missing_field, Field}} ->
+            throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), Field));
+        {error, {unexpected_field, Field}} ->
+            throw(?ERR_BAD_DATA(?err_ctx(), Field, undefined));
+        {error, {invalid_field_value, Field, _Value}} ->
+            % the value stays out of the error, as it may be a secret
+            throw(?ERR_BAD_DATA(?err_ctx(), Field, undefined))
     end.
 
 

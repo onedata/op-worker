@@ -11,7 +11,8 @@
 %%% the create's failures do, in an error returned to the caller; and a refusal,
 %%% which is thrown, must leave the same line in the log as a returned error.
 %%% Besides, the QoS parameters must reach Onezone as numbers where a QoS
-%%% expression reads them as numbers.
+%%% expression reads them as numbers, and a create whose credentials would fail
+%%% every use of the storage must be refused before Onezone.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_creator_test).
@@ -19,6 +20,7 @@
 
 -include_lib("ctool/include/errors.hrl").
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/http.hrl").
 -include_lib("opw_panel_contracts/include/storage/posix.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -97,6 +99,29 @@ external_luma_feed_without_url_is_refused_before_onezone_test_() ->
     end}.
 
 
+%% Onepanel's model has the credentials optional, while every use of an HTTP
+%% storage requires them unless its credentials type is none. The diagnostics
+%% skip HTTP, so nothing else stops such a create.
+credentials_are_refused_before_onezone_test_() ->
+    {setup, fun mock_checks_up_to_onezone/0, fun unmock_create_up_to_onezone/1, fun() ->
+        Spec = #storage_create_spec{
+            type = <<"http">>,
+            name = <<"some-storage">>,
+            readonly = true,
+            imported = true,
+            luma = #luma_spec{feed = auto},
+            configuration = #http_helper_configuration{
+                endpoint = <<"https://example.com">>,
+                storage_path_type = canonical
+            },
+            credentials = #http_helper_credentials{credentials_type = basic}
+        },
+
+        ?assertMatch(?ERR_MISSING_REQUIRED_VALUE(_, <<"credentials">>), storage_creator:create(Spec)),
+        ?assertEqual(0, meck:num_calls(storage_logic, create_in_zone, '_'))
+    end}.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -119,6 +144,7 @@ mock_refusing_path_type_check() ->
     mock_logger(),
     meck:new([helper_spec, storage_crud_utils], [passthrough, no_link]),
     meck:expect(helper_spec, build, fun(_Spec) -> helper_spec_not_inspected end),
+    meck:expect(storage_crud_utils, verify_credentials, fun(_HelperSpec) -> ok end),
     meck:expect(storage_crud_utils, verify_storage_path_type, fun(_HelperSpec) ->
         throw(path_type_refusal())
     end).
@@ -133,10 +159,19 @@ unmock_refusing_path_type_check(_) ->
 %% Everything the create does before it writes to Onezone passes, and the write
 %% to Onezone fails, which ends the create there.
 mock_create_up_to_onezone() ->
+    mock_checks_up_to_onezone(),
+    meck:expect(helper_spec, build, fun(_Spec) -> helper_spec_not_inspected end),
+    meck:expect(storage_crud_utils, verify_credentials, fun(_HelperSpec) -> ok end).
+
+
+%% @private
+%% The checks the create runs before Onezone pass, but for the check of the
+%% credentials, which runs on the helper spec built from the create spec; the
+%% write to Onezone fails.
+mock_checks_up_to_onezone() ->
     mock_logger(),
     meck:new([helper_spec, storage_crud_utils], [passthrough, no_link]),
     meck:new(storage_logic, [no_link]),
-    meck:expect(helper_spec, build, fun(_Spec) -> helper_spec_not_inspected end),
     meck:expect(storage_crud_utils, verify_storage_path_type, fun(_HelperSpec) -> ok end),
     meck:expect(storage_crud_utils, verify_configuration, fun(_Name, _Readonly, _Imported, _HelperSpec) -> ok end),
     meck:expect(storage_crud_utils, run_diagnostics, fun(_HelperSpec, _LumaFeed, _Mode) -> ok end),

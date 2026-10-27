@@ -227,6 +227,7 @@ prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStora
 
     {HelperSpecChanged, NewHelperSpec} = case helper_spec:update(PrevHelperSpec, UpdateSpec) of
         {ok, UpdatedHelperSpec} ->
+            storage_crud_utils:verify_credentials(UpdatedHelperSpec),
             storage_crud_utils:verify_configuration(
                 StorageId, NewReadonly, NewImported, UpdatedHelperSpec
             ),

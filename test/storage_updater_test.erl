@@ -33,8 +33,10 @@
 %%% of the update's failures do, in an error returned to the caller; and a
 %%% refusal, which is thrown, must leave the same line in the log as a
 %%% returned error. And the QoS parameters must reach Onezone as numbers where
-%%% a QoS expression reads them as numbers, and an update that names no LUMA
-%%% setting must leave the LUMA config as it is.
+%%% a QoS expression reads them as numbers, an update that names no LUMA
+%%% setting must leave the LUMA config as it is, and an update that would leave
+%%% credentials failing every use of the storage must be refused before it
+%%% writes anything.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater_test).
@@ -43,6 +45,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/http.hrl").
 -include_lib("opw_panel_contracts/include/storage/posix.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -302,6 +305,29 @@ update_without_luma_change_keeps_the_storage_config_test_() ->
 
 
 %%%===================================================================
+%%% Credentials tests
+%%%===================================================================
+
+
+%% Every use of an HTTP storage requires the credentials unless its credentials
+%% type is none, and the diagnostics skip HTTP, so nothing else stops a switch
+%% to another type that doesn't bring them along.
+credentials_are_refused_before_any_write_test_() ->
+    {setup, fun mock_update_of_http_storage/0, fun unmock_update_of_http_storage/1, fun() ->
+        ?assertMatch(
+            ?ERR_MISSING_REQUIRED_VALUE(_, <<"credentials">>),
+            storage_updater:update(?STORAGE_ID, #storage_update_spec{
+                type = <<"http">>,
+                credentials = #http_helper_credentials_diff{credentials_type = basic}
+            })
+        ),
+
+        ?assertEqual(0, meck:num_calls(storage_config, update, '_')),
+        ?assertEqual(0, meck:num_calls(storage_logic, update_in_zone, '_'))
+    end}.
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -388,6 +414,43 @@ mock_update_of_external_feed_storage() ->
 
 %% @private
 unmock_update_of_external_feed_storage(_) ->
+    meck:unload().
+
+
+%% @private
+%% An HTTP storage with no credentials, whose update passes everything else it
+%% checks and every write it makes.
+mock_update_of_http_storage() ->
+    mock_logger(),
+    meck:new([storage_config, storage_logic, fslogic_event_emitter, rtransfer_config], [no_link]),
+    meck:new(storage_crud_utils, [passthrough, no_link]),
+    HelperSpec = helper_spec:build(#storage_create_spec{
+        type = <<"http">>,
+        configuration = #http_helper_configuration{
+            endpoint = <<"https://example.com">>,
+            storage_path_type = canonical
+        },
+        credentials = #http_helper_credentials{credentials_type = none}
+    }),
+    meck:expect(storage_config, get, fun(StorageId) ->
+        {ok, #document{key = StorageId, value = #storage_config{
+            helper_spec = HelperSpec,
+            luma_config = luma_config:new(auto)
+        }}}
+    end),
+    meck:expect(storage_config, update, fun(StorageId, _Diff) -> {ok, #document{key = StorageId}} end),
+    meck:expect(storage_crud_utils, verify_configuration, fun(_IdOrName, _Readonly, _Imported, _HelperSpec) -> ok end),
+    meck:expect(storage_crud_utils, run_diagnostics, fun(_HelperSpec, _LumaFeed, _Mode) -> ok end),
+    meck:expect(fslogic_event_emitter, emit_helper_params_changed, fun(_StorageId) -> ok end),
+    meck:expect(rtransfer_config, add_storage, fun(_StorageId) -> ok end),
+    meck:expect(storage_logic, get, fun(_StorageId) ->
+        {ok, #document{value = #od_storage{readonly = true, imported = true}}}
+    end),
+    meck:expect(storage_logic, update_in_zone, fun(_StorageId, _UpdateSpec) -> ok end).
+
+
+%% @private
+unmock_update_of_http_storage(_) ->
     meck:unload().
 
 

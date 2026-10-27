@@ -11,13 +11,16 @@
 %%% credentials, a spec carries the API key of an external LUMA feed, and an
 %%% update that changes only the LUMA config carries no credentials at all.
 %%% They also cover the normalization of the QoS parameters that a create
-%%% and an update start with.
+%%% and an update start with, and the errors the check of a storage's own
+%%% credentials refuses them with.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_crud_utils_test).
 -author("Bartosz Walkowicz").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
 -include_lib("opw_panel_contracts/include/storage/posix.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -101,9 +104,55 @@ update_spec_without_qos_parameters_keeps_them_undefined_test() ->
     ?assertEqual(undefined, QosParameters).
 
 
+http_credentials_without_credentials_pass_with_type_none_test() ->
+    ?assertEqual(ok, storage_crud_utils:verify_credentials(
+        http_helper_spec(#{<<"credentialsType">> => <<"none">>})
+    )).
+
+
+missing_credential_is_refused_by_its_name_test() ->
+    ?assertThrow(
+        ?ERR_MISSING_REQUIRED_VALUE(_, <<"credentials">>),
+        storage_crud_utils:verify_credentials(
+            http_helper_spec(#{<<"credentialsType">> => <<"basic">>})
+        )
+    ).
+
+
+unexpected_credential_is_refused_by_its_name_test() ->
+    ?assertThrow(
+        ?ERR_BAD_DATA(_, <<"password">>, undefined),
+        storage_crud_utils:verify_credentials(http_helper_spec(#{
+            <<"credentialsType">> => <<"none">>,
+            <<"password">> => <<"secret">>
+        }))
+    ).
+
+
+%% A credential's value may be a secret, and the error goes back to the
+%% client and to the log.
+invalid_credential_is_refused_without_its_value_test() ->
+    ?assertThrow(
+        ?ERR_BAD_DATA(_, <<"credentials">>, undefined),
+        storage_crud_utils:verify_credentials(http_helper_spec(#{
+            <<"credentialsType">> => <<"basic">>,
+            <<"credentials">> => <<"null">>
+        }))
+    ).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+http_helper_spec(Credentials) ->
+    #helper_spec{
+        name = ?HTTP_HELPER_NAME,
+        configuration = #{<<"endpoint">> => <<"https://example.com">>},
+        credentials = Credentials
+    }.
 
 
 %% @private
