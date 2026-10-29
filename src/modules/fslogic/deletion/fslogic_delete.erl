@@ -506,8 +506,9 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx, UserCtx),
     {ParentGuid, FileCtx4} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx3, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
-    ok = file_meta_forest:delete(ParentUuid, Scope, FileName, FileUuid),
-    FileCtx4.
+    {ParentSyncMode, FileCtx5} = get_parent_sync_mode(FileCtx4, UserCtx),
+    ok = file_meta_forest:delete(ParentUuid, Scope, ParentSyncMode, FileName, FileUuid),
+    FileCtx5.
 
 
 -spec delete_file_meta(file_ctx:ctx()) -> file_ctx:ctx().
@@ -515,13 +516,23 @@ delete_file_meta(FileCtx) ->
     % use get_file_doc_including_deleted because doc can be marked as deleted
     % inside file_meta record and get_file_doc could fail
     FileCtx2 = dataset_api:handle_file_deleted(FileCtx),
-    {FileDoc, FileCtx3} = file_ctx:get_file_doc_including_deleted(FileCtx2),
-    ok = file_meta:delete(FileDoc),
-    FileCtx3.
+    {ParentSyncMode, FileCtx3} = get_parent_sync_mode(FileCtx2, undefined),
+    {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
+    ok = file_meta:delete(FileDoc, ParentSyncMode),
+    FileCtx4.
 
 -spec delete_referenced_file_meta(file_ctx:ctx()) -> file_ctx:ctx().
 delete_referenced_file_meta(FileCtx) ->
     delete_file_meta(file_ctx:ensure_based_on_referenced_guid(FileCtx)).
+
+
+%% @private
+-spec get_parent_sync_mode(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
+    {file_meta_forest:parent_sync_mode(), file_ctx:ctx()}.
+get_parent_sync_mode(FileCtx, UserCtx) ->
+    {ParentCtx, FileCtx2} = file_tree:get_parent(FileCtx, UserCtx),
+    {IsParentSyncEnabled, ParentCtx2} = file_ctx:is_synchronization_enabled(ParentCtx),
+    {file_meta_forest:parent_sync_mode(IsParentSyncEnabled), file_ctx:cache_parent(ParentCtx2, FileCtx2)}.
 
 
 -spec update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().

@@ -198,7 +198,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             ?error_exception(Class, Reason, Stacktrace),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             catch times_api:report_file_deleted(FileCtx),
-            file_meta:delete(FileUuid),
+            file_meta:delete(FileUuid, file_meta_forest:parent_sync_mode(IsSyncEnabled)),
             erlang:Class(Reason)
     end.
 

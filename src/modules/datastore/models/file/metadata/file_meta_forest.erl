@@ -13,6 +13,8 @@
 %%%  * each tree in the forest is assigned to the provider supporting the space
 %%%  * the trees are identified by oneprovider:id()
 %%%  * provider is allowed to modify only its own tree
+%%%  * forest of the tmp dir is read from the local tree only, as its content
+%%%    is never synced and other providers' trees there may be stale copies
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_forest).
@@ -24,8 +26,9 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 
--export([get/3, get_local_or_remote/4, add/4, check_and_add/6]).
--export([delete/4, delete_local/4, delete_remote/5]).
+-export([get/3, get_local_or_remote/4, add/4, add/5, check_and_add/6]).
+-export([delete/4, delete/5, delete_local/5, delete_remote/6]).
+-export([parent_sync_mode/1]).
 -export([list/2, list_whitelisted/3]).
 -export([get_trees/1]).
 -export([check_name_and_get_conflicting_files/6]).
@@ -84,13 +87,16 @@
 
 -type list_extended_info() :: #list_extended_info{}.
 
+% Whether the link docs of the forest (the children links of the parent) are synced to other providers.
+-type parent_sync_mode() :: synced_parent | not_synced_parent.
+
 -export_type([link/0, offset/0, limit/0, datastore_list_token/0, last_name/0, last_tree/0,
-    list_opts/0, list_extended_info/0, tree_id/0, tree_ids/0
+    list_opts/0, list_extended_info/0, tree_id/0, tree_ids/0, parent_sync_mode/0
 ]).
 
 -define(CTX, (file_meta:get_ctx())).
 -define(CTX(Scope), ?CTX#{scope => Scope}).
--define(CTX(Scope, IgnoreInChanges), ?CTX#{scope => Scope, ignore_in_changes => IgnoreInChanges}).
+-define(CTX(Scope, ParentSyncMode), ?CTX#{scope => Scope, ignore_in_changes => is_ignored_in_changes(ParentSyncMode)}).
 -define(LOCAL_TREE_ID, oneprovider:get_id()).
 -define(LINK(FileName, FileUuid), {FileName, FileUuid}).
 
@@ -104,7 +110,7 @@
     {ok, [internal_link()]} | [{ok, [internal_link()]} | {error, term()}] | {error, term()}.
 get(ParentUuid, TreeIds, FileNames) ->
     % Scope is not passed to this function as it's irrelevant for get operations
-    datastore_model:get_links(?CTX, ParentUuid, TreeIds, FileNames).
+    datastore_model:get_links(?CTX, ParentUuid, resolve_tree_ids(ParentUuid, TreeIds), FileNames).
 
 
 %%--------------------------------------------------------------------
@@ -117,33 +123,45 @@ get(ParentUuid, TreeIds, FileNames) ->
 -spec get_local_or_remote(forest(), link_name() | [link_name()], od_space:id(), od_space:id() | undefined) ->
     {ok, [internal_link()]} | [{ok, [internal_link()]} | {error, term()}] | {error, term()}.
 get_local_or_remote(ParentUuid, FileNames, Scope, RemoteScope) ->
-    datastore_model:get_links(file_meta:get_ctx_with_remote_set(Scope, RemoteScope), ParentUuid, all, FileNames).
+    datastore_model:get_links(file_meta:get_ctx_with_remote_set(Scope, RemoteScope), ParentUuid,
+        resolve_tree_ids(ParentUuid, all), FileNames).
 
 
 -spec add(forest(), scope(), link_name(), link_target()) -> ok | {error, term()}.
 add(ParentUuid, Scope, FileName, FileUuid) ->
-    ?extract_ok(datastore_model:add_links(?CTX(Scope), ParentUuid, ?LOCAL_TREE_ID, ?LINK(FileName, FileUuid))).
+    add(ParentUuid, Scope, synced_parent, FileName, FileUuid).
 
 
--spec check_and_add(forest(), scope(), boolean(), tree_ids(), link_name(), link_target()) -> ok | {error, term()}.
-check_and_add(ParentUuid, Scope, IgnoreInChanges, TreesToCheck, FileName, FileUuid) ->
-    ?extract_ok(datastore_model:check_and_add_links(?CTX(Scope, IgnoreInChanges), ParentUuid, ?LOCAL_TREE_ID, TreesToCheck,
-        ?LINK(FileName, FileUuid))).
+-spec add(forest(), scope(), parent_sync_mode(), link_name(), link_target()) -> ok | {error, term()}.
+add(ParentUuid, Scope, ParentSyncMode, FileName, FileUuid) ->
+    ?extract_ok(datastore_model:add_links(?CTX(Scope, ParentSyncMode), ParentUuid, ?LOCAL_TREE_ID, ?LINK(FileName, FileUuid))).
+
+
+-spec check_and_add(forest(), scope(), parent_sync_mode(), tree_ids(), link_name(), link_target()) ->
+    ok | {error, term()}.
+check_and_add(ParentUuid, Scope, ParentSyncMode, TreesToCheck, FileName, FileUuid) ->
+    ?extract_ok(datastore_model:check_and_add_links(?CTX(Scope, ParentSyncMode), ParentUuid, ?LOCAL_TREE_ID,
+        resolve_tree_ids(ParentUuid, TreesToCheck), ?LINK(FileName, FileUuid))).
 
 
 -spec delete(forest(), scope(), link_name(), link_target()) -> ok.
 delete(ParentUuid, Scope, FileName, FileUuid) ->
+    delete(ParentUuid, Scope, synced_parent, FileName, FileUuid).
+
+
+-spec delete(forest(), scope(), parent_sync_mode(), link_name(), link_target()) -> ok.
+delete(ParentUuid, Scope, ParentSyncMode, FileName, FileUuid) ->
     case get(ParentUuid, all, FileName) of
         {ok, Links} ->
             case lists:filter(fun(#link{target = Uuid}) -> Uuid == FileUuid end, Links) of
                 [#link{tree_id = TreeId, name = FileName, rev = Rev}] ->
                     % pass Rev to ensure that link with the same Rev is deleted
-                    delete_link(TreeId, ParentUuid, Scope, FileName, Rev);
+                    delete_link(TreeId, ParentUuid, Scope, ParentSyncMode, FileName, Rev);
                 [_ | _] = Links ->
                     % possible in case of special dirs
                     lists:foreach(fun(#link{tree_id = TreeId, name = CurrentFileName, rev = Rev}) ->
                         % pass Rev to ensure that link with the same Rev is deleted
-                        delete_link(TreeId, ParentUuid, Scope, CurrentFileName, Rev)
+                        delete_link(TreeId, ParentUuid, Scope, ParentSyncMode, CurrentFileName, Rev)
                     end, Links);
                 [] ->
                     ok
@@ -153,24 +171,29 @@ delete(ParentUuid, Scope, FileName, FileUuid) ->
     end.
 
 
--spec delete_link(tree_id(), forest(), scope(), link_name(), link_revision()) -> ok.
-delete_link(TreeId, ParentUuid, Scope, FileName, Rev) ->
+-spec delete_link(tree_id(), forest(), scope(), parent_sync_mode(), link_name(), link_revision()) -> ok.
+delete_link(TreeId, ParentUuid, Scope, ParentSyncMode, FileName, Rev) ->
     case oneprovider:is_self(TreeId) of
         true ->
-            ok = delete_local(ParentUuid, Scope, FileName, Rev);
+            ok = delete_local(ParentUuid, Scope, ParentSyncMode, FileName, Rev);
         false ->
-            ok = delete_remote(ParentUuid, Scope, TreeId, FileName, Rev)
+            ok = delete_remote(ParentUuid, Scope, ParentSyncMode, TreeId, FileName, Rev)
     end.
 
 
--spec delete_local(forest(), scope(), link_name(), link_revision()) -> ok.
-delete_local(ParentUuid, Scope, FileName, Revision) ->
-    ok = datastore_model:delete_links(?CTX(Scope), ParentUuid, ?LOCAL_TREE_ID, {FileName, Revision}).
+-spec delete_local(forest(), scope(), parent_sync_mode(), link_name(), link_revision()) -> ok.
+delete_local(ParentUuid, Scope, ParentSyncMode, FileName, Revision) ->
+    ok = datastore_model:delete_links(?CTX(Scope, ParentSyncMode), ParentUuid, ?LOCAL_TREE_ID, {FileName, Revision}).
 
 
--spec delete_remote(forest(), scope(), tree_id(), link_name(), link_revision()) -> ok.
-delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
-    ok = datastore_model:mark_links_deleted(?CTX(Scope), ParentUuid, TreeId, {FileName, Revision}).
+-spec delete_remote(forest(), scope(), parent_sync_mode(), tree_id(), link_name(), link_revision()) -> ok.
+delete_remote(ParentUuid, Scope, ParentSyncMode, TreeId, FileName, Revision) ->
+    ok = datastore_model:mark_links_deleted(?CTX(Scope, ParentSyncMode), ParentUuid, TreeId, {FileName, Revision}).
+
+
+-spec parent_sync_mode(IsParentSyncEnabled :: boolean()) -> parent_sync_mode().
+parent_sync_mode(true) -> synced_parent;
+parent_sync_mode(false) -> not_synced_parent.
 
 
 -spec list(forest(), datastore_fold_opts()) -> {ok, [link()], datastore_fold_opts()} | {error, term()}.
@@ -228,7 +251,15 @@ list_whitelisted(ParentUuid, Opts, SortedChildrenWhiteList) ->
 
 -spec get_trees(forest()) -> {ok, tree_ids()} | {error, term()}.
 get_trees(ParentUuid) ->
-    datastore_model:get_links_trees(?CTX, ParentUuid).
+    case datastore_model:get_links_trees(?CTX, ParentUuid) of
+        {ok, TreeIds} ->
+            case tmp_dir:is_special(uuid, ParentUuid) of
+                true -> {ok, lists_utils:intersect(TreeIds, [?LOCAL_TREE_ID])};
+                false -> {ok, TreeIds}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -289,9 +320,24 @@ get_all(ParentUuid, Name) ->
 -spec fold(datastore:ctx(), forest(), fold_fun(), fold_acc(), datastore_fold_opts()) ->
     {{ok, fold_acc()}, datastore_links_iter:token() | undefined} | {error, term()}.
 fold(Ctx, ParentUuid, Fun, AccIn, Opts) ->
-    case datastore_model:fold_links(Ctx, ParentUuid, all, Fun, AccIn, Opts) of
+    case datastore_model:fold_links(Ctx, ParentUuid, resolve_tree_ids(ParentUuid, all), Fun, AccIn, Opts) of
         {ok, Result} -> {{ok, Result}, undefined};
         Other -> Other
+    end.
+
+
+%% @private
+-spec is_ignored_in_changes(parent_sync_mode()) -> boolean().
+is_ignored_in_changes(synced_parent) -> false;
+is_ignored_in_changes(not_synced_parent) -> true.
+
+
+%% @private
+-spec resolve_tree_ids(forest(), tree_ids()) -> tree_ids().
+resolve_tree_ids(ParentUuid, TreeIds) ->
+    case tmp_dir:is_special(uuid, ParentUuid) of
+        true -> [?LOCAL_TREE_ID];
+        false -> TreeIds
     end.
 
 

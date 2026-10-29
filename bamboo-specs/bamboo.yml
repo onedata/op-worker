@@ -229,6 +229,7 @@ stages:
         - storage_sync_links
         - storage_traverse
         - tmp_db_error
+        - tmp_dir
         - transfer_eviction
         - transfer_migration
         - transfer_replication
@@ -1753,6 +1754,14 @@ tmp_db_error:
     - <<: *ct_logs
       name: ct_logs_tmp_db_error.tar.gz
 
+tmp_dir:
+  <<: *ct-onenv-job
+  key: TMPDIRSYNC
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_tmp_dir.tar.gz
+  requirements: *os-agent
+
 transfer_eviction:
   <<: *ct-onenv-job
   key: TRANSEVIC
@@ -2062,6 +2071,7 @@ Coverage report:
     - artifact: ct_logs_storage_sync_links.tar.gz
     - artifact: ct_logs_storage_traverse.tar.gz
     - artifact: ct_logs_tmp_db_error.tar.gz
+    - artifact: ct_logs_tmp_dir.tar.gz
     - artifact: ct_logs_transfer_eviction.tar.gz
     - artifact: ct_logs_transfer_migration.tar.gz
     - artifact: ct_logs_transfer_replication.tar.gz

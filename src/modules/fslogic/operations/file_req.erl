@@ -307,7 +307,8 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             catch times_api:report_file_deleted(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
-            file_meta:delete(FileUuid),
+            {IsParentSyncEnabled, _} = file_ctx:is_synchronization_enabled(ParentFileCtx3),
+            file_meta:delete(FileUuid, file_meta_forest:parent_sync_mode(IsParentSyncEnabled)),
             case Reason of
                 {badmatch, {error, not_found}} -> erlang:Error(?ECANCELED);
                 _ -> erlang:Error(Reason)
@@ -395,7 +396,8 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             catch times_api:report_file_deleted(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
-            file_meta:delete(FileUuid),
+            {IsParentSyncEnabled, _} = file_ctx:is_synchronization_enabled(ParentFileCtx3),
+            file_meta:delete(FileUuid, file_meta_forest:parent_sync_mode(IsParentSyncEnabled)),
             erlang:Class(Reason)
     end.
 
@@ -457,13 +459,15 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
             ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx3),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
             Owner = user_ctx:get_user_id(UserCtx),
-            Doc = file_meta_symlinks:new_doc(Name, ParentUuid, SpaceId, Owner, Link),
+            {IsSyncEnabled, ParentFileCtx4} = file_ctx:is_synchronization_enabled(ParentFileCtx3),
+            ParentSyncMode = file_meta_forest:parent_sync_mode(IsSyncEnabled),
+            Doc = file_meta_symlinks:new_doc(Name, ParentUuid, SpaceId, Owner, Link, ParentSyncMode),
             {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
                 FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
                 times_api:report_file_created(FileCtx),
-                times_api:touch(ParentFileCtx3, [?attr_mtime, ?attr_ctime]),
+                times_api:touch(ParentFileCtx4, [?attr_mtime, ?attr_ctime]),
 
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
@@ -475,7 +479,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
                 Ans#fuse_response{fuse_response = FileAttr}
             catch
                 Error:Reason ->
-                    file_meta:delete(SymlinkUuid),
+                    file_meta:delete(SymlinkUuid, ParentSyncMode),
                     erlang:Error(Reason)
             end;
         {false, _} ->
