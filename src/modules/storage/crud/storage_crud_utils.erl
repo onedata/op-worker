@@ -35,8 +35,12 @@
     verify_storage_path_type/1,
     verify_credentials/1,
     verify_configuration/4,
+    verify_s3_region/1,
+    verify_s3_region/2,
     run_diagnostics/3
 ]).
+
+-define(GLOBAL_AWS_S3_HOST, <<"s3.amazonaws.com">>).
 
 
 %%%===================================================================
@@ -121,6 +125,40 @@ verify_configuration(IdOrName, Readonly, Imported, HelperSpec) ->
     check_helper_against_imported_option(Imported, HelperSpec).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Requires the region of an S3 storage at the global AWS endpoint,
+%% s3.amazonaws.com on any port. Without the region, each time the helper is
+%% created it asks AWS for the bucket's region before its first request; given
+%% one, it goes straight to that region's endpoint (but for us-east-1, which it
+%% takes for no region). An endpoint is global by its host alone, as the helper
+%% tells it in S3Helper::isGlobalAwsEndpoint.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_s3_region(helper_spec:t()) -> ok | no_return().
+verify_s3_region(HelperSpec) ->
+    case helper_spec:get_name(HelperSpec) of
+        ?S3_HELPER_NAME -> verify_s3_region_in_configuration(helper_spec:get_configuration(HelperSpec));
+        _ -> ok
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Requires the region as verify_s3_region/1 does, but only of an update that
+%% changes the hostname or the region. A storage at the global endpoint may
+%% have no region, which its helper then finds itself, and an update of its
+%% other parameters must not be refused for that.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_s3_region(helper_spec:t(), helper_spec:t()) -> ok | no_return().
+verify_s3_region(PrevHelperSpec, NewHelperSpec) ->
+    case get_hostname_and_region(PrevHelperSpec) == get_hostname_and_region(NewHelperSpec) of
+        true -> ok;
+        false -> verify_s3_region(NewHelperSpec)
+    end.
+
+
 -spec run_diagnostics(helper_spec:t(), luma:feed(), storage_detector:diagnostics_mode()) ->
     ok | no_return().
 run_diagnostics(HelperSpec, LumaFeed, DiagnosticsMode) ->
@@ -180,6 +218,38 @@ check_helper_against_imported_option(true, HelperSpec) ->
         true ->
             ok
     end.
+
+
+%% @private
+-spec verify_s3_region_in_configuration(helper_spec:configuration()) -> ok | no_return().
+verify_s3_region_in_configuration(Configuration = #{<<"scheme">> := Scheme, <<"hostname">> := Hostname}) ->
+    case is_global_aws_endpoint(Scheme, Hostname) of
+        false ->
+            ok;
+        true ->
+            case maps:get(<<"region">>, Configuration, undefined) of
+                undefined -> throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"region">>));
+                <<>> -> throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"region">>));
+                _ -> ok
+            end
+    end.
+
+
+%% @private
+%% The hostname holds no scheme, and uri_string reads a host and a port without
+%% one as a scheme and a path, so the scheme is put back in front.
+-spec is_global_aws_endpoint(binary(), binary()) -> boolean().
+is_global_aws_endpoint(Scheme, Hostname) ->
+    case uri_string:parse(<<Scheme/binary, "://", Hostname/binary>>) of
+        #{host := ?GLOBAL_AWS_S3_HOST} -> true;
+        _ -> false
+    end.
+
+
+%% @private
+-spec get_hostname_and_region(helper_spec:t()) -> helper_spec:configuration().
+get_hostname_and_region(HelperSpec) ->
+    maps:with([<<"hostname">>, <<"region">>], helper_spec:get_configuration(HelperSpec)).
 
 
 %% @private

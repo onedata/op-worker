@@ -79,6 +79,7 @@ do_create(StorageCreateSpec = #storage_create_spec{
     storage_crud_utils:verify_credentials(HelperSpec),
     storage_crud_utils:verify_storage_path_type(HelperSpec),
     storage_crud_utils:verify_configuration(Name, Readonly, Imported, HelperSpec),
+    storage_crud_utils:verify_s3_region(HelperSpec),
 
     LumaConfig = build_luma_config(LumaSpec),
     run_diagnostics(HelperSpec, LumaConfig, StorageCreateSpec),

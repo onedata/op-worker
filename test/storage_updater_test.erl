@@ -36,7 +36,9 @@
 %%% a QoS expression reads them as numbers, an update that names no LUMA
 %%% setting must leave the LUMA config as it is, and an update that would leave
 %%% credentials failing every use of the storage must be refused before it
-%%% writes anything.
+%%% writes anything, as must an update that leaves an S3 storage at the global
+%%% AWS endpoint with no region; an update that changes neither its hostname
+%%% nor its region must pass even then.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater_test).
@@ -47,6 +49,7 @@
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
 -include_lib("opw_panel_contracts/include/storage/http.hrl").
 -include_lib("opw_panel_contracts/include/storage/posix.hrl").
+-include_lib("opw_panel_contracts/include/storage/s3.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(STORAGE_ID, <<"dummyStorageId">>).
@@ -313,7 +316,7 @@ update_without_luma_change_keeps_the_storage_config_test_() ->
 %% type is none, and the diagnostics skip HTTP, so nothing else stops a switch
 %% to another type that doesn't bring them along.
 credentials_are_refused_before_any_write_test_() ->
-    {setup, fun mock_update_of_http_storage/0, fun unmock_update_of_http_storage/1, fun() ->
+    {setup, fun mock_update_of_http_storage/0, fun unmock_update_of_storage/1, fun() ->
         ?assertMatch(
             ?ERR_MISSING_REQUIRED_VALUE(_, <<"credentials">>),
             storage_updater:update(?STORAGE_ID, #storage_update_spec{
@@ -324,6 +327,39 @@ credentials_are_refused_before_any_write_test_() ->
 
         ?assertEqual(0, meck:num_calls(storage_config, update, '_')),
         ?assertEqual(0, meck:num_calls(storage_logic, update_in_zone, '_'))
+    end}.
+
+
+%%%===================================================================
+%%% S3 region tests
+%%%===================================================================
+
+
+%% Onepanel's model has the region optional, while the helper at the global AWS
+%% endpoint needs it to go straight to the bucket's region.
+switch_to_global_aws_endpoint_without_region_is_refused_before_any_write_test_() ->
+    {setup, fun() -> mock_update_of_s3_storage(<<"minio.example.com:9000">>) end, fun unmock_update_of_storage/1, fun() ->
+        ?assertMatch(
+            ?ERR_MISSING_REQUIRED_VALUE(_, <<"region">>),
+            storage_updater:update(?STORAGE_ID, #storage_update_spec{
+                type = <<"s3">>,
+                configuration = #s3_helper_configuration_diff{hostname = <<"s3.amazonaws.com:443">>}
+            })
+        ),
+
+        ?assertEqual(0, meck:num_calls(storage_config, update, '_')),
+        ?assertEqual(0, meck:num_calls(storage_logic, update_in_zone, '_'))
+    end}.
+
+
+%% A storage at the global endpoint may have no region, which its helper finds
+%% itself, and an update of its other parameters must not be refused for that.
+update_of_other_parameters_at_global_aws_endpoint_passes_without_region_test_() ->
+    {setup, fun() -> mock_update_of_s3_storage(<<"s3.amazonaws.com:443">>) end, fun unmock_update_of_storage/1, fun() ->
+        ?assertEqual(ok, storage_updater:update(?STORAGE_ID, #storage_update_spec{
+            type = <<"s3">>,
+            configuration = #s3_helper_configuration_diff{file_mode = <<"0600">>}
+        }))
     end}.
 
 
@@ -421,9 +457,6 @@ unmock_update_of_external_feed_storage(_) ->
 %% An HTTP storage with no credentials, whose update passes everything else it
 %% checks and every write it makes.
 mock_update_of_http_storage() ->
-    mock_logger(),
-    meck:new([storage_config, storage_logic, fslogic_event_emitter, rtransfer_config], [no_link]),
-    meck:new(storage_crud_utils, [passthrough, no_link]),
     HelperSpec = helper_spec:build(#storage_create_spec{
         type = <<"http">>,
         configuration = #http_helper_configuration{
@@ -432,6 +465,34 @@ mock_update_of_http_storage() ->
         },
         credentials = #http_helper_credentials{credentials_type = none}
     }),
+    mock_update_of_storage(HelperSpec, #od_storage{readonly = true, imported = true}).
+
+
+%% @private
+%% An S3 storage at the hostname with no region, whose update passes everything
+%% else it checks and every write it makes.
+mock_update_of_s3_storage(Hostname) ->
+    HelperSpec = helper_spec:build(#storage_create_spec{
+        type = <<"s3">>,
+        configuration = #s3_helper_configuration{
+            scheme = <<"https">>,
+            hostname = Hostname,
+            bucket_name = <<"some-bucket">>,
+            storage_path_type = flat
+        },
+        credentials = #s3_helper_credentials{
+            access_key = <<"some-access-key">>,
+            secret_key = <<"some-secret-key">>
+        }
+    }),
+    mock_update_of_storage(HelperSpec, #od_storage{}).
+
+
+%% @private
+mock_update_of_storage(HelperSpec, OzStorageData) ->
+    mock_logger(),
+    meck:new([storage_config, storage_logic, fslogic_event_emitter, rtransfer_config], [no_link]),
+    meck:new(storage_crud_utils, [passthrough, no_link]),
     meck:expect(storage_config, get, fun(StorageId) ->
         {ok, #document{key = StorageId, value = #storage_config{
             helper_spec = HelperSpec,
@@ -443,14 +504,12 @@ mock_update_of_http_storage() ->
     meck:expect(storage_crud_utils, run_diagnostics, fun(_HelperSpec, _LumaFeed, _Mode) -> ok end),
     meck:expect(fslogic_event_emitter, emit_helper_params_changed, fun(_StorageId) -> ok end),
     meck:expect(rtransfer_config, add_storage, fun(_StorageId) -> ok end),
-    meck:expect(storage_logic, get, fun(_StorageId) ->
-        {ok, #document{value = #od_storage{readonly = true, imported = true}}}
-    end),
+    meck:expect(storage_logic, get, fun(_StorageId) -> {ok, #document{value = OzStorageData}} end),
     meck:expect(storage_logic, update_in_zone, fun(_StorageId, _UpdateSpec) -> ok end).
 
 
 %% @private
-unmock_update_of_http_storage(_) ->
+unmock_update_of_storage(_) ->
     meck:unload().
 
 

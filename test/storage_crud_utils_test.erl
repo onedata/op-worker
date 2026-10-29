@@ -11,8 +11,10 @@
 %%% credentials, a spec carries the API key of an external LUMA feed, and an
 %%% update that changes only the LUMA config carries no credentials at all.
 %%% They also cover the normalization of the QoS parameters that a create
-%%% and an update start with, and the errors the check of a storage's own
-%%% credentials refuses them with.
+%%% and an update start with, the errors the check of a storage's own
+%%% credentials refuses them with, and when an S3 storage at the global AWS
+%%% endpoint must name its region: on a create, and on an update that changes
+%%% its hostname or its region.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_crud_utils_test).
@@ -26,6 +28,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(API_KEY, <<"luma-feed-api-key-1234">>).
+% the hostname as Onepanel passes it, with the port and without the scheme
+-define(GLOBAL_AWS_ENDPOINT, <<"s3.amazonaws.com:443">>).
 
 
 %%%===================================================================
@@ -141,9 +145,118 @@ invalid_credential_is_refused_without_its_value_test() ->
     ).
 
 
+global_aws_endpoint_without_region_is_refused_test() ->
+    ?assertThrow(
+        ?ERR_MISSING_REQUIRED_VALUE(_, <<"region">>),
+        storage_crud_utils:verify_s3_region(s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{}))
+    ).
+
+
+%% Onepanel's model takes an empty string for the region as well.
+global_aws_endpoint_with_empty_region_is_refused_test() ->
+    ?assertThrow(
+        ?ERR_BAD_VALUE_EMPTY(_, <<"region">>),
+        storage_crud_utils:verify_s3_region(
+            s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<>>})
+        )
+    ).
+
+
+%% The helper takes an endpoint for the global one by its host, whatever the
+%% scheme, the port and the path.
+global_aws_endpoint_is_told_by_its_host_alone_test_() ->
+    [
+        ?_assertThrow(
+            ?ERR_MISSING_REQUIRED_VALUE(_, <<"region">>),
+            storage_crud_utils:verify_s3_region(s3_helper_spec(Scheme, Hostname, #{}))
+        )
+        || {Scheme, Hostname} <- [
+            {<<"http">>, <<"s3.amazonaws.com:80">>},
+            {<<"https">>, <<"s3.amazonaws.com:8443">>},
+            {<<"https">>, <<"s3.amazonaws.com:443/">>}
+        ]
+    ].
+
+
+global_aws_endpoint_with_region_passes_test() ->
+    ?assertEqual(ok, storage_crud_utils:verify_s3_region(
+        s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<"eu-west-3">>})
+    )).
+
+
+%% Neither a regional AWS endpoint nor a host that merely contains the global
+%% one is the global endpoint, and neither is any other S3 service.
+other_s3_endpoints_without_region_pass_test_() ->
+    [
+        ?_assertEqual(ok, storage_crud_utils:verify_s3_region(s3_helper_spec(<<"https">>, Hostname, #{})))
+        || Hostname <- [
+            <<"s3.eu-west-3.amazonaws.com:443">>,
+            <<"some-bucket.s3.amazonaws.com:443">>,
+            <<"s3.amazonaws.com.example.com:443">>,
+            <<"minio.example.com:9000">>
+        ]
+    ].
+
+
+%% A storage of another type has neither a hostname nor a region.
+other_storage_types_pass_the_region_check_test() ->
+    ?assertEqual(ok, storage_crud_utils:verify_s3_region(
+        http_helper_spec(#{<<"credentialsType">> => <<"none">>})
+    )).
+
+
+%% A storage at the global endpoint may have no region, which its helper then
+%% finds itself.
+update_keeping_hostname_and_region_passes_without_region_test() ->
+    ?assertEqual(ok, storage_crud_utils:verify_s3_region(
+        s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{}),
+        s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"fileMode">> => <<"0600">>})
+    )).
+
+
+update_to_global_aws_endpoint_without_region_is_refused_test() ->
+    ?assertThrow(
+        ?ERR_MISSING_REQUIRED_VALUE(_, <<"region">>),
+        storage_crud_utils:verify_s3_region(
+            s3_helper_spec(<<"https">>, <<"minio.example.com:9000">>, #{}),
+            s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{})
+        )
+    ).
+
+
+update_emptying_region_at_global_aws_endpoint_is_refused_test() ->
+    ?assertThrow(
+        ?ERR_BAD_VALUE_EMPTY(_, <<"region">>),
+        storage_crud_utils:verify_s3_region(
+            s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<"eu-west-3">>}),
+            s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<>>})
+        )
+    ).
+
+
+update_changing_region_at_global_aws_endpoint_passes_test() ->
+    ?assertEqual(ok, storage_crud_utils:verify_s3_region(
+        s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<"eu-west-3">>}),
+        s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<"us-west-2">>})
+    )).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+s3_helper_spec(Scheme, Hostname, OtherConfiguration) ->
+    #helper_spec{
+        name = ?S3_HELPER_NAME,
+        configuration = OtherConfiguration#{
+            <<"scheme">> => Scheme,
+            <<"hostname">> => Hostname,
+            <<"bucketName">> => <<"some-bucket">>
+        },
+        credentials = #{<<"accessKey">> => <<"some-access-key">>, <<"secretKey">> => <<"some-secret-key">>}
+    }.
 
 
 %% @private
