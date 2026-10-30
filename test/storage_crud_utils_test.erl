@@ -22,7 +22,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(API_KEY, <<"luma-feed-api-key-1234">>).
-% the hostname as Onepanel passes it, with the port and without the scheme
+% as Onepanel passes it
 -define(GLOBAL_AWS_ENDPOINT, <<"s3.amazonaws.com:443">>).
 
 
@@ -146,7 +146,6 @@ global_aws_endpoint_without_region_is_refused_test() ->
     ).
 
 
-%% Onepanel's model takes an empty string for the region as well.
 global_aws_endpoint_with_empty_region_is_refused_test() ->
     ?assertThrow(
         ?ERR_BAD_VALUE_EMPTY(_, <<"region">>),
@@ -156,8 +155,6 @@ global_aws_endpoint_with_empty_region_is_refused_test() ->
     ).
 
 
-%% The helper takes an endpoint for the global one by its host, whatever the
-%% scheme, the port and the path.
 global_aws_endpoint_is_told_by_its_host_alone_test_() ->
     [
         ?_assertThrow(
@@ -178,8 +175,6 @@ global_aws_endpoint_with_region_passes_test() ->
     )).
 
 
-%% Neither a regional AWS endpoint nor a host that merely contains the global
-%% one is the global endpoint, and neither is any other S3 service.
 other_s3_endpoints_without_region_pass_test_() ->
     [
         ?_assertEqual(ok, storage_crud_utils:verify_s3_region(s3_helper_spec(<<"https">>, Hostname, #{})))
@@ -192,15 +187,12 @@ other_s3_endpoints_without_region_pass_test_() ->
     ].
 
 
-%% A storage of another type has neither a hostname nor a region.
 other_storage_types_pass_the_region_check_test() ->
     ?assertEqual(ok, storage_crud_utils:verify_s3_region(
         http_helper_spec(#{<<"credentialsType">> => <<"none">>})
     )).
 
 
-%% A storage at the global endpoint may have no region, which its helper then
-%% finds itself.
 update_keeping_hostname_and_region_passes_without_region_test() ->
     ?assertEqual(ok, storage_crud_utils:verify_s3_region_update(
         s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{}),

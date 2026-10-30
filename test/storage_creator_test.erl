@@ -133,8 +133,6 @@ credentials_are_refused_before_onezone_test_() ->
     end}.
 
 
-%% Onepanel's model has the region optional, while the helper at the global AWS
-%% endpoint needs it to go straight to the bucket's region.
 global_aws_endpoint_without_region_is_refused_before_onezone_test_() ->
     {setup, fun mock_checks_up_to_onezone/0, fun unmock_create_up_to_onezone/1, fun() ->
         Spec = #storage_create_spec{
@@ -202,9 +200,6 @@ mock_create_up_to_onezone() ->
 
 
 %% @private
-%% The checks the create runs before Onezone pass, but for the checks of the
-%% credentials and of the S3 region, which run on the helper spec built from
-%% the create spec; the write to Onezone fails.
 mock_checks_up_to_onezone() ->
     mock_logger(),
     meck:new([helper_spec, storage_crud_utils], [passthrough, no_link]),

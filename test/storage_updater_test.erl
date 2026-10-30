@@ -304,8 +304,6 @@ credentials_are_refused_before_any_write_test_() ->
 %%%===================================================================
 
 
-%% Onepanel's model has the region optional, while the helper at the global AWS
-%% endpoint needs it to go straight to the bucket's region.
 switch_to_global_aws_endpoint_without_region_is_refused_before_any_write_test_() ->
     {setup, fun() -> mock_update_of_s3_storage(<<"minio.example.com:9000">>) end, fun unmock_update_of_storage/1, fun() ->
         ?assertMatch(
@@ -321,8 +319,6 @@ switch_to_global_aws_endpoint_without_region_is_refused_before_any_write_test_()
     end}.
 
 
-%% A storage at the global endpoint may have no region, which its helper finds
-%% itself, and an update of its other parameters must not be refused for that.
 update_of_other_parameters_at_global_aws_endpoint_passes_without_region_test_() ->
     {setup, fun() -> mock_update_of_s3_storage(<<"s3.amazonaws.com:443">>) end, fun unmock_update_of_storage/1, fun() ->
         ?assertEqual(ok, storage_updater:update(?STORAGE_ID, #storage_update_spec{
@@ -438,8 +434,6 @@ mock_update_of_http_storage() ->
 
 
 %% @private
-%% An S3 storage at the hostname with no region, whose update passes everything
-%% else it checks and every write it makes.
 mock_update_of_s3_storage(Hostname) ->
     HelperSpec = helper_spec:build(#storage_create_spec{
         type = <<"s3">>,

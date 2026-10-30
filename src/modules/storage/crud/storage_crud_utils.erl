@@ -127,12 +127,8 @@ verify_configuration(IdOrName, Readonly, Imported, HelperSpec) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Requires the region of an S3 storage at the global AWS endpoint,
-%% s3.amazonaws.com on any port. Without the region, each time the helper is
-%% created it asks AWS for the bucket's region before its first request; given
-%% one, it goes straight to that region's endpoint (but for us-east-1, which it
-%% takes for no region). An endpoint is global by its host alone, as the helper
-%% tells it in S3Helper::isGlobalAwsEndpoint.
+%% Requires the region of an S3 storage at s3.amazonaws.com, the global AWS
+%% endpoint. Without it, each new helper first asks AWS where the bucket is.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_s3_region(helper_spec:t()) -> ok | no_return().
@@ -228,8 +224,8 @@ verify_s3_region_in_configuration(Configuration = #{<<"scheme">> := Scheme, <<"h
 
 
 %% @private
-%% The hostname holds no scheme, and uri_string reads a host and a port without
-%% one as a scheme and a path, so the scheme is put back in front.
+%% uri_string finds the host only after a scheme: it reads
+%% "s3.amazonaws.com:443" alone as a scheme and a path.
 -spec is_global_aws_endpoint(binary(), binary()) -> boolean().
 is_global_aws_endpoint(Scheme, Hostname) ->
     case uri_string:parse(<<Scheme/binary, "://", Hostname/binary>>) of
