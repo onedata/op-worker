@@ -208,7 +208,7 @@ other_storage_types_pass_the_region_check_test() ->
 %% A storage at the global endpoint may have no region, which its helper then
 %% finds itself.
 update_keeping_hostname_and_region_passes_without_region_test() ->
-    ?assertEqual(ok, storage_crud_utils:verify_s3_region(
+    ?assertEqual(ok, storage_crud_utils:verify_s3_region_update(
         s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{}),
         s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"fileMode">> => <<"0600">>})
     )).
@@ -217,7 +217,7 @@ update_keeping_hostname_and_region_passes_without_region_test() ->
 update_to_global_aws_endpoint_without_region_is_refused_test() ->
     ?assertThrow(
         ?ERR_MISSING_REQUIRED_VALUE(_, <<"region">>),
-        storage_crud_utils:verify_s3_region(
+        storage_crud_utils:verify_s3_region_update(
             s3_helper_spec(<<"https">>, <<"minio.example.com:9000">>, #{}),
             s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{})
         )
@@ -227,7 +227,7 @@ update_to_global_aws_endpoint_without_region_is_refused_test() ->
 update_emptying_region_at_global_aws_endpoint_is_refused_test() ->
     ?assertThrow(
         ?ERR_BAD_VALUE_EMPTY(_, <<"region">>),
-        storage_crud_utils:verify_s3_region(
+        storage_crud_utils:verify_s3_region_update(
             s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<"eu-west-3">>}),
             s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<>>})
         )
@@ -235,7 +235,7 @@ update_emptying_region_at_global_aws_endpoint_is_refused_test() ->
 
 
 update_changing_region_at_global_aws_endpoint_passes_test() ->
-    ?assertEqual(ok, storage_crud_utils:verify_s3_region(
+    ?assertEqual(ok, storage_crud_utils:verify_s3_region_update(
         s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<"eu-west-3">>}),
         s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<"us-west-2">>})
     )).

@@ -36,7 +36,7 @@
     verify_credentials/1,
     verify_configuration/4,
     verify_s3_region/1,
-    verify_s3_region/2,
+    verify_s3_region_update/2,
     run_diagnostics/3
 ]).
 
@@ -143,16 +143,8 @@ verify_s3_region(HelperSpec) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Requires the region as verify_s3_region/1 does, but only of an update that
-%% changes the hostname or the region. A storage at the global endpoint may
-%% have no region, which its helper then finds itself, and an update of its
-%% other parameters must not be refused for that.
-%% @end
-%%--------------------------------------------------------------------
--spec verify_s3_region(helper_spec:t(), helper_spec:t()) -> ok | no_return().
-verify_s3_region(PrevHelperSpec, NewHelperSpec) ->
+-spec verify_s3_region_update(helper_spec:t(), helper_spec:t()) -> ok | no_return().
+verify_s3_region_update(PrevHelperSpec, NewHelperSpec) ->
     case get_hostname_and_region(PrevHelperSpec) == get_hostname_and_region(NewHelperSpec) of
         true -> ok;
         false -> verify_s3_region(NewHelperSpec)

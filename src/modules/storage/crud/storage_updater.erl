@@ -233,7 +233,7 @@ prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStora
             storage_crud_utils:verify_configuration(
                 StorageId, NewReadonly, NewImported, UpdatedHelperSpec
             ),
-            storage_crud_utils:verify_s3_region(PrevHelperSpec, UpdatedHelperSpec),
+            storage_crud_utils:verify_s3_region_update(PrevHelperSpec, UpdatedHelperSpec),
             {true, UpdatedHelperSpec};
         {error, no_change} when ReadonlyChanged orelse ImportedChanged ->
             storage_crud_utils:verify_configuration(
