@@ -6,9 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of the IdP that LUMA acquires a user's OAuth2 access token from:
-%%% the one named by the credentials the user is mapped to, else the one set for
-%%% the storage, else the only offline access IdP that Onezone lists.
+%%% Unit tests of luma: which IdP a user's OAuth2 access token is acquired from.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_test).

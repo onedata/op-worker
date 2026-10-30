@@ -6,10 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of the check of a stale LUMA DB namespace that the collector
-%%% runs before it clears one. It must read the stale list under the lock that
-%%% an update holds for its whole saga, as only that saga's rollback takes a
-%%% namespace back off the list.
+%%% Unit tests of storage: the check whether a LUMA DB namespace is stale.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_test).

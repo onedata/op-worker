@@ -6,10 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of what a storage update's LUMA diff changes. A change of the LUMA
-%%% config rotates the storage's LUMA DB namespace, dropping every mapping, so a
-%%% diff that repeats the settings the storage has must change nothing. And an
-%%% external feed must not be given an empty URL.
+%%% Unit tests of luma_config: which LUMA diffs of a storage update change the
+%%% config, and which are refused.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_config_test).

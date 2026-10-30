@@ -6,9 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of the XRootD helper spec's check of credentials. Every use of a
-%%% storage runs it before it makes a helper, and the helper doesn't use the
-%%% credentials to authenticate, so a storage set up without them must pass.
+%%% Unit tests of xrootd_helper_spec: the check of credentials.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(xrootd_helper_spec_test).

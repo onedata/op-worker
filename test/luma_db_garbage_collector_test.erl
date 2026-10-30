@@ -6,9 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of what the collector clears. It works from a snapshot of the
-%%% storage configs, and between the first step of an update's saga and its
-%%% rollback the namespace the storage reads through is on the stale list.
+%%% Unit tests of luma_db_garbage_collector: which LUMA DB namespaces it clears.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_db_garbage_collector_test).

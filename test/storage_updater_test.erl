@@ -6,37 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of the storage update saga, covering the three things about it
-%%% that are easy to break while reshuffling the code.
-%%%
-%%% The first is the LUMA DB namespace bookkeeping - which namespace a storage
-%%% reads through, and which ones are recorded for the garbage collector to
-%%% clean up. It is split between the action (draw a namespace, mark the
-%%% previous one stale) and the compensation (bring the previous one back, mark
-%%% the one just abandoned stale), and the two must agree on one invariant: a
-%%% storage must never list the namespace it reads through as stale, or the
-%%% garbage collector would delete live mappings.
-%%%
-%%% The second is what a saga step is allowed to report. A compensation is armed
-%%% only once its action has returned 'ok', so a step that reports the failure
-%%% of anything it did after the storage_config write would leave that write
-%%% applied with nothing to take it back. The write is therefore the only thing
-%%% the step reports on; that the propagation which follows it cannot fail the
-%%% step is covered by rtransfer_config_test.
-%%%
-%%% The third is what a failed compensation leaves in the log. It is the one way
-%%% in which Onezone and the provider end up disagreeing about a storage, and
-%%% both compensations report a failure by returning an error rather than by
-%%% throwing, so a returned error must leave the same line as an exception.
-%%%
-%%% Besides, a failure in printing the diff to the log must end as the rest
-%%% of the update's failures do, in an error returned to the caller; and a
-%%% refusal, which is thrown, must leave the same line in the log as a
-%%% returned error. And the QoS parameters must reach Onezone as numbers where
-%%% a QoS expression reads them as numbers, an update that names no LUMA
-%%% setting must leave the LUMA config as it is, and an update that would leave
-%%% credentials failing every use of the storage must be refused before it
-%%% writes anything.
+%%% Unit tests of storage_updater: the update saga with its LUMA DB namespace
+%%% rotation and compensations, and what an update checks and sends to Onezone.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater_test).

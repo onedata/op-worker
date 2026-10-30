@@ -6,12 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of the cleanup of a space's LUMA entries, which a space's
-%%% unsupport runs last. By then the support is revoked, so nothing stops the
-%%% storage's deletion, and the deletion clears the storage's LUMA DB itself.
-%%% Also of what a clear of a whole namespace leaves in the log: it runs on a
-%%% storage's deletion, in the collector and on an admin's request, possibly at
-%%% once, so each of its lines must name the storage and the namespace.
+%%% Unit tests of luma_crud_api: clearing the LUMA entries of a space and a whole
+%%% LUMA DB namespace.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_crud_api_test).

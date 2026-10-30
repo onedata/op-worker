@@ -6,9 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of the NFS helper spec built from a create spec. The params it
-%%% gives go to the helpers NIF, which takes binaries only: any other value
-%%% throws in C++, out of the NIF, and aborts the node.
+%%% Unit tests of nfs_helper_spec: the helper params and the description built
+%%% from an NFS configuration.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(nfs_helper_spec_test).

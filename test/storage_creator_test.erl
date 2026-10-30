@@ -6,13 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of the storage create's handling of its own failures: the spec is
-%%% printed to the log by its type, and a failure there must end as the rest of
-%%% the create's failures do, in an error returned to the caller; and a refusal,
-%%% which is thrown, must leave the same line in the log as a returned error.
-%%% Besides, the QoS parameters must reach Onezone as numbers where a QoS
-%%% expression reads them as numbers, and a create whose credentials would fail
-%%% every use of the storage must be refused before Onezone.
+%%% Unit tests of storage_creator: what a storage create checks and sends to
+%%% Onezone, and how it handles its failures.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_creator_test).
