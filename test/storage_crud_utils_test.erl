@@ -6,15 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of what the pretty print of a storage spec, which a create and an
-%%% update log at info level, leaves of its secrets. Besides the helper
-%%% credentials, a spec carries the API key of an external LUMA feed, and an
-%%% update that changes only the LUMA config carries no credentials at all.
-%%% They also cover the normalization of the QoS parameters that a create
-%%% and an update start with, the errors the check of a storage's own
-%%% credentials refuses them with, and when an S3 storage at the global AWS
-%%% endpoint must name its region: on a create, and on an update that changes
-%%% its hostname or its region.
+%%% Unit tests of storage_crud_utils, the steps that a storage create and update
+%%% share: printing the spec to the log, normalizing QoS parameters and checking
+%%% the configuration.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_crud_utils_test).
