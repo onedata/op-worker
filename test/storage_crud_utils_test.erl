@@ -164,7 +164,8 @@ global_aws_endpoint_is_told_by_its_host_alone_test_() ->
         || {Scheme, Hostname} <- [
             {<<"http">>, <<"s3.amazonaws.com:80">>},
             {<<"https">>, <<"s3.amazonaws.com:8443">>},
-            {<<"https">>, <<"s3.amazonaws.com:443/">>}
+            {<<"https">>, <<"s3.amazonaws.com:443/">>},
+            {<<"https">>, <<"s3.amazonaws.com:443/some/path">>}
         ]
     ].
 
