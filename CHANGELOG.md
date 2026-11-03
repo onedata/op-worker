@@ -2,6 +2,48 @@
 
 ## CHANGELOG
 
+### 25.2
+
+-   **VFS-13773** Removed newline character when copying text from
+    clipboard line in some web browsers.
+-   **VFS-13726** Web GUI: Fixed QoS inherited badge invalid appearing
+    and disappearing when the QoS file browser column is shown.
+-   **VFS-13718** Enabled registration of Onedata shared file ids in
+    HTTP storage.
+-   **VFS-13693** Optimized transfer shaping from slow HTTP servers.
+-   **VFS-13637** Web GUI: Improved the transfers table by reordering
+    columns, making the status column always visible, and merging the
+    type and destination columns into a single column.
+-   **VFS-13628** Web GUI: Added experimental support for customizing
+    button styles using static files without rebuilding the software.
+-   **VFS-13599** Added support for storages based on HTTP servers with
+    invalid content-range header in responses.
+-   **VFS-13530** OneS3 now shows spaces which are not supported by the
+    local provider, but blocks access to them with InvalidRegion error.
+-   **VFS-13511** Web GUI: Updated docs/API links to the new paths used
+    on onedata.org. Links are now pointing to the API docs version
+    matching version of software.
+-   **VFS-13371** Added support for HEAD requests to the file content
+    download REST endpoints (by file ID and by path). They return the
+    `Content-Length` and `Accept-Ranges` headers without the file
+    content; directories are not supported. This allows publicly shared
+    files to be registered on an HTTP storage by their public URL
+    (including the Onezone share URL), with the file size detected
+    automatically.
+-   **VFS-13350** Web GUI: Handling some specific download
+    initialization errors.
+-   **VFS-13215** Fixed HTTP helper error for storages supporting HEAD
+    but not accept-ranges header.
+-   **VFS-12973** Allowed creating directories in spaces supported by a
+    readonly storage. Previously, such an attempt failed with EROFS
+    error.
+-   **VFS-6934** Web GUI: Fixed rounding percentage values in data
+    distribution.
+-   **VFS-2073** Improved content-disposition headers sent during file
+    downloads to properly support filename encoding in modern browsers.
+    Implemented concrete content-type headers (MIME types) rather than
+    the generic application/octet-stream.
+
 ### 25.1
 
 -   **VFS-13456** Web GUI: Changed Europeana materials URLs scheme from
