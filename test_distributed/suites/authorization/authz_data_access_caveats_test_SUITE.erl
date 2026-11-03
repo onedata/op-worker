@@ -494,18 +494,22 @@ allowed_ancestors_operations_test(_Config) ->
                 _ -> <<ParentPath/binary, "/", DirName/binary>>
             end,
 
-            ExpectedError = case DirGuid of
-                UserRootDirGuid -> ?ENOTSUP;
-                _ -> ?EACCES
+            ExpectedGetAclError = case DirGuid of
+                UserRootDirGuid -> ?ERROR_NOT_SUPPORTED;
+                _ -> ?ERR_POSIX(?EACCES)
             end,
             % Most operations should be forbidden to perform on dirs/ancestors
             % leading to files allowed by caveats
             ?assertMatch(
-                {error, ExpectedError},
-                lfm_proxy:get_acl(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
+                ExpectedGetAclError,
+                opt_file_perms:get_acl(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
             ),
+            ExpectedCreateError = case DirGuid of
+                UserRootDirGuid -> {error, ?ENOTSUP};
+                _ -> {error, ?EACCES}
+            end,
             ?assertMatch(
-                {error, ExpectedError},
+                ExpectedCreateError,
                 lfm_proxy:create(Node, SessionIdWithCaveats, DirGuid, ?RAND_STR(), 8#777)
             ),
 
@@ -525,11 +529,11 @@ allowed_ancestors_operations_test(_Config) ->
             ),
             ?assertMatch(
                 {ok, ParentGuid},
-                lfm_proxy:get_parent(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
+                opt_file_tree:get_parent(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
             ),
             ?assertMatch(
                 {ok, DirPath},
-                lfm_proxy:get_file_path(Node, SessionIdWithCaveats, DirGuid)
+                opt_file_tree:get_path(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
             ),
 
             % Get child attr should also succeed but only for children that are
@@ -557,7 +561,7 @@ allowed_ancestors_operations_test(_Config) ->
     % Get acl should finally succeed for dir which is allowed by caveats
     ?assertMatch(
         {ok, []},
-        lfm_proxy:get_acl(Node, SessionIdWithCaveats, ?FILE_REF(DeepestDirGuid))
+        opt_file_perms:get_acl(Node, SessionIdWithCaveats, ?FILE_REF(DeepestDirGuid))
     ),
     ?assertMatch(
         {ok, _},
@@ -610,7 +614,7 @@ data_access_caveats_cache_test(_Config) ->
     end, [UserRootDirGuid, SpaceRootDirGuid, RootDirGuid, DirGuid, FileGuid]),
 
     % call on file should fill cache up to root dir with remaining guid constraints
-    ?assertEqual({ok, []}, lfm_proxy:get_acl(Node, SessionId, ?FILE_REF(FileGuid))),
+    ?assertEqual({ok, []}, opt_file_perms:get_acl(Node, SessionId, ?FILE_REF(FileGuid))),
 
     lists:foreach(fun(Guid) ->
         ?assertEqual(
@@ -646,8 +650,8 @@ data_access_caveats_cache_test(_Config) ->
     % performed but since ancestor checks were not performed it is not known whether
     % ancestor operations can be performed
     ?assertMatch(
-        {error, ?EACCES},
-        lfm_proxy:get_acl(Node, SessionId, ?FILE_REF(DirGuid))
+        ?ERR_POSIX(?EACCES),
+        opt_file_perms:get_acl(Node, SessionId, ?FILE_REF(DirGuid))
     ),
     ?assertEqual(
         {ok, {equal_or_descendant, ?EACCES}},

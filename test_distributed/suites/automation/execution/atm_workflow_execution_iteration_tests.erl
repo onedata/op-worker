@@ -485,7 +485,7 @@ build_file_data_spec() ->
         % requested (@see file_attr:resolve/3), and the guid alone is taken straight
         % from the file reference - a removed file would resolve just fine, and the
         % testcases iterating over inaccessible files would see nothing fail.
-        attributes = lists:usort([?attr_guid, ?attr_type | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
+        attributes = lists:usort([?attr_guid, ?attr_type | ?RAND_SUBLIST(?ATM_AVAILABLE_FILE_ATTRS)])
     }.
 
 

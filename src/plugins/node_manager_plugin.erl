@@ -62,9 +62,15 @@
     {7, <<"21.02.8">>},
     {8, <<"25.0">>},
     {9, <<"25.1">>},
-    {10, op_worker:get_release_version()}
+    {10, <<"25.2">>},
+    {11, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
+
+% node_manager may be busy with periodic tasks for longer than the default call timeout
+% (5 s) on an overloaded node - the etses must be initialized anyway.
+-define(INIT_ETSES_TIMEOUT, timer:minutes(1)).
+
 
 %%%===================================================================
 %%% node_manager_plugin_default callbacks
@@ -359,7 +365,15 @@ upgrade_cluster(9) ->
             dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
         end, SpaceIds)
     end),
-    {ok, 10}.
+    {ok, 10};
+upgrade_cluster(10) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun index:restore_after_couchbase_upgrade_from_4_5_to_6_6/1, SpaceIds)
+    end),
+    {ok, 11}.
 
 
 %%--------------------------------------------------------------------
@@ -509,7 +523,7 @@ init_etses_for_space_on_all_nodes(SpaceId) ->
     lists:foreach(fun
         (ok) ->
             ok;
-        ({badrpc, _} = Error) ->
+        (Error) ->
             ?error("Could not initialize etses for space: ~tp.~nReason: ~tp", [SpaceId, Error]),
             error({etses_not_ready, Error})
     end, Res).
@@ -531,7 +545,9 @@ init_etses_on_current_node() ->
 %% @private
 -spec init_etses_for_space_on_current_node(od_space:id() | all) -> ok.
 init_etses_for_space_on_current_node(SpaceId) ->
-    gen_server2:call(?NODE_MANAGER_NAME, {apply, ?MODULE, init_etses_for_space_internal, [SpaceId]}).
+    gen_server2:call(
+        ?NODE_MANAGER_NAME, {apply, ?MODULE, init_etses_for_space_internal, [SpaceId]}, ?INIT_ETSES_TIMEOUT
+    ).
 
 
 %% @private

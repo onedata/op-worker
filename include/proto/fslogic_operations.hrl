@@ -36,10 +36,7 @@
     #get_file_attr_by_path{}, #create_path{}, #report_file_written{}, #report_file_read{}, #get_recursive_file_list{},
 
     % PROXYIO REQUEST
-    #remote_read{}, #remote_write{},
-
-    % PROVIDER REQUEST
-    #get_parent{}, #get_acl{}, #set_acl{}, #remove_acl{}, #check_perms{}, #get_file_path{}
+    #remote_read{}, #remote_write{}
 ]).
 
 -endif.

@@ -125,7 +125,6 @@ stages:
         - events
         - events_performance
         - events_reliability
-        - events_reliability_2op
         - file_lfm_posix
         - file_lfm_s3
         - file_lifecycle_races
@@ -179,7 +178,6 @@ stages:
         - multi_provider_db_sync
         - multi_provider_file_ops
         - multi_provider_hardlinks
-        - multi_provider_proxy
         - multi_provider_rest
         - multipart_upload
         - multiple_workflow_scheduling
@@ -1005,13 +1003,6 @@ events_reliability:
     - <<: *ct_logs
       name: ct_logs_events_reliability.tar.gz
 
-events_reliability_2op:
-  <<: *ct-job
-  key: EVREL2OP
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_events_reliability_2op.tar.gz
-
 file_lfm_posix:
   <<: *ct-onenv-job
   key: FILELFMPOS
@@ -1395,14 +1386,6 @@ multi_provider_hardlinks:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_multi_provider_hardlinks.tar.gz
-  requirements: *os-agent
-
-multi_provider_proxy:
-  <<: *ct-job
-  key: MULPPROX
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_multi_provider_proxy.tar.gz
   requirements: *os-agent
 
 multi_provider_rest:
@@ -1958,7 +1941,6 @@ Coverage report:
     - artifact: ct_logs_events.tar.gz
     - artifact: ct_logs_events_performance.tar.gz
     - artifact: ct_logs_events_reliability.tar.gz
-    - artifact: ct_logs_events_reliability_2op.tar.gz
     - artifact: ct_logs_file_lfm_posix.tar.gz
     - artifact: ct_logs_file_lfm_s3.tar.gz
     - artifact: ct_logs_file_lifecycle_races.tar.gz
@@ -2012,7 +1994,6 @@ Coverage report:
     - artifact: ct_logs_multi_provider_db_sync.tar.gz
     - artifact: ct_logs_multi_provider_file_ops.tar.gz
     - artifact: ct_logs_multi_provider_hardlinks.tar.gz
-    - artifact: ct_logs_multi_provider_proxy.tar.gz
     - artifact: ct_logs_multi_provider_rest.tar.gz
     - artifact: ct_logs_multipart_upload.tar.gz
     - artifact: ct_logs_multiple_workflow_scheduling.tar.gz

@@ -30,10 +30,12 @@
 -include("modules/dataset/archivisation_tree.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("file/file_tree_test.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("test_rpc.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -60,7 +62,8 @@
     spatial_function_emitting_null_in_array_key_yields_empty_view_test/1,
     spatial_function_emitting_null_in_range_key_yields_empty_view_test/1,
     spatial_function_emitting_integer_key_fails_the_query_test/1,
-    spatial_function_emitting_string_key_fails_the_query_test/1
+    spatial_function_emitting_string_key_fails_the_query_test/1,
+    spatial_view_query_filters_points_by_range_test/1
 ]).
 
 all() -> [
@@ -78,7 +81,8 @@ all() -> [
     spatial_function_emitting_null_in_array_key_yields_empty_view_test,
     spatial_function_emitting_null_in_range_key_yields_empty_view_test,
     spatial_function_emitting_integer_key_fails_the_query_test,
-    spatial_function_emitting_string_key_fails_the_query_test
+    spatial_function_emitting_string_key_fails_the_query_test,
+    spatial_view_query_filters_points_by_range_test
 ].
 
 
@@ -548,6 +552,75 @@ spatial_function_emitting_string_key_fails_the_query_test(_Config) ->
     ?assertQuery(
         ?ERR_VIEW_QUERY_FAILED(_, _),
         ViewName,  [{stale, false}, {spatial, true}]
+    ).
+
+
+spatial_view_query_filters_points_by_range_test(_Config) ->
+    #object{
+        children = [
+            #object{guid = FileGuid1},
+            #object{guid = FileGuid2},
+            #object{guid = FileGuid3},
+            _
+        ]
+    } = file_tree_test_utils:create_and_sync_file_tree(user1, space_krk,
+        #dir_spec{
+            children = [
+                #file_spec{
+                    name = <<"f0">>,
+                    metadata = #metadata_spec{json = #{
+                        <<"loc">> => #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}
+                    }}
+                },
+                #file_spec{
+                    name = <<"f1">>,
+                    metadata = #metadata_spec{json = #{
+                        <<"loc">> => #{<<"type">> => <<"Point">>, <<"coordinates">> => [0, 0]}
+                    }}
+                },
+                #file_spec{
+                    name = <<"f2">>,
+                    metadata = #metadata_spec{json = #{
+                        <<"loc">> => #{<<"type">> => <<"Point">>, <<"coordinates">> => [10, 5]}
+                    }}
+                },
+                #file_spec{name = <<"f3">>}
+            ]
+        }
+    ),
+
+    ViewName = ?view_name,
+    SpatialFunction = <<"
+        function (id, type, meta, ctx) {
+            if(type == 'custom_metadata' && meta['onedata_json'] && meta['onedata_json']['loc']) {
+                return [meta['onedata_json']['loc'], id];
+            }
+            return null;
+        }
+    ">>,
+    create_view(ViewName, SpatialFunction, undefined, [], true),
+
+    QueryFun = fun(Options) ->
+        case query_view(ViewName, Options) of
+            {ok, #{<<"rows">> := Rows}} ->
+                lists:sort(lists:map(fun(Row) ->
+                    element(2, {ok, _} = file_id:objectid_to_guid(maps:get(<<"value">>, Row)))
+                end, Rows));
+            Error ->
+                Error
+        end
+    end,
+
+    ?assertEqual(
+        lists:sort([FileGuid1, FileGuid2, FileGuid3]),
+        QueryFun([{stale, false}, {spatial, true}]),
+        ?ATTEMPTS
+    ),
+
+    ?assertEqual(
+        lists:sort([FileGuid1, FileGuid2]),
+        QueryFun([{stale, false}, {spatial, true}, {start_range, [0, 0]}, {end_range, [5.5, 10.5]}]),
+        ?ATTEMPTS
     ).
 
 

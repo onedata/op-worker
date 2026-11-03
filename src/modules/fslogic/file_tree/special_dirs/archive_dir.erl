@@ -41,7 +41,7 @@
 
 -define(SUPPORTED_OPERATIONS, [
     #resolve_guid{},
-    #get_file_path{},
+    #file_path_get_request{},
     #resolve_guid_by_relative_path{},
 
     #get_file_attr{},

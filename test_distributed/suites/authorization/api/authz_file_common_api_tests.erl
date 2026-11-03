@@ -44,11 +44,12 @@ test_get_parent(SpaceId) ->
         files = [#authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_public_data_mode = true,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
-            lfm_proxy:get_parent(Node, SessionId, FileKey)
+            opt_file_tree:get_parent(Node, SessionId, FileKey)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
@@ -65,10 +66,11 @@ test_get_file_path(SpaceId) ->
         available_for_share_guid = false, % TODO VFS-6057
         available_in_public_data_mode = false, % TODO VFS-6057
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            ?FILE_REF(FileGuid) = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath,
+            FileRef = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath,
                 <<"/file1">>, ExtraData),
-            lfm_proxy:get_file_path(Node, SessionId, FileGuid)
+            opt_file_tree:get_path(Node, SessionId, FileRef)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
@@ -181,6 +183,7 @@ get_attr_required_perms(?attr_eff_qos_inheritance_path) -> [];
 get_attr_required_perms(?attr_qos_status) -> [];
 get_attr_required_perms(?attr_recall_root_id) -> [];
 get_attr_required_perms(?attr_is_deleted) -> [];
+get_attr_required_perms(?attr_is_imported) -> [];
 get_attr_required_perms(?attr_conflicting_files) -> [];
 get_attr_required_perms(?attr_has_custom_metadata) -> [];
 get_attr_required_perms(?attr_has_json_metadata) -> [];

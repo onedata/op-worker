@@ -185,8 +185,8 @@ resume(SuspendedProc) ->
 
 -spec build_space_path(node(), session:id(), od_space:id()) -> file_meta:path().
 build_space_path(Node, SessId, SpaceId) ->
-    {ok, SpacePath} = ?assertMatch({ok, _}, lfm_proxy:get_file_path(
-        Node, SessId, space_dir:guid(SpaceId)
+    {ok, SpacePath} = ?assertMatch({ok, _}, opt_file_tree:get_path(
+        Node, SessId, ?FILE_REF(space_dir:guid(SpaceId))
     )),
     SpacePath.
 

@@ -35,7 +35,7 @@ get_record_version() ->
     %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     %%% WARNING: this is a synced model and MUST NOT be changed outside of a new major release!!!
     %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    12.
+    13.
 
 
 %%--------------------------------------------------------------------
@@ -250,9 +250,6 @@ get_record_struct(11) ->
         {parent_uuid, string}
     ]};
 get_record_struct(12) ->
-    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    %%% WARNING: this is a synced model and MUST NOT be changed outside of a new major release!!!
-    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     {record, [
         {name, string},
         {type, atom},
@@ -276,6 +273,34 @@ get_record_struct(12) ->
         {symlink_value, string},
         % field dataset_status has been added in this version
         {dataset_status, atom}
+    ]};
+get_record_struct(13) ->
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    %%% WARNING: this is a synced model and MUST NOT be changed outside of a new major release!!!
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {protection_flags, integer},
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        {is_scope, boolean},
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string},
+        {references, #{string => [string]}},
+        {symlink_value, string},
+        {dataset_status, atom},
+        % field imported has been added in this version
+        {imported, atom}
     ]}.
 
 
@@ -370,8 +395,15 @@ upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Ow
         #{}, undefined,
         % field dataset_status has been added in this version
         undefined
+    }};
+upgrade_record(12, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+    ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue, DatasetState
+}) ->
+    {13, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue, DatasetState,
+        % field imported has been added in this version
+        unknown
     }}.
-
 
 
 %%--------------------------------------------------------------------

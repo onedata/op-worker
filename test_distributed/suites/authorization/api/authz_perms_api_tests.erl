@@ -26,9 +26,9 @@
 
 -export([
     test_set_perms/1,
-    test_check_read_perms/1,
-    test_check_write_perms/1,
-    test_check_rdwr_perms/1
+    test_check_file_read_access/1,
+    test_check_file_write_access/1,
+    test_check_file_rdwr_access/1
 ]).
 
 
@@ -147,7 +147,7 @@ test_set_perms(SpaceId) ->
     ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(Node, NonSpaceMemberSessionId, FileRef, 8#000)).
 
 
-test_check_read_perms(SpaceId) ->
+test_check_file_read_access(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -159,11 +159,12 @@ test_check_read_perms(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_public_data_mode = true,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
-            lfm_proxy:check_perms(Node, SessionId, FileKey, read)
+            opt_file_perms:check_file_access(Node, SessionId, FileKey, read)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
@@ -171,7 +172,7 @@ test_check_read_perms(SpaceId) ->
     }).
 
 
-test_check_write_perms(SpaceId) ->
+test_check_file_write_access(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -186,8 +187,9 @@ test_check_write_perms(SpaceId) ->
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
-            lfm_proxy:check_perms(Node, SessionId, FileKey, write)
+            opt_file_perms:check_file_access(Node, SessionId, FileKey, write)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
@@ -195,7 +197,7 @@ test_check_write_perms(SpaceId) ->
     }).
 
 
-test_check_rdwr_perms(SpaceId) ->
+test_check_file_rdwr_access(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -210,8 +212,9 @@ test_check_rdwr_perms(SpaceId) ->
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
-            lfm_proxy:check_perms(Node, SessionId, FileKey, rdwr)
+            opt_file_perms:check_file_access(Node, SessionId, FileKey, rdwr)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,

@@ -99,14 +99,14 @@ test_acl_is_returned_with_resolved_names(_Config) ->
         ?identifier_group_mask,
         ?write_all_object_mask
     ),
-    ?assertEqual(ok, lfm_proxy:set_acl(Node, SessionId, ?FILE_REF(FileGuid), [UserAce, GroupAce])),
+    ?assertEqual(ok, opt_file_perms:set_acl(Node, SessionId, ?FILE_REF(FileGuid), [UserAce, GroupAce])),
 
     ?assertEqual(
         {ok, [
             UserAce#access_control_entity{name = oct_background:get_user_fullname(user1)},
             GroupAce#access_control_entity{name = oct_background:get_group_name(group1)}
         ]},
-        lfm_proxy:get_acl(Node, SessionId, ?FILE_REF(FileGuid))
+        opt_file_perms:get_acl(Node, SessionId, ?FILE_REF(FileGuid))
     ).
 
 

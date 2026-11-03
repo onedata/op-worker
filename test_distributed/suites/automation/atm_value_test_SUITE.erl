@@ -525,7 +525,7 @@ atm_file_value_to_from_store_item_test(_Config) ->
         data_spec = #atm_file_data_spec{
             file_type = ?RAND_ELEMENT(['ANY', ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?SYMLINK_TYPE]),
             % attributes shouldn't have any impact on compress/expand functionality
-            attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)
+            attributes = ?RAND_SUBLIST(?ATM_AVAILABLE_FILE_ATTRS)
         },
         values = lists:flatten([
             #{<<"fileId">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
@@ -566,7 +566,7 @@ atm_file_value_describe_test(_Config) ->
         data_spec = #atm_file_data_spec{
             file_type = ?RAND_ELEMENT(['ANY', ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?SYMLINK_TYPE]),
             % attributes shouldn't have any impact on describe functionality
-            attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)
+            attributes = ?RAND_SUBLIST(?ATM_AVAILABLE_FILE_ATTRS)
         },
         values = lists:flatten([
             {

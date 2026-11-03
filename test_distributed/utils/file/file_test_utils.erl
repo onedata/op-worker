@@ -335,7 +335,7 @@ fetch_distribution(Node, SessionId, FileGuid) ->
 %% @private
 -spec describe_file(node(), session:id(), file_id:file_guid()) -> binary().
 describe_file(Node, SessionId, FileGuid) ->
-    try lfm_proxy:get_file_path(Node, SessionId, FileGuid) of
+    try opt_file_tree:get_path(Node, SessionId, ?FILE_REF(FileGuid)) of
         {ok, Path} -> Path;
         Other -> str_utils:format_bin("<path unknown: ~tp>", [Other])
     catch Class:Reason ->

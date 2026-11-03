@@ -890,7 +890,10 @@ create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber) ->
     file_meta:uuid(), od_space:id()) -> file_meta:doc().
 prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
     {ok, Type} = storage_driver:infer_type(Mode),
-    file_meta:new_doc(FileUuid, FileName, Type, Mode band 8#1777, OwnerId, ParentUuid, SpaceId).
+    file_meta:new_doc(
+        FileUuid, FileName, Type, Mode band 8#1777, OwnerId,
+        ParentUuid, SpaceId, false, true
+    ).
 
 -spec build_times_from_stat_timestamps(storage_file_ctx:ctx()) ->
     {ok, times:record(), storage_file_ctx:ctx()}.
@@ -957,8 +960,7 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
                 {ACLBin, StorageFileCtx2} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
                 {ok, NormalizedACL} = storage_import_acl:decode_and_normalize(ACLBin, StorageId),
                 {SanitizedAcl, FileCtx2} = sanitize_acl(NormalizedACL, FileCtx),
-                #provider_response{status = #status{code = ?OK}} =
-                    acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl),
+                ok = acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl),
                 {ok, StorageFileCtx2}
             catch
                 throw:Reason
@@ -1280,19 +1282,18 @@ maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}, S
         false ->
             {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};
         true ->
-            #provider_response{provider_response = ACL} = acl_req:get_acl(UserCtx, FileCtx),
+            {ok, Acl} = acl_req:get_acl(UserCtx, FileCtx),
             try
                 {ACLBin, StorageFileCtx2} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
                 {ok, NormalizedNewACL} = storage_import_acl:decode_and_normalize(ACLBin, StorageId),
                 {SanitizedAcl, FileCtx2} = sanitize_acl(NormalizedNewACL, FileCtx),
-                case #acl{value = SanitizedAcl} of
-                    ACL ->
+                case SanitizedAcl == Acl of
+                    true ->
                         {false, FileCtx2, StorageFileCtx2, ?NFS4_ACL_ATTR_NAME};
-                    _ ->
+                    false ->
                         case ShouldUpdate of
                             true ->
-                                #provider_response{status = #status{code = ?OK}} =
-                                    acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl);
+                                ok = acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl);
                             false ->
                                 ok
                         end,

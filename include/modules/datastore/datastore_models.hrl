@@ -311,7 +311,6 @@
     sequencer_manager :: undefined | pid(),
     async_request_manager :: undefined | pid(),
     connections = [] :: [pid()],
-    proxy_via :: undefined | oneprovider:id(),
     % Key-value in-session memory
     memory = #{} :: map(),
     direct_io = #{} :: #{od_space:id() => boolean()}
@@ -437,7 +436,11 @@
     symlink_value :: undefined | file_meta_symlinks:symlink(),
     % this field is used to cache value from #dataset.state field
     % TODO VFS-7533 handle conflict on file_meta with remote provider
-    dataset_state :: undefined | dataset:state()
+    dataset_state :: undefined | dataset:state(),
+    % Flag telling whether file was imported or registered. While all new files should have
+    % this flag set, already existing ones are assigned 'unknown' during upgrade
+    % as it is not feasible to tell what their origin was.
+    imported = false :: unknown | boolean()
 }).
 
 % Model used for storing information concerning archive.

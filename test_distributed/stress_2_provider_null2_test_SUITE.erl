@@ -70,7 +70,7 @@ random_read_test_base(Config, SeparateBlocks) ->
   Names = case RepNum of
     1 ->
       Config2 = multi_provider_file_ops_test_base:extend_config(
-        Config, <<"user1">>, {2,0,0, 1}, 1),
+        Config, <<"user1">>, {2, 1}, 1),
       SpaceName = ?config(space_name, Config2),
       GeneratedNames = lists:map(fun(I) ->
         <<"/", SpaceName/binary, "/",  (integer_to_binary(I))/binary,

@@ -23,7 +23,7 @@
 -export([
     unlink/3, rm_recursive/2,
     mv/4, cp/4,
-    get_parent/2, get_file_path/2, get_file_guid/2, resolve_guid_by_relative_path/3, ensure_dir/4,
+    get_file_guid/2, resolve_guid_by_relative_path/3, ensure_dir/4,
     is_dir/2
 ]).
 %% Functions operating on files
@@ -122,26 +122,6 @@ cp(SessId, FileKey, TargetParentKey, TargetName) ->
         Error ->
             Error
     end.
-
-
--spec get_parent(session:id(), lfm:file_key()) ->
-    {ok, file_id:file_guid()} | lfm:error_reply().
-get_parent(SessId, FileKey) ->
-    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
-
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_parent{},
-        fun(#dir{guid = ParentGuid}) -> {ok, ParentGuid} end
-    ).
-
-
--spec get_file_path(session:id(), file_id:file_guid()) ->
-    {ok, file_meta:path()}.
-get_file_path(SessId, FileGuid) ->
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_file_path{},
-        fun(#file_path{value = Path}) -> {ok, Path} end
-    ).
 
 
 -spec get_file_guid(session:id(), file_meta:path()) ->

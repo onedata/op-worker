@@ -497,6 +497,7 @@ import_file_tree_test_base(SuiteCtx, CaseName, FileTreeSpec, Opts) ->
     ),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_imported_flags(TestCaseCtx),
     storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(
         TestCaseCtx, maps:get(monitoring_overrides, Opts, #{})

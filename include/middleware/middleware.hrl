@@ -298,6 +298,39 @@
 
 
 %%%===================================================================
+%%% File permissions related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(acl_get_request, {
+}).
+
+-record(acl_set_request, {
+    value :: acl:acl()
+}).
+
+-record(acl_remove_request, {
+}).
+
+-record(check_file_access_request, {
+    flag :: fslogic_worker:open_flag()
+}).
+
+
+%%%===================================================================
+%%% File tree related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(file_parent_get_request, {
+}).
+
+-record(file_path_get_request, {
+}).
+
+
+
+%%%===================================================================
 %%% Misc
 %%%===================================================================
 
@@ -305,7 +338,7 @@
 %% NOTE: Any operation added here will be automatically allowed for space dir.
 %% For more details see space_dir:allowed_operations/0.
 -define(MIDDLEWARE_ALL_OPERATIONS, [
-    % ARCHIVE OPERATION
+    % ARCHIVE OPERATIONS
     #archives_list_request{},
     #dataset_archive_request{},
     #archivisation_cancel_request{},
@@ -318,7 +351,7 @@
     #archive_recall_progress_get_request{},
     #archive_recall_log_browse_request{},
 
-    % ATM OPERATION
+    % ATM OPERATIONS
     #atm_workflow_execution_schedule_request{},
     #atm_workflow_execution_init_cancel_request{},
     #atm_workflow_execution_init_pause_request{},
@@ -327,7 +360,7 @@
     #atm_workflow_execution_repeat_request{},
     #atm_workflow_execution_discard_request{},
 
-    % CDMI OPERATION
+    % CDMI OPERATIONS
     #transfer_encoding_get_request{},
     #transfer_encoding_set_request{},
     #cdmi_completion_status_get_request{},
@@ -335,7 +368,7 @@
     #mimetype_get_request{},
     #mimetype_set_request{},
 
-    % DATASET OPERATION
+    % DATASET OPERATIONS
     #top_datasets_list_request{},
     #children_datasets_list_request{},
     #dataset_establish_request{},
@@ -344,7 +377,7 @@
     #dataset_remove_request {},
     #file_eff_dataset_summary_get_request{},
 
-    % FILE METADATA OPERATION
+    % FILE METADATA OPERATIONS
     #custom_metadata_get_request{},
     #custom_metadata_set_request{},
     #custom_metadata_remove_request{},
@@ -352,20 +385,30 @@
     #historical_dir_size_stats_get_request{},
     #file_storage_locations_get_request{},
 
-    % QoS OPERATION
+    % QoS OPERATIONS
     #qos_entry_add_request{},
     #qos_entry_get_request{},
     #qos_entry_remove_request{},
     #effective_file_qos_get_request{},
     #qos_status_check_request{},
 
-    % SHARE OPERATION
+    % SHARE OPERATIONS
     #share_create_request{},
     #share_remove_request{},
 
-    % TRANSFER OPERATION
+    % TRANSFER OPERATIONS
     #file_transfer_schedule_request{},
-    #view_transfer_schedule_request{}
+    #view_transfer_schedule_request{},
+
+    % FILE PERMISSIONS OPERATIONS
+    #acl_get_request{},
+    #acl_set_request{},
+    #acl_remove_request{},
+    #check_file_access_request{},
+
+    % FILE TREE OPERATIONS
+    #file_parent_get_request{},
+    #file_path_get_request{}
 ]).
 
 -endif.

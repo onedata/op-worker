@@ -53,6 +53,7 @@
     qos_status :: undefined | qos_status:summary(),
     recall_root_id :: undefined | file_id:file_guid(),
     is_deleted :: undefined | boolean(),
+    is_imported :: undefined | unknown | boolean(),
     conflicting_files :: undefined | file_meta:conflicts(),
     has_custom_metadata :: undefined | boolean(),
     has_json_metadata :: undefined | boolean(),

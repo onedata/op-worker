@@ -147,7 +147,7 @@ all() ->
 
 rtransfer_multisource_test(Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0,
-        <<"user1">>, {3, 0, 0, 1}, 60),
+        <<"user1">>, {3, 1}, 60),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -213,10 +213,10 @@ rtransfer_multisource_test(Config0) ->
     ok.
 
 db_sync_basic_opts_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3, 1}, 60).
 
 db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 120, false).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3, 1}, 120, false).
 
 rtransfer_test(Config) ->
     ?PERFORMANCE(Config, ?rtransfer_performance_description("Tests rtransfer")).
@@ -228,21 +228,21 @@ rtransfer_test_base(Config) ->
     TN = ?config(transfers_num, Config),
     TFP = ?config(transfer_file_parts, Config),
     multi_provider_file_ops_test_base:rtransfer_test_base(Config, <<"user1">>,
-        {3,0,0}, 180, timer:minutes(5), SMN, MFN, BFN, BFP, TN, TFP).
+        {3, 1}, 180, timer:minutes(5), SMN, MFN, BFN, BFP, TN, TFP).
 
 rtransfer_blocking_test(Config) ->
     multi_provider_file_ops_test_base:rtransfer_blocking_test_base(Config, <<"user1">>,
-        {3,0,0}, 180, timer:minutes(5), 30).
+        {3, 1}, 180, timer:minutes(5), 30).
 
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?db_sync_performance_description("Tests working on dirs and files with db_sync")).
 db_sync_many_ops_test_base(Config) ->
     DirsNum = ?config(dirs_num, Config),
     FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {3,0,0}, 60, DirsNum, FilesNum).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {3, 1}, 60, DirsNum, FilesNum).
 
 db_sync_distributed_modification_test(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {3,0,0}, 60).
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {3, 1}, 60).
 
 multi_space_test(Config) ->
     User = <<"user1">>,
@@ -250,14 +250,9 @@ multi_space_test(Config) ->
     Attempts = 120,
 
     SpaceConfigs = lists:foldl(fun({_, SN}, Acc) ->
-        {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider} = case SN of
-            <<"space1">> ->
-                {3,0,0,1};
-            _ ->
-                {0,3,1,1}
-        end,
+        {SyncNodes, NodesOfProvider} = {3, 1},
         EC = multi_provider_file_ops_test_base:extend_config(Config, User,
-            {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+            {SyncNodes, NodesOfProvider}, Attempts),
         [{SN, EC} | Acc]
     end, [], Spaces),
 

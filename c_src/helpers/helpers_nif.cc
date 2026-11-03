@@ -22,6 +22,11 @@
 
 #include <folly/executors/IOThreadPoolExecutor.h>
 
+
+//__thread int s2n_errno;
+//__thread struct s2n_debug_info _s2n_debug_info = { .debug_str = "", .source = "" };
+
+
 namespace {
 /**
  * @defgroup StaticAtoms Statically created atoms for ease of usage.
@@ -71,7 +76,7 @@ struct HelpersNIF {
             executors.emplace(entry.first,
                 std::make_shared<folly::IOThreadPoolExecutor>(threadNumber,
                     std::make_shared<StorageWorkerFactory>(
-                        entry.second.second)));
+                        entry.second.second.toStdString())));
         }
 
         auto storage_helper_creator =
