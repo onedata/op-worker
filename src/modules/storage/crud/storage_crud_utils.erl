@@ -46,9 +46,8 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Stores as numbers the QoS parameters that an expression reads as numbers,
-%% see qos_expression:normalize_storage_parameters/1. An update without QoS
-%% parameters keeps them undefined, as they replace all the previous ones.
+%% Turns into numbers the QoS parameters of the spec that an expression
+%% reads as numbers, see qos_expression:normalize_storage_parameters/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_qos_parameters(onedata_storage:create_spec() | onedata_storage:update_spec()) ->
@@ -95,7 +94,8 @@ verify_storage_path_type(HelperSpec) ->
 %% Checks the storage's own credentials the way every use of the storage checks
 %% them before it makes a helper (see helper_spec:build_helper_params/2), so that
 %% credentials which would fail every use are refused before anything is
-%% written. The diagnostics don't cover it, as they skip some storage types.
+%% written. The diagnostics don't cover it: they skip http storages, and on
+%% other types they report a failed test rather than the field at fault.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_credentials(helper_spec:t()) -> ok | no_return().
