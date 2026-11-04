@@ -17,6 +17,7 @@
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
 -include_lib("opw_panel_contracts/include/storage/http.hrl").
 -include_lib("opw_panel_contracts/include/storage/posix.hrl").
+-include_lib("opw_panel_contracts/include/storage/s3.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 
@@ -132,6 +133,29 @@ credentials_are_refused_before_onezone_test_() ->
     end}.
 
 
+global_aws_endpoint_without_region_is_refused_before_onezone_test_() ->
+    {setup, fun mock_checks_up_to_onezone/0, fun unmock_create_up_to_onezone/1, fun() ->
+        Spec = #storage_create_spec{
+            type = <<"s3">>,
+            name = <<"some-storage">>,
+            luma = #luma_spec{feed = auto},
+            configuration = #s3_helper_configuration{
+                scheme = <<"https">>,
+                hostname = <<"s3.amazonaws.com:443">>,
+                bucket_name = <<"some-bucket">>,
+                storage_path_type = flat
+            },
+            credentials = #s3_helper_credentials{
+                access_key = <<"some-access-key">>,
+                secret_key = <<"some-secret-key">>
+            }
+        },
+
+        ?assertMatch(?ERR_MISSING_REQUIRED_VALUE(_, <<"region">>), storage_creator:create(Spec)),
+        ?assertEqual(0, meck:num_calls(storage_logic, create_in_zone, '_'))
+    end}.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -171,13 +195,11 @@ unmock_refusing_path_type_check(_) ->
 mock_create_up_to_onezone() ->
     mock_checks_up_to_onezone(),
     meck:expect(helper_spec, build, fun(_Spec) -> helper_spec_not_inspected end),
-    meck:expect(storage_crud_utils, verify_credentials, fun(_HelperSpec) -> ok end).
+    meck:expect(storage_crud_utils, verify_credentials, fun(_HelperSpec) -> ok end),
+    meck:expect(storage_crud_utils, verify_s3_region, fun(_HelperSpec) -> ok end).
 
 
 %% @private
-%% The checks the create runs before Onezone pass, but for the check of the
-%% credentials, which runs on the helper spec built from the create spec; the
-%% write to Onezone fails.
 mock_checks_up_to_onezone() ->
     mock_logger(),
     meck:new([helper_spec, storage_crud_utils], [passthrough, no_link]),

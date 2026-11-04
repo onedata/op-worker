@@ -35,8 +35,12 @@
     verify_storage_path_type/1,
     verify_credentials/1,
     verify_configuration/4,
+    verify_s3_region/1,
+    verify_s3_region_update/2,
     run_diagnostics/3
 ]).
+
+-define(GLOBAL_AWS_S3_HOST, <<"s3.amazonaws.com">>).
 
 
 %%%===================================================================
@@ -121,6 +125,28 @@ verify_configuration(IdOrName, Readonly, Imported, HelperSpec) ->
     check_helper_against_imported_option(Imported, HelperSpec).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Requires the region of an S3 storage at s3.amazonaws.com, the global AWS
+%% endpoint. Without it, each new helper first asks AWS where the bucket is.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_s3_region(helper_spec:t()) -> ok | no_return().
+verify_s3_region(HelperSpec) ->
+    case helper_spec:get_name(HelperSpec) of
+        ?S3_HELPER_NAME -> verify_s3_region_in_configuration(helper_spec:get_configuration(HelperSpec));
+        _ -> ok
+    end.
+
+
+-spec verify_s3_region_update(helper_spec:t(), helper_spec:t()) -> ok | no_return().
+verify_s3_region_update(PrevHelperSpec, NewHelperSpec) ->
+    case get_hostname_and_region(PrevHelperSpec) == get_hostname_and_region(NewHelperSpec) of
+        true -> ok;
+        false -> verify_s3_region(NewHelperSpec)
+    end.
+
+
 -spec run_diagnostics(helper_spec:t(), luma:feed(), storage_detector:diagnostics_mode()) ->
     ok | no_return().
 run_diagnostics(HelperSpec, LumaFeed, DiagnosticsMode) ->
@@ -180,6 +206,38 @@ check_helper_against_imported_option(true, HelperSpec) ->
         true ->
             ok
     end.
+
+
+%% @private
+-spec verify_s3_region_in_configuration(helper_spec:configuration()) -> ok | no_return().
+verify_s3_region_in_configuration(Configuration = #{<<"scheme">> := Scheme, <<"hostname">> := UrlWithoutScheme}) ->
+    case is_global_aws_endpoint(Scheme, UrlWithoutScheme) of
+        false ->
+            ok;
+        true ->
+            case maps:get(<<"region">>, Configuration, undefined) of
+                undefined -> throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"region">>));
+                <<>> -> throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"region">>));
+                _ -> ok
+            end
+    end.
+
+
+%% @private
+%% uri_string finds the host only after a scheme: it reads
+%% "s3.amazonaws.com:443" alone as a scheme and a path.
+-spec is_global_aws_endpoint(binary(), binary()) -> boolean().
+is_global_aws_endpoint(Scheme, UrlWithoutScheme) ->
+    case uri_string:parse(<<Scheme/binary, "://", UrlWithoutScheme/binary>>) of
+        #{host := ?GLOBAL_AWS_S3_HOST} -> true;
+        _ -> false
+    end.
+
+
+%% @private
+-spec get_hostname_and_region(helper_spec:t()) -> helper_spec:configuration().
+get_hostname_and_region(HelperSpec) ->
+    maps:with([<<"hostname">>, <<"region">>], helper_spec:get_configuration(HelperSpec)).
 
 
 %% @private
