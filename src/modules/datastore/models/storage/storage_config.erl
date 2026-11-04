@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -266,7 +266,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 
 %%--------------------------------------------------------------------
@@ -346,7 +346,11 @@ get_record_struct(4) ->
         % new fields; 'undefined' stands for the original, unnamespaced keyspace
         {luma_db_namespace, string},
         {stale_luma_db_namespaces, [string]}
-    ]}.
+    ]};
+
+get_record_struct(5) ->
+    % the structure does not change, only the helper spec params are moved or dropped
+    get_record_struct(4).
 
 
 %%--------------------------------------------------------------------
@@ -405,4 +409,66 @@ upgrade_record(3, {?MODULE, Helper, LumaConfig}) ->
     },
     % the storage keeps the unnamespaced keyspace, which leaves the LUMA DB doc
     % ids and link forest keys written so far valid - no LUMA migration needed
-    {4, {?MODULE, HelperSpec, LumaConfig, undefined, []}}.
+    {4, {?MODULE, HelperSpec, LumaConfig, undefined, []}};
+
+upgrade_record(4, {?MODULE, HelperSpec, LumaConfig, LumaDbNamespace, StaleLumaDbNamespaces}) ->
+    {helper_spec, Name, Timeout, ConfigurationParams, CredentialsParams} = HelperSpec,
+    {ConfigurationParams2, CredentialsParams2} = move_oauth2_idp_to_credentials(
+        Name, ConfigurationParams, CredentialsParams
+    ),
+    ConfigurationParams3 = maps:without(list_unread_configuration_params(Name), ConfigurationParams2),
+    {5, {?MODULE,
+        {helper_spec, Name, Timeout, ConfigurationParams3, CredentialsParams2},
+        LumaConfig,
+        LumaDbNamespace,
+        StaleLumaDbNamespaces
+    }}.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% LUMA reads the OAuth2 IdP among the credentials, while a storage upgraded from
+%% version 3 keeps it among the configuration params, where the helper args held
+%% it. When both name an IdP, the one among the credentials was set by a later
+%% storage update and wins.
+%% @end
+%%--------------------------------------------------------------------
+-spec move_oauth2_idp_to_credentials(helper_spec:name(), helper_spec:configuration(),
+    helper_spec:credentials()) -> {helper_spec:configuration(), helper_spec:credentials()}.
+move_oauth2_idp_to_credentials(Name, ConfigurationParams, CredentialsParams) when
+    Name == ?WEBDAV_HELPER_NAME;
+    Name == ?HTTP_HELPER_NAME
+->
+    case maps:take(<<"oauth2IdP">>, ConfigurationParams) of
+        {OAuth2IdP, RemainingConfigurationParams} ->
+            {RemainingConfigurationParams, maps:merge(#{<<"oauth2IdP">> => OAuth2IdP}, CredentialsParams)};
+        error ->
+            {ConfigurationParams, CredentialsParams}
+    end;
+move_oauth2_idp_to_credentials(_Name, ConfigurationParams, CredentialsParams) ->
+    {ConfigurationParams, CredentialsParams}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Configuration params that a storage upgraded from version 3 may keep and that
+%% neither op-worker nor the storage helper reads.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_unread_configuration_params(helper_spec:name()) -> [binary()].
+list_unread_configuration_params(?S3_HELPER_NAME) ->
+    % the S3 helper reads the size as 'maxCanonicalObjectSize'
+    [<<"skipStorageDetection">>, <<"maximumCanonicalObjectSize">>];
+list_unread_configuration_params(?GLUSTERFS_HELPER_NAME) ->
+    % neither the GlusterFS helper nor op-worker takes a block size for this type
+    [<<"skipStorageDetection">>, <<"blockSize">>];
+list_unread_configuration_params(_Name) ->
+    % set by the upgrade from version 1 and never read
+    [<<"skipStorageDetection">>].

@@ -30,16 +30,38 @@
 
 %% API
 -export([
+    normalize_qos_parameters/1,
     pretty_print_spec/1,
     verify_storage_path_type/1,
+    verify_credentials/1,
     verify_configuration/4,
+    verify_s3_region/1,
+    verify_s3_region_update/2,
     run_diagnostics/3
 ]).
+
+-define(GLOBAL_AWS_S3_HOST, <<"s3.amazonaws.com">>).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Turns into numbers the QoS parameters of the spec that an expression
+%% reads as numbers, see qos_expression:normalize_storage_parameters/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec normalize_qos_parameters(onedata_storage:create_spec() | onedata_storage:update_spec()) ->
+    onedata_storage:create_spec() | onedata_storage:update_spec().
+normalize_qos_parameters(Spec = #storage_create_spec{qos_parameters = QosParameters}) ->
+    Spec#storage_create_spec{qos_parameters = qos_expression:normalize_storage_parameters(QosParameters)};
+normalize_qos_parameters(Spec = #storage_update_spec{qos_parameters = undefined}) ->
+    Spec;
+normalize_qos_parameters(Spec = #storage_update_spec{qos_parameters = QosParameters}) ->
+    Spec#storage_update_spec{qos_parameters = qos_expression:normalize_storage_parameters(QosParameters)}.
 
 
 -spec pretty_print_spec(onedata_storage:create_spec() | onedata_storage:update_spec()) ->
@@ -71,12 +93,58 @@ verify_storage_path_type(HelperSpec) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks the storage's own credentials the way every use of the storage checks
+%% them before it makes a helper (see helper_spec:build_helper_params/2), so that
+%% credentials which would fail every use are refused before anything is
+%% written. The diagnostics don't cover it: they skip http storages, and on
+%% other types they report a failed test rather than the field at fault.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_credentials(helper_spec:t()) -> ok | no_return().
+verify_credentials(HelperSpec) ->
+    case helper_spec:validate_credentials(HelperSpec, helper_spec:get_credentials(HelperSpec)) of
+        ok ->
+            ok;
+        {error, {missing_field, Field}} ->
+            throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), Field));
+        {error, {unexpected_field, Field}} ->
+            throw(?ERR_BAD_DATA(?err_ctx(), Field, undefined));
+        {error, {invalid_field_value, Field, _Value}} ->
+            % the value stays out of the error, as it may be a secret
+            throw(?ERR_BAD_DATA(?err_ctx(), Field, undefined))
+    end.
+
+
 -spec verify_configuration(storage:id() | storage:name(), storage:readonly(), storage:imported(), helper_spec:t()) ->
     ok | no_return().
 verify_configuration(IdOrName, Readonly, Imported, HelperSpec) ->
     sanitize_readonly_option(Readonly, Imported, IdOrName),
     check_helper_against_readonly_option(Readonly, HelperSpec),
     check_helper_against_imported_option(Imported, HelperSpec).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Requires the region of an S3 storage at s3.amazonaws.com, the global AWS
+%% endpoint. Without it, each new helper first asks AWS where the bucket is.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_s3_region(helper_spec:t()) -> ok | no_return().
+verify_s3_region(HelperSpec) ->
+    case helper_spec:get_name(HelperSpec) of
+        ?S3_HELPER_NAME -> verify_s3_region_in_configuration(helper_spec:get_configuration(HelperSpec));
+        _ -> ok
+    end.
+
+
+-spec verify_s3_region_update(helper_spec:t(), helper_spec:t()) -> ok | no_return().
+verify_s3_region_update(PrevHelperSpec, NewHelperSpec) ->
+    case get_hostname_and_region(PrevHelperSpec) == get_hostname_and_region(NewHelperSpec) of
+        true -> ok;
+        false -> verify_s3_region(NewHelperSpec)
+    end.
 
 
 -spec run_diagnostics(helper_spec:t(), luma:feed(), storage_detector:diagnostics_mode()) ->
@@ -141,16 +209,70 @@ check_helper_against_imported_option(true, HelperSpec) ->
 
 
 %% @private
+-spec verify_s3_region_in_configuration(helper_spec:configuration()) -> ok | no_return().
+verify_s3_region_in_configuration(Configuration = #{<<"scheme">> := Scheme, <<"hostname">> := UrlWithoutScheme}) ->
+    case is_global_aws_endpoint(Scheme, UrlWithoutScheme) of
+        false ->
+            ok;
+        true ->
+            case maps:get(<<"region">>, Configuration, undefined) of
+                undefined -> throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"region">>));
+                <<>> -> throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"region">>));
+                _ -> ok
+            end
+    end.
+
+
+%% @private
+%% uri_string finds the host only after a scheme: it reads
+%% "s3.amazonaws.com:443" alone as a scheme and a path.
+-spec is_global_aws_endpoint(binary(), binary()) -> boolean().
+is_global_aws_endpoint(Scheme, UrlWithoutScheme) ->
+    case uri_string:parse(<<Scheme/binary, "://", UrlWithoutScheme/binary>>) of
+        #{host := ?GLOBAL_AWS_S3_HOST} -> true;
+        _ -> false
+    end.
+
+
+%% @private
+-spec get_hostname_and_region(helper_spec:t()) -> helper_spec:configuration().
+get_hostname_and_region(HelperSpec) ->
+    maps:with([<<"hostname">>, <<"region">>], helper_spec:get_configuration(HelperSpec)).
+
+
+%% @private
 -spec redact_confidential_data(onedata_storage:create_spec() | onedata_storage:update_spec()) ->
     onedata_storage:create_spec() | onedata_storage:update_spec().
-redact_confidential_data(Spec = #storage_create_spec{type = Type, credentials = Credentials}) ->
-    RedactedCredentials = helper_spec:redact_confidential_credentials(Type, Credentials),
-    Spec#storage_create_spec{credentials = RedactedCredentials};
-redact_confidential_data(Spec = #storage_update_spec{credentials = undefined}) ->
-    Spec;
-redact_confidential_data(Spec = #storage_update_spec{type = Type, credentials = CredentialsDiff}) ->
-    RedactedCredentialsDiff = helper_spec:redact_confidential_credentials_diff(Type, CredentialsDiff),
-    Spec#storage_update_spec{credentials = RedactedCredentialsDiff}.
+redact_confidential_data(Spec = #storage_create_spec{type = Type, luma = Luma, credentials = Credentials}) ->
+    Spec#storage_create_spec{
+        luma = redact_luma_api_key(Luma),
+        credentials = helper_spec:redact_confidential_credentials(Type, Credentials)
+    };
+redact_confidential_data(Spec = #storage_update_spec{type = Type, luma = Luma, credentials = CredentialsDiff}) ->
+    Spec#storage_update_spec{
+        luma = redact_luma_api_key(Luma),
+        credentials = redact_confidential_credentials_diff(Type, CredentialsDiff)
+    }.
+
+
+%% @private
+-spec redact_luma_api_key(undefined | onedata_storage:luma_spec() | onedata_storage:luma_spec_diff()) ->
+    undefined | onedata_storage:luma_spec() | onedata_storage:luma_spec_diff().
+redact_luma_api_key(undefined) ->
+    undefined;
+redact_luma_api_key(LumaSpec = #luma_spec{}) ->
+    helper_spec_utils:redact_record_fields_if_defined(LumaSpec, [#luma_spec.api_key]);
+redact_luma_api_key(LumaSpecDiff = #luma_spec_diff{}) ->
+    helper_spec_utils:redact_record_fields_if_defined(LumaSpecDiff, [#luma_spec_diff.api_key]).
+
+
+%% @private
+-spec redact_confidential_credentials_diff(onedata_storage:type(), undefined | onedata_storage:helper_credentials_diff()) ->
+    undefined | onedata_storage:helper_credentials_diff().
+redact_confidential_credentials_diff(_Type, undefined) ->
+    undefined;
+redact_confidential_credentials_diff(Type, CredentialsDiff) ->
+    helper_spec:redact_confidential_credentials_diff(Type, CredentialsDiff).
 
 
 %%--------------------------------------------------------------------
@@ -174,6 +296,11 @@ get_record_def(storage_update_spec, N) ->
 get_record_def(luma_spec, N) ->
     case record_info(size, luma_spec) - 1 of
         N -> record_info(fields, luma_spec);
+        _ -> no
+    end;
+get_record_def(luma_spec_diff, N) ->
+    case record_info(size, luma_spec_diff) - 1 of
+        N -> record_info(fields, luma_spec_diff);
         _ -> no
     end;
 get_record_def(ceph_helper_credentials, N) ->

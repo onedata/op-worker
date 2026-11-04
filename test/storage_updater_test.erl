@@ -6,29 +6,19 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Unit tests of the storage update saga, covering the two things about it that
-%%% are easy to break while reshuffling the code.
-%%%
-%%% The first is the LUMA DB namespace bookkeeping - which namespace a storage
-%%% reads through, and which ones are recorded for the garbage collector to
-%%% clean up. It is split between the action (draw a namespace, mark the
-%%% previous one stale) and the compensation (bring the previous one back, mark
-%%% the one just abandoned stale), and the two must agree on one invariant: a
-%%% storage must never list the namespace it reads through as stale, or the
-%%% garbage collector would delete live mappings.
-%%%
-%%% The second is what a saga step is allowed to report. A compensation is armed
-%%% only once its action has returned 'ok', so a step that reports the failure
-%%% of anything it did after the storage_config write would leave that write
-%%% applied with nothing to take it back. The write is therefore the only thing
-%%% the step reports on; that the propagation which follows it cannot fail the
-%%% step is covered by rtransfer_config_test.
+%%% Unit tests of storage_updater: the update saga with its LUMA DB namespace
+%%% rotation and compensations, and what an update checks and sends to Onezone.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater_test).
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("opw_panel_contracts/include/storage/common.hrl").
+-include_lib("opw_panel_contracts/include/storage/http.hrl").
+-include_lib("opw_panel_contracts/include/storage/posix.hrl").
+-include_lib("opw_panel_contracts/include/storage/s3.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(STORAGE_ID, <<"dummyStorageId">>).
@@ -176,6 +166,169 @@ luma_only_change_does_not_touch_rtransfer_test_() ->
 
 
 %%%===================================================================
+%%% Compensation reporting tests
+%%%===================================================================
+
+
+compensation_returning_error_is_logged_test_() ->
+    {setup, fun mock_logger/0, fun unmock_logger/1, fun() ->
+        storage_updater:run_compensations([{<<"step-a">>, fun() -> {error, not_found} end}]),
+
+        ?assertEqual(1, count_failed_compensation_logs(<<"step-a">>))
+    end}.
+
+
+compensation_crashing_is_logged_test_() ->
+    {setup, fun mock_logger/0, fun unmock_logger/1, fun() ->
+        storage_updater:run_compensations([{<<"step-a">>, fun() -> error(crash) end}]),
+
+        ?assertEqual(1, count_failed_compensation_logs(<<"step-a">>))
+    end}.
+
+
+successful_compensation_logs_no_failure_test_() ->
+    {setup, fun mock_logger/0, fun unmock_logger/1, fun() ->
+        storage_updater:run_compensations([{<<"step-a">>, fun() -> ok end}]),
+
+        ?assertEqual(0, count_failed_compensation_logs(<<"step-a">>))
+    end}.
+
+
+failed_compensation_does_not_stop_the_others_test_() ->
+    {setup, fun mock_logger/0, fun unmock_logger/1, fun() ->
+        Self = self(),
+        storage_updater:run_compensations([
+            {<<"step-b">>, fun() -> {error, not_found} end},
+            {<<"step-a">>, fun() -> Self ! step_a_compensated, ok end}
+        ]),
+
+        ?assert(receive step_a_compensated -> true after 0 -> false end)
+    end}.
+
+
+%%%===================================================================
+%%% Failure handling tests
+%%%===================================================================
+
+
+%% A type that no helper spec module serves makes the print of the diff raise;
+%% it must end as the rest of the update's failures do.
+unprintable_diff_fails_the_update_with_an_error_test_() ->
+    {setup, fun mock_logger/0, fun unmock_logger/1, fun() ->
+        UpdateSpec = #storage_update_spec{
+            type = <<"unknown">>,
+            credentials = #posix_helper_credentials_diff{uid = 0}
+        },
+
+        ?assertMatch(?ERR_INTERNAL_SERVER_ERROR(_, _), storage_updater:update(?STORAGE_ID, UpdateSpec))
+    end}.
+
+
+%% A refusal is thrown, not returned, and must leave the same line in the log
+%% as a returned error does.
+refused_update_is_logged_test_() ->
+    {setup, fun mock_missing_storage_config/0, fun unmock_missing_storage_config/1, fun() ->
+        UpdateSpec = #storage_update_spec{type = <<"posix">>},
+
+        ?assertEqual(?ERROR_NOT_FOUND, storage_updater:update(?STORAGE_ID, UpdateSpec)),
+        ?assertEqual(1, count_error_logs_containing(<<"Failed to update storage '", ?STORAGE_ID/binary, "'">>))
+    end}.
+
+
+%%%===================================================================
+%%% QoS parameters tests
+%%%===================================================================
+
+
+%% Onepanel passes the QoS parameters as the REST request had them, as strings.
+update_sends_normalized_qos_parameters_to_onezone_test_() ->
+    {setup, fun mock_update_up_to_onezone/0, fun unmock_update_up_to_onezone/1, fun() ->
+        storage_updater:update(?STORAGE_ID, #storage_update_spec{
+            type = <<"posix">>,
+            qos_parameters = #{<<"priority">> => <<"2">>, <<"region">> => <<"eu">>}
+        }),
+
+        #storage_update_spec{qos_parameters = QosParameters} = meck:capture(
+            first, storage_logic, update_in_zone, '_', 2
+        ),
+        ?assertEqual(#{<<"priority">> => 2, <<"region">> => <<"eu">>}, QosParameters)
+    end}.
+
+
+%%%===================================================================
+%%% LUMA config tests
+%%%===================================================================
+
+
+%% A change of the LUMA config rotates the storage's LUMA DB namespace and runs
+%% the diagnostics on every node, so an update that names no LUMA setting - here
+%% the empty LUMA spec that comes with a rename - must do neither.
+update_without_luma_change_keeps_the_storage_config_test_() ->
+    {setup, fun mock_update_of_external_feed_storage/0, fun unmock_update_of_external_feed_storage/1, fun() ->
+        ?assertEqual(ok, storage_updater:update(?STORAGE_ID, #storage_update_spec{
+            type = <<"posix">>,
+            name = <<"new-name">>,
+            luma = #luma_spec_diff{}
+        })),
+
+        ?assertEqual(0, meck:num_calls(storage_config, update, '_')),
+        ?assertEqual(0, meck:num_calls(storage_crud_utils, run_diagnostics, '_'))
+    end}.
+
+
+%%%===================================================================
+%%% Credentials tests
+%%%===================================================================
+
+
+%% Every use of an HTTP storage requires the credentials unless its credentials
+%% type is none, and the diagnostics skip HTTP, so nothing else stops a switch
+%% to another type that doesn't bring them along.
+credentials_are_refused_before_any_write_test_() ->
+    {setup, fun mock_update_of_http_storage/0, fun unmock_update_of_storage/1, fun() ->
+        ?assertMatch(
+            ?ERR_MISSING_REQUIRED_VALUE(_, <<"credentials">>),
+            storage_updater:update(?STORAGE_ID, #storage_update_spec{
+                type = <<"http">>,
+                credentials = #http_helper_credentials_diff{credentials_type = basic}
+            })
+        ),
+
+        ?assertEqual(0, meck:num_calls(storage_config, update, '_')),
+        ?assertEqual(0, meck:num_calls(storage_logic, update_in_zone, '_'))
+    end}.
+
+
+%%%===================================================================
+%%% S3 region tests
+%%%===================================================================
+
+
+switch_to_global_aws_endpoint_without_region_is_refused_before_any_write_test_() ->
+    {setup, fun() -> mock_update_of_s3_storage(<<"minio.example.com:9000">>) end, fun unmock_update_of_storage/1, fun() ->
+        ?assertMatch(
+            ?ERR_MISSING_REQUIRED_VALUE(_, <<"region">>),
+            storage_updater:update(?STORAGE_ID, #storage_update_spec{
+                type = <<"s3">>,
+                configuration = #s3_helper_configuration_diff{hostname = <<"s3.amazonaws.com:443">>}
+            })
+        ),
+
+        ?assertEqual(0, meck:num_calls(storage_config, update, '_')),
+        ?assertEqual(0, meck:num_calls(storage_logic, update_in_zone, '_'))
+    end}.
+
+
+update_of_other_parameters_at_global_aws_endpoint_passes_without_region_test_() ->
+    {setup, fun() -> mock_update_of_s3_storage(<<"s3.amazonaws.com:443">>) end, fun unmock_update_of_storage/1, fun() ->
+        ?assertEqual(ok, storage_updater:update(?STORAGE_ID, #storage_update_spec{
+            type = <<"s3">>,
+            configuration = #s3_helper_configuration_diff{file_mode = <<"0600">>}
+        }))
+    end}.
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -200,6 +353,153 @@ mock_update_in_op_deps() ->
 %% @private
 unmock_update_in_op_deps(_) ->
     meck:unload().
+
+
+%% @private
+mock_logger() ->
+    meck:new(onedata_logger, [passthrough, no_link]),
+    meck:expect(onedata_logger, should_log, fun(_Loglevel) -> true end),
+    meck:expect(onedata_logger, log, fun(_Loglevel, _Metadata, _FormattedLog) -> ok end).
+
+
+%% @private
+unmock_logger(_) ->
+    meck:unload(onedata_logger).
+
+
+%% @private
+%% Everything the update does before it writes to Onezone passes, with no change
+%% to the helper or to LUMA, and the write to Onezone fails, which ends the
+%% update there.
+mock_update_up_to_onezone() ->
+    mock_logger(),
+    meck:new([storage_config, storage_logic], [no_link]),
+    meck:new(helper_spec, [passthrough, no_link]),
+    meck:expect(storage_config, get, fun(StorageId) ->
+        {ok, #document{key = StorageId, value = #storage_config{helper_spec = helper_spec_not_inspected}}}
+    end),
+    meck:expect(helper_spec, get_name, fun(_HelperSpec) -> <<"posix">> end),
+    meck:expect(helper_spec, update, fun(_HelperSpec, _UpdateSpec) -> {error, no_change} end),
+    meck:expect(storage_logic, get, fun(_StorageId) -> {ok, #document{value = #od_storage{}}} end),
+    meck:expect(storage_logic, update_in_zone, fun(_StorageId, _UpdateSpec) ->
+        {error, onezone_write_not_reached_in_test}
+    end).
+
+
+%% @private
+unmock_update_up_to_onezone(_) ->
+    meck:unload().
+
+
+%% @private
+%% A storage on the external feed, whose update with no change to the helper
+%% writes to Onezone and passes.
+mock_update_of_external_feed_storage() ->
+    mock_logger(),
+    meck:new([storage_config, storage_logic, fslogic_event_emitter], [no_link]),
+    meck:new([helper_spec, storage_crud_utils], [passthrough, no_link]),
+    meck:expect(storage_config, get, fun(StorageId) ->
+        {ok, #document{key = StorageId, value = #storage_config{
+            helper_spec = helper_spec_not_inspected,
+            luma_config = luma_config:new_with_external_feed(<<"https://luma.example.com">>, undefined)
+        }}}
+    end),
+    meck:expect(storage_config, update, fun(StorageId, _Diff) -> {ok, #document{key = StorageId}} end),
+    meck:expect(helper_spec, get_name, fun(_HelperSpec) -> <<"posix">> end),
+    meck:expect(helper_spec, update, fun(_HelperSpec, _UpdateSpec) -> {error, no_change} end),
+    meck:expect(storage_crud_utils, run_diagnostics, fun(_HelperSpec, _LumaFeed, _Mode) -> ok end),
+    meck:expect(fslogic_event_emitter, emit_helper_params_changed, fun(_StorageId) -> ok end),
+    meck:expect(storage_logic, get, fun(_StorageId) -> {ok, #document{value = #od_storage{}}} end),
+    meck:expect(storage_logic, update_in_zone, fun(_StorageId, _UpdateSpec) -> ok end).
+
+
+%% @private
+unmock_update_of_external_feed_storage(_) ->
+    meck:unload().
+
+
+%% @private
+%% An HTTP storage with no credentials, whose update passes everything else it
+%% checks and every write it makes.
+mock_update_of_http_storage() ->
+    HelperSpec = helper_spec:build(#storage_create_spec{
+        type = <<"http">>,
+        configuration = #http_helper_configuration{
+            endpoint = <<"https://example.com">>,
+            storage_path_type = canonical
+        },
+        credentials = #http_helper_credentials{credentials_type = none}
+    }),
+    mock_update_of_storage(HelperSpec, #od_storage{readonly = true, imported = true}).
+
+
+%% @private
+mock_update_of_s3_storage(Hostname) ->
+    HelperSpec = helper_spec:build(#storage_create_spec{
+        type = <<"s3">>,
+        configuration = #s3_helper_configuration{
+            scheme = <<"https">>,
+            hostname = Hostname,
+            bucket_name = <<"some-bucket">>,
+            storage_path_type = flat
+        },
+        credentials = #s3_helper_credentials{
+            access_key = <<"some-access-key">>,
+            secret_key = <<"some-secret-key">>
+        }
+    }),
+    mock_update_of_storage(HelperSpec, #od_storage{}).
+
+
+%% @private
+mock_update_of_storage(HelperSpec, OzStorageData) ->
+    mock_logger(),
+    meck:new([storage_config, storage_logic, fslogic_event_emitter, rtransfer_config], [no_link]),
+    meck:new(storage_crud_utils, [passthrough, no_link]),
+    meck:expect(storage_config, get, fun(StorageId) ->
+        {ok, #document{key = StorageId, value = #storage_config{
+            helper_spec = HelperSpec,
+            luma_config = luma_config:new(auto)
+        }}}
+    end),
+    meck:expect(storage_config, update, fun(StorageId, _Diff) -> {ok, #document{key = StorageId}} end),
+    meck:expect(storage_crud_utils, verify_configuration, fun(_IdOrName, _Readonly, _Imported, _HelperSpec) -> ok end),
+    meck:expect(storage_crud_utils, run_diagnostics, fun(_HelperSpec, _LumaFeed, _Mode) -> ok end),
+    meck:expect(fslogic_event_emitter, emit_helper_params_changed, fun(_StorageId) -> ok end),
+    meck:expect(rtransfer_config, add_storage, fun(_StorageId) -> ok end),
+    meck:expect(storage_logic, get, fun(_StorageId) -> {ok, #document{value = OzStorageData}} end),
+    meck:expect(storage_logic, update_in_zone, fun(_StorageId, _UpdateSpec) -> ok end).
+
+
+%% @private
+unmock_update_of_storage(_) ->
+    meck:unload().
+
+
+%% @private
+mock_missing_storage_config() ->
+    mock_logger(),
+    meck:new(storage_config, [no_link]),
+    meck:expect(storage_config, get, fun(_StorageId) -> {error, not_found} end).
+
+
+%% @private
+unmock_missing_storage_config(_) ->
+    meck:unload().
+
+
+%% @private
+count_failed_compensation_logs(StepName) ->
+    count_error_logs_containing(<<"FAILED to compensate step '", StepName/binary, "'">>).
+
+
+%% @private
+count_error_logs_containing(Pattern) ->
+    length([
+        FormattedLog
+        || {_Pid, {onedata_logger, log, [error, _Metadata, FormattedLog]}, _Result} <- meck:history(onedata_logger),
+        string:find(FormattedLog, Pattern) /= nomatch
+    ]).
 
 
 %% @private

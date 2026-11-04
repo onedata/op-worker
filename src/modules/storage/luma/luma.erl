@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -333,7 +333,7 @@ add_helper_specific_fields(UserId, SessionId, StorageCredentials, HelperSpec, Lu
     try
         case helper_spec:is_oauth2_supported(HelperSpec) of
             true ->
-                add_oauth2_specific_fields(UserId, SessionId, StorageCredentials, LumaFeed);
+                add_oauth2_specific_fields(UserId, SessionId, StorageCredentials, HelperSpec, LumaFeed);
             false ->
                 {ok, StorageCredentials}
         end
@@ -374,11 +374,11 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
     end.
 
 
--spec add_oauth2_specific_fields(od_user:id(), session:id(), storage_credentials(), feed()) ->
+-spec add_oauth2_specific_fields(od_user:id(), session:id(), storage_credentials(), helper_spec:t(), feed()) ->
     {ok, luma:storage_credentials()} | {error, term()}.
 add_oauth2_specific_fields(UserId, SessionId, StorageCredentials = #{
     <<"credentialsType">> := <<"oauth2">>
-}, LumaFeed) ->
+}, HelperSpec, LumaFeed) ->
     {UserId2, SessionId2} = case fslogic_file_id:is_space_owner(UserId) of
         true ->
             % space owner uses the helper spec credentials
@@ -386,16 +386,18 @@ add_oauth2_specific_fields(UserId, SessionId, StorageCredentials = #{
         false ->
             {UserId, SessionId}
     end,
-    choose_idp_and_fill_in_oauth2_token(UserId2, SessionId2, StorageCredentials, LumaFeed);
+    choose_idp_and_fill_in_oauth2_token(UserId2, SessionId2, StorageCredentials, HelperSpec, LumaFeed);
 
-add_oauth2_specific_fields(_UserId, _SessionId, StorageCredentials, _LumaFeed) ->
+add_oauth2_specific_fields(_UserId, _SessionId, StorageCredentials, _HelperSpec, _LumaFeed) ->
     {ok, StorageCredentials}.
 
 
--spec choose_idp_and_fill_in_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(), feed()) ->
+-spec choose_idp_and_fill_in_oauth2_token(
+    od_user:id(), session:id(), luma:storage_credentials(), helper_spec:t(), feed()
+) ->
     {ok, luma:storage_credentials()} | {error, term()}.
-choose_idp_and_fill_in_oauth2_token(UserId, SessionId, StorageCredentials, LumaFeed) ->
-    case maps:get(<<"oauth2IdP">>, StorageCredentials, undefined) of
+choose_idp_and_fill_in_oauth2_token(UserId, SessionId, StorageCredentials, HelperSpec, LumaFeed) ->
+    case find_oauth2_idp(StorageCredentials, HelperSpec) of
         undefined ->
             % OAuth2IdP was not explicitly set, try to infer it
             case provider_logic:zone_get_offline_access_idps() of
@@ -413,6 +415,19 @@ choose_idp_and_fill_in_oauth2_token(UserId, SessionId, StorageCredentials, LumaF
             end;
         OAuth2IdP ->
             fill_in_oauth2_token(UserId, SessionId, StorageCredentials, OAuth2IdP, LumaFeed)
+    end.
+
+
+%% @private
+%% The credentials a local or external LUMA feed maps a user to may name their
+%% own IdP; when they don't, the IdP set for the storage applies.
+-spec find_oauth2_idp(luma:storage_credentials(), helper_spec:t()) -> undefined | binary().
+find_oauth2_idp(StorageCredentials, HelperSpec) ->
+    case maps:find(<<"oauth2IdP">>, StorageCredentials) of
+        {ok, OAuth2IdP} ->
+            OAuth2IdP;
+        error ->
+            maps:get(<<"oauth2IdP">>, helper_spec:get_credentials(HelperSpec), undefined)
     end.
 
 

@@ -15,7 +15,10 @@
 %%% critical section for as long as it took to walk five tables, and where a
 %%% single failure meant the entries were never revisited. The namespaces to
 %%% clean are read off the storage config rather than guessed, so a run that
-%%% fails simply leaves them there and the next one retries.
+%%% fails simply leaves them there and the next one retries. Each one is checked
+%%% again under the storage's lock right before it is cleared, as the run works
+%%% from a snapshot, and an update's rollback can make a namespace on it live
+%%% again (see storage:is_luma_db_namespace_stale/2).
 %%%
 %%% Runs as an internal service, i.e. on one node at a time, with another node
 %%% taking over on failure. Running it on every node would have each of them
@@ -34,6 +37,11 @@
 %% API
 -export([setup_internal_service/0, terminate_internal_service/0]).
 -export([run/0]).
+
+-ifdef(TEST).
+%% Export for unit testing of what a namespace is cleared under
+-export([clear_stale_namespace/3]).
+-endif.
 
 %% Internal Service callbacks
 -export([start_service/0, stop_service/0]).
@@ -222,17 +230,13 @@ collect_storage_garbage(#document{
     ok.
 clear_stale_namespace(StorageConfigDoc, StorageId, Namespace) ->
     try
-        luma_crud_api:clear_stale_db_namespace(StorageConfigDoc, Namespace),
-
-        case storage_config:forget_stale_luma_db_namespace(StorageId, Namespace) of
-            ok ->
-                ok;
-            {error, not_found} ->
-                % the storage has been deleted in the meantime - nothing left to
-                % keep the list on
-                ok;
-            {error, _} = Error ->
-                throw(Error)
+        case storage:is_luma_db_namespace_stale(StorageId, Namespace) of
+            true ->
+                clear_and_forget_stale_namespace(StorageConfigDoc, StorageId, Namespace);
+            false ->
+                % made live again by an update's rollback, or gone with the
+                % storage's deletion
+                ok
         end
     catch Class:Reason:Stacktrace ->
         % only a warning - the namespace stays on the list and the next run retries it
@@ -241,4 +245,22 @@ clear_stale_namespace(StorageConfigDoc, StorageId, Namespace) ->
             [Namespace, StorageId]
         ),
         ?examine_exception(Class, Reason, Stacktrace)
+    end.
+
+
+%% @private
+-spec clear_and_forget_stale_namespace(storage_config:doc(), storage:id(), undefined | luma_db:namespace()) ->
+    ok | no_return().
+clear_and_forget_stale_namespace(StorageConfigDoc, StorageId, Namespace) ->
+    luma_crud_api:clear_stale_db_namespace(StorageConfigDoc, Namespace),
+
+    case storage_config:forget_stale_luma_db_namespace(StorageId, Namespace) of
+        ok ->
+            ok;
+        {error, not_found} ->
+            % the storage has been deleted in the meantime - nothing left to
+            % keep the list on
+            ok;
+        {error, _} = Error ->
+            throw(Error)
     end.

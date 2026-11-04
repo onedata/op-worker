@@ -48,13 +48,9 @@ build(CreateReq = #storage_create_spec{type = ?XROOTD_HELPER_NAME, credentials =
 
 -spec validate_credentials(helper_spec:credentials()) -> ok | {error, Reason :: term()}.
 validate_credentials(Credentials) ->
-    {RequiredFields, OptionalFields} = case Credentials of
-        #{<<"credentialsType">> := <<"pwd">>} ->
-            {[<<"credentialsType">>, <<"credentials">>], []};
-        _ ->
-            {[<<"credentialsType">>], [<<"credentials">>]}
-    end,
-    helper_spec_utils:validate_credentials(Credentials, RequiredFields, OptionalFields).
+    % optional with the pwd type too: the XRootD helper doesn't use them to
+    % authenticate, so a storage set up without them works
+    helper_spec_utils:validate_credentials(Credentials, [<<"credentialsType">>], [<<"credentials">>]).
 
 
 -spec build_configuration_diff(helper_spec:t(), onedata_storage:update_spec()) -> helper_spec:configuration().
