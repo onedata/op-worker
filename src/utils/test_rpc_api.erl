@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Piotr Duleba
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2021 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -109,7 +109,7 @@ get_storages() ->
     rpc_api:get_storages().
 
 
--spec storage_describe(storage:id()) -> {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
+-spec storage_describe(storage:id()) -> {ok, onedata_storage:description()} | errors:error().
 storage_describe(StorageId) ->
     rpc_api:storage_describe(StorageId).
 

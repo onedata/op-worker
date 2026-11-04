@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Cwiertnia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -178,6 +178,55 @@ convert_from_old_version_rpn_test() ->
         qos_expression:convert_from_old_version_rpn([<<"a=b">>, <<"c=d">>, <<"|">>])),
     ?assertEqual({<<"&">>, {<<"=">>, <<"a">>, <<"b">>}, {<<"=">>, <<"c">>, <<"d">>}},
         qos_expression:convert_from_old_version_rpn([<<"a=b">>, <<"c=d">>, <<"&">>])).
+
+%% A storage parameter is stored as a number exactly when an expression reads
+%% the same text as one, so that both sides of a comparison agree.
+normalize_storage_parameters_test() ->
+    ?assertEqual(
+        #{
+            <<"priority">> => 2,
+            <<"ratio">> => 2.5,
+            <<"size">> => 1.0e3,
+            <<"padded">> => 2,
+            <<"region">> => <<"eu">>,
+            <<"ssd">> => <<"true">>,
+            <<"empty">> => <<"">>,
+            <<"quoted">> => <<"\"x\"">>,
+            <<"leadingZeros">> => <<"007">>,
+            <<"negative">> => <<"-1">>,
+            <<"twoNumbers">> => <<"2 2">>,
+            <<"expression">> => <<"a=b">>,
+            <<"alreadyNumber">> => 8,
+            <<"notUtf8">> => <<255>>
+        },
+        qos_expression:normalize_storage_parameters(#{
+            <<"priority">> => <<"2">>,
+            <<"ratio">> => <<"2.5">>,
+            <<"size">> => <<"1e3">>,
+            <<"padded">> => <<" 2 ">>,
+            <<"region">> => <<"eu">>,
+            <<"ssd">> => <<"true">>,
+            <<"empty">> => <<"">>,
+            <<"quoted">> => <<"\"x\"">>,
+            <<"leadingZeros">> => <<"007">>,
+            <<"negative">> => <<"-1">>,
+            <<"twoNumbers">> => <<"2 2">>,
+            <<"expression">> => <<"a=b">>,
+            <<"alreadyNumber">> => 8,
+            <<"notUtf8">> => <<255>>
+        })
+    ).
+
+
+normalized_storage_parameters_match_expressions_test() ->
+    StoragesMap = #{<<"s">> => qos_expression:normalize_storage_parameters(#{
+        <<"priority">> => <<" 2 ">>,
+        <<"ssd">> => <<"true">>
+    })},
+
+    check_filter_storages(<<"priority > 1">>, [<<"s">>], StoragesMap),
+    check_filter_storages(<<"priority = 2">>, [<<"s">>], StoragesMap),
+    check_filter_storages(<<"ssd = true">>, [<<"s">>], StoragesMap).
 
 %%%===================================================================
 %%% Internal functions

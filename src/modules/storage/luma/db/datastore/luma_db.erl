@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -119,7 +119,7 @@
 %%%===================================================================
 
 
--spec get(storage:data(), db_key(), table()) -> {ok, db_record()} | errors:error().
+-spec get(storage:data(), db_key(), table()) -> {ok, db_record()} | od_error_not_found:t().
 get(StorageData, Key, Table) ->
     Id = id(StorageData, Table, Key),
 

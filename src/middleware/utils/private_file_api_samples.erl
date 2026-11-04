@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2022 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -107,7 +107,7 @@ create_file_endpoint(FileId) ->
             <<"$NAME">> => <<"Name of the file.">>
         },
         optional_parameters = [
-            <<"type">>, <<"mode">>, <<"offset">>, <<"target_file_id">>, <<"target_file_path">>
+            <<"type">>, <<"posixPermissions">>, <<"offset">>, <<"target_file_id">>, <<"target_file_path">>
         ],
         swagger_operation_id = <<"create_file">>
     }.

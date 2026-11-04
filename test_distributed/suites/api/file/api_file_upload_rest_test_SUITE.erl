@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020-2021 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -214,7 +214,7 @@ build_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
         % Missing parent dirs are created with the mode parameter (posixPermissions is
         % not applied to them), so when it forbids write access nothing can be created
         % inside the first of them by any user not being space owner
-        % TODO VFS-13869 remove once parent dirs are created with default permissions
+        % TODO VFS-14003 remove once parent dirs are created with default permissions
         IsParentDirWriteForbidden = maps:get(<<"mode">>, Data, undefined) == <<"0544">> andalso
             maps:get(<<"path">>, Data, undefined) == nonexistent_path_with_create_parents_flag_placeholder,
 
