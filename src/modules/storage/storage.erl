@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -40,7 +40,8 @@
 -export([
     get_id/1, get_block_size/1, get_helper_spec/1, get_helper_name/1,
     get_luma_feed/1, get_luma_config/1,
-    get_luma_db_namespace/1, get_stale_luma_db_namespaces/1, with_luma_db_namespace/2
+    get_luma_db_namespace/1, get_stale_luma_db_namespaces/1, with_luma_db_namespace/2,
+    is_luma_db_namespace_stale/2
 ]).
 -export([
     fetch_shared_data/2,
@@ -214,6 +215,27 @@ get_luma_db_namespace(Storage) ->
 -spec get_stale_luma_db_namespaces(id() | data()) -> [undefined | luma_db:namespace()].
 get_stale_luma_db_namespaces(Storage) ->
     storage_config:get_stale_luma_db_namespaces(Storage).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Tells whether the namespace is still among the storage's stale ones, reading
+%% it under the storage's lock. An update holds the lock for its whole saga, and
+%% only that saga's rollback takes the namespace it made stale back off the
+%% list, so a namespace found stale here stays stale. A deleted storage has
+%% none left, as its deletion cleared them all.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_luma_db_namespace_stale(id(), undefined | luma_db:namespace()) -> boolean().
+is_luma_db_namespace_stale(StorageId, Namespace) ->
+    lock_on_storage_by_id(StorageId, fun() ->
+        case storage_config:get(StorageId) of
+            {ok, StorageConfigDoc} ->
+                lists:member(Namespace, storage_config:get_stale_luma_db_namespaces(StorageConfigDoc));
+            {error, not_found} ->
+                false
+        end
+    end).
 
 
 %%--------------------------------------------------------------------

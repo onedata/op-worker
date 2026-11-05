@@ -103,7 +103,6 @@ describe(#helper_spec{
 }) ->
     %% Reconstruct configuration record from flat params
     BaseConfiguration = #nfs_helper_configuration{
-        version = binary_to_integer(maps:get(<<"version">>, ConfigurationParams)),
         host = maps:get(<<"host">>, ConfigurationParams),
         volume = maps:get(<<"volume">>, ConfigurationParams),
         storage_path_type = helper_spec_utils:storage_path_type_from_binary(
@@ -111,6 +110,7 @@ describe(#helper_spec{
         )
     },
     Configuration = helper_spec_utils:set_optional_record_fields_if_defined(BaseConfiguration, ConfigurationParams, [
+        {<<"version">>, #nfs_helper_configuration.version, fun binary_to_integer/1},
         {<<"readAhead">>, #nfs_helper_configuration.read_ahead, fun binary_to_integer/1},
         {<<"dirCache">>, #nfs_helper_configuration.dir_cache, fun utils:to_boolean/1},
         {<<"autoReconnect">>, #nfs_helper_configuration.auto_reconnect, fun binary_to_integer/1},
@@ -160,12 +160,14 @@ build_configuration(#storage_create_spec{
     }
 }) ->
     RequiredParams = #{
-        <<"version">> => Version,
         <<"host">> => Host,
         <<"volume">> => Volume,
         <<"storagePathType">> => helper_spec_utils:storage_path_type_to_binary(StoragePathType)
     },
+    % every value goes to the helpers NIF, which takes binaries only; an absent
+    % version is the helper's default
     helper_spec_utils:add_optional_entries_if_defined(RequiredParams, [
+        {<<"version">>, Version, fun integer_to_binary/1},
         {<<"readAhead">>, ReadAhead, fun integer_to_binary/1},
         {<<"dirCache">>, DirCache, fun atom_to_binary/1},
         {<<"autoReconnect">>, AutoReconnect, fun integer_to_binary/1},

@@ -31,6 +31,8 @@
 -export([rotate_luma_db_namespace/1, build_rollback_storage_config/3]).
 %% Export for unit testing of what the first saga step reports
 -export([update_in_op/4]).
+%% Export for unit testing of what a failed compensation leaves in the log
+-export([run_compensations/1]).
 -endif.
 
 
@@ -53,23 +55,30 @@
 
 -spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 update(StorageId, UpdateSpec) ->
-    ?info("Gathered storage (id: '~ts') update diff: ~n~ts", [
-        StorageId, storage_crud_utils:pretty_print_spec(UpdateSpec)
-    ]),
-
-    try do_update(StorageId, UpdateSpec) of
-        ok ->
-            ?info("Successfully updated storage '~ts'", [StorageId]),
-            ok;
-        {error, _} = Error ->
-            ?error(?autoformat_with_msg("Failed to update storage '~ts'", [StorageId], Error)),
-            Error
+    Result = try
+        NormalizedSpec = storage_crud_utils:normalize_qos_parameters(UpdateSpec),
+        % printed inside the try, as printing walks the diff by its type and may
+        % raise like the rest of the update
+        ?info("Gathered storage (id: '~ts') update diff: ~n~ts", [
+            StorageId, storage_crud_utils:pretty_print_spec(NormalizedSpec)
+        ]),
+        do_update(StorageId, NormalizedSpec)
     catch Class:Reason:Stacktrace ->
+        % a refusal is thrown as a known error, which is returned with no log
+        % line of its own - it is logged below, with the returned errors
         ?examine_exception(
             "Unexpected error when updating storage '~ts'", [StorageId],
             Class, Reason, Stacktrace
         )
-    end.
+    end,
+
+    case Result of
+        ok ->
+            ?info("Successfully updated storage '~ts'", [StorageId]);
+        {error, _} = Error ->
+            ?error(?autoformat_with_msg("Failed to update storage '~ts'", [StorageId], Error))
+    end,
+    Result.
 
 
 -spec update_helper_spec(storage:id(), fun((helper_spec:t()) -> {ok, helper_spec:t()} | {error, term()})) ->
@@ -149,7 +158,9 @@ do_update(StorageId, UpdateSpec) ->
 %% previous namespace back off the list, which is required, as the rollback
 %% makes it live again. The only entry it can lose is one the garbage collector
 %% has finished cleaning in the meantime, which merely costs one more (empty)
-%% pass over it.
+%% pass over it. Nor can the collector clear the namespace revived here: the
+%% saga holds the storage's lock throughout, and the collector checks each
+%% namespace under that lock before clearing it.
 %% @end
 %%--------------------------------------------------------------------
 -spec build_rollback_storage_config(storage_config:record(), storage_config:record(), boolean()) ->
@@ -218,9 +229,11 @@ prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStora
 
     {HelperSpecChanged, NewHelperSpec} = case helper_spec:update(PrevHelperSpec, UpdateSpec) of
         {ok, UpdatedHelperSpec} ->
+            storage_crud_utils:verify_credentials(UpdatedHelperSpec),
             storage_crud_utils:verify_configuration(
                 StorageId, NewReadonly, NewImported, UpdatedHelperSpec
             ),
+            storage_crud_utils:verify_s3_region_update(PrevHelperSpec, UpdatedHelperSpec),
             {true, UpdatedHelperSpec};
         {error, no_change} when ReadonlyChanged orelse ImportedChanged ->
             storage_crud_utils:verify_configuration(
@@ -309,8 +322,8 @@ infer_new_value(NewValue, PrevValue) -> {NewValue /= PrevValue, NewValue}.
 
 
 %% @private
--spec build_luma_diff(onedata_storage:luma_spec()) -> luma_config:diff().
-build_luma_diff(#luma_spec{feed = Feed, url = Url, api_key = ApiKey}) ->
+-spec build_luma_diff(onedata_storage:luma_spec_diff()) -> luma_config:diff().
+build_luma_diff(#luma_spec_diff{feed = Feed, url = Url, api_key = ApiKey}) ->
     maps_utils:remove_undefined(#{
         feed => Feed,
         url => Url,
@@ -459,13 +472,24 @@ run_compensations([]) ->
     ok;
 run_compensations([{Name, Compensation} | Rest]) ->
     ?warning("Storage update saga - compensating step: ~ts", [Name]),
+    case run_compensation(Compensation) of
+        ok ->
+            ok;
+        {error, _} = Error ->
+            ?error(
+                "Storage update saga - FAILED to compensate step '~ts'; manual "
+                "intervention may be required to restore consistent state~nError: ~tp",
+                [Name, Error]
+            )
+    end,
+    run_compensations(Rest).
+
+
+%% @private
+-spec run_compensation(fun(() -> ok | {error, term()})) -> ok | {error, term()}.
+run_compensation(Compensation) ->
     try
         Compensation()
     catch Class:Reason:Stacktrace ->
-        ?warning(
-            "Storage update saga - FAILED to compensate step; "
-            "manual intervention may be required to restore consistent state"
-        ),
         ?examine_exception(Class, Reason, Stacktrace)
-    end,
-    run_compensations(Rest).
+    end.

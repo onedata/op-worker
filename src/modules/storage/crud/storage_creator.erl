@@ -31,26 +31,33 @@ create(StorageCreateSpec) ->
     StorageName = StorageCreateSpec#storage_create_spec.name,
     StorageType = StorageCreateSpec#storage_create_spec.type,
 
-    ?info("Gathered storage configuration for '~ts' (~ts) - parameters: ~n~ts", [
-        StorageName, StorageType, storage_crud_utils:pretty_print_spec(StorageCreateSpec)
-    ]),
-
-    try do_create(StorageCreateSpec) of
-        {ok, StorageId} = Result ->
-            ?notice("Successfully added storage '~ts' (~ts) with Id: '~ts'", [
-                StorageName, StorageType, StorageId
-            ]),
-            Result;
-        {error, _} = Error ->
-            ?error(?autoformat_with_msg("Failed to add storage '~ts' (~ts)", [StorageName, StorageType], Error)),
-            Error
+    Result = try
+        NormalizedSpec = storage_crud_utils:normalize_qos_parameters(StorageCreateSpec),
+        % printed inside the try, as printing walks the spec by its type and may
+        % raise like the rest of the create
+        ?info("Gathered storage configuration for '~ts' (~ts) - parameters: ~n~ts", [
+            StorageName, StorageType, storage_crud_utils:pretty_print_spec(NormalizedSpec)
+        ]),
+        do_create(NormalizedSpec)
     catch Class:Reason:Stacktrace ->
+        % a refusal is thrown as a known error, which is returned with no log
+        % line of its own - it is logged below, with the returned errors
         ?examine_exception(
             "Unexpected error when adding storage '~ts' (~ts)",
             [StorageName, StorageType],
             Class, Reason, Stacktrace
         )
-    end.
+    end,
+
+    case Result of
+        {ok, StorageId} ->
+            ?notice("Successfully added storage '~ts' (~ts) with Id: '~ts'", [
+                StorageName, StorageType, StorageId
+            ]);
+        {error, _} = Error ->
+            ?error(?autoformat_with_msg("Failed to add storage '~ts' (~ts)", [StorageName, StorageType], Error))
+    end,
+    Result.
 
 
 %%%===================================================================
@@ -69,8 +76,10 @@ do_create(StorageCreateSpec = #storage_create_spec{
     qos_parameters = QosParameters
 }) ->
     HelperSpec = helper_spec:build(StorageCreateSpec),
+    storage_crud_utils:verify_credentials(HelperSpec),
     storage_crud_utils:verify_storage_path_type(HelperSpec),
     storage_crud_utils:verify_configuration(Name, Readonly, Imported, HelperSpec),
+    storage_crud_utils:verify_s3_region(HelperSpec),
 
     LumaConfig = build_luma_config(LumaSpec),
     run_diagnostics(HelperSpec, LumaConfig, StorageCreateSpec),
@@ -91,7 +100,14 @@ do_create(StorageCreateSpec = #storage_create_spec{
 
 
 %% @private
--spec build_luma_config(onedata_storage:luma_spec()) -> luma_config:config().
+-spec build_luma_config(onedata_storage:luma_spec()) -> luma_config:config() | no_return().
+build_luma_config(#luma_spec{feed = external, url = undefined}) ->
+    % refused as the update refuses it - every request to the feed would go
+    % nowhere, and no user but root could reach the storage
+    throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), url));
+build_luma_config(#luma_spec{feed = external, url = <<>>}) ->
+    % refused for the same reason
+    throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), url));
 build_luma_config(#luma_spec{feed = external, url = Url, api_key = ApiKey}) ->
     luma_config:new_with_external_feed(Url, ApiKey);
 build_luma_config(#luma_spec{feed = Feed}) ->
