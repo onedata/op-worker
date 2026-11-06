@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015-2020 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -42,7 +42,7 @@
     close/2, close_all/1,
     read/4, silent_read/4, check_size_and_read/4,
     write/4, write_and_check/4,
-    fsync/2, fsync/4,
+    fsync/2, fsync/3,
     truncate/4,
 
     mkdir/3, mkdir/4, mkdir/5,
@@ -476,10 +476,10 @@ fsync(Worker, TestHandle) ->
         end).
 
 
--spec fsync(node(), session:id(), lfm:file_key(), oneprovider:id()) ->
+-spec fsync(node(), session:id(), lfm:file_key()) ->
     ok | lfm:error_reply().
-fsync(Worker, SessId, FileKey, OneproviderId) ->
-    ?EXEC(Worker, lfm:fsync(SessId, FileKey, OneproviderId)).
+fsync(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:fsync(SessId, FileKey)).
 
 
 -spec truncate(node(), session:id(), lfm:file_key() | file_meta:uuid(), non_neg_integer()) ->

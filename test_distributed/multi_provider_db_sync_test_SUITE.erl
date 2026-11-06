@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -181,14 +181,14 @@ sparse_files_should_be_created(Config0) ->
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid5, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid5, 1, {Provider1Id, [[0, 1]]}, false),
     ?assertEqual(ok, lfm_proxy:truncate(Worker1, SessId1, ?FILE_REF(FileGuid5), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, ?FILE_REF(FileGuid5), Provider1Id)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, ?FILE_REF(FileGuid5))),
     verify_sparse_file(Worker2, SessId2, FileGuid5, 10, {Provider1Id, [[0, 1]]}),
 
     % Creation of hole using truncate on other provider on empty file
     {ok, FileGuid6} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
         <<"/space1/", (generator:gen_name())/binary>>)),
     ?assertEqual(ok, lfm_proxy:truncate(Worker1, SessId1, ?FILE_REF(FileGuid6), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, ?FILE_REF(FileGuid5), Provider1Id)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, ?FILE_REF(FileGuid5))),
     verify_sparse_file(Worker2, SessId2, FileGuid6, 10, {Provider1Id, []}),
 
     % Truncate on empty file and read by other provider
@@ -196,7 +196,7 @@ sparse_files_should_be_created(Config0) ->
         <<"/space1/", (generator:gen_name())/binary>>)),
     verify_sparse_file(Worker2, SessId2, FileGuid7, 0, {Provider1Id, []}, false),
     ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, ?FILE_REF(FileGuid7), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, ?FILE_REF(FileGuid7), Provider2Id)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, ?FILE_REF(FileGuid7))),
     verify_sparse_file(Worker1, SessId1, FileGuid7, 10, {Provider2Id, []}),
 
     % Truncate on not empty file and read by other provider

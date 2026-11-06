@@ -1,7 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2018-2019 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license 
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -119,7 +119,7 @@ handle_multipart_req(Req, ?USER(_UserId, SessionId) = Auth, Params) ->
             }),
             FileGuid = maps:get(<<"guid">>, SanitizedParams),
             % Fsync events to force size update in metadata
-            case lfm:fsync(SessionId, ?FILE_REF(FileGuid), oneprovider:get_id()) of
+            case lfm:fsync(SessionId, ?FILE_REF(FileGuid)) of
                 ok ->
                     case file_popularity:update_size(file_ctx:new_by_guid(FileGuid)) of
                         ok -> ok;
