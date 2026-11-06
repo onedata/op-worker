@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2021-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -39,7 +39,7 @@
 all() -> [
     consecutive_failures_to_verify_peer_should_not_terminate_session_test,
     consecutive_failures_to_perform_handshake_should_not_terminate_session_test,
-%%    session_should_be_terminated_when_there_are_no_common_spaces_test, TODO VFS-5418 uncomment when proxy is no more
+    session_should_be_terminated_when_there_are_no_common_spaces_test,
     crashed_connection_should_be_restarted_test
 ].
 
