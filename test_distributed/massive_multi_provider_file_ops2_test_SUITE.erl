@@ -1,12 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of db_sync and proxy
+%%% Tests of db_sync
 %%% @end
 %%%-------------------------------------------------------------------
 -module(massive_multi_provider_file_ops2_test_SUITE).
