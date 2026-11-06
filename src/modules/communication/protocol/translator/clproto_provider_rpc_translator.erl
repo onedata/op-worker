@@ -1,12 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2022-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module handling translations between protobuf and internal protocol.
+%%% These messages travel between providers, and op-worker both sends and
+%%% receives them, so they are translated in both directions.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_provider_rpc_translator).

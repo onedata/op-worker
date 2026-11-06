@@ -1,12 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module handling translations between protobuf and internal protocol.
+%%% These messages travel between op-worker and clients and between
+%%% providers, so each record is translated in the directions it travels.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_connection_translator).
@@ -21,8 +23,8 @@
 
 %% API
 -export([
-    from_protobuf/1, session_mode_from_protobuf/1,
-    to_protobuf/1, handshake_error_to_protobuf/1, session_mode_to_protobuf/1
+    from_protobuf/1,
+    to_protobuf/1, handshake_error_to_protobuf/1
 ]).
 
 %%%===================================================================
@@ -178,12 +180,6 @@ to_protobuf(#handshake_response{
     {handshake_response, #'HandshakeResponse'{
         status = Status
     }};
-to_protobuf(#client_tokens{
-    access_token = SerializedToken
-}) ->
-    #'Macaroon'{
-        macaroon = SerializedToken
-    };
 
 
 % PROCESSING STATUS
@@ -280,9 +276,3 @@ handshake_error_to_protobuf(<<"no_discharge_macaroon_for_caveat">>) ->
     'NO_DISCHARGE_MACAROON_FOR_CAVEAT';
 handshake_error_to_protobuf(_) ->
     'INTERNAL_SERVER_ERROR'.
-
-
--spec session_mode_to_protobuf(undefined | session:mode()) ->
-    'NORMAL' | 'OPEN_HANDLE'.  % TODO VFS-12625 rework to PUBLIC_DATA
-session_mode_to_protobuf(public_data) -> 'OPEN_HANDLE';
-session_mode_to_protobuf(_)           -> 'NORMAL'.

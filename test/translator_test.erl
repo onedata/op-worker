@@ -46,8 +46,8 @@ translate_status_from_protobuf_test() ->
 translate_file_block_from_protobuf_test() ->
     {Internal, Protobuf} = get_file_block(0, 0),
     {Internal2, Protobuf2} = get_file_block(32, 2048),
-    ?assertEqual(Internal, clproto_translator:from_protobuf(Protobuf)),
-    ?assertEqual(Internal2, clproto_translator:from_protobuf(Protobuf2)).
+    ?assertEqual(Internal, clproto_common_translator:from_protobuf(Protobuf)),
+    ?assertEqual(Internal2, clproto_common_translator:from_protobuf(Protobuf2)).
 
 translate_events_from_protobuf_test() ->
     {Internal, Protobuf} = get_events(5),

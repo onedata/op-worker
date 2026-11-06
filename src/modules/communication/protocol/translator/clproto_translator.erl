@@ -7,6 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module handling translations between protobuf and internal protocol.
+%%% It dispatches a message body, or a message stream, to the translator of
+%%% its kind; records nested in them are translated by those translators.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_translator).
@@ -42,9 +44,6 @@
 
 %% COMMON
 from_protobuf(#'Status'{} = Msg) -> clproto_common_translator:from_protobuf(Msg);
-from_protobuf(#'FileBlock'{} = Msg) -> clproto_common_translator:from_protobuf(Msg);
-from_protobuf(#'FileRenamedEntry'{} = Msg) -> clproto_common_translator:from_protobuf(Msg);
-from_protobuf(#'IpAndPort'{} = Msg) -> clproto_common_translator:from_protobuf(Msg);
 
 
 %% EVENT
@@ -131,9 +130,6 @@ from_protobuf(Message) when is_tuple(Message) -> throw({unrecognized_message, el
 
 %% COMMON
 to_protobuf(#status{} = Msg) -> clproto_common_translator:to_protobuf(Msg);
-to_protobuf(#file_block{} = Msg) -> clproto_common_translator:to_protobuf(Msg);
-to_protobuf(#file_renamed_entry{} = Msg) -> clproto_common_translator:to_protobuf(Msg);
-to_protobuf(#ip_and_port{} = Msg) -> clproto_common_translator:to_protobuf(Msg);
 
 
 %% EVENT
@@ -143,7 +139,6 @@ to_protobuf(#events{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
 %% HANDSHAKE
 to_protobuf(#provider_handshake_request{} = Msg) -> clproto_connection_translator:to_protobuf(Msg);
 to_protobuf(#handshake_response{} = Msg) -> clproto_connection_translator:to_protobuf(Msg);
-to_protobuf(#client_tokens{} = Msg) -> clproto_connection_translator:to_protobuf(Msg);
 
 
 % PROCESSING STATUS
