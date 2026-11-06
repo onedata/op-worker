@@ -1,7 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Mateusz Paciorek
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -84,7 +84,7 @@ rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) -
     TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx), % TODO VFS-7446 - rename vs hardlinks
     {SourceFileType, SourceFileCtx2} = get_type(SourceFileCtx),
     {TargetFileType, TargetGuid} =
-        remotely_get_child_type(SessId, TargetParentGuid, TargetName),
+        get_child_type_via_lfm(SessId, TargetParentGuid, TargetName),
     case {SourceFileType, TargetFileType} of
         {_, undefined} ->
             copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
@@ -665,15 +665,15 @@ get_child_type(ParentFileCtx, ChildName, UserCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns type of child file with given name, may send requests to other
-%% providers if the current one does not support file's space.
+%% Returns type and guid of child file with given name, or {undefined, undefined}
+%% if there is none.
 %% @end
 %%--------------------------------------------------------------------
--spec remotely_get_child_type(session:id(), ParentGuid :: fslogic_worker:file_guid(),
+-spec get_child_type_via_lfm(session:id(), ParentGuid :: fslogic_worker:file_guid(),
     ChildName :: file_meta:name()) ->
     {onedata_file:type(), ChildGuid :: fslogic_worker:file_guid()} |
     {undefined, undefined}.
-remotely_get_child_type(SessId, ParentGuid, ChildName) ->
+get_child_type_via_lfm(SessId, ParentGuid, ChildName) ->
     case lfm:get_child_attr(SessId, ParentGuid, ChildName) of
         {ok, #file_attr{type = Type, guid = ChildGuid}} ->
             {Type, ChildGuid};
