@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -76,7 +76,7 @@ manager_test(Config) ->
 
     InitMessage = client_message(SessId, StreamId, 0),
     ?assertEqual(ok, rpc:call(Worker, sequencer,
-        communicate_with_sequencer_manager, [InitMessage, SessId, true])),
+        communicate_with_sequencer_manager, [InitMessage, SessId])),
 
     Messages = lists:map(fun(SeqNum) ->
         client_message(SessId, StreamId, SeqNum)
@@ -92,7 +92,7 @@ manager_test(Config) ->
     lists:foreach(fun(StmId) ->
         InitMessage2 = client_message(SessId, StmId, 0),
         ?assertEqual(ok, rpc:call(Worker, sequencer,
-            communicate_with_sequencer_manager, [InitMessage2, SessId, true]))
+            communicate_with_sequencer_manager, [InitMessage2, SessId]))
     end, lists:seq(2, ProcNum + 1)),
 
     Messages2 = lists:map(fun(StmId) ->

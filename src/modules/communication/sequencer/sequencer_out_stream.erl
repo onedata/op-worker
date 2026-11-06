@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -139,9 +139,6 @@ handle_cast(#message_acknowledgement{} = Request, #state{} = State) ->
 
 handle_cast(#server_message{} = Request, #state{session_id = SessionId} = State) ->
     {noreply, handle_request(Request#server_message{session_id = SessionId}, State)};
-
-handle_cast(#client_message{} = Request, State) ->
-    {noreply, handle_request(Request, State)};
 
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
@@ -297,14 +294,6 @@ process_request(#server_message{message_stream = MsgStm} = Msg, #state{
         sequence_number = SeqNum
     }},
     ok = communicator:send_to_oneclient(SessId, NewMsg),
-    State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)};
-
-process_request(#client_message{message_stream = MsgStm} = Msg, #state{
-    sequence_number = SeqNum, session_id = SessId, outbox = Msgs} = State) ->
-    NewMsg = Msg#client_message{message_stream = MsgStm#message_stream{
-        sequence_number = SeqNum
-    }},
-    ok = communicator:send_to_provider(SessId, NewMsg),
     State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)}.
 
 %%--------------------------------------------------------------------
@@ -356,12 +345,6 @@ resend_all_messages(Msgs, SessId, SeqNum, MsgsAcc) ->
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
             ok = communicator:send_to_oneclient(SessId, NewMsg),
-            resend_all_messages(queue:drop(Msgs), SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
-        {value, #client_message{message_stream = MsgStm} = Msg} ->
-            NewMsg = Msg#client_message{
-                message_stream = MsgStm#message_stream{sequence_number = SeqNum}
-            },
-            ok = communicator:send_to_provider(SessId, NewMsg),
             resend_all_messages(queue:drop(Msgs), SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         empty ->
             {SeqNum, MsgsAcc}

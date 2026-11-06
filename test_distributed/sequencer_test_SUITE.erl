@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -34,8 +34,6 @@
     open_stream_should_return_stream_id/1,
     open_stream_should_return_different_stream_ids/1,
     close_stream_should_notify_sequencer_manager/1,
-    send_message_should_forward_message/1,
-    send_message_should_inject_stream_id_into_message/1,
     route_message_should_forward_message/1,
     route_message_should_forward_messages_to_the_same_stream/1,
     route_message_should_forward_messages_to_different_streams/1
@@ -46,8 +44,6 @@ all() ->
         open_stream_should_return_stream_id,
         open_stream_should_return_different_stream_ids,
         close_stream_should_notify_sequencer_manager,
-        send_message_should_forward_message,
-        send_message_should_inject_stream_id_into_message,
         route_message_should_forward_message,
         route_message_should_forward_messages_to_the_same_stream,
         route_message_should_forward_messages_to_different_streams
@@ -74,22 +70,6 @@ close_stream_should_notify_sequencer_manager(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, StmId} = open_stream(Worker, ?config(session_id, Config)),
     close_stream(Worker, ?config(session_id, Config), StmId).
-
-send_message_should_forward_message(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    StmId = ?config(stream_id, Config),
-    send_message(Worker, ?config(session_id, Config), StmId, msg),
-    ?assertReceivedMatch(
-        #server_message{message_stream = #message_stream{}}, ?TIMEOUT
-    ).
-
-send_message_should_inject_stream_id_into_message(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    StmId = ?config(stream_id, Config),
-    send_message(Worker, ?config(session_id, Config), StmId, msg),
-    ?assertReceivedMatch(#server_message{message_stream = #message_stream{
-        stream_id = StmId
-    }}, ?TIMEOUT).
 
 route_message_should_forward_message(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -135,15 +115,6 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 init_per_testcase(Case, Config) when
-    Case =:= send_message_should_forward_message;
-    Case =:= send_message_should_inject_stream_id_into_message ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    mock_communicator(Worker),
-    {ok, SessId} = session_setup(Worker),
-    {ok, StmId} = open_stream(Worker, SessId),
-    [{session_id, SessId}, {stream_id, StmId} | Config];
-
-init_per_testcase(Case, Config) when
     Case =:= open_stream_should_return_stream_id;
     Case =:= open_stream_should_return_different_stream_ids;
     Case =:= close_stream_should_notify_sequencer_manager;
@@ -158,15 +129,6 @@ init_per_testcase(Case, Config) when
 
 end_per_suite(_Config) ->
     ok.
-
-end_per_testcase(Case, Config) when
-    Case =:= send_message_should_forward_message;
-    Case =:= send_message_should_inject_stream_id_into_message ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config(session_id, Config),
-    close_stream(Worker, SessId, ?config(stream_id, Config)),
-    session_teardown(Worker, SessId),
-    test_utils:mock_validate_and_unload(Worker, communicator);
 
 end_per_testcase(Case, Config) when
     Case =:= open_stream_should_return_stream_id;
@@ -230,17 +192,6 @@ close_stream(Worker, SessId, StmId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends message to sequencer stream for outgoing messages.
-%% @end
-%%--------------------------------------------------------------------
--spec send_message(Worker :: node(), SessId :: session:id(),
-    StmId :: sequencer:stream_id(), Msg :: term()) -> ok.
-send_message(Worker, SessId, StmId, Msg) ->
-    ?assertEqual(ok, rpc:call(Worker, sequencer, send_message, [Msg, StmId, SessId])).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Sends message to sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -264,17 +215,6 @@ client_message(SessId, StmId, SeqNum) ->
             sequence_number = SeqNum
         }
     }.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator, so that on send it forwards all messages to this process.
-%% @end
-%%--------------------------------------------------------------------
--spec mock_communicator(Worker :: node()) -> ok.
-mock_communicator(Worker) ->
-    Self = self(),
-    mock_communicator(Worker, fun(_, Msg, _) -> Self ! Msg, ok end).
 
 %%--------------------------------------------------------------------
 %% @private

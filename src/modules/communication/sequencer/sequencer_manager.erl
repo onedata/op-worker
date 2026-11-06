@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -98,12 +98,6 @@ handle(Manager, #client_message{message_body = #message_acknowledgement{
     forward_to_sequencer_out_stream(Msg, StmId, Manager),
     ok;
 
-%% Handle outgoing messages
-handle(Manager, #client_message{message_stream = #message_stream{sequence_number = undefined}} = Msg) ->
-    {ok, SeqStm} = get_or_create_sequencer_out_stream(Msg, Manager),
-    sequencer_out_stream:send(SeqStm, Msg),
-    ok;
-
 %% Handle incoming messages
 handle(Manager, #client_message{} = Msg) ->
     {ok, SeqStm} = get_or_create_sequencer_in_stream(Msg, Manager),
@@ -181,15 +175,6 @@ handle_call({create_in_stream, StmId}, _From, State) ->
             {reply, {ok, SeqStm}, State};
         error ->
             {ok, SeqStm} = create_sequencer_in_stream(StmId, State),
-            {reply, {ok, SeqStm}, State}
-    end;
-
-handle_call({create_out_stream, StmId}, _From, State) ->
-    case get_stream(self(), sequencer_out_streams, StmId) of
-        {ok, SeqStm} ->
-            {reply, {ok, SeqStm}, State};
-        error ->
-            {ok, SeqStm} = create_sequencer_out_stream(StmId, State),
             {reply, {ok, SeqStm}, State}
     end;
 
@@ -312,24 +297,6 @@ ensure_sent(Msg, SessId) ->
             erlang:send_after(?SEND_RETRY_DELAY, self(), {send, Msg, SessId}),
             ok
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns sequencer stream for outgoing messages associated with provided
-%% stream ID. If stream does not exist creates one.
-%% @see create_sequencer_out_stream/2
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_create_sequencer_out_stream(Msg :: #client_message{},
-    Manager :: pid()) -> {ok, SeqStm :: pid()}.
-get_or_create_sequencer_out_stream(#client_message{message_stream = #message_stream{
-    stream_id = StmId}}, Manager) ->
-    case get_stream(Manager, sequencer_out_streams, StmId) of
-        {ok, SeqStm} -> {ok, SeqStm};
-        error -> gen_server2:call(Manager, {create_out_stream, StmId}, ?TIMEOUT)
-    end.
-
 
 %%--------------------------------------------------------------------
 %% @private
