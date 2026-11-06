@@ -93,6 +93,7 @@ empty_directory_deletion_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
 
     {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
@@ -128,6 +129,7 @@ non_empty_directory_deletion_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
 
     %% scan 1: the directory + its file on POSIX, only the file (object) on S3
     Scan1Created = storage_import_test_utils:expected_created_count(TestCaseCtx),
@@ -178,6 +180,7 @@ import_continues_after_deletion_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -199,6 +202,7 @@ import_continues_after_deletion_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, NewFileTreeSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, NewFileTreeSpec),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 3,
         %% the new tree has the same shape as the initial one
@@ -268,6 +272,7 @@ recreate_file_deleted_by_sync_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
 
     %% the root's logical mtime (stamped by the remote LFM create) predates the
     %% storage deletion by at least the ensure_mtime_progression second, so the
@@ -288,11 +293,18 @@ recreate_file_deleted_by_sync_test(SuiteCtx) ->
 
     %% the same path must be recreatable via the remote provider and fully
     %% functional on the importing one
+    RecreatedFileSpec = #file_spec{name = FileName, content = RecreatedContent},
     storage_import_test_utils:create_file_tree_via_remote_provider(
-        TestCaseCtx, #file_spec{name = FileName, content = RecreatedContent}
+        TestCaseCtx, RecreatedFileSpec
     ),
     storage_import_test_utils:assert_file_content(
         ImportingProviderCtx, SpaceFilePath, RecreatedContent
+    ),
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, RecreatedFileSpec
+    ),
+    storage_import_test_utils:verify_dir_stats(
+        TestCaseCtx, RecreatedFileSpec
     ).
 
 
@@ -338,8 +350,9 @@ imported_file_delete_recreate_lifecycle_test(SuiteCtx) ->
 
     %% the freed path is recreated remotely; reading on the importing provider
     %% replicates the new content back onto the imported storage
+    RecreatedFileSpec = #file_spec{name = FileName, content = RecreatedContent},
     storage_import_test_utils:create_file_tree_via_remote_provider(
-        TestCaseCtx, #file_spec{name = FileName, content = RecreatedContent}
+        TestCaseCtx, RecreatedFileSpec
     ),
     storage_import_test_utils:assert_file_content(
         ImportingProviderCtx, SpaceFilePath, RecreatedContent
@@ -348,6 +361,13 @@ imported_file_delete_recreate_lifecycle_test(SuiteCtx) ->
         {ok, _},
         storage_file_tree_test_utils:stat(ImportingProviderSelector, ImportedStorageId, StorageFileId),
         ?STORAGE_IMPORT_ATTEMPTS
+    ),
+
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, RecreatedFileSpec
+    ),
+    storage_import_test_utils:verify_dir_stats(
+        TestCaseCtx, RecreatedFileSpec
     ),
 
     %% the storage file disappears - scan 2 must delete the recreated file from
@@ -359,6 +379,7 @@ imported_file_delete_recreate_lifecycle_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
 
     %% deterministic root verdict for the same reason as in
     %% recreate_file_deleted_by_sync_test above
@@ -415,9 +436,9 @@ simultaneous_deletion_and_modification_test(SuiteCtx) ->
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    storage_import_test_utils:verify_imported_tree(
-        TestCaseCtx, #dir_spec{name = DirName, children = [ModifiedFileSpec]}
-    ),
+    ExpectedDirSpec = #dir_spec{name = DirName, children = [ModifiedFileSpec]},
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, ExpectedDirSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, ExpectedDirSpec),
     ModifiedFilePath = filepath_utils:join([SpacePath, DirName, ModifiedFileName]),
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, ModifiedFilePath, #{mode => NewMode}),
 
@@ -466,6 +487,7 @@ file_deletion_purges_metadata_test(SuiteCtx) ->
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:get_xattr(Node, SessId, {path, FilePath}, <<"xattr_name">>), ?STORAGE_IMPORT_ATTEMPTS),
     ?assertMatch({error, ?ENOENT},
@@ -517,9 +539,9 @@ nested_file_deletion_test(SuiteCtx) ->
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    storage_import_test_utils:verify_imported_tree(
-        TestCaseCtx, #dir_spec{name = DirName, children = [KeptFileSpec]}
-    ),
+    ExpectedDirSpec = #dir_spec{name = DirName, children = [KeptFileSpec]},
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, ExpectedDirSpec),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, ExpectedDirSpec),
 
     %% scan 1: the directory + its 2 files on POSIX, only the 2 files on S3
     Scan1Created = storage_import_test_utils:expected_created_count(TestCaseCtx),
@@ -647,4 +669,5 @@ create_subfiles_and_delete_before_import_is_finished_test(SuiteCtx) ->
     ),
     storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
 
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx, []).
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx, []).

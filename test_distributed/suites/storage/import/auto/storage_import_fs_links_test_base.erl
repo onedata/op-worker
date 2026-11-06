@@ -158,11 +158,18 @@ hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeleti
     unlink_if_applicable(Node, SessId, ?FILE_REF(HardlinkGuid), HardlinkDeletionMode),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    storage_import_test_utils:create_trigger_file_on_storage(TestCaseCtx),
+    TriggerFileSpec = storage_import_test_utils:create_trigger_file_on_storage(TestCaseCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     assert_reference_survival(Node, SessId, FilePath, FileDeletionMode),
     assert_reference_survival(Node, SessId, HardlinkPath, HardlinkDeletionMode),
+    %% Hardlinks appear as regular files in the logical namespace. Only kept
+    %% references belong in the expected tree, even if deleted ones remain open.
+    KeptFileSpecs = [#file_spec{name = Name, content = Content} ||
+        {Name, Mode} <- [{FileName, FileDeletionMode}, {HardlinkName, HardlinkDeletionMode}],
+        Mode =:= kept
+    ],
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, [TriggerFileSpec | KeptFileSpecs]),
     assert_hardlink_scan_monitoring_state(TestCaseCtx, StorageType, FileDeletionMode, HardlinkDeletionMode).
 
 
@@ -174,6 +181,7 @@ hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeleti
 symlink_is_ignored_by_continuous_scan_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
     SymlinkName = ?RAND_STR(),
+    SymlinkValue = <<"dummy symlink value">>,
 
     TestCaseCtx = #storage_import_test_case_ctx{
         space_path = SpacePath,
@@ -185,7 +193,7 @@ symlink_is_ignored_by_continuous_scan_test(SuiteCtx) ->
     ),
 
     SymlinkPath = filepath_utils:join([SpacePath, SymlinkName]),
-    {ok, _} = lfm_proxy:make_symlink(Node, SessId, SymlinkPath, <<"dummy symlink value">>),
+    {ok, _} = lfm_proxy:make_symlink(Node, SessId, SymlinkPath, SymlinkValue),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     storage_import_test_utils:create_trigger_file_on_storage(TestCaseCtx),

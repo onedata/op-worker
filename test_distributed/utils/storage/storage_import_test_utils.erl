@@ -687,20 +687,21 @@ ensure_mtime_progression(#storage_import_test_case_ctx{
 %% the root's children individually instead of bulk-skipping the
 %% otherwise-unchanged batch - without it, tests whose only storage change went
 %% through LFM (links) or targeted entries other than the root's direct children
-%% would pass vacuously. Returns the (random) name of the created file.
+%% would pass vacuously. Returns the created file specification, including its name and content.
 %% @end
 %%--------------------------------------------------------------------
--spec create_trigger_file_on_storage(case_ctx()) -> binary().
+-spec create_trigger_file_on_storage(case_ctx()) -> #file_spec{}.
 create_trigger_file_on_storage(#storage_import_test_case_ctx{
     suite_ctx = #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector},
     imported_storage_id = ImportedStorageId
 }) ->
     TriggerFileName = ?RAND_STR(),
+    TriggerContent = ?RAND_STR(),
     storage_file_tree_test_utils:create_file(
         ImportingProviderSelector, ImportedStorageId,
-        filepath_utils:join([<<"/">>, TriggerFileName]), ?RAND_STR()
+        filepath_utils:join([<<"/">>, TriggerFileName]), TriggerContent
     ),
-    TriggerFileName.
+    #file_spec{name = TriggerFileName, content = TriggerContent}.
 
 
 -spec unmock_space_dir_statbuf_on_flat_storage(oct_background:entity_selector()) -> ok.

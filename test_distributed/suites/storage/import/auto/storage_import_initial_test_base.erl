@@ -529,6 +529,7 @@ import_check_user_id_test_base(SuiteCtx, CaseName, NodeName, NodeSpec) ->
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
 
     SpaceTestNodePath = filepath_utils:join([SpacePath, NodeName]),
     SpaceOwnerId = oct_background:to_entity_id(SpaceOwnerSelector),
