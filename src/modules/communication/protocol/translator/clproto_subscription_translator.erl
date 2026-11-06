@@ -1,12 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module handling translations between protobuf and internal protocol.
+%%% op-worker decodes the subscriptions a client sends and encodes only the
+%%% file read and written subscriptions it gives clients in their configuration.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_subscription_translator).
@@ -132,60 +134,6 @@ to_protobuf(#file_written_subscription{
         counter_threshold = CounterThreshold,
         time_threshold = TimeThreshold
     }};
-to_protobuf(#file_attr_changed_subscription{
-    file_guid = FileGuid,
-    time_threshold = TimeThreshold
-}) ->
-    {file_attr_changed, #'FileAttrChangedSubscription'{
-        file_uuid = FileGuid,
-        time_threshold = TimeThreshold
-    }};
-to_protobuf(#replica_status_changed_subscription{
-    file_guid = FileGuid,
-    time_threshold = TimeThreshold
-}) ->
-    {replica_status_changed, #'ReplicaStatusChangedSubscription'{
-        file_uuid = FileGuid,
-        time_threshold = TimeThreshold
-    }};
-to_protobuf(#file_location_changed_subscription{
-    file_guid = FileGuid,
-    time_threshold = TimeThreshold
-}) ->
-    {file_location_changed, #'FileLocationChangedSubscription'{
-        file_uuid = FileGuid,
-        time_threshold = TimeThreshold
-    }};
-to_protobuf(#file_perm_changed_subscription{
-    file_guid = FileGuid
-}) ->
-    {file_perm_changed, #'FilePermChangedSubscription'{
-        file_uuid = FileGuid
-    }};
-to_protobuf(#file_removed_subscription{
-    file_guid = FileGuid
-}) ->
-    {file_removed, #'FileRemovedSubscription'{
-        file_uuid = FileGuid
-    }};
-to_protobuf(#file_renamed_subscription{
-    file_guid = FileGuid
-}) ->
-    {file_renamed, #'FileRenamedSubscription'{
-        file_uuid = FileGuid
-    }};
-to_protobuf(#quota_exceeded_subscription{}) ->
-    {quota_exceeded, #'QuotaExceededSubscription'{}};
-to_protobuf(#helper_params_changed_subscription{
-    storage_id = StorageId
-}) ->
-    {helper_params_changed, #'HelperParamsChangedSubscription'{
-        storage_id = StorageId
-    }};
-to_protobuf(#subscription_cancellation{id = Id}) ->
-    {subscription_cancellation, #'SubscriptionCancellation'{
-        id = binary_to_integer(Id)}
-    };
 
 
 %% OTHER

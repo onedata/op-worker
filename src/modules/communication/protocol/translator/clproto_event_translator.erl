@@ -1,12 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module handling translations between protobuf and internal protocol.
+%%% op-worker decodes every event type a client may send and encodes the
+%%% types it pushes to clients.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_event_translator).
@@ -112,42 +114,6 @@ to_protobuf(#events{events = Evts}) ->
     {events, #'Events'{
         events = [to_protobuf(Evt) || Evt <- Evts]}
     };
-to_protobuf(#flush_events{
-    provider_id = ProviderId,
-    subscription_id = SubId,
-    context = Context
-}) ->
-    {flush_events, #'FlushEvents'{
-        provider_id = ProviderId,
-        subscription_id = binary_to_integer(SubId),
-        context = Context}
-    };
-to_protobuf(#file_read_event{
-    counter = Counter,
-    file_guid = FileGuid,
-    size = Size,
-    blocks = Blocks
-}) ->
-    {file_read, #'FileReadEvent'{
-        counter = Counter,
-        file_uuid = FileGuid,
-        size = Size,
-        blocks = [clproto_common_translator:to_protobuf(B) || B <- Blocks]
-    }};
-to_protobuf(#file_written_event{
-    counter = Counter,
-    file_guid = FileGuid,
-    size = Size,
-    file_size = FileSize,
-    blocks = Blocks
-}) ->
-    {file_written, #'FileWrittenEvent'{
-        counter = Counter,
-        file_uuid = FileGuid,
-        size = Size,
-        file_size = FileSize,
-        blocks = [clproto_common_translator:to_protobuf(B) || B <- Blocks]
-    }};
 to_protobuf(#file_attr_changed_event{file_attr = FileAttr}) ->
     {_, Record} = clproto_fuse_translator:to_protobuf(FileAttr),
     {file_attr_changed, #'FileAttrChangedEvent'{

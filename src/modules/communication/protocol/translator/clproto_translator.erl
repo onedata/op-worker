@@ -48,32 +48,12 @@ from_protobuf(#'IpAndPort'{} = Msg) -> clproto_common_translator:from_protobuf(M
 
 
 %% EVENT
-from_protobuf(#'Event'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
 from_protobuf(#'Events'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
 from_protobuf(#'FlushEvents'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
-from_protobuf(#'FileReadEvent'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
-from_protobuf(#'FileWrittenEvent'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
-from_protobuf(#'FileAttrChangedEvent'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
-from_protobuf(#'FileLocationChangedEvent'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
-from_protobuf(#'FilePermChangedEvent'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
-from_protobuf(#'FileRemovedEvent'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
-from_protobuf(#'FileRenamedEvent'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
-from_protobuf(#'QuotaExceededEvent'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
-from_protobuf(#'HelperParamsChangedEvent'{} = Msg) -> clproto_event_translator:from_protobuf(Msg);
 
 
 %% SUBSCRIPTION
 from_protobuf(#'Subscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
-from_protobuf(#'FileReadSubscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
-from_protobuf(#'FileWrittenSubscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
-from_protobuf(#'FileAttrChangedSubscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
-from_protobuf(#'ReplicaStatusChangedSubscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
-from_protobuf(#'FileLocationChangedSubscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
-from_protobuf(#'FilePermChangedSubscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
-from_protobuf(#'FileRemovedSubscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
-from_protobuf(#'FileRenamedSubscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
-from_protobuf(#'QuotaExceededSubscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
-from_protobuf(#'HelperParamsChangedSubscription'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
 from_protobuf(#'SubscriptionCancellation'{} = Msg) -> clproto_subscription_translator:from_protobuf(Msg);
 
 
@@ -157,33 +137,7 @@ to_protobuf(#ip_and_port{} = Msg) -> clproto_common_translator:to_protobuf(Msg);
 
 
 %% EVENT
-to_protobuf(#event{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
 to_protobuf(#events{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-to_protobuf(#flush_events{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-to_protobuf(#file_read_event{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-to_protobuf(#file_written_event{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-to_protobuf(#file_attr_changed_event{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-to_protobuf(#file_location_changed_event{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-to_protobuf(#file_perm_changed_event{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-to_protobuf(#file_removed_event{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-to_protobuf(#file_renamed_event{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-to_protobuf(#quota_exceeded_event{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-to_protobuf(#helper_params_changed_event{} = Msg) -> clproto_event_translator:to_protobuf(Msg);
-
-
-%% SUBSCRIPTION
-to_protobuf(#subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#file_read_subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#file_written_subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#file_attr_changed_subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#replica_status_changed_subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#file_location_changed_subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#file_perm_changed_subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#file_removed_subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#file_renamed_subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#quota_exceeded_subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#helper_params_changed_subscription{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
-to_protobuf(#subscription_cancellation{} = Msg) -> clproto_subscription_translator:to_protobuf(Msg);
 
 
 %% HANDSHAKE
