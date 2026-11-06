@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -463,7 +463,7 @@ forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Communicates with client or provider.
+%% Sends the message to the client.
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(Message :: term(), session:id(), InfinityRetry :: boolean()) ->

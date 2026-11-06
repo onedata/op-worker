@@ -1,14 +1,14 @@
 %%%--------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module implements worker_plugin_behaviour callbacks.
-%%% Also it decides whether request has to be handled locally or rerouted
-%%% to other provider.
+%%% Also it refuses requests concerning files of spaces this provider doesn't
+%%% support (see assert_request_can_be_handled_locally/2).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_worker).

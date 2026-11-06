@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 2023 ACK CYFRONET AGH
+%%% @copyright (C) 2023-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -91,7 +91,7 @@
 resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
     % TODO VFS-12851 restrict attrs available for special dirs sub trees
     % For spaces not supported locally (accessed by e.g. listing user root dir) effective value cache is not initialized.
-    % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
+    % Fuse clients ask for ?ONECLIENT_FILE_ATTRS, which hold none of them, so they are skipped.
     IsNotLocallySupportedSpace = file_ctx:is_space_dir_const(FileCtx0) andalso
         not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx0)),
 

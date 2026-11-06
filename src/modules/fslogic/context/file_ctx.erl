@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -671,7 +671,7 @@ get_times(FileCtx = #file_ctx{times = TimesMap}, RequestedTimes) ->
 get_storage_id(FileCtx) ->
     case get_storage(FileCtx) of
         {undefined, FileCtx2} ->
-            % can happen for user root dir or space dir accessed via provider proxy
+            % can happen for user root dir or a file of a space this provider doesn't support
             {undefined, FileCtx2};
         {Storage, FileCtx2} ->
             {storage:get_id(Storage), FileCtx2}
