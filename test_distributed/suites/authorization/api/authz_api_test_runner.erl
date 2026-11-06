@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019-2024 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -1549,7 +1549,7 @@ format_additional_log_data(ActualPermsPerFile, #authz_test_case_ctx{
 
     {ok, ExecutionerSpacePrivs} = get_user_space_privileges(TestNode, SpaceId, ExecutionerUserId),
 
-    {ok, ExecutionerSessionMode} = session:get_mode(ExecutionerSession),
+    #document{value = #session{mode = ExecutionerSessionMode}} = ExecutionerSession,
     ExecutionerSessionConstraints = session:get_data_constraints(ExecutionerSession),
 
     onedata_logger:format_generic_log(?autoformat(

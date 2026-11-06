@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -32,7 +32,6 @@
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
 -export([get_credentials/1, get_data_constraints/1, get_user_id/1]).
--export([get_mode/1]).
 -export([set_direct_io/3]).
 
 % exometer callbacks
@@ -297,20 +296,6 @@ get_data_constraints(#session{data_constraints = DataConstraints}) ->
     DataConstraints;
 get_data_constraints(#document{value = Session}) ->
     get_data_constraints(Session).
-
-
--spec get_mode(id() | record() | doc()) -> {ok, mode()} | {error, term()}.
-get_mode(<<_/binary>> = SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{mode = SessMode}}} ->
-            {ok, SessMode};
-        {error, _} = Error ->
-            Error
-    end;
-get_mode(#session{mode = SessMode}) ->
-    {ok, SessMode};
-get_mode(#document{value = #session{mode = SessMode}}) ->
-    {ok, SessMode}.
 
 
 %%--------------------------------------------------------------------

@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015-2023 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -30,8 +30,8 @@
 
 %% API
 -export([
-    from_protobuf/1, session_mode_from_protobuf/1,
-    to_protobuf/1, handshake_error_to_protobuf/1, session_mode_to_protobuf/1
+    from_protobuf/1,
+    to_protobuf/1, handshake_error_to_protobuf/1
 ]).
 
 %%%===================================================================
@@ -151,11 +151,6 @@ from_protobuf(undefined) -> undefined;
 from_protobuf(Message) when is_tuple(Message) -> throw({unrecognized_message, element(1, Message)}).
 
 
--spec session_mode_from_protobuf(undefined | 'NORMAL' | 'OPEN_HANDLE') ->  % TODO VFS-12625 rework to PUBLIC_DATA
-    session:mode().
-session_mode_from_protobuf(Mode) ->
-    clproto_connection_translator:session_mode_from_protobuf(Mode).
-
 
 %%%===================================================================
 %%% TO PROTOBUF
@@ -267,11 +262,6 @@ to_protobuf(#rtransfer_nodes_ips{} = Msg) -> clproto_rtransfer_translator:to_pro
 %% OTHER
 to_protobuf(undefined) -> undefined.
 
-
--spec session_mode_to_protobuf(undefined | session:mode()) ->
-    'NORMAL' | 'OPEN_HANDLE'.  % TODO VFS-12625 rework to PUBLIC_DATA
-session_mode_to_protobuf(Mode) ->
-    clproto_connection_translator:session_mode_to_protobuf(Mode).
 
 
 -spec handshake_error_to_protobuf(Type :: binary()) -> Type :: atom().

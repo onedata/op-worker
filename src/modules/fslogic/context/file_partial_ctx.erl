@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @copyright (C) 2017-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -32,7 +32,6 @@
 %% API
 -export([new_by_guid/1, new_by_logical_path/2, new_by_canonical_path/2]).
 -export([get_space_id_const/1, get_share_id_const/1]).
--export([is_space_dir_const/1, is_user_root_dir_const/2]).
 -export([get_parent/2, get_canonical_path/1]).
 
 %%%===================================================================
@@ -145,33 +144,6 @@ get_share_id_const(#file_partial_ctx{}) ->
     undefined;
 get_share_id_const(FileCtx) ->
     file_ctx:get_share_id_const(FileCtx).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if file is a space root dir.
-%% @end
-%%--------------------------------------------------------------------
--spec is_space_dir_const(ctx()) -> boolean().
-is_space_dir_const(#file_partial_ctx{canonical_path = Path}) ->
-    case filepath_utils:split(Path) of
-        [<<"/">>, _SpaceId] ->
-            true;
-        _ ->
-            false
-    end;
-is_space_dir_const(FileCtx) ->
-    file_ctx:is_space_dir_const(FileCtx).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if file is an user root dir.
-%% @end
-%%--------------------------------------------------------------------
--spec is_user_root_dir_const(ctx(), user_ctx:ctx()) -> boolean().
-is_user_root_dir_const(#file_partial_ctx{canonical_path = Path}, _UserCtx) ->
-    Path =:= <<"/">>;
-is_user_root_dir_const(FileCtx, UserCtx) ->
-    file_ctx:is_user_root_dir_const(FileCtx, UserCtx).
 
 %%%===================================================================
 %%% Internal functions
