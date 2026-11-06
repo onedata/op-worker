@@ -45,7 +45,6 @@ from_protobuf(#'Status'{} = Msg) -> clproto_common_translator:from_protobuf(Msg)
 from_protobuf(#'FileBlock'{} = Msg) -> clproto_common_translator:from_protobuf(Msg);
 from_protobuf(#'FileRenamedEntry'{} = Msg) -> clproto_common_translator:from_protobuf(Msg);
 from_protobuf(#'IpAndPort'{} = Msg) -> clproto_common_translator:from_protobuf(Msg);
-from_protobuf(#'Dir'{} = Msg) -> clproto_common_translator:from_protobuf(Msg);
 
 
 %% EVENT
@@ -110,18 +109,10 @@ from_protobuf(#'CloseSession'{} = Msg) -> clproto_connection_translator:from_pro
 
 %% FUSE
 from_protobuf(#'FuseRequest'{} = Msg) -> clproto_fuse_translator:from_protobuf(Msg);
-from_protobuf(#'FuseResponse'{} = Msg) -> clproto_fuse_translator:from_protobuf(Msg);
-from_protobuf(#'ResolveGuid'{} = Msg) -> clproto_fuse_translator:from_protobuf(Msg);
-from_protobuf(#'GetHelperParams'{} = Msg) -> clproto_fuse_translator:from_protobuf(Msg);
-from_protobuf(#'GetFSStats'{} = Msg) -> clproto_fuse_translator:from_protobuf(Msg);
-from_protobuf(#'CreateStorageTestFile'{} = Msg) -> clproto_fuse_translator:from_protobuf(Msg);
-from_protobuf(#'VerifyStorageTestFile'{} = Msg) -> clproto_fuse_translator:from_protobuf(Msg);
 
 
 %% PROXYIO
 from_protobuf(#'ProxyIORequest'{} = Msg) -> clproto_proxyio_translator:from_protobuf(Msg);
-from_protobuf(#'ByteSequence'{} = Msg) -> clproto_proxyio_translator:from_protobuf(Msg);
-from_protobuf(#'ProxyIOResponse'{} = Msg) -> clproto_proxyio_translator:from_protobuf(Msg);
 
 
 %% PROVIDER RPC
@@ -163,7 +154,6 @@ to_protobuf(#status{} = Msg) -> clproto_common_translator:to_protobuf(Msg);
 to_protobuf(#file_block{} = Msg) -> clproto_common_translator:to_protobuf(Msg);
 to_protobuf(#file_renamed_entry{} = Msg) -> clproto_common_translator:to_protobuf(Msg);
 to_protobuf(#ip_and_port{} = Msg) -> clproto_common_translator:to_protobuf(Msg);
-to_protobuf(#dir{} = Msg) -> clproto_common_translator:to_protobuf(Msg);
 
 
 %% EVENT
@@ -224,16 +214,10 @@ to_protobuf(#end_of_message_stream{} = Msg) -> clproto_connection_translator:to_
 to_protobuf(#close_session{} = Msg) -> clproto_connection_translator:to_protobuf(Msg);
 
 %% FUSE
-to_protobuf(#fuse_request{} = Msg) -> clproto_fuse_translator:to_protobuf(Msg);
 to_protobuf(#fuse_response{} = Msg) -> clproto_fuse_translator:to_protobuf(Msg);
-to_protobuf(#resolve_guid{} = Msg) -> clproto_fuse_translator:to_protobuf(Msg);
-to_protobuf(#get_helper_params{} = Msg) -> clproto_fuse_translator:to_protobuf(Msg);
-to_protobuf(#get_fs_stats{} = Msg) -> clproto_fuse_translator:to_protobuf(Msg);
 
 
 %% PROXYIO
-to_protobuf(#proxyio_request{} = Msg) -> clproto_proxyio_translator:to_protobuf(Msg);
-to_protobuf(#byte_sequence{} = Msg) -> clproto_proxyio_translator:to_protobuf(Msg);
 to_protobuf(#proxyio_response{} = Msg) -> clproto_proxyio_translator:to_protobuf(Msg);
 
 

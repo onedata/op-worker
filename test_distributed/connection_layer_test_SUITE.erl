@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -684,15 +684,12 @@ prolong_msg_routing(Workers) ->
 
 
 create_resolve_guid_req(Path) ->
-    {ok, FuseReq} = clproto_serializer:serialize_client_message(#client_message{
-        message_id = #message_id{id = crypto:strong_rand_bytes(5)},
-        message_body = #fuse_request{
-            fuse_request = #resolve_guid{
-                path = Path
-            }
-        }
-    }, true),
-    FuseReq.
+    messages:encode_msg(#'ClientMessage'{
+        message_id = crypto:strong_rand_bytes(5),
+        message_body = {fuse_request, #'FuseRequest'{
+            fuse_request = {resolve_guid, #'ResolveGuid'{path = Path}}
+        }}
+    }).
 
 
 send_msg(Node, SessionId, Msg) ->

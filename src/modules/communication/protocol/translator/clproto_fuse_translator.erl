@@ -1,12 +1,15 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module handling translations between protobuf and internal protocol.
+%%% op-worker is the server of these messages, so requests are translated
+%%% only from protobuf and responses only to protobuf. FileAttr and
+%%% FileLocation are also decoded, as parts of the events a client may send.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_fuse_translator).
@@ -74,27 +77,6 @@ from_protobuf(#'VerifyStorageTestFile'{
         file_id = FId,
         file_content = FContent
     };
-from_protobuf(#'FuseResponse'{
-    status = Status,
-    fuse_response = {_, FuseResponse}
-}) ->
-    #fuse_response{
-        status = clproto_common_translator:from_protobuf(Status),
-        fuse_response = from_protobuf(FuseResponse)
-    };
-from_protobuf(#'FuseResponse'{status = Status}) ->
-    #fuse_response{
-        status = clproto_common_translator:from_protobuf(Status),
-        fuse_response = undefined
-    };
-from_protobuf(#'ChildLink'{
-    uuid = FileGuid,
-    name = Name
-}) ->
-    #child_link{
-        guid = FileGuid,
-        name = Name
-    };
 from_protobuf(#'FileAttr'{} = FileAttr) ->
     Xattrs = lists:foldl(fun(Xattr, Acc) ->
         #xattr{name = Name, value = Value} = from_protobuf(Xattr),
@@ -129,26 +111,6 @@ from_protobuf(#'Xattr'{
         name = Name,
         value = json_utils:decode(Value)
     };
-from_protobuf(#'XattrList'{names = Names}) ->
-    #xattr_list{names = Names};
-from_protobuf(#'FileChildren'{
-    child_links = FileEntries,
-    index_token = Token,
-    is_last = _IsLast
-}) ->
-    #file_children{
-        child_links = [from_protobuf(E) || E <- FileEntries],
-        pagination_token = file_listing:decode_pagination_token(Token)
-    };
-from_protobuf(#'FileChildrenAttrs'{
-    child_attrs = Children,
-    index_token = Token,
-    is_last = _IsLast
-}) ->
-    #file_children_attrs{
-        child_attrs = [from_protobuf(E) || E <- Children],
-        pagination_token = file_listing:decode_pagination_token(Token)
-    };
 from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
         uuid = file_id:guid_to_uuid(Record#'FileLocation'.uuid),
@@ -160,104 +122,6 @@ from_protobuf(#'FileLocation'{} = Record) ->
             fun(#'FileBlock'{offset = Offset, size = Size}) ->
                 #file_block{offset = Offset, size = Size}
             end, Record#'FileLocation'.blocks)
-    };
-from_protobuf(#'FileLocationChanged'{
-    file_location = FileLocation,
-    change_beg_offset = O,
-    change_end_offset = S
-}) ->
-    #file_location_changed{
-        file_location = from_protobuf(FileLocation),
-        change_beg_offset = O,
-        change_end_offset = S
-    };
-from_protobuf(#'HelperParams'{
-    helper_name = HelperName,
-    helper_args = HelpersArgs
-}) ->
-    #helper_params{
-        helper_name = HelperName,
-        helper_args = [from_protobuf(Arg) || Arg <- HelpersArgs]
-    };
-from_protobuf(#'HelperArg'{
-    key = Key,
-    value = Value
-}) ->
-    #helper_arg{
-        key = Key,
-        value = Value
-    };
-from_protobuf(#'FSStats'{
-    space_id = SpaceId,
-    storage_stats = StorageStats
-}) ->
-    #fs_stats{
-        space_id = SpaceId,
-        storage_stats = [from_protobuf(Arg) || Arg <- StorageStats]
-    };
-from_protobuf(#'StorageStats'{
-    storage_id = StorageId,
-    size = Size,
-    occupied = Occupied
-}) ->
-    #storage_stats{
-        storage_id = StorageId,
-        size = Size,
-        occupied = Occupied
-    };
-from_protobuf(#'SyncResponse'{
-    checksum = Checksum,
-    file_location_changed = FileLocationChanged
-}) ->
-    #sync_response{
-        checksum = Checksum,
-        file_location_changed = from_protobuf(FileLocationChanged)
-    };
-from_protobuf(#'FileCreated'{
-    handle_id = HandleId,
-    file_attr = FileAttr,
-    file_location = FileLocation
-}) ->
-    #file_created{
-        handle_id = HandleId,
-        file_attr = from_protobuf(FileAttr),
-        file_location = from_protobuf(FileLocation)
-    };
-from_protobuf(#'FileOpened'{
-    handle_id = HandleId
-}) ->
-    #file_opened{
-        handle_id = HandleId
-    };
-from_protobuf(#'Symlink'{
-    link = Link
-}) ->
-    #symlink{
-        link = Link
-    };
-from_protobuf(#'FileOpenedExtended'{
-    handle_id = HandleId,
-    provider_id = ProviderId,
-    file_id = FileId,
-    storage_id = StorageId
-}) ->
-    #file_opened_extended{
-        handle_id = HandleId,
-        provider_id = ProviderId,
-        file_id = FileId,
-        storage_id = StorageId
-    };
-from_protobuf(#'FileRenamed'{
-    new_uuid = NewGuid,
-    child_entries = ChildEntries
-}) ->
-    #file_renamed{
-        new_guid = NewGuid,
-        child_entries = [from_protobuf(E) || E <- ChildEntries]
-    };
-from_protobuf(#'Uuid'{uuid = Guid}) ->
-    #guid{
-        guid = Guid
     };
 from_protobuf(#'FSync'{
     data_only = DataOnly,
@@ -274,9 +138,6 @@ from_protobuf(#'FileRequest'{} = Msg) -> clproto_file_req_translator:from_protob
 
 %% MULTIPART UPLOAD
 from_protobuf(#'MultipartUploadRequest'{} = Msg) -> clproto_multipart_upload_translator:from_protobuf(Msg);
-from_protobuf(#'MultipartParts'{} = Msg) -> clproto_multipart_upload_translator:from_protobuf(Msg);
-from_protobuf(#'MultipartUpload'{} = Msg) -> clproto_multipart_upload_translator:from_protobuf(Msg);
-from_protobuf(#'MultipartUploads'{} = Msg) -> clproto_multipart_upload_translator:from_protobuf(Msg);
 
 %% OTHER
 from_protobuf(undefined) -> undefined;
@@ -284,30 +145,6 @@ from_protobuf(Other) -> clproto_common_translator:from_protobuf(Other).
 
 
 -spec to_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
-to_protobuf(#fuse_request{
-    fuse_request = Record
-}) ->
-    {fuse_request, #'FuseRequest'{
-        fuse_request = to_protobuf(Record)}
-    };
-to_protobuf(#resolve_guid{path = Path}) ->
-    {resolve_guid, #'ResolveGuid'{path = Path}};
-to_protobuf(#get_helper_params{
-    storage_id = StorageId,
-    space_id = SpaceId,
-    helper_mode = HelperMode
-}) ->
-    {get_helper_params, #'GetHelperParams'{
-        storage_id = StorageId,
-        space_id = SpaceId,
-        helper_mode = HelperMode
-    }};
-to_protobuf(#get_fs_stats{
-    file_id = FileGuid
-}) ->
-    {get_fs_stats, #'GetFSStats'{
-        file_id = FileGuid
-    }};
 to_protobuf(#fuse_response{
     status = Status,
     fuse_response = FuseResponse
@@ -537,12 +374,7 @@ to_protobuf(#file_recursive_listing_result{
     }};
 
 
-%% FILE REQUEST
-to_protobuf(#file_request{} = Msg) -> clproto_file_req_translator:to_protobuf(Msg);
-
-
 %% MULTIPART UPLOAD
-to_protobuf(#multipart_upload_request{} = Msg) -> clproto_multipart_upload_translator:to_protobuf(Msg);
 to_protobuf(#multipart_parts{} = Msg) -> clproto_multipart_upload_translator:to_protobuf(Msg);
 to_protobuf(#multipart_upload{} = Msg) -> clproto_multipart_upload_translator:to_protobuf(Msg);
 to_protobuf(#multipart_uploads{} = Msg) -> clproto_multipart_upload_translator:to_protobuf(Msg);
