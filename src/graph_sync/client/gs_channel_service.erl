@@ -1,0 +1,414 @@
+%%%-------------------------------------------------------------------
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Internal (persistent) service that maintains an open GraphSync channel
+%%% to Onezone. The internal service interface is used in a non-standard way -
+%%% this service does not depend on the start_function and manages GS channel
+%%% restarts by itself. Healthchecks are essentially used to periodically run
+%%% the logic that checks the connection and restarts it as needed.
+%%% In case of the channel crash, the connection will be down until the next
+%%% healthcheck. The healthchecks are done in short intervals, unless there are
+%%% persistent problems with connection - in such case, backoff is applied.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(gs_channel_service).
+-feature(maybe_expr, enable).
+-compile({feature, maybe_expr, enable}).
+-author("Lukasz Opiola").
+
+
+-include("graph_sync/provider_graph_sync.hrl").
+-include("http/gui_paths.hrl").
+-include_lib("ctool/include/onedata.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+%% API
+-export([setup_internal_service/0]).
+-export([terminate_internal_service/0]).
+-export([is_connected_and_initialized/0]).
+-export([force_start_connection/0, force_terminate_connection/0, force_restart_connection/0]).
+-export([trigger_pending_on_connect_to_oz_procedures/0]).
+
+%% Internal Service callbacks
+-export([start_service/0, stop_service/0, takeover_service/0, healthcheck/1]).
+
+%% By default, the channel waits for the node's clock to be synchronized, which
+%% is done by Onepanel. During that time, no connection is attempted. If
+%% needed, this mechanism can be turned off using this env variable.
+-define(REQUIRE_CLOCK_SYNC_FOR_CONNECTION, application:get_env(
+    ?APP_NAME, graph_sync_require_clock_sync_for_connection, true
+)).
+
+-define(THROTTLE_LOG(Log), utils:throttle(?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() -> Log end)).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Registers the GS channel service in the internal services manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec setup_internal_service() -> ok.
+setup_internal_service() ->
+    ok = internal_services_manager:start_service(?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME, #{
+        start_function => start_service,
+        stop_function => stop_service,
+        takeover_function => takeover_service,
+        healthcheck_fun => healthcheck,
+        healthcheck_interval => ?GS_RECONNECT_BASE_INTERVAL,
+        async_start => true
+    }).
+
+
+-spec terminate_internal_service() -> ok.
+terminate_internal_service() ->
+    case node() =:= responsible_node() of
+        true ->
+            try
+                ok = internal_services_manager:stop_service(?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME)
+            catch Class:Reason:Stacktrace ->
+                ?error_exception(Class, Reason, Stacktrace)
+            end;
+        false ->
+            ok
+    end.
+
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Intended as a check from an external process perspective to determine that
+%% the GS channel is ready to take requests, which requires proper setup
+%% (@see gs_client_worker -> main doc).
+%% @end
+%%--------------------------------------------------------------------
+-spec is_connected_and_initialized() -> boolean().
+is_connected_and_initialized() ->
+    is_connected() andalso not safe_mode:should_enforce_for_pid(self()).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Immediately triggers Onezone connection attempt (if applicable).
+%% Returns boolean indicating if the connection is active after this operation.
+%% @end
+%%--------------------------------------------------------------------
+-spec force_start_connection() -> boolean().
+force_start_connection() ->
+    case {oneprovider:is_registered(), is_connected()} of
+        {false, _} ->
+            ?warning("Ignoring attempt to force start Onezone connection - Oneprovider is not registered"),
+            false;
+        {true, true} ->
+            ?info("Ignoring attempt to force start Onezone connection - already started"),
+            true;
+        {true, false} ->
+            ResponsibleNode = responsible_node(),
+            case node() of
+                ResponsibleNode ->
+                    ?info("Attempting to start Onezone connection (forced)..."),
+                    case try_to_start_connection() of
+                        ok ->
+                            internal_services_manager:reschedule_healthcheck(
+                                ?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME,
+                                ?GS_RECONNECT_BASE_INTERVAL
+                            ),
+                            case gs_client_worker:await_enabled_for_any_pid() of
+                                ok -> true;
+                                error -> false
+                            end;
+                        error ->
+                            false
+                    end;
+                _OtherNode ->
+                    ?info("Attempting to start Onezone connection at node ~tp (forced)...", [
+                        ResponsibleNode
+                    ]),
+                    rpc:call(ResponsibleNode, ?MODULE, force_start_connection, [])
+            end
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Terminates existing Onezone connection (if any).
+%% @end
+%%--------------------------------------------------------------------
+-spec force_terminate_connection() -> ok | not_started.
+force_terminate_connection() ->
+    gs_client_worker:force_terminate().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Terminates existing Onezone connection (if any).
+%% @end
+%%--------------------------------------------------------------------
+-spec force_restart_connection() -> boolean().
+force_restart_connection() ->
+    force_terminate_connection(),
+    force_start_connection().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback for when the cluster is initialized and it is possible to run the
+%% deferred on-connect procedures. They are not run during the first Onezone
+%% connection as it is established before the upgrade_cluster step and
+%% initialization of all workers (which are required for them to work).
+%% @end
+%%--------------------------------------------------------------------
+-spec trigger_pending_on_connect_to_oz_procedures() -> ok.
+trigger_pending_on_connect_to_oz_procedures() ->
+    case node() == responsible_node() of
+        true ->
+            % the dedicated GS node will report being fully initialized when the
+            % procedures are run successfully
+            is_connected() andalso run_on_connect_to_oz_procedures(),
+            ok;
+        false ->
+            % nodes that do not host the GS channel are considered initialized already
+            safe_mode:report_node_initialized()
+    end.
+
+%%%===================================================================
+%%% Internal services API
+%%%===================================================================
+
+-spec start_service() -> ok.
+start_service() ->
+    ok. % the GS channel will be started upon the first healthcheck
+
+
+-spec stop_service() -> ok | no_return().
+stop_service() ->
+    force_terminate_connection(),
+    ok.
+
+
+-spec takeover_service() -> ok.
+takeover_service() ->
+    gs_hooks:handle_disconnected_from_oz(),
+    start_service().
+
+
+-spec healthcheck(time:millis()) -> {ok, time:millis()}.
+healthcheck(LastInterval) ->
+    case {oneprovider:is_registered(), is_connected()} of
+        {false, _} ->
+            ?debug("Skipping Onezone connection as the provider is not registered"),
+            {ok, calculate_backoff(LastInterval)};
+        {true, true} ->
+            % run the hook only if the node is already set up; as the healthcheck is repeated
+            % often, the hook will be executed in due time
+            case node_manager:is_cluster_healthy() of
+                false ->
+                    ok;
+                true ->
+                    safe_mode:whitelist_pid(self()),
+                    gs_hooks:handle_healthcheck_success()
+            end,
+            {ok, ?GS_RECONNECT_BASE_INTERVAL};
+        {true, false} ->
+            case try_to_start_connection() of
+                ok ->
+                    {ok, ?GS_RECONNECT_BASE_INTERVAL};
+                error ->
+                    % specific errors are already logged
+                    {ok, calculate_backoff(LastInterval)}
+            end
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec calculate_backoff(time:millis()) -> time:millis().
+calculate_backoff(LastInterval) ->
+    min(?GS_RECONNECT_MAX_BACKOFF, round(LastInterval * ?GS_RECONNECT_BACKOFF_RATE)).
+
+
+%% @private
+-spec responsible_node() -> node().
+responsible_node() ->
+    internal_services_manager:get_processing_node(?GS_CHANNEL_SERVICE_NAME).
+
+
+%% @private
+-spec try_to_start_connection() -> ok | error.
+try_to_start_connection() ->
+    maybe
+        ok ?= check_connection_prerequisites(),
+        ok ?= start_gs_client_worker()
+    end.
+
+
+%% @private
+-spec check_connection_prerequisites() -> ok | error.
+check_connection_prerequisites() ->
+    case check_compatibility_with_onezone() of
+        false ->
+            error;
+        true ->
+            case is_clock_sync_satisfied() of
+                true ->
+                    ok;
+                false ->
+                    ?debug("Deferring Onezone connection as the clock has not been yet synchronized with Onepanel"),
+                    ?THROTTLE_LOG(?info(
+                        "Deferring Onezone connection as the clock has not been yet "
+                        "synchronized with Onepanel (see op_panel logs for details)"
+                    )),
+                    error
+            end
+    end.
+
+
+%% @private
+-spec start_gs_client_worker() -> ok | error.
+start_gs_client_worker() ->
+    case gs_client_worker:start() of
+        ok ->
+            % The on connection procedures require an initialized cluster,
+            % but the connection may be established before in order to perform an upgrade.
+            % In such a case, the procedures are deferred and will be called later:
+            % @see trigger_pending_on_connect_to_oz_procedures/0
+            case node_manager:is_cluster_healthy() of
+                false ->
+                    ?info("Deferring on-connect-to-oz procedures as the cluster is not initialized yet");
+                true ->
+                    run_on_connect_to_oz_procedures()
+            end;
+        already_started ->
+            ok;
+        error ->
+            error
+    end.
+
+
+%% @private
+-spec run_on_connect_to_oz_procedures() -> ok | error.
+run_on_connect_to_oz_procedures() ->
+    % GS connection starts in safe mode and must be enabled explicitly; this makes sure other processes
+    % don't start using GS before basic setup is performed (which initializes caches etc)
+    safe_mode:whitelist_pid(self()),
+    gs_client_worker:enable_cache(),
+    case gs_hooks:handle_connected_to_oz() of
+        ok ->
+            % after the first setup, the GS channel can be used by any process, even in case of disconnects
+            safe_mode:report_node_initialized(),
+            ok;
+        error ->
+            % kill the connection, which will cause a retry during the next healthcheck
+            force_terminate_connection(),
+            error
+    end.
+
+
+%% @private
+-spec is_clock_sync_satisfied() -> boolean().
+is_clock_sync_satisfied() ->
+    case global_clock:is_synchronized() of
+        true ->
+            true;
+        false ->
+            case ?REQUIRE_CLOCK_SYNC_FOR_CONNECTION of
+                false ->
+                    ?THROTTLE_LOG(?notice(
+                        "Ignoring unsynchronized clock for Onezone GS connection (forced in config)"
+                    )),
+                    true;
+                _ ->
+                    false
+            end
+    end.
+
+
+%% @private
+-spec check_compatibility_with_onezone() -> boolean().
+check_compatibility_with_onezone() ->
+    case provider_logic:get_service_configuration(onezone) of
+        {ok, OzConfiguration} ->
+            Resolver = compatibility:build_resolver(consistent_hashing:get_all_nodes(), oneprovider:trusted_ca_certs()),
+            check_for_compatibility_registry_updates(Resolver, OzConfiguration),
+            OzVersion = maps:get(<<"version">>, OzConfiguration, <<"unknown">>),
+            OpVersion = op_worker:get_release_version(),
+            case compatibility:check_products_compatibility(Resolver, ?ONEPROVIDER, OpVersion, ?ONEZONE, OzVersion) of
+                true ->
+                    true;
+                {false, CompOzVersions} ->
+                    ?THROTTLE_LOG(?critical(
+                        "This Oneprovider is not compatible with its Onezone service.~n"
+                        "Oneprovider version: ~ts, supports zones: ~ts~n"
+                        "Onezone version: ~ts~n"
+                        "The service will not be operational until the problem is resolved "
+                        "(may require Oneprovider / Onezone upgrade or compatibility registry refresh).", [
+                            OpVersion, str_utils:join_binary(CompOzVersions, <<", ">>), OzVersion
+                        ])),
+                    false;
+                {error, Error} ->
+                    ?THROTTLE_LOG(?critical(
+                        "Cannot check Oneprovider's compatibility due to ~tp~n."
+                        "The service will not be operational until the problem is resolved.", [
+                            {error, Error}
+                        ])),
+                    false
+            end;
+        {error, {bad_response, Code, ResponseBody}} ->
+            ?THROTTLE_LOG(?critical(
+                "Failure while checking Onezone version. "
+                "The service will not be operational until the problem is resolved.~n"
+                "HTTP response: ~B ~ts", [
+                    Code, ResponseBody
+                ])),
+            false;
+        {error, _} = LastError ->
+            ?THROTTLE_LOG(?warning(?autoformat_with_msg(
+                "Onezone is not reachable (~ts), is the service online? Retrying as long as it takes...",
+                [oneprovider:get_oz_domain()],
+                LastError
+            ))),
+            false
+    end.
+
+
+%% @private
+-spec check_for_compatibility_registry_updates(compatibility:resolver(), json_utils:json_term()) -> ok.
+check_for_compatibility_registry_updates(Resolver, OzConfiguration) ->
+    case maps:get(<<"compatibilityRegistryRevision">>, OzConfiguration, <<"unknown">>) of
+        RemoteRevision when is_integer(RemoteRevision) ->
+            LocalRevision = case compatibility:peek_current_registry_revision(Resolver) of
+                {ok, R} -> R;
+                _ -> 0
+            end,
+            case RemoteRevision > LocalRevision of
+                true ->
+                    compatibility:check_for_updates(
+                        Resolver, [oneprovider:get_oz_url(?ZONE_COMPATIBILITY_REGISTRY_PATH)]
+                    );
+                false ->
+                    ?debug(
+                        "Local compatibility registry (v. ~B) is not older than Onezone's (v. ~B)",
+                        [LocalRevision, RemoteRevision]
+                    )
+            end;
+        Other ->
+            ?THROTTLE_LOG(?warning(
+                "Cannot check Onezone's compatibility registry revision - got '~w'", [Other]
+            ))
+    end.
+
+
+%% @private
+-spec is_connected() -> boolean().
+is_connected() ->
+    gs_client_worker:is_connected().

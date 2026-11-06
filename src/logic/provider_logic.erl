@@ -17,44 +17,49 @@
 -module(provider_logic).
 -author("Lukasz Opiola").
 
+-include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("http/gui_paths.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
--export([get/0, get/1, get/2, get_protected_data/2]).
--export([get_as_map/0]).
--export([to_string/1]).
+-export([get/0, get/1, get/2, get_protected_data/2, get_protected_data/3]).
+-export([force_fetch/0]).
+-export([to_printable/1]).
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
--export([has_eff_user/2, has_eff_user/3]).
--export([support_space/2, support_space/3]).
--export([update_space_support_size/2]).
--export([supports_space/1, supports_space/2, supports_space/3]).
+-export([get_eff_users/0]).
+-export([get_storages/0, get_storages/1]).
+-export([has_storage/1]).
+-export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
+-export([supports_space/1]).
 -export([get_support_size/1]).
--export([map_idp_group_to_onedata/2]).
+-export([map_idp_user_to_onedata/2, map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
--export([set_domain/1, set_delegated_subdomain/1]).
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
--export([update_subdomain_delegation_ips/0]).
+-export([update_domain_config/1]).
+-export([update_txt_records/1]).
 -export([get_nodes/1, get_nodes/2]).
 -export([get_rtransfer_port/1]).
--export([set_txt_record/3, remove_txt_record/1]).
--export([zone_time_seconds/0]).
 -export([zone_get_offline_access_idps/0]).
--export([fetch_compatibility_config/1]).
--export([assert_zone_compatibility/0]).
+-export([get_service_configuration/1, get_peer_version/1]).
 -export([provider_connection_ssl_opts/1]).
--export([assert_provider_compatibility/3]).
--export([verify_provider_identity/1, verify_provider_identity/2]).
--export([verify_provider_nonce/2]).
+-export([assert_provider_compatibility/1]).
+-export([verify_provider_identity/1]).
 
--define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
 
+-define(SERVICE_CONFIGURATION_CACHE_TTL_SEC, 15).
+-define(PROVIDER_NODES_CACHE_TTL_SEC,
+    op_worker:get_env(provider_nodes_cache_ttl_seconds, 600) % 10 minutes
+).
+
+-compile([{no_auto_import, [get/0]}]).
 
 %%%===================================================================
 %%% API
@@ -66,7 +71,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get() ->
-    {ok, od_provider:doc()} | gs_protocol:error().
+    {ok, od_provider:doc()} | errors:error().
 get() ->
     get(?ROOT_SESS_ID, ?SELF).
 
@@ -76,7 +81,7 @@ get() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(od_provider:id()) ->
-    {ok, od_provider:doc()} | gs_protocol:error().
+    {ok, od_provider:doc()} | errors:error().
 get(ProviderId) ->
     get(?ROOT_SESS_ID, ProviderId).
 
@@ -86,10 +91,10 @@ get(ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_provider:id()) ->
-    {ok, od_provider:doc()} | gs_protocol:error().
+    {ok, od_provider:doc()} | errors:error().
 get(SessionId, ?SELF) ->
     case oneprovider:get_id_or_undefined() of
-        undefined -> ?ERROR_UNREGISTERED_PROVIDER;
+        undefined -> ?ERR_UNREGISTERED_ONEPROVIDER(?err_ctx());
         ProviderId -> get(SessionId, ProviderId)
     end;
 get(SessionId, ProviderId) ->
@@ -99,17 +104,16 @@ get(SessionId, ProviderId) ->
         subscribe = true
     }).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves provider doc restricted to protected data by given ProviderId.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_protected_data(gs_client_worker:client(), od_provider:id()) ->
-    {ok, od_provider:doc()} | gs_protocol:error().
+    {ok, od_provider:doc()} | errors:error().
 get_protected_data(SessionId, ?SELF) ->
     case oneprovider:get_id_or_undefined() of
-        undefined -> ?ERROR_UNREGISTERED_PROVIDER;
+        undefined -> ?ERR_UNREGISTERED_ONEPROVIDER(?err_ctx());
         ProviderId -> get_protected_data(SessionId, ProviderId)
     end;
 get_protected_data(SessionId, ProviderId) ->
@@ -120,35 +124,33 @@ get_protected_data(SessionId, ProviderId) ->
     }).
 
 
--spec to_string(od_provider:id()) -> string().
-to_string(ProviderId) ->
-    case provider_logic:get_name(ProviderId) of
-        {ok, Name} -> str_utils:format("'~ts' (~s)", [Name, ProviderId]);
-        _ -> str_utils:format("'~s' (name unknown)", [ProviderId])
-    end.
-
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns current provider's data in a map.
-%% Useful for RPC calls from onepanel where od_provider record is not defined.
+%% Retrieves provider doc restricted to protected data by given ProviderId
+%% using specified AuthHint.
 %% @end
 %%--------------------------------------------------------------------
--spec get_as_map() -> {ok, map()} | gs_protocol:error().
-get_as_map() ->
-    case ?MODULE:get() of
-        {ok, #document{key = Id, value = Record}} ->
-            {ok, #{
-                id => Id,
-                name => Record#od_provider.name,
-                admin_email => Record#od_provider.admin_email,
-                subdomain_delegation => Record#od_provider.subdomain_delegation,
-                domain => Record#od_provider.domain,
-                subdomain => Record#od_provider.subdomain,
-                longitude => Record#od_provider.longitude,
-                latitude => Record#od_provider.latitude
-            }};
-        Error -> Error
+-spec get_protected_data(gs_client_worker:client(), od_provider:id(),
+    gs_protocol:auth_hint()) -> {ok, od_provider:doc()} | errors:error().
+get_protected_data(SessionId, ProviderId, AuthHint) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_provider, id = ProviderId, aspect = instance, scope = protected},
+        auth_hint = AuthHint,
+        subscribe = true
+    }).
+
+
+-spec force_fetch() -> {ok, od_provider:doc()}.
+force_fetch() ->
+    gs_client_worker:force_fetch_entity(#gri{type = od_provider, id = oneprovider:get_id(), aspect = instance}).
+
+
+-spec to_printable(od_provider:id()) -> string().
+to_printable(ProviderId) ->
+    case provider_logic:get_name(ProviderId) of
+        {ok, Name} -> str_utils:format("'~ts' (~ts)", [Name, ProviderId]);
+        _ -> str_utils:format("'~ts' (name unknown)", [ProviderId])
     end.
 
 
@@ -158,7 +160,7 @@ get_as_map() ->
 %% Supports updating name, latitude, longitude and adminEmail.
 %% @end
 %%--------------------------------------------------------------------
--spec update(Data :: #{binary() => term()}) -> ok | gs_protocol:error().
+-spec update(Data :: #{binary() => term()}) -> ok | errors:error().
 update(Data) ->
     update(?ROOT_SESS_ID, Data).
 
@@ -169,14 +171,14 @@ update(Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update(SessionId :: gs_client_worker:client(),
-    Data :: #{binary() => term()}) -> ok | gs_protocol:error().
+    Data :: #{binary() => term()}) -> ok | errors:error().
 update(SessionId, Data) ->
     Result = gs_client_worker:request(SessionId, #gs_req_graph{
         operation = update, data = Data,
         gri = #gri{type = od_provider, id = ?SELF, aspect = instance}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+        provider_logic:force_fetch()
     end).
 
 
@@ -185,7 +187,7 @@ update(SessionId, Data) ->
 %% Retrieves provider name of this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_name() -> {ok, od_provider:name()} | gs_protocol:error().
+-spec get_name() -> {ok, od_provider:name()} | errors:error().
 get_name() ->
     get_name(?ROOT_SESS_ID, ?SELF).
 
@@ -195,7 +197,7 @@ get_name() ->
 %% Retrieves provider name by given ProviderId using current provider's auth.
 %% @end
 %%--------------------------------------------------------------------
--spec get_name(od_provider:id()) -> {ok, od_provider:name()} | gs_protocol:error().
+-spec get_name(od_provider:id()) -> {ok, od_provider:name()} | errors:error().
 get_name(ProviderId) ->
     get_name(?ROOT_SESS_ID, ProviderId).
 
@@ -206,7 +208,7 @@ get_name(ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_name(gs_client_worker:client(), od_provider:id()) ->
-    {ok, od_provider:name()} | gs_protocol:error().
+    {ok, od_provider:name()} | errors:error().
 get_name(SessionId, ProviderId) ->
     case get_protected_data(SessionId, ProviderId) of
         {ok, #document{value = #od_provider{name = Name}}} ->
@@ -221,7 +223,7 @@ get_name(SessionId, ProviderId) ->
 %% Retrieves spaces of this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_spaces() -> {ok, [od_space:id()]} | gs_protocol:error().
+-spec get_spaces() -> {ok, [od_space:id()]} | errors:error().
 get_spaces() ->
     get_spaces(?ROOT_SESS_ID, ?SELF).
 
@@ -231,10 +233,17 @@ get_spaces() ->
 %% Retrieves spaces of provider by given ProviderId using current provider's auth.
 %% @end
 %%--------------------------------------------------------------------
--spec get_spaces(od_provider:id()) -> {ok, [od_space:id()]} | gs_protocol:error().
+-spec get_spaces(od_provider:id()) -> {ok, [od_space:id()]} | errors:error().
 get_spaces(ProviderId) ->
     get_spaces(?ROOT_SESS_ID, ProviderId).
 
+
+-spec get_eff_users() -> {ok, [od_user:id()]} | errors:error().
+get_eff_users() ->
+    case get() of
+        {ok, #document{value = #od_provider{eff_users = EffUsers}}} -> {ok, EffUsers};
+        {error, _} = Error -> Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -242,20 +251,55 @@ get_spaces(ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_spaces(gs_client_worker:client(), od_provider:id()) ->
-    {ok, [od_space:id()]} | gs_protocol:error().
+    {ok, [od_space:id()]} | errors:error().
 get_spaces(SessionId, ProviderId) ->
     case get(SessionId, ProviderId) of
-        {ok, #document{value = #od_provider{spaces = Spaces}}} ->
+        {ok, #document{value = #od_provider{eff_spaces = Spaces}}} ->
             {ok, maps:keys(Spaces)};
         {error, _} = Error ->
             Error
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves storage_ids of this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storages() -> {ok, [storage:id()]} | errors:error().
+get_storages() ->
+    get_storages(?SELF).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves storage_ids of provider by given ProviderId using current provider's auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storages(od_provider:id()) -> {ok, [storage:id()]} | errors:error().
+get_storages(ProviderId) ->
+    case get(?ROOT_SESS_ID, ProviderId) of
+        {ok, #document{value = #od_provider{storages = Storages}}} ->
+            {ok, Storages};
+        {error, _} = Error ->
+            Error
+    end.
+
+-spec has_storage(storage:id()) -> boolean().
+has_storage(StorageId) ->
+    case get_storages() of
+        {ok, StorageIds} -> lists:member(StorageId, StorageIds);
+        _ -> false
+    end.
+
+
+-spec has_eff_user(od_user:id()) -> boolean().
+has_eff_user(UserId) ->
+    has_eff_user(?ROOT_SESS_ID, ?SELF, UserId).
+
 -spec has_eff_user(od_provider:doc(), od_user:id()) -> boolean().
 has_eff_user(#document{value = #od_provider{eff_users = EffUsers}}, UserId) ->
     lists:member(UserId, EffUsers).
-
 
 -spec has_eff_user(gs_client_worker:client(), od_provider:id(), od_user:id()) ->
     boolean().
@@ -267,59 +311,17 @@ has_eff_user(SessionId, ProviderId, UserId) ->
             false
     end.
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Supports a space based on support_space_token and support size.
-%% @end
-%%--------------------------------------------------------------------
--spec support_space(Token :: token:id() | macaroon:macaroon(), SupportSize :: integer()) ->
-    {ok, od_space:id()} | gs_protocol:error().
-support_space(Token, SupportSize) ->
-    support_space(?ROOT_SESS_ID, Token, SupportSize).
-
--spec support_space(SessionId :: gs_client_worker:client(),
-    Token :: binary() | macaroon:macaroon(), SupportSize :: integer()) ->
-    {ok, od_space:id()} | gs_protocol:error().
-support_space(SessionId, Token, SupportSize) ->
-    Data = #{<<"token">> => Token, <<"size">> => SupportSize},
-    Result = gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_provider, id = ?SELF, aspect = support},
-        data = Data
-    }),
-
-    ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
-    end)).
-
-
 -spec supports_space(od_space:id()) -> boolean().
 supports_space(SpaceId) ->
-    supports_space(?ROOT_SESS_ID, ?SELF, SpaceId).
+    % NOTE: this function is the only source of truth regarding local support
+    % (combines all necessary checks)
+    space_logic:is_supported_locally(SpaceId).
 
 
--spec supports_space(od_provider:doc(), od_space:id()) ->
-    boolean().
-supports_space(#document{value = #od_provider{spaces = Spaces}}, SpaceId) ->
-    maps:is_key(SpaceId, Spaces).
-
-
--spec supports_space(gs_client_worker:client(), od_provider:id(), od_space:id()) ->
-    boolean().
-supports_space(SessionId, ProviderId, SpaceId) ->
-    case get(SessionId, ProviderId) of
-        {ok, ProviderDoc = #document{}} ->
-            supports_space(ProviderDoc, SpaceId);
-        _ ->
-            false
-    end.
-
-
--spec get_support_size(od_space:id()) -> {ok, integer()} | gs_protocol:error().
+-spec get_support_size(od_space:id()) -> {ok, integer()} | {error, term()}.
 get_support_size(SpaceId) ->
     case get(?ROOT_SESS_ID, ?SELF) of
-        {ok, #document{value = #od_provider{spaces = #{SpaceId := SupportSize}}}} ->
+        {ok, #document{value = #od_provider{eff_spaces = #{SpaceId := SupportSize}}}} ->
             {ok, SupportSize};
         {ok, #document{value = #od_provider{}}} ->
             ?ERROR_NOT_FOUND;
@@ -330,45 +332,11 @@ get_support_size(SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Changes support size of this provider towards given space,
-%% given that data stored on this provider is not larger than
-%% the intended size.
-%% @end
-%%--------------------------------------------------------------------
--spec update_space_support_size(SpaceId :: od_space:id(), NewSupportSize :: integer()) ->
-    ok | gs_protocol:error().
-update_space_support_size(SpaceId, NewSupportSize) ->
-    OccupiedSize = space_quota:current_size(SpaceId),
-    update_space_support_size(SpaceId, NewSupportSize, OccupiedSize).
-
-
-%% @private
--spec update_space_support_size(SpaceId :: od_space:id(), NewSupportSize :: integer(),
-    CurrentOccupiedSize :: non_neg_integer()) ->
-    ok | gs_protocol:error().
-update_space_support_size(_SpaceId, NewSupportSize, CurrentOccupiedSize)
-    when NewSupportSize < CurrentOccupiedSize ->
-    ?ERROR_BAD_VALUE_TOO_LOW(<<"size">>, CurrentOccupiedSize);
-
-update_space_support_size(SpaceId, NewSupportSize, _CurrentOccupiedSize) ->
-    Data = #{<<"size">> => NewSupportSize},
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = update, data = Data,
-        gri = #gri{type = od_provider, id = ?SELF, aspect = {space, SpaceId}}
-    }),
-    ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId),
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
-    end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Retrieves domain of this provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_domain() ->
-    {ok, od_provider:doc()} | gs_protocol:error().
+    {ok, od_provider:domain()} | errors:error().
 get_domain() ->
     get_domain(?ROOT_SESS_ID, ?SELF).
 
@@ -378,7 +346,7 @@ get_domain() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_domain(od_provider:id()) ->
-    {ok, od_provider:doc()} | gs_protocol:error().
+    {ok, od_provider:domain()} | errors:error().
 get_domain(ProviderId) ->
     get_domain(?ROOT_SESS_ID, ProviderId).
 
@@ -388,7 +356,7 @@ get_domain(ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_domain(gs_client_worker:client(), od_provider:id()) ->
-    {ok, od_provider:domain()} | gs_protocol:error().
+    {ok, od_provider:domain()} | errors:error().
 get_domain(SessionId, ProviderId) ->
     case get_protected_data(SessionId, ProviderId) of
         {ok, #document{value = #od_provider{domain = Domain}}} ->
@@ -406,43 +374,42 @@ get_domain(SessionId, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_nodes(od_provider:id()) -> {ok, [binary()]} | {error, term()}.
 get_nodes(ProviderId) ->
-    ResolveNodes = fun() ->
+    node_cache:acquire({provider_nodes, ProviderId}, fun() ->
         % Call by ?MODULE to allow for CT testing
         case ?MODULE:get_domain(?ROOT_SESS_ID, ProviderId) of
             {ok, Domain} ->
-                {true, get_nodes(ProviderId, Domain), ?PROVIDER_NODES_CACHE_TTL};
+                {ok, get_nodes(ProviderId, Domain), ?PROVIDER_NODES_CACHE_TTL_SEC};
             {error, _} = Error ->
                 Error
         end
-    end,
-    simple_cache:get({provider_nodes, ProviderId}, ResolveNodes).
+    end).
 
 -spec get_nodes(od_provider:id(), od_provider:domain()) -> [binary()].
 get_nodes(ProviderId, Domain) ->
     case inet:parse_ipv4_address(binary_to_list(Domain)) of
         {ok, _} ->
-            ?warning("Provider ~ts is using an IP address instead of domain", [to_string(ProviderId)]),
-            ?info("Resolved 1 node for connection to provider ~ts: ~s", [to_string(ProviderId), Domain]),
+            ?warning("Provider ~ts is using an IP address instead of domain", [to_printable(ProviderId)]),
+            ?info("Resolved 1 node for connection to provider ~ts: ~ts", [to_printable(ProviderId), Domain]),
             [Domain];
         {error, einval} ->
             {ok, IPsAtoms} = inet:getaddrs(binary_to_list(Domain), inet),
             IPs = [list_to_binary(inet:ntoa(IP)) || IP <- IPsAtoms],
             IpsString = str_utils:join_binary(IPs, <<", ">>),
-            ProviderConfig = fetch_service_configuration({oneprovider, Domain, Domain}),
+            ProviderConfig = get_service_configuration({oneprovider, Domain, Domain}),
             ConfigMatches = fun(IP) ->
-                ProviderConfig =:= (catch fetch_service_configuration({oneprovider, Domain, IP}))
+                ProviderConfig =:= (catch get_service_configuration({oneprovider, Domain, IP}))
             end,
             case lists:all(ConfigMatches, IPs) of
                 true ->
-                    ?info("Resolved ~B node(s) for connection to provider ~ts: ~s", [
-                        length(IPs), to_string(ProviderId), IpsString
+                    ?info("Resolved ~B node(s) for connection to provider ~ts: ~ts", [
+                        length(IPs), to_printable(ProviderId), IpsString
                     ]),
                     IPs;
                 false ->
                     ?info(
                         "Falling back to domain '~ts' for connection to provider ~ts as "
-                        "IP addresses failed the connectivity check (~s)", [
-                            Domain, to_string(ProviderId), IpsString
+                        "IP addresses failed the connectivity check (~ts)", [
+                            Domain, to_printable(ProviderId), IpsString
                         ]),
                     [Domain]
             end
@@ -458,17 +425,17 @@ get_nodes(ProviderId, Domain) ->
 get_rtransfer_port(ProviderId) ->
     ResolvePort = fun() ->
         {ok, Domain} = provider_logic:get_domain(ProviderId),
-        Port = case fetch_service_configuration({oneprovider, Domain, Domain}) of
+        Port = case get_service_configuration({oneprovider, Domain, Domain}) of
             {ok, #{<<"rtransferPort">> := RtransferPort}} ->
                 RtransferPort;
             _ ->
-                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p", 
-                    [to_string(ProviderId), ?RTRANSFER_PORT]),
+                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~tp",
+                    [to_printable(ProviderId), ?RTRANSFER_PORT]),
                 ?RTRANSFER_PORT
         end,
-        {true, Port, ?PROVIDER_NODES_CACHE_TTL}
+        {ok, Port, ?PROVIDER_NODES_CACHE_TTL_SEC}
     end,
-    simple_cache:get({rtransfer_port, ProviderId}, ResolvePort).
+    node_cache:acquire({rtransfer_port, ProviderId}, ResolvePort).
 
 
 %%--------------------------------------------------------------------
@@ -478,7 +445,7 @@ get_rtransfer_port(ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_subdomain_delegated() ->
-    {true, binary()} | false | gs_protocol:error().
+    {true, binary()} | false | errors:error().
 is_subdomain_delegated() ->
     case ?MODULE:get() of
         {ok, #document{value = #od_provider{
@@ -497,52 +464,13 @@ is_subdomain_delegated() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets onezone subdomain pointing to this provider.
-%% @end
-%%--------------------------------------------------------------------
--spec set_delegated_subdomain(binary()) ->
-    ok | {error, subdomain_exists} | gs_protocol:error().
-set_delegated_subdomain(Subdomain) ->
-    IPs = node_manager:get_cluster_ips(),
-    case set_subdomain_delegation(Subdomain, IPs) of
-        ok ->
-            gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id()),
-            ok;
-        Error ->
-            Error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% If subdomain delegation is on, updates ips of this provider in dns state.
-%% @end
-%%--------------------------------------------------------------------
--spec update_subdomain_delegation_ips() -> ok | error.
-update_subdomain_delegation_ips() ->
-    try
-        case is_subdomain_delegated() of
-            {true, Subdomain} ->
-                IPs = node_manager:get_cluster_ips(),
-                ok = set_subdomain_delegation(Subdomain, IPs);
-            false ->
-                ok
-        end
-    catch Type:Message ->
-        ?error("Error updating provider IPs: ~p:~p", [Type, Message]),
-        error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Retrieves IPs of this provider as known to Onezone DNS.
 %% Returns the atom 'false' if subdomain delegation is not enabled for this
 %% provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_subdomain_delegation_ips() ->
-    {true, [inet:ip4_address()]} | false | gs_protocol:error().
+    {true, [inet:ip4_address()]} | false | errors:error().
 get_subdomain_delegation_ips() ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
@@ -563,86 +491,46 @@ get_subdomain_delegation_ips() ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets provider domain that is NOT a subdomain of onezone domain.
-%% @end
-%%--------------------------------------------------------------------
--spec set_domain(binary()) -> ok | gs_protocol:error().
-set_domain(Domain) ->
-    Data = #{
-        <<"subdomainDelegation">> => false,
-        <<"domain">> => Domain},
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = update, data = Data,
-        gri = #gri{type = od_provider, id = ?SELF,
-            aspect = domain_config}
-    }),
-    ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
-    end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets TXT type dns record in onezone DNS.
-%% @end
-%%--------------------------------------------------------------------
--spec set_txt_record(Name :: binary(), Content :: binary(),
-    TTL :: non_neg_integer() | undefined) -> ok | no_return().
-set_txt_record(Name, Content, TTL) ->
-    Data = #{<<"content">> => Content},
-    Data2 = case TTL of
-        Number when is_integer(Number) -> Data#{<<"ttl">> => TTL};
-        _ -> Data
-    end,
-    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create, data = Data2,
-        gri = #gri{type = od_provider, id = ?SELF,
-            aspect = {dns_txt_record, Name}}
-    }).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes TXT type dns record in onezone DNS.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_txt_record(Name :: binary()) -> ok | no_return().
-remove_txt_record(Name) ->
-    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = delete,
-        gri = #gri{type = od_provider, id = ?SELF,
-            aspect = {dns_txt_record, Name}}
-    }).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns on subdomain delegation for this provider
-%% and sets its subdomain and ips.
-%% @end
-%%--------------------------------------------------------------------
--spec set_subdomain_delegation(binary(), [inet:ip4_address() | binary()]) ->
-    ok | gs_protocol:error().
-set_subdomain_delegation(Subdomain, IPs) ->
-    IPBinaries = lists:map(fun
-        (IP) when is_binary(IP) -> IP;
-        (IP) when is_tuple(IP) -> list_to_binary(inet:ntoa(IP))
-    end, IPs),
-
-    Data = #{
-        <<"subdomainDelegation">> => true,
-        <<"subdomain">> => Subdomain,
-        <<"ipList">> => IPBinaries},
+-spec update_domain_config(json_utils:json_map()) -> ok | errors:error().
+update_domain_config(Data) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update, data = Data,
         gri = #gri{type = od_provider, id = ?SELF, aspect = domain_config}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+        provider_logic:force_fetch()
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates TXT type dns records in onezone DNS.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_txt_records(map()) -> ok | no_return().
+update_txt_records(Data) ->
+    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update, data = Data,
+        gri = #gri{type = od_provider, id = ?SELF, aspect = dns_txt_records}
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls OZ to learn what's the onedata id of given user from certain IdP.
+%% @end
+%%--------------------------------------------------------------------
+-spec map_idp_user_to_onedata(Idp :: binary(), IdpGroupId :: binary()) ->
+    {ok, od_user:id()} | errors:error().
+map_idp_user_to_onedata(Idp, IdpUserId) ->
+    ?CREATE_RETURN_DATA(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_provider, id = undefined, aspect = map_idp_user},
+        data = #{
+            <<"idp">> => Idp,
+            <<"userId">> => IdpUserId
+        }
+    })).
 
 
 %%--------------------------------------------------------------------
@@ -651,7 +539,7 @@ set_subdomain_delegation(Subdomain, IPs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec map_idp_group_to_onedata(Idp :: binary(), IdpGroupId :: binary()) ->
-    {ok, od_group:id()} | gs_protocol:error().
+    {ok, od_group:id()} | errors:error().
 map_idp_group_to_onedata(Idp, IdpGroupId) ->
     ?CREATE_RETURN_DATA(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
@@ -661,39 +549,6 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
             <<"groupId">> => IdpGroupId
         }
     })).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns current timestamp that is synchronized with the Onezone service.
-%% It has the accuracy of 1 second in most cases, but this might be worse under
-%% very high load. When evaluated on different providers within the same zone
-%% simultaneously, it should yield times at most one second apart from each
-%% other.
-%% @end
-%%--------------------------------------------------------------------
--spec zone_time_seconds() -> non_neg_integer().
-zone_time_seconds() ->
-    TimeMillis = time_utils:remote_timestamp(zone_time_bias, fun() ->
-        Req = #gs_req_graph{
-            operation = get,
-            gri = #gri{type = od_provider, id = undefined, aspect = current_time}
-        },
-        case gs_client_worker:request(?ROOT_SESS_ID, Req) of
-            {ok, Timestamp1} ->
-                {ok, Timestamp1};
-            _ ->
-                % Fallback to REST in case GS returned an error
-                case oz_providers:get_zone_time(none) of
-                    {ok, Timestamp2} ->
-                        {ok, Timestamp2};
-                    _ ->
-                        % Use local time if Onezone is unreachable
-                        {ok, time_utils:system_time_millis()}
-                end
-        end
-    end),
-    TimeMillis div 1000.
 
 
 %%--------------------------------------------------------------------
@@ -714,7 +569,7 @@ zone_time_seconds() ->
 %%--------------------------------------------------------------------
 -spec zone_get_offline_access_idps() -> {ok, [IdP :: binary()]} | {error, term()}.
 zone_get_offline_access_idps() ->
-    case fetch_service_configuration(onezone) of
+    case get_service_configuration(onezone) of
         {ok, Map} ->
             SupportedIdPs = maps:get(<<"supportedIdPs">>, Map, []),
             {ok, lists:filtermap(fun(IdPConfig) ->
@@ -730,142 +585,64 @@ zone_get_offline_access_idps() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Contacts given provider and retrieves his identity macaroon, and then
+%% Contacts given provider and retrieves his identity token, and then
 %% verifies it in Onezone.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_provider_identity(od_provider:id()) -> ok | {error, term()}.
-verify_provider_identity(ProviderId) ->
+verify_provider_identity(TheirProviderId) ->
     try
-        {ok, Domain} = get_domain(ProviderId),
-        URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_MACAROON_PATH]),
+        OurIdentityToken = ?check(provider_auth:acquire_identity_token_for_consumer(
+            ?SUB(?ONEPROVIDER, TheirProviderId)
+        )),
+        {ok, Domain} = get_domain(TheirProviderId),
+        Headers = tokens:access_token_header(OurIdentityToken),
+        URL = str_utils:format_bin("https://~ts~ts", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
-        case http_client:get(URL, #{}, <<>>, SslOpts) of
-            {ok, 200, _, IdentityMacaroon} ->
-                verify_provider_identity(ProviderId, IdentityMacaroon);
+        case http_client:get(URL, Headers, <<>>, SslOpts) of
+            {ok, 200, _, TheirIdentityToken} ->
+                verify_provider_identity(TheirProviderId, TheirIdentityToken);
             {ok, Code, _, _} ->
                 {error, {bad_http_code, Code}};
-            {error, _} = Error ->
-                Error
+            {error, _} = Error1 ->
+                Error1
         end
-    catch _:_ ->
-        ?ERROR_UNAUTHORIZED
+    catch
+        throw:{error, _} = Error2 ->
+            Error2;
+        Class:Reason:Stacktrace ->
+            ?debug_exception("Failed to verify provider ~ts identity", [
+                provider_logic:to_printable(TheirProviderId)
+            ], Class, Reason, Stacktrace),
+            {error, Reason}
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Verifies given provider in Onezone based on its identity macaroon.
-%% @end
-%%--------------------------------------------------------------------
--spec verify_provider_identity(od_provider:id(), IdentityMacaroon :: binary()) ->
-    ok | gs_protocol:error().
-verify_provider_identity(ProviderId, IdentityMacaroon) ->
-    ?CREATE_RETURN_OK(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_provider, id = undefined, aspect = verify_provider_identity},
-        data = #{
-            <<"providerId">> => ProviderId,
-            <<"macaroon">> => IdentityMacaroon
-        }
-    })).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Contacts given provider and verifies if given nonce is valid for the provider
-%% (was generated by the provider and did not expire).
-%% @end
-%%--------------------------------------------------------------------
--spec verify_provider_nonce(od_provider:id(), Nonce :: binary()) ->
-    ok | {error, term()}.
-verify_provider_nonce(ProviderId, Nonce) ->
-    try
-        % Call by ?MODULE to allow for CT testing
-        {ok, Domain} = ?MODULE:get_domain(ProviderId),
-        URL = str_utils:format_bin("https://~s~s?nonce=~s", [Domain, ?NONCE_VERIFY_PATH, Nonce]),
-        SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
-        case http_client:get(URL, #{}, <<>>, SslOpts) of
-            {ok, 200, _, JSON} ->
-                case json_utils:decode(JSON) of
-                    #{<<"status">> := <<"ok">>} -> ok;
-                    _ -> {error, invalid_nonce}
-                end;
-            {ok, Code, _, _} ->
-                {error, {bad_http_code, Code}};
-            {error, _} = Error ->
-                Error
-        end
-    catch Type:Reason ->
-        ?debug_stacktrace("Cannot verify nonce for provider ~ts - nonce was '~s' - ~p:~p", [
-            to_string(ProviderId), Nonce, Type, Reason
-        ]),
-        ?ERROR_UNAUTHORIZED
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Performs request fetching compatibility information from
-%% Onezone or another Oneprovider.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch_compatibility_config(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
-    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+-spec get_service_configuration(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
+    {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
-fetch_compatibility_config(Service) ->
-    case fetch_service_configuration(Service) of
+get_service_configuration(ServiceSpec) ->
+    node_cache:acquire({service_configuration, ServiceSpec}, fun() ->
+        case fetch_service_configuration(ServiceSpec) of
+            {ok, Configuration} ->
+                {ok, Configuration, ?SERVICE_CONFIGURATION_CACHE_TTL_SEC};
+            {error, _} = Error ->
+                Error
+        end
+    end).
+
+
+-spec get_peer_version(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
+    {ok, PeerVersion :: binary()} |
+    {error, {bad_response, Code :: integer(), Body :: binary()}} | {error, term()}.
+get_peer_version(Service) ->
+    case get_service_configuration(Service) of
         {ok, JsonMap} ->
             PeerVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
-            CompatibleOpVersions = maps:get(
-                <<"compatibleOneproviderVersions">>, JsonMap, []
-            ),
-            {ok, PeerVersion, CompatibleOpVersions};
+            {ok, PeerVersion};
         {error, Error} ->
             {error, Error}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check compatibility of Onezone and exit if it is not compatible.
-%% @end
-%%--------------------------------------------------------------------
--spec assert_zone_compatibility() -> ok | no_return().
-assert_zone_compatibility() ->
-    case fetch_compatibility_config(onezone) of
-        {ok, OzVersion, CompOpVersionsBin} ->
-            OpVersion = oneprovider:get_version(),
-            CompOzVersions = application:get_env(
-                ?APP_NAME, compatible_oz_versions, []
-            ),
-            CompOzVersionsBin = strings_to_binaries(CompOzVersions),
-            case lists:member(OzVersion, CompOzVersionsBin) orelse
-                lists:member(OpVersion, CompOpVersionsBin) of
-                true ->
-                    ok;
-                false ->
-                    ?critical("This provider is not compatible with its Onezone "
-                    "service.~n"
-                    "Oneprovider version: ~s, supports zones: ~p~n"
-                    "Onezone version: ~s, supports providers: ~p~n"
-                    "The application will be terminated.", [
-                        OpVersion,
-                        CompOzVersions,
-                        OzVersion,
-                        binaries_to_strings(CompOpVersionsBin)
-                    ]),
-                    init:stop()
-            end;
-        {error, {bad_response, Code, ResponseBody}} ->
-            ?critical("Failure while checking Onezone version. The application "
-            "will be terminated. HTTP response: ~B: ~s", [
-                Code, ResponseBody
-            ]),
-            init:stop();
-        {error, Error} ->
-            error(Error)
     end.
 
 
@@ -877,7 +654,7 @@ assert_zone_compatibility() ->
 -spec provider_connection_ssl_opts(od_provider:domain()) -> [http_client:ssl_opt()].
 provider_connection_ssl_opts(Domain) ->
     CaCerts = oneprovider:trusted_ca_certs(),
-    SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
+    SecureFlag = op_worker:get_env(interprovider_connections_security, true),
     [{cacerts, CaCerts}, {secure, SecureFlag}, {hostname, Domain}].
 
 
@@ -886,39 +663,28 @@ provider_connection_ssl_opts(Domain) ->
 %% Assert that peer provider is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_provider_compatibility(od_provider:id(), Domain :: binary(), Hostname :: binary()) ->
-    ok | no_return().
-assert_provider_compatibility(ProviderId, Domain, Hostname) ->
-    case fetch_compatibility_config({oneprovider, Domain, Hostname}) of
-        {ok, RemoteOpVersion, RemoteCompOpVersionsBin} ->
-            OpVersion = oneprovider:get_version(),
-            CompOpVersions = application:get_env(
-                ?APP_NAME, compatible_op_versions, []
-            ),
-            CompOpVersionsBin = strings_to_binaries(CompOpVersions),
-            case lists:member(OpVersion, RemoteCompOpVersionsBin) orelse
-                lists:member(RemoteOpVersion, CompOpVersionsBin) of
+-spec assert_provider_compatibility(Domain :: binary()) -> ok | no_return().
+assert_provider_compatibility(Domain) ->
+    case get_peer_version({oneprovider, Domain, Domain}) of
+        {ok, RemoteOpVersion} ->
+            Resolver = compatibility:build_resolver(consistent_hashing:get_all_nodes(), oneprovider:trusted_ca_certs()),
+            OpVersion = op_worker:get_release_version(),
+            case compatibility:check_products_compatibility(
+                Resolver, ?ONEPROVIDER, RemoteOpVersion, ?ONEPROVIDER, OpVersion
+            ) of
                 true ->
                     ok;
-                false ->
-                    ?error("Discarding connection to provider ~p because of "
-                    "incompatible version. ~n"
-                    "Local version: ~s, supports providers: ~p~n"
-                    "Remote version: ~s, supports providers: ~p~n", [
-                        ProviderId,
-                        OpVersion,
-                        CompOpVersions,
+                {false, RemoteCompOpVersions} ->
+                    throw({
+                        incompatible_peer_op_version,
                         RemoteOpVersion,
-                        binaries_to_strings(RemoteCompOpVersionsBin)
-                    ]),
-                    throw(incompatible_peer_op_version)
+                        RemoteCompOpVersions
+                    });
+                {error, Error} ->
+                    error(Error)
             end;
         {error, {bad_response, Code, _ResponseBody}} ->
-            ?warning("Discarding connection to provider ~p because its "
-            "version cannot be determined (HTTP ~b). ~n", [
-                ProviderId, Code
-            ]),
-            throw(cannot_check_peer_op_version);
+            throw({cannot_check_peer_op_version, Code});
         {error, Error} ->
             error(Error)
     end.
@@ -928,36 +694,26 @@ assert_provider_compatibility(ProviderId, Domain, Hostname) ->
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Attempts to fetch the configuration page of given service.
-%% @end
-%%--------------------------------------------------------------------
 -spec fetch_service_configuration(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
     {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
 fetch_service_configuration(onezone) ->
-    OzHostname = oneprovider:get_oz_domain(),
-    URL = str_utils:format_bin("https://~s~s", [
-        OzHostname, ?ZONE_CONFIGURATION_PATH
-    ]),
-    DeprecatedURL = str_utils:format_bin("https://~s~s", [
-        OzHostname, ?DEPRECATED_ZONE_CONFIGURATION_PATH
-    ]),
+    URL = oneprovider:get_oz_url(?ZONE_CONFIGURATION_PATH),
+    DeprecatedURL = oneprovider:get_oz_url(?DEPRECATED_ZONE_CONFIGURATION_PATH),
     SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
-    fetch_configuration(URL, DeprecatedURL, SslOpts);
+    fetch_configuration(URL, DeprecatedURL, oneprovider:get_oz_domain(), SslOpts);
 
 fetch_service_configuration({oneprovider, Domain, Hostname}) ->
-    URL = str_utils:format_bin("https://~s~s", [
+    URL = str_utils:format_bin("https://~ts~ts", [
         Hostname, ?PROVIDER_CONFIGURATION_PATH
     ]),
-    DeprecatedURL = str_utils:format_bin("https://~s~s", [
+    DeprecatedURL = str_utils:format_bin("https://~ts~ts", [
         Hostname, ?DEPRECATED_PROVIDER_CONFIGURATION_PATH
     ]),
     SslOpts = provider_connection_ssl_opts(Domain),
-    fetch_configuration(URL, DeprecatedURL, SslOpts).
+    fetch_configuration(URL, DeprecatedURL, Domain, SslOpts).
 
 
 %%--------------------------------------------------------------------
@@ -967,15 +723,15 @@ fetch_service_configuration({oneprovider, Domain, Hostname}) ->
 %% If the resource with default URL is not found, the older path is attempted.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_configuration(URL, DeprecatedURL :: URL, [http_client:ssl_opt()]) ->
+-spec fetch_configuration(URL, DeprecatedURL :: URL, binary(), [http_client:ssl_opt()]) ->
     {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}
     when URL :: binary().
-fetch_configuration(URL, DeprecatedURL, SslOpts) ->
-    case http_get_configuration(URL, SslOpts) of
+fetch_configuration(URL, DeprecatedURL, Domain, SslOpts) ->
+    case http_get_configuration(URL, Domain, SslOpts) of
         {error, {bad_response, 404, _}} ->
-            case http_get_configuration(DeprecatedURL, SslOpts) of
+            case http_get_configuration(DeprecatedURL, Domain, SslOpts) of
                 {error, Error} -> {error, Error};
                 Success -> Success
             end;
@@ -991,13 +747,14 @@ fetch_configuration(URL, DeprecatedURL, SslOpts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec http_get_configuration(
-    URL :: string() | binary(), SslOpts :: [http_client:ssl_opt()]
+    string() | binary(), binary(),
+    [http_client:ssl_opt()]
 ) ->
     {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
-http_get_configuration(URL, SslOpts) ->
-    case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
+http_get_configuration(URL, Domain, SslOpts) ->
+    case http_client:get(URL, #{<<"host">> => Domain}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
             {ok, json_utils:decode(JsonBody)};
         {ok, Code, _, Body} ->
@@ -1008,12 +765,14 @@ http_get_configuration(URL, SslOpts) ->
 
 
 %% @private
--spec strings_to_binaries([string()]) -> [binary()].
-strings_to_binaries(List) ->
-    [list_to_binary(S) || S <- List].
-
-
-%% @private
--spec binaries_to_strings([binary()]) -> [string()].
-binaries_to_strings(List) ->
-    [binary_to_list(B) || B <- List].
+-spec verify_provider_identity(od_provider:id(), IdentityToken :: binary()) ->
+    ok | errors:error().
+verify_provider_identity(ProviderId, IdentityToken) ->
+    case token_logic:verify_provider_identity_token(IdentityToken) of
+        {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
+            ok;
+        {ok, _} ->
+            ?ERR_TOKEN_SUBJECT_INVALID(?err_ctx());
+        {error, _} = Error ->
+            Error
+    end.

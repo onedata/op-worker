@@ -1,0 +1,131 @@
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2021-2026 Onedata (onedata.org)
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Records defining the specification of a file tree to be created in tests
+%%% and the objects describing the tree that was actually created.
+%%% @end
+%%%-------------------------------------------------------------------
+-ifndef(FILE_TREE_TEST_HRL).
+-define(FILE_TREE_TEST_HRL, 1).
+
+
+-include("modules/dataset/dataset.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+
+
+-record(archive_spec, {
+    config :: undefined | archive:config(),
+    description :: undefined | archive:description()
+}).
+
+-record(dataset_spec, {
+    state = ?ATTACHED_DATASET :: dataset:state(),
+    protection_flags = [] :: [binary()],
+    archives = 0 :: non_neg_integer() | [archive_test_utils:archive_spec()]
+}).
+
+-record(metadata_spec, {
+    json :: json_utils:json_term() | undefined,
+    rdf :: binary() | undefined,
+    xattrs :: json_utils:json_map() | undefined
+}).
+
+-record(file_spec, {
+    name = undefined :: undefined | binary(),
+    mode = ?DEFAULT_FILE_MODE :: file_meta:mode(),
+    shares = [] :: [file_tree_test_utils:share_spec()],
+    dataset = undefined :: undefined | dataset_test_utils:dataset_spec(),
+    content = <<"">> :: binary(),
+    metadata = #metadata_spec{} :: file_tree_test_utils:object_spec(),
+    % Custom label that can be provided in symlink/hardlink spec as target.
+    % NOTE: link must be specified after this file (i.e. further on the list) in file spec.
+    custom_label = undefined :: undefined | any(),
+    %% TODO VFS-12179 handle uid/gid in creating test files utils
+    uid = undefined :: luma:uid(),
+    gid = undefined :: luma:gid()
+}).
+
+-record(dir_spec, {
+    name = undefined :: undefined | binary(),
+    mode = ?DEFAULT_DIR_MODE :: file_meta:mode(),
+    shares = [] :: [file_tree_test_utils:share_spec()],
+    dataset = undefined :: undefined | dataset_test_utils:dataset_spec(),
+    children = [] :: [#dir_spec{} | #file_spec{}],
+    metadata = #metadata_spec{} :: file_tree_test_utils:object_spec(),
+    % Custom label that can be provided in symlink/hardlink spec as target.
+    % NOTE: link must be specified after this dir (i.e. further on the list) in file spec.
+    custom_label = undefined :: undefined | file_tree_test_utils:custom_label(),
+    %% TODO VFS-12179 handle uid/gid in creating test files utils
+    uid = undefined :: luma:uid(),
+    gid = undefined :: luma:gid()
+}).
+
+-record(symlink_spec, {
+    name = undefined :: undefined | binary(),
+    dataset = undefined :: undefined | dataset_test_utils:dataset_spec(),
+    symlink_value :: binary() | {custom_label, file_tree_test_utils:custom_label()},
+    % Custom label that can be provided in symlink/hardlink spec as target.
+    % NOTE: link must be specified after this symlink (i.e. further on the list) in file spec.
+    custom_label = undefined :: undefined | file_tree_test_utils:custom_label()
+}).
+
+-record(hardlink_spec, {
+    name = undefined :: undefined | binary(),
+    shares = [] :: [file_tree_test_utils:share_spec()],
+    dataset = undefined :: undefined | dataset_test_utils:dataset_spec(),
+    target :: file_id:file_guid() | {custom_label, file_tree_test_utils:custom_label()},
+    % Custom label that can be provided in symlink/hardlink spec as target.
+    % NOTE: link must be specified after this hardlink (i.e. further on the list) in file spec.
+    custom_label = undefined :: undefined | file_tree_test_utils:custom_label()
+}).
+
+-record(share_spec, {
+    name = <<"share">> :: binary(),
+    description = <<>> :: binary(),
+    has_handle = false :: boolean()
+}).
+
+
+-record(archive_object, {
+    id :: archive:id(),
+    config :: archive:config(),
+    description :: archive:description(),
+    index :: archive_api:index()
+}).
+
+
+-record(dataset_object, {
+    id :: dataset:id(),
+    state :: dataset:state(),
+    protection_flags :: [binary()],
+    space_id :: od_space:id(),
+    archives = [] :: [archive_test_utils:archive_object()]
+}).
+
+-record(metadata_object, {
+    json :: json_utils:json_term() | undefined,
+    rdf :: binary() | undefined,
+    xattrs :: json_utils:json_map() | undefined
+}).
+
+-record(object, {
+    guid :: file_id:file_guid(),
+    name :: binary(),
+    type :: onedata_file:type(),
+    mode :: file_meta:mode(),
+    shares = [] :: [od_share:id()],
+    handles = #{} :: #{od_share:id() => od_handle:id()},
+    dataset = undefined :: undefined | dataset_test_utils:dataset_object(),
+    content = undefined :: undefined | binary(),  % set only for files
+    children = undefined :: undefined | [file_tree_test_utils:object()],  % set only for dirs
+    symlink_value = undefined :: undefined | file_meta_symlinks:symlink(),  % set only for symlinks
+    metadata :: undefined | file_tree_test_utils:metadata_object()
+}).
+
+
+-endif.

@@ -17,28 +17,40 @@
 -module(space_logic).
 -author("Lukasz Opiola").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -export([get/2, get_protected_data/2]).
+-export([force_fetch/1]).
 -export([get_name/2]).
--export([get_eff_users/2, get_shares/2]).
--export([get_provider_ids/2]).
--export([has_eff_user/2, has_eff_user/3]).
--export([has_eff_group/2, has_eff_group/3]).
--export([is_supported/2, is_supported/3]).
--export([has_eff_privilege/3, has_eff_privilege/4]).
+-export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
+-export([has_eff_privilege/3, has_eff_privileges/3, get_eff_privileges/2]).
+-export([assert_has_eff_privilege/3]).
+-export([is_owner/2]).
+-export([infer_accessible_eff_groups/2]).
+-export([get_eff_groups/2, get_shares/2]).
+-export([get_local_storages/1, is_supported_by_local_storage/2]).
+-export([get_local_supporting_storage/1, get_provider_storages/2, get_storages_by_provider/1]).
+-export([get_all_storage_ids/1, get_support_size/2, get_support_parameters/2]).
+-export([get_provider_ids/1, get_provider_ids/2]).
+-export([update_support_parameters/2]).
+-export([is_supported_locally/1, is_supported_by/2, is_supported_by/3]).
+-export([has_readonly_support_from/2]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
--export([can_view_group_through_space/3, can_view_group_through_space/4]).
--export([create/2, create/3, update_name/3, delete/2]).
--export([update_user_privileges/4, update_user_privileges/5]).
--export([update_group_privileges/4, update_group_privileges/5]).
--export([create_user_invite_token/2, create_group_invite_token/2]).
--export([create_provider_invite_token/2]).
+-export([can_view_group_through_space/4]).
+-export([harvest_metadata/5]).
+-export([get_harvesters/1]).
+-export([on_space_supported/1, ensure_required_docs_exist/1]).
 
+-define(HARVEST_METADATA_TIMEOUT, application:get_env(
+    ?APP_NAME, graph_sync_harvest_metadata_request_timeout, 120000
+)).
 
 %%%===================================================================
 %%% API
@@ -50,7 +62,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_space:id()) ->
-    {ok, od_space:doc()} | gs_protocol:error().
+    {ok, od_space:doc()} | errors:error().
+get(?GUEST_SESS_ID, SpaceId) ->
+    % Guest session is a virtual session fully managed by provider, and it needs
+    % access to space info to serve public data such as shares.
+    get(?ROOT_SESS_ID, SpaceId);
 get(SessionId, SpaceId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -65,7 +81,7 @@ get(SessionId, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_protected_data(gs_client_worker:client(), od_space:id()) ->
-    {ok, od_space:doc()} | gs_protocol:error().
+    {ok, od_space:doc()} | errors:error().
 get_protected_data(SessionId, SpaceId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -75,7 +91,7 @@ get_protected_data(SessionId, SpaceId) ->
 
 
 -spec get_name(gs_client_worker:client(), od_space:id()) ->
-    {ok, od_space:name()} | gs_protocol:error().
+    {ok, od_space:name()} | errors:error().
 get_name(SessionId, SpaceId) ->
     case get_protected_data(SessionId, SpaceId) of
         {ok, #document{value = #od_space{name = Name}}} ->
@@ -85,34 +101,17 @@ get_name(SessionId, SpaceId) ->
     end.
 
 
+-spec force_fetch(od_space:id()) -> {ok, od_space:doc()}.
+force_fetch(SpaceId) ->
+    gs_client_worker:force_fetch_entity(#gri{type = od_space, id = SpaceId, aspect = instance}).
+
+
 -spec get_eff_users(gs_client_worker:client(), od_space:id()) ->
-    {ok, maps:map(od_user:id(), [privileges:space_privilege()])} | gs_protocol:error().
+    {ok, #{od_user:id() => [privileges:space_privilege()]}} | errors:error().
 get_eff_users(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{eff_users = EffUsers}}} ->
             {ok, EffUsers};
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec get_shares(gs_client_worker:client(), od_space:id()) ->
-    {ok, [od_share:id()]} | gs_protocol:error().
-get_shares(SessionId, SpaceId) ->
-    case get(SessionId, SpaceId) of
-        {ok, #document{value = #od_space{shares = Shares}}} ->
-            {ok, Shares};
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec get_provider_ids(gs_client_worker:client(), od_space:id()) ->
-    {ok, [od_provider:id()]} | gs_protocol:error().
-get_provider_ids(SessionId, SpaceId) ->
-    case get(SessionId, SpaceId) of
-        {ok, #document{value = #od_space{providers = Providers}}} ->
-            {ok, maps:keys(Providers)};
         {error, _} = Error ->
             Error
     end.
@@ -134,52 +133,314 @@ has_eff_user(SessionId, SpaceId, UserId) ->
     end.
 
 
+-spec has_eff_privilege(od_space:doc() | od_space:id(), od_user:id(),
+    privileges:space_privilege()) -> boolean().
+has_eff_privilege(SpaceDocOrId, UserId, Privilege) ->
+    has_eff_privileges(SpaceDocOrId, UserId, [Privilege]).
+
+
+-spec has_eff_privileges(od_space:doc() | od_space:id(), od_user:id(),
+    [privileges:space_privilege()]) -> boolean().
+has_eff_privileges(#document{value = #od_space{eff_users = EffUsers}} = SpaceDoc, UserId, Privileges) ->
+    UserPrivileges = maps:get(UserId, EffUsers, []),
+    % space owners have all the privileges, regardless of those assigned
+    lists_utils:is_subset(Privileges, UserPrivileges) orelse is_owner(SpaceDoc, UserId);
+has_eff_privileges(SpaceId, UserId, Privileges) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{} = SpaceDoc} ->
+            has_eff_privileges(SpaceDoc, UserId, Privileges);
+        _ ->
+            false
+    end.
+
+
+-spec get_eff_privileges(od_space:doc() | od_space:id(), od_user:id()) ->
+    {ok, [privileges:space_privilege()]} | errors:error().
+get_eff_privileges(#document{value = #od_space{eff_users = EffUsers}} = SpaceDoc, UserId) ->
+    case is_owner(SpaceDoc, UserId) of
+        true -> {ok, privileges:space_privileges()};
+        false -> {ok, maps:get(UserId, EffUsers, [])}
+    end;
+get_eff_privileges(SpaceId, UserId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{} = SpaceDoc} ->
+            get_eff_privileges(SpaceDoc, UserId);
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec assert_has_eff_privilege(od_space:id(), od_user:id(), privileges:space_privilege()) -> ok.
+assert_has_eff_privilege(SpaceId, UserId, Privilege) ->
+    % call by module to mock in tests
+    case space_logic:has_eff_privilege(SpaceId, UserId, Privilege) of
+        true ->
+            ok;
+        false ->
+            throw({error, ?EPERM})
+    end.
+
+
+-spec is_owner(od_space:id() | od_space:doc(), od_user:id()) -> boolean().
+is_owner(SpaceId, UserId) when is_binary(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{} = SpaceDoc} ->
+            is_owner(SpaceDoc, UserId);
+        _ ->
+            false
+    end;
+is_owner(#document{value = #od_space{owners = Owners}}, UserId) ->
+    lists:member(UserId, Owners).
+
+
+-spec infer_accessible_eff_groups(gs_client_worker:client(), od_space:id()) ->
+    {ok, middleware:data()} | errors:error().
+infer_accessible_eff_groups(SessionId, SpaceId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_space, id = SpaceId, aspect = infer_accessible_eff_groups, scope = private}
+    }).
+
+
+-spec get_eff_groups(gs_client_worker:client(), od_space:id()) ->
+    {ok, #{od_group:id() => [privileges:space_privilege()]}} | errors:error().
+get_eff_groups(SessionId, SpaceId) ->
+    case get(SessionId, SpaceId) of
+        {ok, #document{value = #od_space{eff_groups = EffGroups}}} ->
+            {ok, EffGroups};
+        {error, _} = Error ->
+            Error
+    end.
+
+
 -spec has_eff_group(od_space:doc(), od_group:id()) -> boolean().
 has_eff_group(#document{value = #od_space{eff_groups = EffGroups}}, GroupId) ->
     maps:is_key(GroupId, EffGroups).
 
 
--spec has_eff_group(gs_client_worker:client(), od_space:id(), od_group:id()) ->
-    boolean().
-has_eff_group(SessionId, SpaceId, GroupId) ->
+-spec get_shares(gs_client_worker:client(), od_space:id()) ->
+    {ok, [od_share:id()]} | errors:error().
+get_shares(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
-        {ok, SpaceDoc = #document{}} ->
-            has_eff_group(SpaceDoc, GroupId);
-        _ ->
+        {ok, #document{value = #od_space{shares = Shares}}} ->
+            {ok, Shares};
+        {error, _} = Error ->
+            Error
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% @TODO VFS-5497 Remove after allowing to support one space with many storages on one provider
+%% This function returns StorageId for given SpaceId.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_local_supporting_storage(od_space:id()) -> {ok, storage:id()} | errors:error().
+get_local_supporting_storage(SpaceId) ->
+    % called by module to be mocked in tests
+    case space_logic:get_local_storages(SpaceId) of
+        {ok, []} -> ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, oneprovider:get_id());
+        {ok, [StorageId | _]} -> {ok, StorageId};
+        Other -> Other
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of storage ids supporting given space, belonging to this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_storages(od_space:id() | od_space:doc()) -> {ok, [storage:id()]} | errors:error().
+get_local_storages(SpaceIdOrDoc) ->
+    case get_provider_storages(SpaceIdOrDoc, oneprovider:get_id()) of
+        {ok, ProviderStorages} -> {ok, maps:keys(ProviderStorages)};
+        {error, _} = Error -> Error
+    end.
+
+
+-spec is_supported_by_local_storage(od_space:id() | od_space:doc(), any | od_storage:id()) -> boolean().
+is_supported_by_local_storage(SpaceIdOrDoc, StorageSelector) ->
+    case get_local_storages(SpaceIdOrDoc) of
+        {ok, LocalStorageIds} ->
+            StorageSelector == any orelse lists:member(StorageSelector, LocalStorageIds);
+        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
+            false;
+        ?ERR_FORBIDDEN ->
+            false;
+        ?ERROR_NOT_FOUND ->
             false
     end.
 
 
--spec is_supported(od_space:doc(), od_provider:id()) -> boolean().
-is_supported(#document{value = #od_space{providers = Providers}}, ProviderId) ->
-    maps:is_key(ProviderId, Providers).
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns map in the form #{storage:id() => storage:access_type()}
+%% with storages supporting given space, belonging to ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider_storages(od_space:id() | od_space:doc(), od_provider:id()) ->
+    {ok, #{storage:id() => storage:access_type()}} | errors:error().
+get_provider_storages(SpaceIdOrDoc, ProviderId) ->
+    case get_storages_by_provider(SpaceIdOrDoc) of
+        {ok, #{ProviderId := ProviderStorages}} ->
+            {ok, ProviderStorages};
+        {ok, _} ->
+            SpaceId = case SpaceIdOrDoc of
+                Bin when is_binary(Bin) -> Bin;
+                #document{key = Key} -> Key
+            end,
+            ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, ProviderId);
+        {error, _} = Error ->
+            Error
+    end.
 
 
--spec is_supported(gs_client_worker:client(), od_space:id(), od_provider:id()) ->
-    boolean().
-is_supported(SessionId, SpaceId, ProviderId) ->
+-spec get_storages_by_provider(od_space:id() | od_space:doc()) ->
+    {ok, #{od_provider:id() => #{storage:id() => storage:access_type()}}} | errors:error().
+get_storages_by_provider(#document{value = #od_space{storages_by_provider = StoragesByProvider}}) ->
+    {ok, StoragesByProvider};
+get_storages_by_provider(SpaceId) when is_binary(SpaceId) ->
+    case space_logic:get(?ROOT_SESS_ID, SpaceId) of
+        {ok, SpaceDoc} ->
+            get_storages_by_provider(SpaceDoc);
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_all_storage_ids(od_space:id()) -> {ok, [storage:id()]} | errors:error().
+get_all_storage_ids(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{storages = AllStorages}}} ->
+            {ok, maps:keys(AllStorages)};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_support_size(od_space:id(), od_provider:id()) -> {ok, non_neg_integer()} | errors:error().
+get_support_size(SpaceId, ProviderId) ->
+    % call via module to mock in tests
+    case space_logic:get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{providers = ProviderSupports}}} ->
+            case maps:get(ProviderId, ProviderSupports, undefined) of
+                undefined ->
+                    ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, ProviderId);
+                SupportSize ->
+                    {ok, SupportSize}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_support_parameters(od_space:id(), od_provider:id()) ->
+    {ok, support_parameters:record()} | errors:error().
+get_support_parameters(SpaceId, ProviderId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{support_parameters_registry = SupportParametersRegistry}}} ->
+            {ok, support_parameters_registry:get_entry(ProviderId, SupportParametersRegistry)};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_provider_ids(od_space:id()) ->
+    {ok, [od_provider:id()]} | errors:error().
+get_provider_ids(SpaceId) ->
+    get_provider_ids(?ROOT_SESS_ID, SpaceId).
+
+
+-spec get_provider_ids(gs_client_worker:client(), od_space:id()) ->
+    {ok, [od_provider:id()]} | errors:error().
+get_provider_ids(SessionId, SpaceId) ->
+    case get(SessionId, SpaceId) of
+        {ok, #document{value = #od_space{providers = Providers}}} ->
+            {ok, maps:keys(Providers)};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec update_support_parameters(od_space:id(), support_parameters:record()) ->
+    ok | errors:error().
+update_support_parameters(SpaceId, SupportParametersOverlay) ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{
+            type = od_space,
+            id = SpaceId,
+            aspect = {support_parameters, oneprovider:get_id()},
+            scope = private
+        },
+        data = jsonable_record:to_json(SupportParametersOverlay, support_parameters)
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        space_logic:force_fetch(SpaceId)
+    end).
+
+
+%% @doc extra checks are applied for determining local support, to make sure all the GS entities
+%%      have been synchronized
+-spec is_supported_locally(od_space:doc() | od_space:id()) -> boolean().
+is_supported_locally(SpaceId) when is_binary(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, SpaceDoc = #document{}} ->
+            is_supported_locally(SpaceDoc);
+        ?ERROR_NOT_FOUND ->  % the space has been deleted or never existed
+            false;
+        ?ERR_FORBIDDEN ->  % forbidden access due to lack of support
+            false
+    end;
+is_supported_locally(#document{key = SpaceId, value = #od_space{providers = Providers}} = SpaceDoc) ->
+    {ok, #document{key = ProviderId, value = #od_provider{eff_spaces = EffSpaces}}} = provider_logic:get(),
+    maps:is_key(ProviderId, Providers) andalso
+        maps:is_key(SpaceId, EffSpaces) andalso
+        is_supported_by_local_storage(SpaceDoc, any).
+
+
+-spec is_supported_by(od_space:doc() | od_space:id(), od_provider:id()) -> boolean().
+is_supported_by(SpaceId, ProviderId) when is_binary(SpaceId) ->
+    is_supported_by(?ROOT_SESS_ID, SpaceId, ProviderId);
+is_supported_by(#document{value = #od_space{providers = Providers}} = SpaceDoc, ProviderId) ->
+    case oneprovider:is_self(ProviderId) of
+        true ->
+            is_supported_locally(SpaceDoc);
+        false ->
+            maps:is_key(ProviderId, Providers)
+    end.
+
+
+-spec is_supported_by(gs_client_worker:client(), od_space:id(), od_provider:id()) -> boolean().
+is_supported_by(SessionId, SpaceId, ProviderId) ->
     case get(SessionId, SpaceId) of
         {ok, SpaceDoc = #document{}} ->
-            is_supported(SpaceDoc, ProviderId);
-        _ ->
+            is_supported_by(SpaceDoc, ProviderId);
+        ?ERROR_NOT_FOUND ->  % the space has been deleted or never existed
+            false;
+        ?ERR_FORBIDDEN ->  % forbidden access due to lack of support
             false
     end.
 
 
--spec has_eff_privilege(od_space:doc(), od_user:id(), privileges:space_privilege()) ->
-    boolean().
-has_eff_privilege(#document{value = #od_space{eff_users = EffUsers}}, UserId, Privilege) ->
-    lists:member(Privilege, maps:get(UserId, EffUsers, [])).
-
-
--spec has_eff_privilege(gs_client_worker:client(), od_space:id(), od_user:id(),
-    privileges:space_privilege()) -> boolean().
-has_eff_privilege(SessionId, SpaceId, UserId, Privilege) ->
-    case get(SessionId, SpaceId) of
-        {ok, SpaceDoc = #document{}} ->
-            has_eff_privilege(SpaceDoc, UserId, Privilege);
-        _ ->
-            false
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether ALL storages with which the ProviderId supports
+%% the space are readonly.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_readonly_support_from(od_space:id(), od_provider:id()) -> boolean().
+has_readonly_support_from(SpaceId, ProviderId) ->
+    case get_provider_storages(SpaceId, ProviderId) of
+        {ok, ProviderStorages} when map_size(ProviderStorages) =:= 0 ->
+            % if the map is empty, this provider does not support the space and has
+            % no knowledge about other supports to determine if they are readonly
+            false;
+        {ok, ProviderStorages} ->
+            lists:all(fun(AccessMode) ->
+                AccessMode =:= ?READONLY
+            end, maps:values(ProviderStorages));
+        {error, _} = Error ->
+            throw(Error)
     end.
 
 
@@ -206,131 +467,76 @@ can_view_user_through_space(SpaceDoc, ClientUserId, TargetUserId) ->
 can_view_group_through_space(SessionId, SpaceId, ClientUserId, GroupId) ->
     case get(SessionId, SpaceId) of
         {ok, SpaceDoc = #document{}} ->
-            can_view_group_through_space(SpaceDoc, ClientUserId, GroupId);
+            (has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso has_eff_group(SpaceDoc, GroupId))
+                orelse user_logic:has_eff_group(SessionId, ClientUserId, GroupId);
         _ ->
             false
     end.
 
 
--spec can_view_group_through_space(od_space:doc(), ClientUserId :: od_user:id(),
-    od_group:id()) -> boolean().
-can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
-    has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso
-        has_eff_group(SpaceDoc, GroupId).
-
-
--spec create(gs_client_worker:client(), od_space:name()) ->
-    {ok, od_space:id()} | gs_protocol:error().
-create(SessionId, Name) ->
-    {ok, UserId} = session:get_user_id(SessionId),
-    create(SessionId, UserId, Name).
-
-
--spec create(gs_client_worker:client(), od_user:id(),
-    od_space:name()) -> {ok, od_space:id()} | gs_protocol:error().
-create(SessionId, UserId, Name) ->
-    Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
+%%--------------------------------------------------------------------
+%% @doc
+%% Pushes batch of metadata changes to Onezone.
+%% Metadata are harvested for given SpaceId and Destination.
+%% Destination is the structure that describes target Harvesters and
+%% associated Indices.
+%% MaxStreamSeq and MaxSeq are sent to allow for tracking progress of
+%% harvesting. MaxStreamSeq is the highest sequence number processed by the
+%% calling harvesting_stream. MaxSeq is the highest sequence number in given
+%% space.
+%% This function can return following values:
+%%     * {ok, FailureMap :: #{od_harvester:id() =>
+%%           #{od_harvester:index() => FirstFailedSeq :: couchbase_changes:seq()}
+%%        }}
+%%        FirstFailedSeq is the first sequence number on which harvesting
+%%        failed for given index.
+%%        If harvesting succeeds for whole Destination, the map is empty.
+%%     * {error, _} :: errors:error()
+%%
+%% NOTE!!!
+%% If you introduce any changes in this function, please ensure that
+%% docs in {@link harvesting_stream} module are up to date.
+%% @end
+%%--------------------------------------------------------------------
+-spec harvest_metadata(od_space:id(), harvesting_destination:destination(),
+    harvesting_batch:batch_entries(), couchbase_changes:seq(),
+    couchbase_changes:seq()) -> {ok, harvesting_result:failure_map()} | errors:error().
+harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_space, id = undefined, aspect = instance},
-        auth_hint = ?AS_USER(UserId),
-        data = #{<<"name">> => Name},
-        subscribe = true
-    })),
-    ?ON_SUCCESS(Res, fun(_) ->
-        {ok, UserId} = session:get_user_id(SessionId),
-        gs_client_worker:invalidate_cache(od_user, UserId)
-    end).
+        gri = #gri{type = od_space, id = SpaceId,
+            aspect = harvest_metadata, scope = private
+        },
+        data = #{
+            <<"destination">> => Destination,
+            <<"maxSeq">> => MaxSeq,
+            <<"maxStreamSeq">> => MaxStreamSeq,
+            <<"batch">> => Batch
+        }
+    }, ?HARVEST_METADATA_TIMEOUT).
 
 
--spec update_name(gs_client_worker:client(), od_space:id(), od_space:name()) ->
-    ok | gs_protocol:error().
-update_name(SessionId, SpaceId, Name) ->
-    Res = gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = update,
-        gri = #gri{type = od_space, id = SpaceId, aspect = instance},
-        data = #{<<"name">> => Name}
-    }),
-    ?ON_SUCCESS(Res, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId)
-    end).
+-spec get_harvesters(od_space:doc() | od_space:id()) ->
+    {ok, [od_harvester:id()]} | errors:error().
+get_harvesters(#document{value = #od_space{harvesters = Harvesters}}) ->
+    {ok, Harvesters};
+get_harvesters(SpaceId) ->
+    case space_logic:get(?ROOT_SESS_ID, SpaceId) of
+        {ok, Doc} ->
+            get_harvesters(Doc);
+        {error, _} = Error ->
+            Error
+    end.
 
 
--spec delete(gs_client_worker:client(), od_space:id()) -> ok | gs_protocol:error().
-delete(SessionId, SpaceId) ->
-    Res = gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = delete,
-        gri = #gri{type = od_space, id = SpaceId, aspect = instance}
-    }),
-    ?ON_SUCCESS(Res, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId)
-    end).
+-spec on_space_supported(od_space:id()) -> ok.
+on_space_supported(SpaceId) ->
+    % No need to run file links reconciliation traverse on newly supported spaces as it is needed only for legacy ones.
+    ok = file_links_reconciliation_traverse:mark_traverse_not_needed_for_space(SpaceId),
+    ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 
--spec update_user_privileges(gs_client_worker:client(), od_space:id(),
-    od_user:id(), [privileges:space_privilege()]) -> ok | gs_protocol:error().
-update_user_privileges(SessionId, SpaceId, UserId, Privileges) ->
-    update_user_privileges(SessionId, SpaceId, UserId, Privileges, set).
-
-
--spec update_user_privileges(gs_client_worker:client(), od_space:id(),
-    od_user:id(), [privileges:space_privilege()], set | grant | revoke) ->
-    ok | gs_protocol:error().
-update_user_privileges(SessionId, SpaceId, UserId, Privileges, Operation) ->
-    Res = gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = update,
-        gri = #gri{type = od_space, id = SpaceId, aspect = {user_privileges, UserId}},
-        data = #{<<"privileges">> => Privileges, <<"operation">> => Operation}
-    }),
-    ?ON_SUCCESS(Res, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId)
-    end).
-
-
--spec update_group_privileges(gs_client_worker:client(), od_space:id(),
-    od_group:id(), [privileges:group_privilege()]) -> ok | gs_protocol:error().
-update_group_privileges(SessionId, SpaceId, GroupId, Privileges) ->
-    update_group_privileges(SessionId, SpaceId, GroupId, Privileges, set).
-
-
--spec update_group_privileges(gs_client_worker:client(), od_space:id(),
-    od_group:id(), [privileges:space_privilege()], set | grant | revoke) ->
-    ok | gs_protocol:error().
-update_group_privileges(SessionId, SpaceId, GroupId, Privileges, Operation) ->
-    Res = gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = update,
-        gri = #gri{type = od_space, id = SpaceId, aspect = {group_privileges, GroupId}},
-        data = #{<<"privileges">> => Privileges, <<"operation">> => Operation}
-    }),
-    ?ON_SUCCESS(Res, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId)
-    end).
-
-
--spec create_user_invite_token(gs_client_worker:client(), od_space:id()) ->
-    {ok, Token :: binary()} | gs_protocol:error().
-create_user_invite_token(SessionId, SpaceId) ->
-    ?CREATE_RETURN_DATA(gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_space, id = SpaceId, aspect = invite_user_token},
-        data = #{}
-    })).
-
-
--spec create_group_invite_token(gs_client_worker:client(), od_space:id()) ->
-    {ok, Token :: binary()} | gs_protocol:error().
-create_group_invite_token(SessionId, SpaceId) ->
-    ?CREATE_RETURN_DATA(gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_space, id = SpaceId, aspect = invite_group_token},
-        data = #{}
-    })).
-
-
--spec create_provider_invite_token(gs_client_worker:client(), od_space:id()) ->
-    {ok, Token :: binary()} | gs_protocol:error().
-create_provider_invite_token(SessionId, SpaceId) ->
-    ?CREATE_RETURN_DATA(gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_space, id = SpaceId, aspect = invite_provider_token},
-        data = #{}
-    })).
+% TODO VFS-11954 analyze whether still needed
+-spec ensure_required_docs_exist(od_space:id()) -> ok.
+ensure_required_docs_exist(SpaceId) ->
+    special_dirs:set_up_for_new_local_space(SpaceId).

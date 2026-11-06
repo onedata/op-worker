@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
 %%% @copyright (C) 2017 ACK CYFRONET AGH
-%%% This software is released under the MIT license cited in 'LICENSE.txt'.
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
@@ -14,14 +15,15 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([get_bucket/0]).
 -export([get_spaces/0, get_provider/1, get_providers/1, is_supported/2]).
 -export([gen_request_id/0]).
--export([compress/1, uncompress/1]).
+-export([encode_batch/2, decode_batch/2]).
 
 %%%===================================================================
 %%% API
@@ -54,9 +56,9 @@ get_spaces() ->
                 end
         end
     catch
-        _:Reason ->
+        _:Reason:Stacktrace ->
             ?error_stacktrace(
-                "Cannot resolve spaces of provider due to ~p", [Reason]
+                "Cannot resolve spaces of provider due to ~tp", [Reason], Stacktrace
             ),
             []
     end.
@@ -68,9 +70,9 @@ get_spaces() ->
 %%--------------------------------------------------------------------
 -spec get_provider(session:id()) -> od_provider:id().
 get_provider(SessId) ->
-    {ok, #document{value = #session{identity = #user_identity{
-        provider_id = ProviderId
-    }}}} = session:get(SessId),
+    {ok, #document{value = #session{
+        identity = ?SUB(?ONEPROVIDER, ProviderId)
+    }}} = session:get(SessId),
     ProviderId.
 
 %%--------------------------------------------------------------------
@@ -113,22 +115,43 @@ is_supported(SpaceId, ProviderIds) ->
 gen_request_id() ->
     base64:encode(crypto:strong_rand_bytes(16)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a compressed datastore documents binary.
-%% @end
-%%--------------------------------------------------------------------
--spec compress([datastore:doc()]) -> binary().
-compress(Docs) ->
-    Docs2 = [datastore_json:encode(Doc) || Doc <- Docs],
-    zlib:compress(jiffy:encode(Docs2)).
+-spec encode_batch([datastore:doc()], boolean()) -> binary().
+encode_batch(Docs, Compress) ->
+    EncodedDocs = jiffy:encode(
+        lists:map(fun
+            (#document{value = #times{}} = Doc) ->
+                {EncodedDoc} = datastore_json:encode(Doc),
+                WithoutCreation = lists:keydelete(<<"creation_time">>, 1, EncodedDoc),
+                {lists:keyreplace(<<"_version">>, 1, WithoutCreation, {<<"_version">>, 1})};
+            (Doc) ->
+                datastore_json:encode(Doc)
+        end, Docs)
+    ),
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a list of uncompressed datastore documents.
-%% @end
-%%--------------------------------------------------------------------
--spec uncompress(binary()) -> [datastore:doc()].
-uncompress(CompressedDocs) ->
-    Docs = jiffy:decode(zlib:uncompress(CompressedDocs)),
-    [datastore_json:decode(Doc) || Doc <- Docs].
+    case Compress of
+        true -> zlib:compress(EncodedDocs);
+        false -> EncodedDocs
+    end.
+
+-spec decode_batch(binary(), boolean()) -> [datastore:doc()].
+decode_batch(EncodedDocs0, Compressed) ->
+    EncodedDocs1 = case Compressed of
+        true -> zlib:uncompress(EncodedDocs0);
+        false -> EncodedDocs0
+    end,
+    Docs = jiffy:decode(EncodedDocs1, [copy_strings]),
+    lists:map(fun({Doc}) ->
+        case lists:keyfind(<<"_record">>, 1, Doc) of
+            {<<"_record">>, <<"times">>} ->
+                case lists:keyfind(<<"creation_time">>, 1, Doc) of
+                    {<<"creation_time">>, _} ->
+                        datastore_json:decode({Doc});
+                    _ ->
+                        {Prefix, Suffix} = lists:split(9, Doc),
+                        WithCreation = Prefix ++ [{<<"creation_time">>, 0}] ++ Suffix,
+                        datastore_json:decode({lists:keyreplace(<<"_version">>, 1, WithCreation, {<<"_version">>, 2})})
+                end;
+            _ ->
+                datastore_json:decode({Doc})
+        end
+    end, Docs).

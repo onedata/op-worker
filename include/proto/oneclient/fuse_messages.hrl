@@ -14,55 +14,59 @@
 -define(FUSE_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 -define(AUTO_HELPER_MODE, 'AUTO').
 -define(FORCE_PROXY_HELPER_MODE, 'FORCE_PROXY').
 -define(FORCE_DIRECT_HELPER_MODE, 'FORCE_DIRECT').
 
--record(child_link_uuid, {
-    uuid :: file_meta:uuid(),
-    name :: binary()
-}).
-
+%% @TODO VFS-11299 deprecated, left for compatibility with oneclient
 -record(child_link, {
     guid :: fslogic_worker:file_guid(),
     name :: binary()
 }).
 
 -record(get_file_attr, {
+    attributes = [] :: [onedata_file:attr_name()]
+}).
+
+-record(get_file_references, {
 }).
 
 -record(get_child_attr, {
-    name :: file_meta:name()
+    name :: file_meta:name(),
+    attributes = [] :: [onedata_file:attr_name()]
 }).
 
+%% @TODO VFS-11299 deprecated, left for compatibility with oneclient
 -record(get_file_children, {
-    offset :: file_meta:offset(),
-    size :: file_meta:size(),
-    index_token :: undefined | binary()
+    listing_options :: file_listing:options()
 }).
 
 -record(get_file_children_attrs, {
-    offset :: file_meta:offset(),
-    size :: file_meta:size(),
-    index_token :: undefined | binary()
+    listing_options :: file_listing:options(),
+    attributes = [] :: [onedata_file:attr_name()]
 }).
 
 -record(create_dir, {
     name :: file_meta:name(),
-    mode :: file_meta:mode()
+    mode = ?DEFAULT_DIR_PERMS :: file_meta:mode()
 }).
 
 -record(delete_file, {
     silent = false :: boolean()
 }).
 
+-record(move_to_trash, {
+    emit_events = true :: boolean()
+}).
+
 -record(update_times, {
-    atime :: file_meta:time(),
-    mtime :: file_meta:time(),
-    ctime :: file_meta:time()
+    atime :: times:a_time(),
+    mtime :: times:m_time(),
+    ctime :: times:c_time()
 }).
 
 -record(change_mode, {
@@ -76,13 +80,23 @@
 
 -record(create_file, {
     name :: file_meta:name(),
-    mode = 8#644 :: file_meta:posix_permissions(),
+    mode = ?DEFAULT_FILE_PERMS :: file_meta:posix_permissions(),
     flag = rdwr :: fslogic_worker:open_flag()
 }).
 
 -record(make_file, {
     name :: file_meta:name(),
-    mode = 8#644 :: file_meta:posix_permissions()
+    mode = ?DEFAULT_FILE_PERMS :: file_meta:posix_permissions()
+}).
+
+-record(make_link, {
+    target_parent_guid :: fslogic_worker:file_guid(),
+    target_name :: file_meta:name()
+}).
+
+-record(make_symlink, {
+    target_name :: file_meta:name(),
+    link :: file_meta_symlinks:symlink()
 }).
 
 -record(open_file, {
@@ -96,6 +110,13 @@
 -record(get_file_location, {
 }).
 
+% Operation that returns symlink value as it is
+-record(read_symlink, {
+}).
+
+% Operation that returns target file (file pointed by path stored in symlink) guid
+-record(resolve_symlink, {}).
+
 -record(release, {
     handle_id :: binary()
 }).
@@ -105,25 +126,30 @@
 }).
 
 -record(synchronize_block, {
-    block :: #file_block{},
+    block :: fslogic_blocks:block(),
     prefetch = false :: boolean(),
     priority :: non_neg_integer()
 }).
 
 -record(synchronize_block_and_compute_checksum, {
-    block :: #file_block{},
+    block :: fslogic_blocks:block(),
     prefetch = false :: boolean(),
     priority :: non_neg_integer()
 }).
 
 -record(block_synchronization_request, {
-    block :: #file_block{},
+    block :: fslogic_blocks:block(),
     prefetch = false :: boolean(),
     priority :: non_neg_integer()
 }).
 
+-record(xattr, {
+    name :: onedata_file:xattr_name(),
+    value :: onedata_file:xattr_value()
+}).
+
 -record(get_xattr, {
-    name :: xattr:name(),
+    name :: onedata_file:xattr_name(),
     inherited = false :: boolean()
 }).
 
@@ -134,7 +160,7 @@
 }).
 
 -record(remove_xattr, {
-    name :: xattr:name()
+    name :: onedata_file:xattr_name()
 }).
 
 -record(list_xattr, {
@@ -150,24 +176,70 @@
 -record(storage_file_created, {
 }).
 
+-record(get_file_attr_by_path, {
+    path :: file_meta:path(),
+    attributes = [] :: [onedata_file:attr_name()]
+}).
+
+-record(create_path, {
+    path :: file_meta:path()
+}).
+
+-record(report_file_written, {
+    offset :: non_neg_integer(),
+    size :: integer()
+}).
+
+-record(report_file_read, {
+    offset :: non_neg_integer(),
+    size :: integer()
+}).
+
+-record(get_recursive_file_list, {
+    listing_options :: dir_req:recursive_listing_opts(),
+    attributes = [] :: [onedata_file:attr_name()]
+}).
+
 -type file_request_type() ::
-    #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
-    #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
-    #open_file{} | #get_file_location{} | #release{} | #truncate{} |
-    #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
-    #block_synchronization_request{} |
+    #get_file_attr{} | #get_file_references{} |
+    #get_file_children{} | #get_file_children_attrs{} |
+    #create_dir{} | #delete_file{} | #move_to_trash{} |
+    #update_times{} | #change_mode{} |
+    #rename{} | #create_file{} | #make_file{} |
+    #make_link{} | #make_symlink{} | #open_file{} | #get_file_location{} |
+    #read_symlink{} | #resolve_symlink{} |
+    #release{} | #truncate{} | #synchronize_block{} |
+    #synchronize_block_and_compute_checksum{} | #block_synchronization_request{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-    #list_xattr{} | #fsync{} | #get_file_children_attrs{} |
-    #storage_file_created{} | #open_file_with_extended_info{}.
+    #list_xattr{} | #fsync{} |
+    #storage_file_created{} | #open_file_with_extended_info{} | 
+    #get_file_attr_by_path{} | #create_path{} | #report_file_written{} | #report_file_read{} | 
+    #get_recursive_file_list{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
-    extended_direct_io :: boolean(),
     file_request :: file_request_type()
 }).
 
 -record(resolve_guid, {
     path :: file_meta:path()
+}).
+
+-record(resolve_guid_by_canonical_path, {
+    path :: file_meta:path()
+}).
+
+-record(resolve_guid_by_relative_path, {
+    % file, relative to which the path remainder will be resolved
+    root_file :: fslogic_worker:file_guid(),
+    path :: file_meta:path()
+}).
+
+-record(ensure_dir, {
+    % file, relative to which the path remainder will be resolved
+    root_file :: fslogic_worker:file_guid(),
+    path :: file_meta:path(),
+    mode :: file_meta:mode()
 }).
 
 -record(get_helper_params, {
@@ -188,9 +260,53 @@
     file_content :: binary()
 }).
 
+-record(get_fs_stats, {
+    file_id :: file_id:file_guid()
+}).
+
+-record(create_multipart_upload, {
+    space_id :: od_space:id(),
+    path :: multipart_upload:path()
+}).
+
+-record(upload_multipart_part, {
+    multipart_upload_id :: multipart_upload:id(),
+    part :: multipart_upload_part:record()
+}).
+
+-record(list_multipart_parts, {
+    multipart_upload_id :: multipart_upload:id(),
+    limit :: undefined | non_neg_integer(),
+    part_marker :: undefined | non_neg_integer()
+}).
+
+-record(abort_multipart_upload, {
+    multipart_upload_id :: multipart_upload:id()
+}).
+
+-record(complete_multipart_upload, {
+    multipart_upload_id :: multipart_upload:id()
+}).
+
+-record(list_multipart_uploads, {
+    space_id :: od_space:id(),
+    limit :: non_neg_integer(),
+    index_token :: multipart_upload:pagination_token() | undefined
+}).
+
+-type multipart_request_type() :: #create_multipart_upload{} | #upload_multipart_part{} |
+    #list_multipart_parts{} | #abort_multipart_upload{} | #complete_multipart_upload{} |
+    #list_multipart_uploads{}.
+
+-record(multipart_upload_request, {
+    multipart_request :: multipart_request_type()
+}).
+
+
 -type fuse_request_type() ::
-    #resolve_guid{} | #get_helper_params{} | #create_storage_test_file{} |
-    #verify_storage_test_file{} | #file_request{}.
+    #resolve_guid{} | #resolve_guid_by_canonical_path{} | #resolve_guid_by_relative_path{} | #ensure_dir{} |
+    #get_helper_params{} | #create_storage_test_file{} | #verify_storage_test_file{} | #file_request{} | 
+    #get_fs_stats{} |  #multipart_upload_request{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request_type()
@@ -198,14 +314,12 @@
 
 -record(file_children, {
     child_links :: [#child_link{}],
-    index_token :: binary(),
-    is_last :: boolean()
+    pagination_token :: file_listing:pagination_token()
 }).
 
 -record(file_children_attrs, {
     child_attrs :: [#file_attr{}],
-    index_token :: binary(),
-    is_last :: boolean()
+    pagination_token :: file_listing:pagination_token()
 }).
 
 -record(helper_arg, {
@@ -214,9 +328,8 @@
 }).
 
 -record(helper_params, {
-    helper_name :: helper:name(),
-    helper_args :: [#helper_arg{}],
-    extended_direct_io :: boolean()
+    helper_name :: helper_spec:name(),
+    helper_args :: [#helper_arg{}]
 }).
 
 -record(storage_test_file, {
@@ -247,6 +360,22 @@
     handle_id :: binary()
 }).
 
+-record(symlink, {
+    link :: file_meta_symlinks:symlink()
+}).
+
+-record(file_recursive_listing_result, {
+    entries :: [#file_attr{}],
+    inaccessible_paths :: [file_meta:path()],
+    pagination_token :: undefined | recursive_listing:pagination_token()
+}).
+
+-record(dataset_recursive_listing_result, {
+    entries :: [{file_meta:path(), dataset_api:info()}],
+    inaccessible_paths :: [file_meta:path()],
+    pagination_token :: undefined | recursive_listing:pagination_token()
+}).
+
 -record(file_opened_extended, {
     handle_id :: binary(),
     provider_id,
@@ -264,19 +393,56 @@
 }).
 
 -record(xattr_list, {
-    names :: [xattr:name()]
+    names :: [onedata_file:xattr_name()]
+}).
+
+-record(storage_stats, {
+    storage_id :: storage:id(),
+    size :: non_neg_integer(),
+    occupied :: non_neg_integer()
+}).
+
+-record(fs_stats, {
+    space_id :: od_space:id(),
+    storage_stats :: [#storage_stats{}]
+}).
+
+-record(file_references, {
+    references :: [file_id:file_guid()]
+}).
+
+-record(multipart_parts, {
+    parts :: [multipart_upload_part:record()],
+    is_last :: boolean()
+}).
+
+-record(multipart_uploads, {
+    uploads :: [multipart_upload:record()],
+    is_last :: boolean(),
+    next_page_token :: multipart_upload:pagination_token() | undefined
 }).
 
 -type fuse_response_type() ::
-    #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
+    #file_attr{} | #file_references{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
-    #file_children_attrs{} | #file_location_changed{} | #file_opened_extended{} |
+    #file_children_attrs{} | #file_location_changed{} |
+    #file_recursive_listing_result{} | #dataset_recursive_listing_result{} |
+    #file_opened_extended{} | #fs_stats{} | #symlink{} |
+    #multipart_uploads{} | #multipart_upload{} | #multipart_parts{} |
     undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},
     fuse_response :: fuse_response_type()
+}).
+
+-define(FUSE_OK_RESP, #fuse_response{
+    status = #status{code = ?OK}
+}).
+
+-define(FUSE_OK_RESP(__RESPONSE), (?FUSE_OK_RESP)#fuse_response{
+    fuse_response = __RESPONSE
 }).
 
 -endif.

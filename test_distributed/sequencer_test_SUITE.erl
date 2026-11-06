@@ -14,6 +14,7 @@
 
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -22,7 +23,11 @@
 -include_lib("proto/oneclient/server_messages.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
@@ -124,9 +129,10 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
         initializer:clear_subscriptions(Worker),
+        initializer:mock_auth_manager(NewConfig),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 init_per_testcase(Case, Config) when
     Case =:= send_message_should_forward_message;
@@ -150,6 +156,9 @@ init_per_testcase(Case, Config) when
     {ok, SessId} = session_setup(Worker),
     [{session_id, SessId} | Config].
 
+end_per_suite(_Config) ->
+    ok.
+
 end_per_testcase(Case, Config) when
     Case =:= send_message_should_forward_message;
     Case =:= send_message_should_inject_stream_id_into_message ->
@@ -169,7 +178,7 @@ end_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
-    test_utils:mock_validate_and_unload(Worker, [communicator, router,
+    test_utils:mock_validate_and_unload(Worker, [communicator, event_router,
         stream_router]).
 
 %%%===================================================================
@@ -182,25 +191,9 @@ end_per_testcase(Case, Config) when
 %% @equiv session_setup(Worker, <<"session_id">>
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
+-spec session_setup(node()) -> {ok, session:id()}.
 session_setup(Worker) ->
-    session_setup(Worker, <<"session_id">>).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates session document in datastore.
-%% @end
-%%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id()) ->
-    {ok, SessId :: session:id()}.
-session_setup(Worker, SessId) ->
-    Self = self(),
-    Iden = #user_identity{user_id = <<"user_id">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Self]
-    )),
-    {ok, SessId}.
+    fuse_test_utils:setup_fuse_session(Worker, <<"user_id">>, <<"nonce">>).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -210,7 +203,7 @@ session_setup(Worker, SessId) ->
 %%--------------------------------------------------------------------
 -spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
 session_teardown(Worker, SessId) ->
-    rpc:call(Worker, session_manager, remove_session, [SessId]).
+    rpc:call(Worker, session_manager, terminate_session, [SessId]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -264,9 +257,13 @@ route_message(Worker, Msg) ->
 -spec client_message(SessId :: session:id(), StmId :: sequencer:stream_id(),
     SeqNum :: sequencer:sequence_number()) -> Msg :: #client_message{}.
 client_message(SessId, StmId, SeqNum) ->
-    #client_message{session_id = SessId, message_stream = #message_stream{
-        stream_id = StmId, sequence_number = SeqNum
-    }}.
+    #client_message{
+        session_id = SessId,
+        message_stream = #message_stream{
+            stream_id = StmId,
+            sequence_number = SeqNum
+        }
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -277,7 +274,7 @@ client_message(SessId, StmId, SeqNum) ->
 -spec mock_communicator(Worker :: node()) -> ok.
 mock_communicator(Worker) ->
     Self = self(),
-    mock_communicator(Worker, fun(Msg, _, _) -> Self ! Msg, ok end).
+    mock_communicator(Worker, fun(_, Msg, _) -> Self ! Msg, ok end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -288,7 +285,7 @@ mock_communicator(Worker) ->
 -spec mock_communicator(Worker :: node(), MockFun :: fun()) -> ok.
 mock_communicator(Worker, MockFun) ->
     test_utils:mock_new(Worker, [communicator]),
-    test_utils:mock_expect(Worker, communicator, send_to_client, MockFun).
+    test_utils:mock_expect(Worker, communicator, send_to_oneclient, MockFun).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -299,12 +296,11 @@ mock_communicator(Worker, MockFun) ->
 -spec mock_router(Worker :: node()) -> ok.
 mock_router(Worker) ->
     Self = self(),
-    test_utils:mock_new(Worker, [router]),
-    test_utils:mock_expect(Worker, router, route_message, fun
+    test_utils:mock_new(Worker, [event_router]),
+    test_utils:mock_expect(Worker, event_router, route_message, fun
         (Msg) -> Self ! Msg
     end),
     test_utils:mock_new(Worker, [stream_router]),
     test_utils:mock_expect(Worker, stream_router, make_message_direct, fun
         (Msg) -> Msg
     end).
-

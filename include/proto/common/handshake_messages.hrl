@@ -16,14 +16,19 @@
 -include("proto/common/credentials.hrl").
 
 -record(client_handshake_request, {
-    auth :: #macaroon_auth{},
-    session_id :: session:id(),
-    version :: binary()
+    client_tokens :: auth_manager:client_tokens(),
+    nonce :: binary(),
+    version :: binary(),
+    compatible_oneprovider_versions :: [binary()],
+    session_mode :: session:mode(),
+    client_type :: undefined | session:client_type(),
+    client_options :: [session:client_option()],
+    client_system_properties :: [session:client_system_property()]
 }).
 
 -record(provider_handshake_request, {
     provider_id :: od_provider:id(),
-    nonce :: binary()
+    token :: tokens:serialized()
 }).
 
 -record(handshake_response, {

@@ -14,35 +14,108 @@
 
 -include("global_definitions.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
--include_lib("cluster_worker/include/elements/node_manager/node_manager.hrl").
+-include("modules/dataset/dataset.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% node_manager_plugin_behaviour callbacks
--export([app_name/0, cm_nodes/0, db_nodes/0]).
--export([listeners/0, modules_with_args/0]).
--export([before_init/1, on_cluster_initialized/1]).
--export([handle_cast/2]).
+-export([cluster_generations/0]).
+-export([oldest_upgradable_cluster_generation/0]).
+-export([app_name/0, release_version/0, build_version/0]).
+-export([cm_nodes/0, db_nodes/0]).
+-export([before_init/0]).
+-export([before_custom_workers_start/0]).
+-export([custom_workers/0]).
+-export([before_cluster_upgrade/0]).
+-export([upgrade_cluster/1]).
+-export([before_listeners_start/0, after_listeners_stop/0]).
+-export([cluster_init_safe_mode_disabling_method/0]).
+-export([listeners/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
+-export([master_node_down/1, master_node_up/1, master_node_ready/1]).
+-export([init_etses_for_space_on_all_nodes/1]).
+
+% For rpc
+-export([init_etses_for_space_on_current_node/1, init_etses_for_space_internal/1]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
 
--type state() :: #state{}.
+-define(GS_WORKER_POOL_SIZE, op_worker:get_env(graph_sync_worker_pool_size, 20)).
+
+% List of all known cluster generations.
+% When cluster is not in newest generation it will be upgraded during initialization.
+% This can be used to e.g. move models between services.
+% Oldest upgradable generation is the lowest one that can be directly upgraded to newest.
+% Human readable version is included to for logging purposes. It's the last version
+% where this cluster generation was the current one.
+-define(CLUSTER_GENERATIONS, [
+    {1, <<"19.02.5">>},
+    {2, <<"20.02.0-beta3">>},
+    {3, <<"21.02.1">>},
+    {4, <<"21.02.2">>},
+    {5, <<"21.02.3">>},
+    {6, <<"21.02.5">>},
+    {7, <<"21.02.8">>},
+    {8, <<"25.0">>},
+    {9, <<"25.1">>},
+    {10, op_worker:get_release_version()}
+]).
+-define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
 %%%===================================================================
-%%% node_manager_plugin_behaviour callbacks
+%%% node_manager_plugin_default callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:cluster_generations/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec cluster_generations() ->
+    [{node_manager:cluster_generation(), onedata:release_version()}].
+cluster_generations() ->
+    ?CLUSTER_GENERATIONS.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:oldest_upgradable_cluster_generation/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec oldest_upgradable_cluster_generation() ->
+    node_manager:cluster_generation().
+oldest_upgradable_cluster_generation() ->
+    ?OLDEST_UPGRADABLE_CLUSTER_GENERATION.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:app_name/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec app_name() -> {ok, Name :: atom()}.
+-spec app_name() -> atom().
 app_name() ->
-    {ok, op_worker}.
+    op_worker.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:release_version/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec release_version() -> string() | binary().
+release_version() ->
+    op_worker:get_release_version().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:app_name/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec build_version() -> string() | binary().
+build_version() ->
+    op_worker:get_build_version().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -64,27 +137,68 @@ db_nodes() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:listeners/0}.
+%% Overrides {@link node_manager_plugin_default:renamed_models/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec listeners() -> Listeners :: [atom()].
-listeners() -> [
-    http_listener,
-    https_listener
-].
+-spec renamed_models() -> #{{record_version(), model()} => model()}.
+renamed_models() ->
+    #{
+        {1, open_file} => file_handles
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:modules_with_args/0}.
+%% Overrides {@link node_manager_plugin_default:before_init/0}.
+%% This callback is executed on all cluster nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec modules_with_args() -> Models :: [{atom(), [any()]}].
-modules_with_args() -> filter_disabled_workers([
+-spec before_init() -> ok | {error, Reason :: term()}.
+before_init() ->
+    try
+        op_worker_sup:start_link(),
+        start_custom_logger_handlers(),
+        ok = helpers_nif:init()
+    catch
+        _:Error:Stacktrace ->
+            ?error_stacktrace("Error in node_manager_plugin:before_init: ~tp", [Error], Stacktrace),
+            {error, cannot_start_node_manager_plugin}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback executed before custom workers start so that any required preparation
+%% can be done.
+%%
+%% This callback is executed on all cluster nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec before_custom_workers_start() -> ok.
+before_custom_workers_start() ->
+    init_etses_on_current_node().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:custom_workers/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec custom_workers() ->
+    [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}].
+custom_workers() -> filter_disabled_workers([
+    {dir_stats_service_worker, [
+        {supervisor_flags, pes:get_root_supervisor_flags(dir_stats_collector)},
+        {supervisor_children_spec, pes:get_root_supervisor_child_specs(dir_stats_collector)}
+    ]},
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
+    ], [worker_first]},
+    {fslogic_worker, [
+        {supervisor_flags, fslogic_worker:supervisor_flags()},
+        {supervisor_children_spec, fslogic_worker:supervisor_children_spec()}
     ]},
-    {fslogic_worker, []},
+    {qos_worker, []},
     {dbsync_worker, [
         {supervisor_flags, dbsync_worker:supervisor_flags()}
     ]},
@@ -92,101 +206,223 @@ modules_with_args() -> filter_disabled_workers([
         {supervisor_flags, monitoring_worker:supervisor_flags()},
         {supervisor_children_spec, monitoring_worker:supervisor_children_spec()}
     ]},
-    {gs_worker, [
-        {supervisor_flags, gs_worker:supervisor_flags()}
-    ]},
-    {fslogic_deletion_worker, []},
     {rtransfer_worker, [
         {supervisor_flags, rtransfer_worker:supervisor_flags()},
         {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}
     ]},
-    {space_sync_worker, []}
+    {auto_storage_import_worker, []},
+    {harvesting_worker, [
+        {supervisor_flags, harvesting_worker:supervisor_flags()},
+        {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}
+    ]},
+    {middleware_worker, []},
+    {provider_rpc_worker, []},
+    {atm_supervision_worker, [
+        {supervisor_flags, atm_supervision_worker:supervisor_flags()},
+        {supervisor_children_spec, atm_supervision_worker:supervisor_children_spec()}
+    ], [{terminate_timeout, infinity}]}
 ]).
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Filters node_manager_plugins that were turned off in app.config
-%% @end
-%%-------------------------------------------------------------------
--spec filter_disabled_workers(
-    [{atom(), [any()]} |{singleton | early_init, atom(), [any()]}]) ->
-    [{atom(), [any()]} |{singleton | early_init, atom(), [any()]}].
-filter_disabled_workers(WorkersSpecs) ->
-    DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
-    DisabledWorkersSet = sets:from_list(DisabledWorkers),
-    lists:filter(fun
-        ({Worker, _WorkerArgs}) ->
-            not sets:is_element(Worker, DisabledWorkersSet);
-        ({early_init, Worker, _WorkerArgs}) ->
-            not sets:is_element(Worker, DisabledWorkersSet);
-        ({singleton, Worker, _WorkerArgs}) ->
-            not sets:is_element(Worker, DisabledWorkersSet)
-    end, WorkersSpecs).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:renamed_models/0}.
+%% Callback executed before cluster upgrade so that any required preparation
+%% can be done.
+%%
+%% This callback is executed on all cluster nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec renamed_models() -> #{{record_version(), model()} => model()}.
-renamed_models() ->
-    #{{1, open_file} => file_handles}.
+-spec before_cluster_upgrade() -> ok.
+before_cluster_upgrade() ->
+    safe_mode:whitelist_pid(self()),
+    gs_channel_service:setup_internal_service().
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:before_init/1}.
+%% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
+%% This callback is executed only on one cluster node.
 %% @end
 %%--------------------------------------------------------------------
--spec before_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
-before_init([]) ->
-    try
-        op_worker_sup:start_link(),
-        ok = helpers_nif:init()
-    catch
-        _:Error ->
-            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",
-                [Error]),
-            {error, cannot_start_node_manager_plugin}
-    end.
+-spec upgrade_cluster(node_manager:cluster_generation()) ->
+    {ok, node_manager:cluster_generation()}.
+upgrade_cluster(3) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
+    await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
+    {ok, 4};
+upgrade_cluster(4) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+
+        lists:foreach(fun(SpaceId) ->
+            tmp_dir:ensure_exists(SpaceId)
+        end, SpaceIds)
+    end),
+    {ok, 5};
+upgrade_cluster(5) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) -> init_etses_for_space_on_all_nodes(SpaceId) end, SpaceIds),
+        ?info("Upgrading tmp directory links..."),
+        % NOTE: existence of tmp directory was ensured in previous version upgrade, but we still need to ensure,
+        % that link exists (it was not ensured then).
+        lists:foreach(fun tmp_dir:ensure_tmp_dir_link_exists/1, SpaceIds),
+        % NOTE: there is no link for trash dir, so there is no need to ensure it existence.
+        ?info("Upgrading trash directories..."),
+        lists:foreach(fun trash_dir:ensure_exists/1, SpaceIds),
+        ?info("Upgrading archive root directories..."),
+        % NOTE: below function also ensures existence of archives root link.
+        lists:foreach(fun space_archives_dir:ensure_exists/1, SpaceIds),
+        % NOTE: there is no need to ensure dataset directory existence, as any operation requiring
+        % it will create it if it is not yet synced.
+        lists:foreach(fun(SpaceId) ->
+            ?info("Upgrading dataset directory links for space '~ts'...", [SpaceId]),
+            ok = datasets_structure:apply_to_all_datasets(SpaceId, ?ATTACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
+                dataset_archives_dir:ensure_parent_link_exists(DatasetId, SpaceId) end),
+            ok = datasets_structure:apply_to_all_datasets(SpaceId, ?DETACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
+                dataset_archives_dir:ensure_parent_link_exists(DatasetId, SpaceId) end)
+        end, SpaceIds),
+        async_run_with_oz_connection_after_upgrade(fun() ->
+            lists:foreach(fun(SpaceId) ->
+                % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
+                ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
+                opened_deleted_files_dir:ensure_exists(SpaceId)
+            end, SpaceIds)
+        end)
+    end),
+    {ok, 6};
+upgrade_cluster(6) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        % Allow for file links reconciliation traverses to be run again - due to a bug in previous versions it
+        % could have been accidentally cancelled.
+        lists:foreach(fun file_links_reconciliation_traverse:mark_traverse_needed_for_space/1, SpaceIds)
+    end),
+    {ok, 7};
+upgrade_cluster(7) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun() ->
+        storage_upgrader:upgrade_after_swift_version_update_to_v3(),
+
+        % clear cached auto luma entries in db
+        {ok, StorageIds} = provider_logic:get_storages(),
+        lists:foreach(fun(StorageId) ->
+            ?info("Clearing cached auto-feed LUMA entries for storage: ~ts", [StorageId]),
+            case storage_config:get_luma_feed(StorageId) of
+                ?AUTO_FEED -> luma_crud_api:clear_db(StorageId);
+                _ -> ok
+            end
+        end, StorageIds)
+    end),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Reinitializing stats for space '~ts' after upgrade", [SpaceId]),
+            dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
+        end, SpaceIds)
+    end),
+    {ok, 8};
+upgrade_cluster(8) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Clearing trash of space '~ts' after upgrade", [SpaceId]),
+            trash_dir:clear_all(SpaceId, no_events)
+        end, SpaceIds)
+    end),
+    {ok, 9};
+upgrade_cluster(9) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    safe_mode:whitelist_pid(self()),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Clearing trash of space '~ts' after upgrade", [SpaceId]),
+            trash_dir:clear_all(SpaceId, no_events)
+        end, SpaceIds),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Reinitializing stats for space '~ts' after upgrade", [SpaceId]),
+            dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
+        end, SpaceIds)
+    end),
+    {ok, 10}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% This callback is executed when the cluster has been initialized, i.e. all
-%% nodes have connected to cluster manager.
+%% Overrides {@link node_manager_plugin_default:before_listeners_start/0}.
+%%
+%% NOTE: this callback blocks the application supervisor and must not be used to
+%% interact with the main supervision tree.
+%%
+%% NOTE: this callback is run on all cluster nodes and is awaited
+%% for before cluster setup proceeds.
 %% @end
 %%--------------------------------------------------------------------
--spec on_cluster_initialized(Nodes :: [node()]) -> Result :: ok | {error, Reason :: term()}.
-on_cluster_initialized(_Nodes) ->
-    ok.
+before_listeners_start() ->
+    gs_worker_pool:init(?GS_WORKER_POOL_SIZE),
+    middleware:load_known_atoms(),
+    fslogic_delete:cleanup_opened_files(),
+    space_unsupport:init_pools(),
+    file_upload_manager_watcher_service:setup_internal_service(),
+    luma_db_garbage_collector:setup_internal_service(),
+    atm_warden_service:setup_internal_service(),
+    atm_workflow_execution_api:init_engine(),
+    gs_channel_service:trigger_pending_on_connect_to_oz_procedures().
+
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Overrides {@link node_manager_plugin_default:handle_cast/2}.
+%% Overrides {@link node_manager_plugin_default:after_listeners_stop/0}.
+%%
+%% NOTE: this callback blocks the application supervisor and must not be used to
+%% interact with the main supervision tree.
+%%
+%% NOTE: this callback is run on a cluster node that is being turned off
+%% independently of other cluster nodes (no synchronization is performed).
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: state()) ->
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
-handle_cast(update_subdomain_delegation_ips, State) ->
-    % This cast will be usually used only after acquiring connection
-    % to onezone in order to send current cluster IPs
-    case provider_logic:update_subdomain_delegation_ips() of
-        ok ->
-            ok;
-        error ->
-            % Kill the connection to Onezone in case provider IPs cannot be
-            % updated, which will cause a reconnection and update retry.
-            gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME},
-                {terminate, normal})
-    end,
-    {noreply, State};
+after_listeners_stop() ->
+    atm_supervision_worker:try_to_gracefully_stop_atm_workflow_executions(),
+    atm_warden_service:terminate_internal_service(),
+    luma_db_garbage_collector:terminate_internal_service(),
+    file_upload_manager_watcher_service:terminate_internal_service(),
+    % GS connection should be closed at the end as other services
+    % may still require access to synced documents
+    % (though a working connection cannot be guaranteed here).
+    gs_channel_service:terminate_internal_service().
 
-handle_cast(Request, State) ->
-    ?log_bad_request(Request),
-    {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:listeners/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec listeners() -> Listeners :: [atom()].
+listeners() -> [
+    https_listener
+].
+
+
+%% @doc overrides {@link node_manager_plugin_default:cluster_init_safe_mode_disabling_method/0}
+-spec cluster_init_safe_mode_disabling_method() -> implicit_before_listeners_start | explicit.
+cluster_init_safe_mode_disabling_method() ->
+    explicit.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -204,3 +440,156 @@ modules_with_exometer() ->
 %%--------------------------------------------------------------------
 -spec exometer_reporters() -> list().
 exometer_reporters() -> [].
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Filters node_manager_plugins that were turned off in app.config
+%% @end
+%%-------------------------------------------------------------------
+-spec filter_disabled_workers(
+    [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}]) ->
+    [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}].
+filter_disabled_workers(WorkersSpecs) ->
+    DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
+    DisabledWorkersSet = sets:from_list(DisabledWorkers),
+    lists:filter(fun
+        ({Worker, _WorkerArgs}) ->
+            not sets:is_element(Worker, DisabledWorkersSet);
+        ({singleton, Worker, _WorkerArgs}) ->
+            not sets:is_element(Worker, DisabledWorkersSet);
+        ({Worker, _WorkerArgs, _Options}) ->
+            not sets:is_element(Worker, DisabledWorkersSet)
+    end, WorkersSpecs).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback used to customize behavior in case of master node failure.
+%% @end
+%%--------------------------------------------------------------------
+-spec master_node_down(FailedNode :: node()) -> ok.
+master_node_down(_FailedNode) ->
+    session_manager:restart_dead_sessions(),
+    process_handles:release_all_dead_processes_handles().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback used to customize behavior when master node recovers after failure.
+%% It is called after basic workers (especially datastore) have been restarted.
+%% @end
+%%--------------------------------------------------------------------
+-spec master_node_up(node()) -> ok.
+master_node_up(RecoveredNode) ->
+    oneprovider:replicate_oz_domain_to_node(RecoveredNode),
+    provider_auth:backup_to_file(RecoveredNode),
+    replica_synchronizer:cancel_and_terminate_slaves().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback used to customize behavior when master node recovers after failure.
+%% It is called after all workers and listeners have been restarted.
+%% @end
+%%--------------------------------------------------------------------
+-spec master_node_ready(node()) -> ok.
+master_node_ready(_RecoveredNode) ->
+    init_etses_for_space_on_current_node(all).
+
+
+-spec init_etses_for_space_on_all_nodes(od_space:id() | all) -> ok.
+init_etses_for_space_on_all_nodes(SpaceId) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, init_etses_for_space_on_current_node, [SpaceId]),
+    case BadNodes of
+        [] ->
+            ok;
+        _ ->
+            ?error("Could not initialize etses for space ~tp on nodes: ~w (RPC error)", [SpaceId, BadNodes]),
+            error({etses_not_ready, BadNodes})
+    end,
+    lists:foreach(fun
+        (ok) ->
+            ok;
+        ({badrpc, _} = Error) ->
+            ?error("Could not initialize etses for space: ~tp.~nReason: ~tp", [SpaceId, Error]),
+            error({etses_not_ready, Error})
+    end, Res).
+
+
+%% @private
+-spec init_etses_on_current_node() -> ok.
+init_etses_on_current_node() ->
+    % TODO VFS-7412 refactor effective_value cache
+    auto_storage_import_worker:init_ets(),
+    paths_cache:init_group(),
+    dataset_eff_cache:init_group(),
+    file_meta_sync_status_cache:init_group(),
+    archive_recall_cache:init_group(),
+    permissions_cache:init_group(),
+    qos_eff_cache:init_group().
+
+
+%% @private
+-spec init_etses_for_space_on_current_node(od_space:id() | all) -> ok.
+init_etses_for_space_on_current_node(SpaceId) ->
+    gen_server2:call(?NODE_MANAGER_NAME, {apply, ?MODULE, init_etses_for_space_internal, [SpaceId]}).
+
+
+%% @private
+-spec init_etses_for_space_internal(od_space:id() | all) -> ok.
+init_etses_for_space_internal(Space) ->
+    paths_cache:init(Space),
+    dataset_eff_cache:init(Space),
+    archive_recall_cache:init(Space),
+    qos_eff_cache:init(Space),
+    file_meta_sync_status_cache:init(Space).
+
+
+-define(ZONE_CONNECTION_RETRIES, 180).
+
+%% @private
+-spec await_zone_connection_and_run(Fun :: fun(() -> ok)) -> ok.
+await_zone_connection_and_run(Fun) ->
+    ?info("Awaiting Onezone connection..."),
+    await_zone_connection_and_run(gs_channel_service:is_connected_and_initialized(), ?ZONE_CONNECTION_RETRIES, Fun).
+
+-spec await_zone_connection_and_run(IsConnectedToZone :: boolean(), Retries :: integer(),
+    Fun :: fun(() -> ok)) -> ok.
+await_zone_connection_and_run(false, 0, _) ->
+    ?critical("Could not establish Onezone connection. Aborting upgrade procedure."),
+    throw(?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain()));
+await_zone_connection_and_run(false, Retries, Fun) ->
+    ?warning("The Onezone connection is down. Next retry in 10 seconds..."),
+    timer:sleep(timer:seconds(10)),
+    await_zone_connection_and_run(gs_channel_service:is_connected_and_initialized(), Retries - 1, Fun);
+await_zone_connection_and_run(true, _, Fun) ->
+    Fun().
+
+
+%% @private
+-spec async_run_with_oz_connection_after_upgrade(Fun :: fun(() -> ok)) -> ok.
+async_run_with_oz_connection_after_upgrade(Fun) ->
+    spawn(fun() ->
+        utils:wait_until(fun() -> not safe_mode:should_enforce() end, timer:seconds(10), infinity),
+        utils:wait_until(fun gs_channel_service:is_connected_and_initialized/0, timer:seconds(10), infinity),
+        ?catch_exceptions(Fun())
+    end),
+    ok.
+
+
+%% @private
+-spec start_custom_logger_handlers() -> ok.
+start_custom_logger_handlers() ->
+    LogDir = ctool:get_env(log_dir),
+    Config = ctool:get_env(logger_base_config),
+
+    ok = logger:add_handler(file_access_audit_log, logger_std_h, #{
+        level => debug,
+        config => Config#{file => filename:join(LogDir, op_worker:get_env(file_access_audit_log_file_name))},
+        filter_default => stop,
+        filters => [
+            {opw_file_access_domain, {fun logger_filters:domain/2, {log, equal, [onedata, opw, file_access]}}}
+        ],
+        formatter => {onedata_logger_formatter, #{
+            template =>  op_worker:get_env(file_access_audit_log_formatter_template)
+        }}
+    }).

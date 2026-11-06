@@ -17,13 +17,20 @@
 -include("proto/common/handshake_messages.hrl").
 
 -record(client_message, {
-    message_id :: undefined | message_id:id(),
+    message_id :: undefined | clproto_message_id:id(),
     session_id :: undefined | session:id(),
-    proxy_session_id :: undefined | session:id(),
-    proxy_session_auth :: undefined | #macaroon_auth{},
+
+    % Parameters describing what session should be created on peer provider
+    % (used only by proxy)
+    effective_session_id :: undefined | session:id(),
+    effective_client_tokens :: undefined | auth_manager:client_tokens(),
+    effective_session_mode = normal :: session:mode(),
+
     message_stream :: undefined | #message_stream{},
     message_body :: tuple()
 }).
+
+-record(close_session, {}).
 
 -define(CLIENT_KEEPALIVE_MSG, <<"KA">>).
 

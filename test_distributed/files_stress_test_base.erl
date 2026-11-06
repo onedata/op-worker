@@ -13,18 +13,26 @@
 -module(files_stress_test_base).
 -author("Michal Wrzeszcz").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
+-include_lib("cluster_worker/include/modules/datastore/ha_datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
--export([many_files_creation_tree_test_base/2, many_files_creation_tree_test_base/3,
-    single_dir_creation_test_base/2]).
--export([create_single_call/4]).
+-export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
+-export([many_files_creation_tree_test_base/2, single_dir_creation_test_base/2]).
+-export([create_single_call/4, get_final_ans/9, get_final_ans_tree/10, get_param_value/2]).
 
 -define(TIMEOUT, timer:minutes(30)).
 
@@ -32,56 +40,68 @@
 %%% Test functions
 %%%===================================================================
 
-single_dir_creation_test_base(Config, Clear) ->
+% Test creates files in a loop. If CreateDeleteLoop is false, number of files grows during the test.
+% If CreateDeleteLoop is true, files are deleted after each iteration.
+single_dir_creation_test_base(Config, CreateDeleteLoop) ->
     FilesNum = ?config(files_num, Config),
+    ProcNum = case CreateDeleteLoop of
+        true -> 1;
+        false -> ?config(proc_num, Config)
+    end,
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     User = <<"user1">>,
 
     SessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     RepeatNum = ?config(rep_num, Config),
 
     % Generate test setup
-    {Dir, CheckAns, NameExt} = case {Clear, RepeatNum} of
+    {Dir, CheckAns, NameExt} = case {CreateDeleteLoop, RepeatNum} of
         {true, _} ->
             MainDir = generator:gen_name(),
             D = <<"/", SpaceName/binary, "/", MainDir/binary>>,
-            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D, 8#755),
+            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D),
             {D, MkdirAns, 0};
         {_, 1} ->
-            MainDir = <<"test_dir">>,
-            D = <<"/", SpaceName/binary, "/", MainDir/binary>>,
-            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D, 8#755),
-            {D, MkdirAns, 0};
+            case rand:uniform() < 0.5 of
+                true ->
+                    D = <<"/", SpaceName/binary, "/test_dir">>,
+                    MkdirAns = lfm_proxy:mkdir(Worker, SessId, D),
+                    put(main_dir, D),
+                    put(dirs_created, 1),
+                    {D, MkdirAns, 1};
+                false ->
+                    D = <<"/", SpaceName/binary>>,
+                    put(main_dir, D),
+                    put(dirs_created, 0),
+                    {D, {ok, space_dir:guid(SpaceId)}, 0}
+            end;
         _ ->
-            D = <<"/", SpaceName/binary, "/test_dir">>,
-            {D, {ok, ok}, RepeatNum}
+            {get(main_dir), {ok, ok}, RepeatNum}
     end,
     NameExtBin = integer_to_binary(NameExt),
 
     case CheckAns of
         {ok, _} ->
             % Create all
-            {SaveOk, SaveTime, SError, SErrorTime} =
-                rpc:call(Worker, ?MODULE, create_single_call,
-                    [SessId, Dir, FilesNum, NameExtBin]),
+            {SaveOk, SaveTime, SError, SErrorTime} = create_many(Worker, SessId, Dir, FilesNum, ProcNum, NameExtBin),        
 
             % Delete all is clearing is active
             {DelOk, DelTime, DError, DErrorTime} =
-                case Clear of
+                case CreateDeleteLoop of
                     true ->
                         lists:foldl(fun(N, {OkNum, OkTime, ErrorNum, ErrorTime}) ->
                             {T, A} = measure_execution_time(fun() ->
                                 N2 = integer_to_binary(N),
-                                File = <<Dir/binary, "/", NameExtBin/binary, "_", N2/binary>>,
+                                File = <<Dir/binary, "/", NameExtBin/binary, "_1_", N2/binary>>,
                                 lfm_proxy:unlink(Worker, SessId, {path, File})
                             end),
                             case A of
                                 ok ->
                                     {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
                                 _ ->
-                                    ct:print("Unlink error: ~p", [A]),
+                                    ct:print("Unlink error: ~tp", [A]),
                                     {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
                             end
                         end, {0,0,0,0}, lists:seq(1,FilesNum));
@@ -96,9 +116,9 @@ single_dir_creation_test_base(Config, Clear) ->
             DErrorAvgTime = get_avg(DError, DErrorTime),
 
             % Print statistics
-            case Clear of
+            case CreateDeleteLoop of
                 true ->
-                    ct:print("Save num ~p, del num ~p", [SaveOk, DelOk]);
+                    ct:print("Save num ~tp, del num ~tp", [SaveOk, DelOk]);
                 _ ->
                     Sum = case get(ok_sum) of
                         undefined ->
@@ -109,22 +129,29 @@ single_dir_creation_test_base(Config, Clear) ->
                     NewSum = Sum + SaveOk,
                     put(ok_sum, NewSum),
 
-                    LastLS = case get(last_ls) of
-                        undefined ->
-                            0;
-                        LLS ->
-                            LLS
-                    end,
-
-                    case NewSum - LastLS >= 20000 of
+                    case ?config(test_list, Config) of
                         true ->
-                            put(last_ls, NewSum),
-                            T0 = os:timestamp(),
-                            ls(Worker, SessId, Dir, undefined, false),
-                            ct:print("Save num ~p, sum ~p, ls time ~p",
-                                [SaveOk, NewSum, timer:now_diff(os:timestamp(), T0)]);
-                        _ ->
-                            ct:print("Save num ~p, sum ~p", [SaveOk, NewSum])
+                            LastLS = case get(last_ls) of
+                                undefined ->
+                                    0;
+                                LLS ->
+                                    LLS
+                            end,
+
+                            case NewSum - LastLS >= 20000 of
+                                true ->
+                                    put(last_ls, NewSum),
+                                    LsTime = measure_execution_time(fun() ->
+                                        ls(Worker, SessId, Dir, undefined)
+                                    end),
+
+                                    ct:print("Save num ~tp, sum ~tp, ls time ~tp",
+                                        [SaveOk, NewSum, LsTime]);
+                                _ ->
+                                    ct:print("Save num ~tp, sum ~tp", [SaveOk, NewSum])
+                            end;
+                        false ->
+                            ct:print("Save num ~tp, sum ~tp", [SaveOk, NewSum])
                     end
             end,
 
@@ -137,10 +164,7 @@ single_dir_creation_test_base(Config, Clear) ->
             get_final_ans(0,0,0,0,0,0,0,0,1)
     end.
 
-many_files_creation_tree_test_base(Config, WriteToFile) ->
-    many_files_creation_tree_test_base(Config, WriteToFile, false).
-
-many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
+many_files_creation_tree_test_base(Config, Options) ->
     % Get test and environment description
     SpawnBegLevel = ?config(spawn_beg_level, Config),
     SpawnEndLevel = ?config(spawn_end_level, Config),
@@ -148,11 +172,22 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
     DirsPerParent = ?config(dirs_per_parent, Config),
     FilesPerDir = ?config(files_per_dir, Config),
 
+    WriteToFile = maps:get(write_to_file, Options, false),
+    CacheGUIDS = maps:get(cache_guids, Options, false),
+    SetMetadata = maps:get(set_metadata, Options, false),
+    HA_Nodes = maps:get(ha_nodes, Options, 1),
+    UseHardlinks = maps:get(use_hardlinks, Options, false),
+
     % Setup test
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Worker) ->
+        ?assertEqual(ok, rpc:call(Worker, ha_datastore, change_config, [HA_Nodes, ?HA_CAST_PROPAGATION]))
+    end, Workers),
+
     User = <<"user1">>,
 
-    SessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
+    [SessId | _] = SessIds =
+        lists:map(fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end, Workers),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
 
     Master = self(),
@@ -174,37 +209,55 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
     end, [{<<"/", SpaceName/binary>>, false}], Levels),
     [_ | BaseDirs] = lists:reverse(BaseDirsReversed),
 
-    BaseCreationAns = lists:foldl(fun
-        ({D, true}, {ok, _}) ->
-            lfm_proxy:mkdir(Worker, SessId, D, 8#755);
-        ({D, true}, {error,eexist}) ->
-            lfm_proxy:mkdir(Worker, SessId, D, 8#755);
+    {BaseCreationAns, CreatedBaseDirsNum} = lists:foldl(fun
+        ({D, true}, {ok, CreatedBaseDirsAcc}) ->
+            case lfm_proxy:mkdir(Worker, SessId, D) of
+                {ok, _} -> {ok, CreatedBaseDirsAcc + 1};
+                {error, eexist} -> {ok, CreatedBaseDirsAcc};
+                Other -> {Other, CreatedBaseDirsAcc}
+            end;
         (_, Acc) ->
             Acc
-    end, {ok, ok}, BaseDirs),
+    end, {ok, 0}, BaseDirs),
 
-    % Check if dirs are ready
-    Proceed = case BaseCreationAns of
-        {ok, _} ->
-            ok;
-        {error,eexist} ->
-            ok;
-        No ->
-            No
+    {ReferencedFilesStatus, ReferencedFilesMap} = case {UseHardlinks, get(referenced_files)} of
+        {false, _} ->
+            {ok, undefined};
+        {true, undefined} ->
+            {FoldlStatus, FoldlMap} = FoldlAns = lists:foldl(fun
+                (N, {ok, Acc}) ->
+                    ReferencedFileName = filename:join(["/", SpaceName, "ref_file" ++ integer_to_list(N)]),
+                    case lfm_proxy:create(Worker, SessId, ReferencedFileName) of
+                        {ok, ReferencedFileGuid} -> {ok, Acc#{N => ReferencedFileGuid}};
+                        Other -> Other
+                    end;
+                (_, ErrorAcc) ->
+                    ErrorAcc
+            end, {ok, #{}}, lists:seq(1, FilesPerDir)),
+
+            case FoldlStatus of
+                ok -> put(referenced_files, FoldlMap);
+                _ -> ok
+            end,
+            FoldlAns;
+        {true, Map} ->
+            {ok, Map}
     end,
-    case Proceed of
-        ok ->
+
+    case {BaseCreationAns, ReferencedFilesStatus} of
+        {ok, ok} ->
             Dirs = create_dirs_names(BaseDir, SpawnBegLevel, DirLevel, DirsPerParent),
 
             % Function that creates test directories and measures performance
             Fun = fun
                 ({{D, DName}, DParent}) ->
+                    {W, S} = get_worker_and_session(Workers, SessIds),
                     {T, {A, GUID}} = measure_execution_time(fun() ->
                         MkdirAns = case CacheGUIDS of
                             false ->
-                                lfm_proxy:mkdir(Worker, SessId, D, 8#755);
+                                lfm_proxy:mkdir(W, S, D);
                             _ ->
-                                lfm_proxy:mkdir(Worker, SessId, DParent, DName, 8#755)
+                                lfm_proxy:mkdir(W, S, DParent, DName, ?DEFAULT_DIR_PERMS)
                         end,
                         case MkdirAns of
                             {ok, DirGuid} ->
@@ -216,8 +269,9 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
                     Master ! {worker_ans, A, T},
                     GUID;
                 ({D, _}) ->
+                    {W, S} = get_worker_and_session(Workers, SessIds),
                     {T, {A, GUID}} = measure_execution_time(fun() ->
-                        case lfm_proxy:mkdir(Worker, SessId, D, 8#755) of
+                        case lfm_proxy:mkdir(W, S, D) of
                             {ok, DirGuid} ->
                                 {dir_ok, DirGuid};
                             Other ->
@@ -230,33 +284,56 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
 
             % Function that creates test files and measures performance
             Fun2 = fun(D, GUID) ->
+                {W, S} = get_worker_and_session(Workers, SessIds),
                 ToSend = lists:foldl(fun(N, Answers) ->
                     N2 = integer_to_binary(N),
                     F = <<D/binary, "/", N2/binary>>,
                     {ToAddV, Ans} = measure_execution_time(fun() ->
                         try
-                            {ok, FileGUID} = case CacheGUIDS of
-                                false ->
-                                    lfm_proxy:create(Worker, SessId, F, 8#755);
-                                _ ->
-                                    lfm_proxy:create(Worker, SessId, GUID, N2, 8#755)
-                            end,
-                            % Fill file if needed (depends on test config)
-                            case WriteToFile of
+                            case UseHardlinks of
                                 true ->
-                                    {ok, Handle} = case CacheGUIDS of
-                                        false ->
-                                            lfm_proxy:open(Worker, SessId, {path, F}, rdwr);
-                                        _ ->
-                                            lfm_proxy:open(Worker, SessId, {guid, FileGUID}, rdwr)
-                                    end,
-                                    WriteBuf = generator:gen_name(),
-                                    WriteSize = size(WriteBuf),
-                                    {ok, WriteSize} = lfm_proxy:write(Worker, Handle, 0, WriteBuf),
-                                    ok = lfm_proxy:close(Worker, Handle),
+                                    INodeGuid = maps:get(N, ReferencedFilesMap),
+                                    {ok, _} = lfm_proxy:make_link(W, S, ?FILE_REF(INodeGuid), ?FILE_REF(GUID), N2),
                                     file_ok;
-                                _ ->
-                                    file_ok
+                                false ->
+                                    {ok, FileGUID} = case CacheGUIDS of
+                                        false ->
+                                            lfm_proxy:create(W, S, F);
+                                        _ ->
+                                            lfm_proxy:create(W, S, GUID, N2, ?DEFAULT_FILE_PERMS)
+                                    end,
+                                    % Fill file if needed (depends on test config)
+                                    case WriteToFile of
+                                        true ->
+                                            {ok, Handle} = case CacheGUIDS of
+                                                false ->
+                                                    lfm_proxy:open(W, S, {path, F}, rdwr);
+                                                _ ->
+                                                    lfm_proxy:open(W, S, ?FILE_REF(FileGUID), rdwr)
+                                            end,
+                                            WriteBuf = generator:gen_name(),
+                                            WriteSize = size(WriteBuf),
+                                            {ok, WriteSize} = lfm_proxy:write(W, Handle, 0, WriteBuf),
+                                            ok = lfm_proxy:close(W, Handle),
+                                            ok;
+                                        _ ->
+                                            ok
+                                    end,
+
+                                    % set xattr metadata if needed (depends on test config)
+                                    case SetMetadata of
+                                        true ->
+                                            Xattr = #xattr{name = F, value = F},
+                                            case CacheGUIDS of
+                                                false ->
+                                                    lfm_proxy:set_xattr(W, S, {path, F}, Xattr);
+                                                _ ->
+                                                    lfm_proxy:set_xattr(W, S, ?FILE_REF(FileGUID), Xattr)
+                                            end,
+                                            file_ok;
+                                        _ ->
+                                            file_ok
+                                    end
                             end
                         catch
                             E1:E2 ->
@@ -271,10 +348,10 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
             % Spawn processes that execute both test functions
             spawn_workers(Dirs, Fun, Fun2, SpawnBegLevel, SpawnEndLevel),
             LastLevelDirs = math:pow(DirsPerParent, DirLevel - SpawnBegLevel + 1),
-            DirsToDo = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
+            DirsToProcess = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
             % Gather test results
             GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}},
-                {other, {0,0}}], round(DirsToDo + LastLevelDirs)),
+                {other, {0,0}}], round(DirsToProcess + LastLevelDirs)),
 
             % Calculate and log output
             NewLevels = lists:foldl(fun
@@ -313,7 +390,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
             {OtherAns, OtherTime} = proplists:get_value(other, Ans, {0,0}),
             OtherAvgTime = get_avg(OtherAns, OtherTime),
             FinalAns = get_final_ans_tree(Worker, FilesSaved, FilesAvgTime, DirsSaved,
-                DirsAvgTime, OtherAns, OtherAvgTime, 0, Timeout),
+                DirsAvgTime, CreatedBaseDirsNum, OtherAns, OtherAvgTime, 0, Timeout),
 
             Sum = case get(ok_sum) of
                 undefined ->
@@ -324,7 +401,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
             NewSum = Sum + FilesSaved + DirsSaved,
             put(ok_sum, NewSum),
 
-            ct:print("Files num ~p, dirs num ~p, agg ~p", [FilesSaved, DirsSaved, NewSum]),
+            ct:print("Files num ~tp, dirs num ~tp, agg ~tp", [FilesSaved, DirsSaved, NewSum]),
             ?assertEqual(ok, TimeoutCheck),
             ?assertEqual(0, OtherAns),
 
@@ -333,13 +410,12 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
                     [stop | FinalAns];
                 _ ->
                     FinalAns
-
             end;
         _ ->
-            ct:print("Dirs not ready"),
+            ct:print("Dirs or referenced files not ready"),
             timer:sleep(timer:seconds(60)),
-            ?assertEqual(ok, Proceed),
-            get_final_ans_tree(Worker, 0, 0, 0, 0, 0,0, 1, 0)
+            ?assertEqual(ok, BaseCreationAns),
+            get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0,0, 1, 0)
     end.
 
 %%%===================================================================
@@ -347,13 +423,16 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer, ?MODULE]} | Config].
+    [{?LOAD_MODULES, [initializer, ?MODULE, stress_test_traverse_pool]} | Config].
+
+end_per_suite(_Config) ->
+    ok.
 
 init_per_testcase(stress_test, Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     initializer:disable_quota_limit(Config),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config, true),
 
     lfm_proxy:init(ConfigWithSessionInfo);
 
@@ -365,7 +444,7 @@ end_per_testcase(stress_test, Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop();
 
 end_per_testcase(_Case, Config) ->
@@ -421,7 +500,7 @@ gather_answers(Answers, 0, _, _) ->
 gather_answers(Answers, Num, Gathered, LastReport) ->
     NewLastReport = case (Gathered - LastReport) >= 1000 of
         true ->
-            ct:print("Gather answers num ~p", [Gathered]),
+            ct:print("Gather answers num ~tp", [Gathered]),
             Gathered;
         _ ->
             LastReport
@@ -443,7 +522,7 @@ gather_answers(Answers, Num, Gathered, LastReport) ->
                     {K, {V1_2, V2_2}} ->
                         {{K, {V1 + V1_2, V2 + V2_2}}, V1_2};
 %%                    {K, {V1_2, V2_2, V3_2}} ->
-%%                        ct:print("Error ~p", [V3_2]),
+%%                        ct:print("Error ~tp", [V3_2]),
 %%                        {{K, {V1 + V1_2, V2 + V2_2}}, V1_2};
                     none ->
                         {CurrentV, 0}
@@ -457,10 +536,9 @@ gather_answers(Answers, Num, Gathered, LastReport) ->
     end.
 
 measure_execution_time(Fun) ->
-    StartTime = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     Ans = Fun(),
-    Now = os:timestamp(),
-    {timer:now_diff(Now, StartTime), Ans}.
+    {stopwatch:read_micros(Stopwatch), Ans}.
 
 get_avg(Num, Timw) ->
     case Num of
@@ -468,14 +546,16 @@ get_avg(Num, Timw) ->
         _ -> Timw/Num
     end.
 
-get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, OtherTime, InitFailed, Timeout) ->
+get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, CreatedBaseDirsNum,
+    OtherAns, OtherTime, InitFailed, Timeout
+) ->
     Mem = case rpc:call(Worker, monitoring, get_memory_stats, []) of
         [{<<"mem">>, MemUsage}] ->
             MemUsage;
         _ ->
             -1
     end,
-%%    ct:print("Repeat log: ~p", [{FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, OtherTime, Mem, InitFailed, Timeout}]),
+%%    ct:print("Repeat log: ~tp", [{FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, OtherTime, Mem, InitFailed, Timeout}]),
     [
         #parameter{name = files_saved, value = FilesSaved, description = "Number of files saved"},
         #parameter{name = file_save_avg_time, value = FilesTime, unit = "us",
@@ -483,6 +563,7 @@ get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns,
         #parameter{name = dirs_saved, value = DirsSaved, description = "Number of dirs saved"},
         #parameter{name = dirs_save_avg_time, value = DirsTime, unit = "us",
             description = "Average time of dir save operation"},
+        #parameter{name = base_dirs_created, value = CreatedBaseDirsNum, description = "Number of base dirs created"},
         #parameter{name = error_ans_count, value = OtherAns, description = "Number of errors"},
         #parameter{name = error_ans_count_avg_time, value = OtherTime, unit = "us",
             description = "Average time of operation that ended with error"},
@@ -492,7 +573,7 @@ get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns,
     ].
 
 get_final_ans(Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed) ->
-%%    ct:print("Repeat log: ~p", [{Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed}]),
+%%    ct:print("Repeat log: ~tp", [{Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed}]),
     [
         #parameter{name = saved, value = Saved, description = "Number of save operations that succed"},
         #parameter{name = save_avg_time, value = SaveTime, unit = "us",
@@ -514,13 +595,13 @@ create_single_call(SessId, Dir, FilesNum, NameExtBin) ->
         {T, A} = measure_execution_time(fun() ->
             N2 = integer_to_binary(N),
             File = <<Dir/binary, "/", NameExtBin/binary, "_", N2/binary>>,
-            logical_file_manager:create(SessId, File)
+            lfm:create(SessId, File)
         end),
         case A of
             {ok, _} ->
                 {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
             _ ->
-                ct:print("Create error: ~p", [A]),
+                ?error("Create error: ~tp", [A]),
                 {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
         end
     end, {0,0,0,0}, lists:seq(1,FilesNum)).
@@ -539,8 +620,50 @@ process_answer(Answers, Ans, ToAddV) ->
     end,
     [ToAdd | proplists:delete(K, Answers)].
 
-ls(_Worker, _SessId, _Dir, _Token, true) ->
-    ok;
-ls(Worker, SessId, Dir, Token, _) ->
-    {ok, _, Token2, IsLast} = lfm_proxy:ls(Worker, SessId, {path, Dir}, 0, 2000, Token),
-    ls(Worker, SessId, Dir, Token2, IsLast).
+ls(Worker, SessId, Dir, PaginationToken) ->
+    ListOpts = case PaginationToken of
+        undefined -> #{tune_for_large_continuous_listing => true};
+        _ -> #{pagination_token => PaginationToken}
+    end,
+    {ok, _, NextListingPaginationToken} = lfm_proxy:get_children(Worker, SessId, {path, Dir}, ListOpts#{limit => 2000}),
+    case file_listing:is_finished(NextListingPaginationToken) of
+        true -> ok;
+        false ->
+            ls(Worker, SessId, Dir, NextListingPaginationToken)
+    end.
+
+get_param_value(ParamName, ParamsList) ->
+    #parameter{value = Value} = lists:keyfind(ParamName, 2, ParamsList),
+    Value.
+
+get_worker_and_session([W], [S]) ->
+    {W, S};
+get_worker_and_session(Workers, Sessions) ->
+    Num = rand:uniform(length(Workers)),
+    {lists:nth(Num, Workers), lists:nth(Num, Sessions)}.
+
+
+create_many(Worker, SessId, Dir, FilesNum, ProcNum, NameExtBin) ->
+    FilesPerProc = FilesNum div ProcNum,
+    Master = self(),
+    lists:foreach(fun(N) ->
+        spawn(fun() ->
+            try
+                NBin = integer_to_binary(N),
+                RpcAns = rpc:call(Worker, ?MODULE, create_single_call,
+                    [SessId, Dir, FilesPerProc, <<NameExtBin/binary, "_", NBin/binary>>]),
+                Master ! {create_single_call, RpcAns}
+            catch
+                Error:Reason:Stacktrace ->
+                    ct:print("Error: ~tp:~tp~n~tp", [Error, Reason, Stacktrace]),
+                    Master ! {create_single_call, {0, 0, 0, 0}}
+            end
+        end)
+    end, lists:seq(1, ProcNum)),
+
+    lists:foldl(fun(_, {SaveOkAcc, SaveTimeAcc, SErrorAcc, SErrorTimeAcc}) ->
+        receive
+            {create_single_call, {SaveOk, SaveTime, SError, SErrorTime}} ->
+                {SaveOk + SaveOkAcc, SaveTime + SaveTimeAcc, SError + SErrorAcc, SErrorTime + SErrorTimeAcc}
+        end
+    end, {0, 0, 0, 0}, lists:seq(1, ProcNum)).

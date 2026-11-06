@@ -1,0 +1,58 @@
+%%%-------------------------------------------------------------------
+%%% @author Katarzyna Such
+%%% @copyright (C) 2024 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Logic related to the circuit breaker mechanism, managed
+%%% by Onepanel's DB disk usage monitor.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(op_worker_circuit_breaker).
+-author("Katarzyna Such").
+
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+-define(THROTTLE_LOG(Log), utils:throttle({?MODULE, ?FUNCTION_NAME}, timer:minutes(5), fun() -> Log end)).
+
+%% API
+-export([assert_closed/0, toggle/1]).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+-spec assert_closed() -> ok | no_return().
+assert_closed() ->
+    case op_worker:get_env(service_circuit_breaker_state, closed) of
+        open ->
+            ?THROTTLE_LOG(?critical(
+                "All services have been temporarily disabled, consult Onepanel logs for details"
+            )),
+            throw(?ERR_SERVICE_UNAVAILABLE(?err_ctx()));
+        closed ->
+            ok
+    end.
+
+
+-spec toggle(open | closed) -> ok.
+toggle(NewState) ->
+    PrevState = op_worker:get_env(service_circuit_breaker_state, closed),
+    op_worker:set_env(service_circuit_breaker_state, NewState),
+    case {PrevState, NewState} of
+        {open, closed} ->
+            ?notice(
+                "The circuit breaker has been set to 'closed', all services resume operation - "
+                "consult Onepanel logs for details"
+            );
+        {closed, open} ->
+            ?emergency(
+                "The circuit breaker has been set to 'open', ALL SERVICES HAVE BEEN DISABLED - "
+                "consult Onepanel logs for details"
+            );
+        {Same, Same} ->
+            ok
+    end.

@@ -15,6 +15,8 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
+
 
 %%%===================================================================
 %%% Global names
@@ -40,10 +42,6 @@
 %% ID of provider that is not currently registered in Onezone
 -define(UNREGISTERED_PROVIDER_ID, <<"unregistered_provider">>).
 
-%%%===================================================================
-%%% Global identities
-%%%===================================================================
-
--define(OZ_IDENTITY, #user_identity{user_id = <<"ONE-ZONE">>}).
+-define(EPOCH_INFINITY, 9999999999). % GMT: Saturday, 20 November 2286 17:46:39
 
 -endif.

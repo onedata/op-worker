@@ -22,7 +22,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([stress_test/1, stress_test_base/1,
     single_large_dir_creation_test/1, single_large_dir_creation_test_base/1,
     single_dir_creation_test/1, single_dir_creation_test_base/1]).
@@ -58,7 +58,7 @@ single_dir_creation_test(Config) ->
         {parameters, [
             [{name, files_num}, {value, 1000}, {description, "Numer of files in dir"}]
         ]},
-        {description, "Creates files in dir using single process"}
+        {description, "Creates and deletes files in dir (in a loop)"}
     ]).
 single_dir_creation_test_base(Config) ->
     files_stress_test_base:single_dir_creation_test_base(Config, true).
@@ -66,12 +66,20 @@ single_dir_creation_test_base(Config) ->
 single_large_dir_creation_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, files_num}, {value, 1000}, {description, "Numer of files in dir"}]
+            [{name, files_num}, {value, 10000}, {description, "Numer of files in dir"}],
+            [{name, proc_num}, {value, 20}, {description, "Number of precesses that create files"}],
+            [{name, reps_num}, {value, 100}, {description, "Number of test function repeats"}],
+            [{name, test_list}, {value, true}, {description, "Measure ls time after every 20000 files creation"}]
         ]},
-        {description, "Creates files in dir using single process"}
+        {description, "Creates files in dir using using multiple processes"}
     ]).
 single_large_dir_creation_test_base(Config) ->
-    files_stress_test_base:single_dir_creation_test_base(Config, false).
+    Ans = files_stress_test_base:single_dir_creation_test_base(Config, false),
+    RepsNum = ?config(reps_num, Config),
+    case ?config(rep_num, Config) >= RepsNum of
+        true -> [stop | Ans];
+        false -> Ans
+    end.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -79,6 +87,9 @@ single_large_dir_creation_test_base(Config) ->
 
 init_per_suite(Config) ->
     files_stress_test_base:init_per_suite(Config).
+
+end_per_suite(Config) ->
+    files_stress_test_base:end_per_suite(Config).
 
 init_per_testcase(Case, Config) ->
     files_stress_test_base:init_per_testcase(Case, Config).

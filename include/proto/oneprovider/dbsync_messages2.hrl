@@ -28,13 +28,16 @@
     space_id :: od_space:id(),
     since :: couchbase_changes:since(),
     until :: couchbase_changes:until(),
-    compressed_docs :: binary()
+    timestamp :: dbsync_changes:timestamp(),
+    compressed :: boolean(),
+    docs :: binary()
 }).
 
 -record(changes_request2, {
     space_id :: od_space:id(),
     since :: couchbase_changes:since(),
-    until :: couchbase_changes:until()
+    until :: couchbase_changes:until(),
+    included_mutators :: dbsync_in_stream:mutators()
 }).
 
 -endif.

@@ -1,0 +1,326 @@
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2020-2024 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Tests concerning authorization of file metadata operations.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(authz_file_metadata_api_tests).
+-author("Bartosz Walkowicz").
+
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
+-include("authz/authz_api_test_runner.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
+-include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
+
+-export([
+    test_get_custom_metadata/1,
+    test_set_custom_metadata/1,
+    test_remove_custom_metadata/1,
+
+    test_get_xattr/1,
+    test_list_xattr/1,
+    test_set_xattr/1,
+    test_remove_xattr/1,
+
+    test_get_file_distribution/1,
+    test_get_historical_dir_size_stats/1,
+    test_get_file_storage_locations/1
+]).
+
+
+%%%===================================================================
+%%% Tests
+%%%===================================================================
+
+
+test_get_custom_metadata(SpaceId) ->
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = SpaceId,
+        files = [#authz_file_spec{
+            name = <<"file1">>,
+            required_perms = [?read_metadata],
+            on_create = fun(Node, FileOwnerSessionId, Guid) ->
+                opt_file_metadata:set_custom_metadata(
+                    Node, FileOwnerSessionId, ?FILE_REF(Guid), json, <<"VAL">>, []
+                ),
+                ?FILE_REF(Guid)
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_for_share_guid = true,
+        available_in_public_data_mode = false,
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            opt_file_metadata:get_custom_metadata(Node, SessionId, FileKey, json, [], false)
+        end,
+        returned_errors = api_errors,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end,
+        special_dirs_supporting_the_operation = [space_dir, archive_dir],
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?ENODATA)
+    }).
+
+
+test_set_custom_metadata(SpaceId) ->
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = SpaceId,
+        files = [#authz_file_spec{
+            name = <<"file1">>,
+            required_perms = [?write_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_for_share_guid = false,
+        available_in_public_data_mode = false,
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            opt_file_metadata:set_custom_metadata(Node, SessionId, FileKey, json, <<"VAL">>, [])
+        end,
+        returned_errors = api_errors,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
+    }).
+
+
+test_remove_custom_metadata(SpaceId) ->
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = SpaceId,
+        files = [#authz_file_spec{
+            name = <<"file1">>,
+            required_perms = [?write_metadata],
+            on_create = fun(Node, FileOwnerSessionId, Guid) ->
+                opt_file_metadata:set_custom_metadata(
+                    Node, FileOwnerSessionId, ?FILE_REF(Guid), json, <<"VAL">>, []
+                ),
+                ?FILE_REF(Guid)
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_for_share_guid = false,
+        available_in_public_data_mode = false,
+        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            opt_file_metadata:remove_custom_metadata(Node, SessionId, FileKey, json)
+        end,
+        returned_errors = api_errors,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
+    }).
+
+
+test_get_xattr(SpaceId) ->
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = SpaceId,
+        files = [#authz_file_spec{
+            name = <<"file1">>,
+            required_perms = [?read_metadata],
+            on_create = fun(Node, FileOwnerSessionId, Guid) ->
+                Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
+                lfm_proxy:set_xattr(Node, FileOwnerSessionId, ?FILE_REF(Guid), Xattr),
+                ?FILE_REF(Guid)
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_for_share_guid = true,
+        available_in_public_data_mode = true,
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            lfm_proxy:get_xattr(Node, SessionId, FileKey, <<"myxattr">>)
+        end,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end,
+        special_dirs_supporting_the_operation = [space_dir, user_root_dir],
+        expected_result_for_supporting_special_dirs = {error, ?ENODATA}
+    }).
+
+
+test_list_xattr(SpaceId) ->
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = SpaceId,
+        files = [#authz_file_spec{
+            name = <<"file1">>,
+            on_create = fun(Node, FileOwnerSessionId, Guid) ->
+                Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
+                lfm_proxy:set_xattr(Node, FileOwnerSessionId, ?FILE_REF(Guid), Xattr),
+                ?FILE_REF(Guid)
+            end
+        }],
+        available_in_readonly_mode = true,
+        available_for_share_guid = true,
+        available_in_public_data_mode = true,
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            lfm_proxy:list_xattr(Node, SessionId, FileKey, false, false)
+        end,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end,
+        special_dirs_supporting_the_operation = [space_dir, user_root_dir]
+    }).
+
+
+test_set_xattr(SpaceId) ->
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = SpaceId,
+        files = [#authz_file_spec{
+            name = <<"file1">>,
+            required_perms = [?write_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_for_share_guid = false,
+        available_in_public_data_mode = false,
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            lfm_proxy:set_xattr(Node, SessionId, FileKey, #xattr{name = <<"myxattr">>, value = <<"VAL">>})
+        end,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
+    }).
+
+
+test_remove_xattr(SpaceId) ->
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = SpaceId,
+        files = [#authz_file_spec{
+            name = <<"file1">>,
+            required_perms = [?write_metadata],
+            on_create = fun(Node, FileOwnerSessionId, Guid) ->
+                Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
+                lfm_proxy:set_xattr(Node, FileOwnerSessionId, ?FILE_REF(Guid), Xattr),
+                ?FILE_REF(Guid)
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_for_share_guid = false,
+        available_in_public_data_mode = false,
+        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            lfm_proxy:remove_xattr(Node, SessionId, FileKey, <<"myxattr">>)
+        end,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
+    }).
+
+
+test_get_file_distribution(SpaceId) ->
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = SpaceId,
+        files = [#authz_file_spec{
+            name = <<"file1">>,
+            required_perms = [?read_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_for_share_guid = false,
+        available_in_public_data_mode = false,
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            opt_file_metadata:get_distribution_deprecated(Node, SessionId, FileKey)
+        end,
+        returned_errors = api_errors,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
+    }).
+
+
+test_get_historical_dir_size_stats(SpaceId) ->
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = SpaceId,
+        files = [#authz_dir_spec{
+            name = <<"dir1">>,
+            required_perms = [?read_metadata],
+            children = [
+                #authz_file_spec{
+                    name = <<"file1">>,
+                    required_perms = []
+                }
+            ]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_for_share_guid = false,
+        available_in_public_data_mode = false,
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/dir1">>, ExtraData),
+            ProviderId = opw_test_rpc:get_provider_id(Node),
+            opt_file_metadata:get_historical_dir_size_stats(
+                Node, SessionId, FileKey, ProviderId, #time_series_layout_get_request{}
+            )
+        end,
+        returned_errors = api_errors,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
+        end,
+        special_dirs_supporting_the_operation = [space_dir, space_archives_dir, dataset_archives_dir, archive_dir, tmp_dir, trash_dir]
+    }).
+
+
+test_get_file_storage_locations(SpaceId) ->
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = SpaceId,
+        files = [#authz_file_spec{
+            name = <<"file1">>,
+            required_perms = [?read_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_for_share_guid = false,
+        available_in_public_data_mode = false,
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            opt_file_metadata:get_storage_locations(Node, SessionId, FileKey)
+        end,
+        returned_errors = api_errors,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
+    }).

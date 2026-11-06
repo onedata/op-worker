@@ -89,7 +89,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 },
                 "worker2": {
@@ -104,7 +104,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -138,7 +138,7 @@
                             "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 },
                 "worker2": {
@@ -153,7 +153,7 @@
                             "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -187,7 +187,7 @@
                             "127.0.0.1:49163"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 },
                 "worker2": {
@@ -202,18 +202,13 @@
                             "127.0.0.1:49163"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
         }
     },
     "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space1"
-            }
-        },
         "groups": {
         },
         "spaces": {
@@ -226,13 +221,16 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "nulldevice1"
+                        "storage": "nulldevice1",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "nulldevice2"
+                        "storage": "nulldevice2",
+                        "supported_size": 10000000000
                     },
                     "p3": {
-                        "storage": "nulldevice3"
+                        "storage": "nulldevice3",
+                        "supported_size": 10000000000
                     }
                 }
             }

@@ -13,20 +13,22 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("http/rest/cdmi/cdmi_errors.hrl").
--include("http/rest/cdmi/cdmi_capabilities.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("rest_test_utils.hrl").
+-include("api/rest_test_utils.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([
@@ -36,30 +38,13 @@
 ]).
 
 -export([
-    get_simple_file_distribution/1,
+    lookup_file_objectid/1,
+    lookup_file_objectid_in_tmp_dir/1,
+    lookup_file_objectid_duplicated_space_name/1,
     transfers_should_be_ordered_by_timestamps/1,
-    posix_mode_get/1,
-    posix_mode_put/1,
-    attributes_list/1,
-    xattr_get/1,
-    xattr_put/1,
-    xattr_list/1,
     metric_get/1,
-    list_file/1,
-    list_dir/1,
-    list_dir_range/1,
     list_spaces/1,
     get_space/1,
-    create_share/1,
-    set_get_json_metadata/1,
-    set_get_json_metadata_id/1,
-    set_get_rdf_metadata/1,
-    set_get_rdf_metadata_id/1,
-    set_get_json_metadata_inherited/1,
-    set_get_xattr_inherited/1,
-    set_get_json_metadata_using_filter/1,
-    primitive_json_metadata_test/1,
-    empty_metadata_invalid_json_test/1,
     list_transfers/1,
     track_transferred_files/1
 ]).
@@ -67,57 +52,41 @@
 %utils
 -export([
     verify_file/3, create_file/3, create_dir/3,
-    create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4,
-    verify_distribution/6
+    create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4
 ]).
 
 all() ->
     ?ALL([
-        get_simple_file_distribution,
+        lookup_file_objectid,
+        lookup_file_objectid_in_tmp_dir,
+        lookup_file_objectid_duplicated_space_name,
         transfers_should_be_ordered_by_timestamps,
-        posix_mode_get,
-        posix_mode_put,
-        attributes_list,
-        xattr_get,
-        xattr_put,
-        xattr_list,
-        metric_get,
-        list_file,
-        list_dir,
-        list_dir_range,
+        % @TODO VFS-8297 currently disabled
+        % metric_get,
         list_spaces,
         get_space,
-        create_share,
-        set_get_json_metadata,
-        set_get_json_metadata_id,
-        set_get_rdf_metadata,
-        set_get_rdf_metadata_id,
-        set_get_json_metadata_inherited,
-        set_get_xattr_inherited,
-        set_get_json_metadata_using_filter,
-        primitive_json_metadata_test,
-        empty_metadata_invalid_json_test,
         list_transfers,
         track_transferred_files
     ]).
 
 -define(ATTEMPTS, 100).
 
--define(normalizeDistribution(__Distributions), lists:sort(lists:map(fun(__Distribution) ->
-    __Distribution#{
-        <<"totalBlocksSize">> => lists:foldl(fun([_Offset, __Size], __SizeAcc) ->
-            __SizeAcc + __Size
-        end, 0, maps:get(<<"blocks">>, __Distribution))
-    }
-end, __Distributions))).
+-define(SPACE1_ID, <<"space1">>).
 
--define(assertDistribution(Worker, ExpectedDistribution, Config, File),
-    ?assertEqual(?normalizeDistribution(ExpectedDistribution), begin
-        case rest_test_utils:request(Worker, <<"replicas", File/binary>>, get,
+-define(assertDistribution(Worker, ExpectedDistribution, Config, FileGuid),
+    ?assertMatch(ExpectedDistribution, begin
+        case rest_test_utils:request(
+            Worker,
+            <<
+                "data/",
+                (element(2, {ok, _} = file_id:guid_to_objectid(FileGuid)))/binary,
+                "/distribution"
+            >>,
+            get,
             ?USER_1_AUTH_HEADERS(Config), []
         ) of
             {ok, 200, _, __Body} ->
-                lists:sort(json_utils:decode(__Body));
+                json_utils:decode(__Body);
             Error ->
                 Error
         end
@@ -150,61 +119,142 @@ end, __Distributions))).
 -define(SYNC_FILE_COUNTER, sync_file_counter).
 -define(VERIFY_POOL, verify_pool).
 
+-define(SHARE_PUBLIC_URL(__ShareId), <<__ShareId/binary, "_public_url">>).
+-define(SHARE_HANDLE_ID(__ShareId), <<__ShareId/binary, "_handle_id">>).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-get_simple_file_distribution(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+lookup_file_objectid(Config) ->
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file0_gsfd"])),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    {ok, _} = lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
-    lfm_proxy:fsync(WorkerP1, Handle),
+    FilePath = filename:join(["/", SpaceName, "get_file_objectid"]),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
+    {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+        WorkerP1, <<"lookup-file-id/", FilePath/binary>>, post,
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
+    )),
+    #{<<"fileId">> := ObjectId} = json_utils:decode(Response),
+    ?assertMatch({ok, ObjectId}, file_id:guid_to_objectid(FileGuid)).
 
-    % when
-    ExpectedDistribution = [#{
-        <<"providerId">> => domain(WorkerP1),
-        <<"blocks">> => [[0, 4]]
-    }],
 
-    % then
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File).
+lookup_file_objectid_in_tmp_dir(Config) ->
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    TmpDirGuid = tmp_dir:guid(SpaceId),
+    TmpDirPath = filename:join(["/", SpaceName, ".__onedata__tmp"]),
+    {ok, 200, _, Response1} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+        WorkerP1, <<"lookup-file-id/", TmpDirPath/binary>>, post,
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
+    )),
+    #{<<"fileId">> := TmpDirObjectId} = json_utils:decode(Response1),
+    ?assertMatch({ok, TmpDirObjectId}, file_id:guid_to_objectid(TmpDirGuid)),
+
+    FileName = <<"get_file_objectid">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, TmpDirGuid, FileName, undefined),
+    FilePath = filename:join(["/", SpaceName, ".__onedata__tmp", FileName]),
+    {ok, 200, _, Response2} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+        WorkerP1, <<"lookup-file-id/", FilePath/binary>>, post,
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
+    )),
+    #{<<"fileId">> := ObjectId} = json_utils:decode(Response2),
+    ?assertMatch({ok, ObjectId}, file_id:guid_to_objectid(FileGuid)).
+
+
+lookup_file_objectid_duplicated_space_name(Config) ->
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    Fun = fun(SpaceName) ->
+        {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+            WorkerP1, <<"lookup-file-id/", SpaceName/binary>>, post,
+            ?USER_AUTH_HEADERS(Config, <<"user3">>, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
+        )),
+        #{<<"fileId">> := ObjectId} = json_utils:decode(Response),
+        ObjectId
+    end,
+    {ok, Space1ObjectId} = file_id:guid_to_objectid(space_dir:guid(<<"space_duplicated1">>)),
+    {ok, Space2ObjectId} = file_id:guid_to_objectid(space_dir:guid(<<"space_duplicated2">>)),
+    ?assertMatch(Space1ObjectId, Fun(<<"space_duplicated@space_duplicated1">>)),
+    ?assertMatch(Space2ObjectId, Fun(<<"space_duplicated@space_duplicated2">>)).
+
 
 transfers_should_be_ordered_by_timestamps(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SpaceId = ?config(space_id, Config),
     DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
+    StorageP1 = initializer:get_supporting_storage_id(WorkerP1, SpaceId),
+    StorageP2 = initializer:get_supporting_storage_id(WorkerP2, SpaceId),
 
-    File = ?absPath(SpaceId, <<"file_sorted">>),
+    FilePath = ?absPath(SpaceId, <<"file_sorted">>),
     Size = 1,
-    FileGuid = create_test_file(WorkerP1, SessionId, File, crypto:strong_rand_bytes(Size)),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    FileGuid = create_test_file(WorkerP1, SessionId, FilePath, crypto:strong_rand_bytes(Size)),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    File2 = ?absPath(SpaceId, <<"file_sorted2">>),
+    FilePath2 = ?absPath(SpaceId, <<"file_sorted2">>),
     Size2 = 3 * 1024 * 1024 * 1024,
-    FileGuid2 = create_test_file_by_size(WorkerP1, SessionId, File2, Size2),
-    {ok, FileObjectId2} = cdmi_id:guid_to_objectid(FileGuid2),
+    FileGuid2 = create_test_file_by_size(WorkerP1, SessionId, FilePath2, Size2),
+    {ok, FileObjectId2} = file_id:guid_to_objectid(FileGuid2),
 
     % when
-    ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{size = Size2}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
-    ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size]]}],
-    ExpectedDistribution2 = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size2]]}],
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File2),
+    ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, FilePath}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = Size2}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, FilePath2}), ?ATTEMPTS),
+    ExpectedDistributionFun = fun(S, StoragePath) -> #{
+        <<"distributionPerProvider">> => #{
+            DomainP1 => #{
+                <<"success">> => true,
+                <<"virtualSize">> => S,
+                <<"distributionPerStorageBackend">> => #{
+                    StorageP1 => #{
+                        <<"success">> => true, 
+                        <<"blocks">> => [[0, S]], 
+                        <<"physicalSize">> => S
+                    }
+                },
+                <<"locationsPerStorageBackend">> => #{
+                    StorageP1 => #{
+                        <<"success">> => true, 
+                        <<"location">> => StoragePath
+                    }
+                }
+            },
+            DomainP2 => #{
+                <<"success">> => true,
+                <<"virtualSize">> => S,
+                <<"distributionPerStorageBackend">> => #{
+                    StorageP2 => #{
+                        <<"success">> => true, 
+                        <<"blocks">> => [],  
+                        <<"physicalSize">> => 0
+                    }
+                },
+                <<"locationsPerStorageBackend">> => #{
+                    StorageP2 => #{
+                        <<"success">> => true, 
+                        <<"location">> => null
+                    }
+                }
+            }
+        },
+        <<"type">> => atom_to_binary(?REGULAR_FILE_TYPE)
+    } end,
+    ExpectedDistribution = ExpectedDistributionFun(Size, FilePath),
+    ExpectedDistribution2 = ExpectedDistributionFun(Size2, FilePath2),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, FileGuid),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, FileGuid2),
 
-    Tid2 = schedule_file_replication(WorkerP2, DomainP2, File2, Config),
+    Tid2 = schedule_file_replication(WorkerP2, DomainP2, FileGuid2, Config),
     ?assertEqual([Tid2], get_ongoing_transfers_for_file(WorkerP2, FileGuid2), ?ATTEMPTS),
     ?assertEqual([], get_ended_transfers_for_file(WorkerP2, FileGuid2), ?ATTEMPTS),
     % Wait 1 second to be sure that transfer Tid will have greater timestamp than transfer Tid2
     timer:sleep(timer:seconds(1)),
-    Tid = schedule_file_replication(WorkerP2, DomainP2, File, Config),
+    Tid = schedule_file_replication(WorkerP2, DomainP2, FileGuid, Config),
     ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
     ?assertEqual([], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
 
@@ -212,15 +262,15 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
+        <<"filePath">> := FilePath,
+        <<"evictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 0,
+        <<"filesFailed">> := 0,
         <<"filesReplicated">> := 1,
-        <<"fileReplicasEvicted">> := 0,
+        <<"filesEvicted">> := 0,
         <<"bytesReplicated">> := Size,
         <<"mthHist">> := #{DomainP1 := [Size | _]}
     }, WorkerP1, Tid, Config),
@@ -228,14 +278,14 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File2,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
+        <<"filePath">> := FilePath2,
+        <<"evictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId2,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"filesReplicated">> := 1,
-        <<"fileReplicasEvicted">> := 0,
+        <<"filesEvicted">> := 0,
         <<"bytesReplicated">> := Size2,
         <<"mthHist">> := #{DomainP1 := [Size2 | _]}
     }, WorkerP1, Tid2, Config),
@@ -255,164 +305,22 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid2), ?ATTEMPTS),
     ?assert(get_finish_time(WorkerP2, Tid, Config) =< get_finish_time(WorkerP2, Tid2, Config)).
 
-posix_mode_get(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_pmg"])),
-    Mode = 8#700,
-    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertEqual(
-        #{
-            <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>
-        },
-        DecodedBody
-    ).
-
-posix_mode_put(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file2_pmp"])),
-    Mode = 8#700,
-    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-
-    % when
-    NewMode = 8#777,
-    Body = json_utils:encode(#{<<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
-    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary>>, put,
-        ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Body),
-
-    % then
-    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-    DecodedBody = json_utils:decode(RespBody),
-    ?assertEqual(
-        #{
-            <<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>
-        },
-        DecodedBody
-    ).
-
-attributes_list(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_al"])),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    {ok, #file_attr{
-        atime = ATime,
-        ctime = CTime,
-        mtime = MTime,
-        gid = Gid,
-        uid = Uid
-    }} = lfm_proxy:stat(WorkerP1, SessionId, {guid, FileGuid}),
-    {ok, CdmiObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-    DecodedBody = json_utils:decode(Body),
-    ?assertEqual(
-        #{
-            <<"mode">> => <<"0700">>,
-            <<"size">> => 0,
-            <<"atime">> => ATime,
-            <<"ctime">> => CTime,
-            <<"mtime">> => MTime,
-            <<"storage_group_id">> => Gid,
-            <<"storage_user_id">> => Uid,
-            <<"name">> => <<"file1_al">>,
-            <<"owner_id">> => UserId1,
-            <<"shares">> => [],
-            <<"type">> => <<"reg">>,
-            <<"file_id">> => CdmiObjectId
-        },
-        DecodedBody
-    ).
-
-xattr_get(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_xg"])),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-    ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k1">>, value = <<"v1">>}),
-
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertEqual(
-        #{
-            <<"k1">> => <<"v1">>
-        },
-        DecodedBody
-    ).
-
-xattr_put(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file2_xp"])),
-    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-
-    % when
-    Body = json_utils:encode(#{<<"k1">> => <<"v1">>}),
-    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, put,
-        ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Body),
-
-    % then
-    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-    DecodedBody = json_utils:decode(RespBody),
-    ?assertEqual(
-        #{
-            <<"k1">> => <<"v1">>
-        },
-        DecodedBody
-    ).
-
-xattr_list(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_xl"])),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-    ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k1">>, value = <<"v1">>}),
-    ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k2">>, value = <<"v2">>}),
-
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(#{
-        <<"k1">> := <<"v1">>,
-        <<"k2">> := <<"v2">>
-    }, DecodedBody).
-
 metric_get(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Workers = [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space2">>,
+    UserId = <<"user1">>,
 
     Prov1ID = rpc:call(WorkerP1, oneprovider, get_id, []),
     Prov2ID = rpc:call(WorkerP2, oneprovider, get_id, []),
 
     MonitoringId = #monitoring_id{
         main_subject_type = space,
-        main_subject_id = <<"space2">>,
+        main_subject_id = SpaceId,
         metric_type = storage_quota,
         provider_id = Prov1ID
     },
 
-    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space2">>, MonitoringId, time_utils:system_time_seconds()])),
+    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [SpaceId, MonitoringId, global_clock:timestamp_seconds()])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
     ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save, [
         #document{
@@ -423,8 +331,21 @@ metric_get(Config) ->
         }
     ])),
 
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metrics/space/space2?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    AllPrivs = privileges:space_privileges(),
+
+    % viewing metrics without SPACE_VIEW_STATISTICS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, AllPrivs -- [?SPACE_VIEW_STATISTICS]),
+    ?assertMatch(
+        {ok, 403, _, _},
+        rest_test_utils:request(WorkerP1, <<"metrics/space/space2?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), [])
+    ),
+
+    % viewing metrics with SPACE_VIEW_STATISTICS privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, [?SPACE_VIEW_STATISTICS]),
+    {ok, 200, _, Body} = ?assertMatch(
+        {ok, 200, _, _},
+        rest_test_utils:request(WorkerP1, <<"metrics/space/space2?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), [])
+    ),
     DecodedBody = json_utils:decode(Body),
 
     % then
@@ -435,93 +356,67 @@ metric_get(Config) ->
     [Elem1, Elem2] = DecodedBody,
     ?assertNotEqual(maps:get(<<"providerId">>, Elem1), maps:get(<<"providerId">>, Elem2)).
 
-list_file(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    File = <<"/space2/file1_lf">>,
-    Mode = 8#700,
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-
-    % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"files/space2/file1_lf">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-    ?assertEqual(
-        [#{<<"id">> => FileObjectId, <<"path">> => File}],
-        DecodedBody
-    ).
-
-list_dir(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"files">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        [
-            #{<<"id">> := _, <<"path">> := <<"/space1">>},
-            #{<<"id">> := _, <<"path">> := <<"/space2">>},
-            #{<<"id">> := _, <<"path">> := <<"/space3">>},
-            #{<<"id">> := _, <<"path">> := <<"/space4">>}
-        ],
-        lists:sort(fun(#{<<"path">> := Path1}, #{<<"path">> := Path2}) ->
-            Path1 =< Path2
-        end, DecodedBody)
-    ).
-
-list_dir_range(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"files?offset=0&limit=1">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        [
-            #{<<"id">> := _, <<"path">> := <<"/space1">>}
-        ],
-        DecodedBody
-    ).
 
 list_spaces(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
+    [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    P1 = ?GET_DOMAIN_BIN(WorkerP1),
+    P2 = ?GET_DOMAIN_BIN(WorkerP2),
     % when
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"spaces">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
 
     % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        [
-            #{<<"name">> := <<"space1">>, <<"spaceId">> := <<"space1">>},
-            #{<<"name">> := <<"space2">>, <<"spaceId">> := <<"space2">>},
-            #{<<"name">> := <<"space3">>, <<"spaceId">> := <<"space3">>},
-            #{<<"name">> := <<"space4">>, <<"spaceId">> := <<"space4">>}
-        ],
-        lists:sort(DecodedBody)
+    ExpSpaces = lists:sort(lists:map(fun({SpaceId, Providers}) ->
+        SpaceDirGuid = space_dir:guid(SpaceId),
+        {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
+        {ok, TrashRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId)),
+        {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?SPACE_ARCHIVES_DIR_UUID(SpaceId), SpaceId)),
+
+        #{
+            <<"name">> => SpaceId,
+            <<"spaceId">> => SpaceId,
+            <<"fileId">> => SpaceDirObjectId,
+            <<"dirId">> => SpaceDirObjectId,
+            <<"trashDirId">> => TrashRootDirObjectId,
+            <<"archivesDirId">> => ArchivesRootDirObjectId,
+            <<"providers">> => lists:map(fun(P) ->
+                #{
+                    <<"providerId">> => P,
+                    <<"providerName">> => P
+                }
+            end, Providers)
+        }
+    end, [{<<"space1">>, [P1]}, {<<"space2">>, [P1, P2]}, {<<"space3">>, [P1, P2]}, {<<"space4">>, [P1, P2]}])),
+
+    ?assertEqual(ExpSpaces, lists:sort(json_utils:decode(Body))),
+
+    % data access caveats can limit the pool of available spaces
+    {_, _, _, Body2} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(WorkerP1, <<"spaces">>, get,
+        [rest_test_utils:user_token_header(user1_token_with_access_limited_to_space3(Config))], [])),
+    ?assertEqual(
+        lists:filter(fun(SpaceData) -> maps:get(<<"spaceId">>, SpaceData) == <<"space3">> end, ExpSpaces),
+        json_utils:decode(Body2)
     ).
 
-get_space(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
-    % when
+get_space(Config) ->
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+
+    % the token used in both requests allows access only to space3
+    AuthHeaders = [rest_test_utils:user_token_header(user1_token_with_access_limited_to_space3(Config))],
+    SpaceId = <<"space3">>,
+
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"spaces/space2">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
+        rest_test_utils:request(WorkerP1, <<"spaces/", SpaceId/binary>>, get, AuthHeaders, [])),
+
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
     % then
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
-            <<"name">> := <<"space2">>,
+            <<"name">> := SpaceId,
             <<"providers">> := [
                 #{
                     <<"providerId">> := PID1,
@@ -532,275 +427,22 @@ get_space(Config) ->
                     <<"providerName">> := PID2
                 }
             ],
-            <<"spaceId">> := <<"space2">>
-        },
-        DecodedBody
-    ).
-
-create_share(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Dir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
-    {ok, FileGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir, 8#700),
-    {ok, ObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-
-    % No share name -> error
-    ?assertMatch({ok, 400, _, _},
-        rest_test_utils:request(WorkerP1, str_utils:format_bin("shares-id/~s", [ObjectId]), post,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"">>)),
-
-    % Share name -> ok
-    ShareName = <<"Share name">>,
-    Payload = json_utils:encode(#{<<"name">> => ShareName}),
-    {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, str_utils:format_bin("shares-id/~s", [ObjectId]), post,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Payload)),
-    #{<<"shareId">> := ShareId} = json_utils:decode(Response),
-    ShareGuid = fslogic_uuid:guid_to_share_guid(FileGuid, ShareId),
-    ?assertMatch(
-        {ok, #document{key = ShareId, value = #od_share{
-            root_file = ShareGuid, name = ShareName, space = SpaceId
-        }}},
-        rpc:call(WorkerP1, share_logic, get, [?ROOT_SESS_ID, ShareId])
-    ),
-
-    % Cannot share the same dir twice
-    ?assertMatch({ok, 400, _, _},
-        rest_test_utils:request(WorkerP1, str_utils:format_bin("shares-id/~s", [ObjectId]), post,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Payload)),
-
-
-    % Remove the share and try again
-    ok = lfm_proxy:remove_share(WorkerP1, SessionId, ShareId),
-    ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, str_utils:format_bin("shares-id/~s", [ObjectId]), post,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Payload)).
-
-
-set_get_json_metadata(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), "{\"key\": \"value\"}")),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        #{
-            <<"key">> := <<"value">>
+            <<"spaceId">> := SpaceId,
+            <<"fileId">> := SpaceDirObjectId
         },
         DecodedBody
     ),
 
-    % then
-    ?assertMatch({ok, 200, _, <<"\"value\"">>},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?filter_type=keypath&filter=key">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])).
+    % space2 should not be available
+    {_, _, _, Body2} = ?assertMatch({ok, 401, _, _}, rest_test_utils:request(
+        WorkerP1, <<"spaces/space2">>, get, AuthHeaders, [])),
+    #{<<"error">> := ErrorJson} = ?assertMatch(#{<<"error">> := _}, json_utils:decode(Body2)),
+    ?assertMatch(?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(_)), errors:from_json(ErrorJson)).
 
-set_get_json_metadata_id(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space2/file_sgjmi">>, 8#777),
-    {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=json">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), "{\"key\": \"value\"}")),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=json">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        #{
-            <<"key">> := <<"value">>
-        },
-        DecodedBody
-    ),
-
-    % then
-    ?assertMatch({ok, 200, _, <<"\"value\"">>},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?filter_type=keypath&filter=key">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])).
-
-set_get_rdf_metadata(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=rdf">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/rdf+xml">>}]), "some_xml")),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=rdf">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/rdf+xml">>}]), [])),
-    ?assertMatch(<<"some_xml">>, Body).
-
-set_get_rdf_metadata_id(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space2/file_sgrmi">>, 8#777),
-    {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=rdf">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/rdf+xml">>}]), "some_xml")),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=rdf">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/rdf+xml">>}]), [])),
-    ?assertMatch(<<"some_xml">>, Body).
-
-set_get_json_metadata_inherited(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\": {\"a1\": \"b1\"}, \"b\": \"c\", \"e\": \"f\"}">>)),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir">>),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2/dir?metadata_type=json">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\": {\"a2\": \"b2\"}, \"b\": \"d\"}">>)),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2/dir?metadata_type=json&inherited=true">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        #{
-            <<"a">> := #{<<"a1">> := <<"b1">>, <<"a2">> := <<"b2">>},
-            <<"b">> := <<"d">>,
-            <<"e">> := <<"f">>
-        },
-        DecodedBody
-    ).
-
-set_get_xattr_inherited(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir_test">>),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir_test/child">>),
-
-    % when
-    XattrSpace = json_utils:encode(#{<<"k1">> => <<"v1">>}),
-    XattrDir = json_utils:encode(#{<<"k2">> => <<"v2">>}),
-    XattrChild = json_utils:encode(#{<<"k2">> => <<"v22">>}),
-    XattrChild2 = json_utils:encode(#{<<"k3">> => <<"v3">>}),
-
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\":5}">>)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space2?extended=true">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrSpace)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test?extended=true">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrDir)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test/child?extended=true">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrChild)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test/child?extended=true">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrChild2)),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test/child?inherited=true&extended=true">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(#{
-        <<"k1">> := <<"v1">>,
-        <<"k2">> := <<"v22">>,
-        <<"k3">> := <<"v3">>,
-        <<"onedata_json">> := #{<<"a">> := 5}
-    }, DecodedBody).
-
-set_get_json_metadata_using_filter(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"key1\": \"value1\", \"key2\": \"value2\", \"key3\": [\"v1\", \"v2\"]}">>)),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key1">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(<<"value1">>, DecodedBody),
-    {_, _, _, Body2} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key3.[1]">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody2 = json_utils:decode(Body2),
-    ?assertMatch(<<"v2">>, DecodedBody2),
-
-    %when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key1">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"\"value11\"">>)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"key22\": \"value22\"}">>)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key3.[0]">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"\"v11\"">>)),
-
-    %then
-    {_, _, _, ReponseBody} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    ?assertMatch(
-        #{
-            <<"key1">> := <<"value11">>,
-            <<"key2">> := #{<<"key22">> := <<"value22">>},
-            <<"key3">> := [<<"v11">>, <<"v2">>]
-        },
-        json_utils:decode(ReponseBody)).
-
-primitive_json_metadata_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    Primitives = [<<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
-        <<"null">>, <<"\"string\"">>],
-
-    lists:foreach(fun(Primitive) ->
-        ?assertMatch({ok, 204, _, _},
-            rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
-                ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Primitive)),
-        ?assertMatch({ok, 200, _, Primitive},
-            rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, get,
-                ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), []))
-    end, Primitives).
-
-empty_metadata_invalid_json_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    InvalidJsons = [<<"aaa">>, <<"{">>, <<"{\"aaa\": aaa}">>],
-
-    lists:foreach(fun(InvalidJson) ->
-        ?assertMatch({ok, 400, _, _},
-            rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
-                ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), InvalidJson))
-    end, InvalidJsons).
 
 list_transfers(Config) ->
     ct:timetrap({hours, 1}),
-    [P2, P1] = ?config(op_worker_nodes, Config),
+    Workers = [P1, P2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P2)}}, Config),
     Space = <<"space4">>,
@@ -828,8 +470,7 @@ list_transfers(Config) ->
     FileGuidsAndPaths2 = proplists:delete(DirGuid, FileGuidsAndPaths),
 
     AllTransfers = lists:sort(lists:map(fun({FileGuid, _FilePath}) ->
-        {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-        schedule_file_replication_by_id(P1, DomainP2, FileObjectId, Config)
+        schedule_file_replication(P1, DomainP2, FileGuid, Config)
     end, FileGuidsAndPaths2)),
 
     % List using random chunk sizes
@@ -869,13 +510,21 @@ list_transfers(Config) ->
     ?assertMatch(true, length(Ended(P2)) =:= FilesNum, ?ATTEMPTS),
 
     ?assertMatch(AllTransfers, lists:sort(Ended(P1)), ?ATTEMPTS),
-    ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS).
+    ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS),
+
+    AllPrivs = privileges:space_privileges(),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
+
+    % listing transfers without SPACE_VIEW_TRANSFERS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, <<"space4">>, <<"user1">>, AllPrivs -- [?SPACE_VIEW_TRANSFERS]),
+    ?assertMatch(ErrorForbidden, Ended(P1), ?ATTEMPTS),
+    ?assertMatch(ErrorForbidden, Ended(P2), ?ATTEMPTS).
 
 track_transferred_files(Config) ->
     [Provider1, Provider2] = ?config(op_worker_nodes, Config),
     FileUuid = <<"file1">>,
     SpaceId = <<"space2">>,
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     ScheduleTime = 100,
     FinishTime = 150,
     Transfer1 = <<"transfer1">>,
@@ -957,23 +606,17 @@ track_transferred_files(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
-            test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
-            test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
-            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
-        end, ?config(op_worker_nodes, NewConfig2)),
-
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
+            test_utils:set_env(Worker, ?APP_NAME, public_block_size_threshold, 0),
+            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_threshold, 0)
+        end, ?config(op_worker_nodes, NewConfig1)),
         application:start(ssl),
-        hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
-        NewConfig3
+        application:ensure_all_started(hackney),
+        NewConfig1
     end,
     {ok, _} = application:ensure_all_started(worker_pool),
     {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
@@ -986,9 +629,8 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    true = worker_pool:stop_pool(?VERIFY_POOL),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    ok = worker_pool:stop_sup_pool(?VERIFY_POOL),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
@@ -996,44 +638,46 @@ init_per_testcase(transfers_should_be_ordered_by_timestamps, Config) ->
     init_per_testcase(all, [{space_id, <<"space2">>} | Config]);
 
 init_per_testcase(metric_get, Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     start_monitoring_worker(WorkerP1),
     test_utils:mock_new(WorkerP1, rrd_utils),
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
         {ok, <<"{\"test\":\"rrd\"}">>}
     end),
-    init_per_testcase(all, Config);
+    OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space2">>, <<"user1">>]),
+    init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
-init_per_testcase(create_share, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    initializer:mock_share_logic(Config),
-    init_per_testcase(all, Config);
+init_per_testcase(list_transfers, Config) ->
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space4">>, <<"user1">>]),
+    init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
 init_per_testcase(_Case, Config) ->
+    Config2 = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:mock_auth_manager(Config2),
     ct:timetrap({minutes, 5}),
-    lfm_proxy:init(Config).
+    lfm_proxy:init(Config2).
 
 end_per_testcase(metric_get = Case, Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Workers = [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(WorkerP1, rrd_utils),
+    OldPrivs = ?config(old_privs, Config),
+    initializer:testmaster_mock_space_user_privileges(Workers, <<"space2">>, <<"user1">>, OldPrivs),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
+end_per_testcase(list_transfers = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, changes),
-    end_per_testcase(all, Config);
-
-end_per_testcase(create_share, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    initializer:unmock_share_logic(Config),
-    end_per_testcase(all, Config);
+    OldPrivs = ?config(old_privs, Config),
+    initializer:testmaster_mock_space_user_privileges(Workers, <<"space2">>, <<"user1">>, OldPrivs),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     remove_transfers(Config),
     ensure_transfers_removed(Config),
     test_utils:mock_unload(Workers, [sync_req, replica_deletion_req]),
-    lfm_proxy:teardown(Config).
+    lfm_proxy:teardown(Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 %%%===================================================================
 %%% Internal functions
@@ -1087,24 +731,15 @@ create_file_counter(N, FilesToCreate, ParentPid, Files) ->
 
 verify_file(Worker, SessionId, FileGuid) ->
     {ok, #file_attr{type = Type}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), 10 * ?ATTEMPTS),
+        lfm_proxy:stat(Worker, SessionId, ?FILE_REF(FileGuid)), 10 * ?ATTEMPTS),
     case Type of
         ?REGULAR_FILE_TYPE ->
             ?assertMatch({ok, #file_attr{size = ?TEST_DATA_SIZE}},
-                lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), ?ATTEMPTS);
+                lfm_proxy:stat(Worker, SessionId, ?FILE_REF(FileGuid)), ?ATTEMPTS);
         _ ->
             ok
     end,
     ?SYNC_FILE_COUNTER ! verified.
-
-verify_distribution(Worker, ExpectedDistribution, Config, FileGuid, FilePath, SessionId) ->
-    case lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}) of
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-            ?SYNC_FILE_COUNTER ! verified;
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
-            ?assertDistribution(Worker, ExpectedDistribution, Config, FilePath),
-            ?SYNC_FILE_COUNTER ! verified
-    end.
 
 list_ended_transfers(Worker, SpaceId) ->
     {ok, Transfers} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceId]),
@@ -1159,27 +794,28 @@ get_status(Worker, Tid, Config) ->
         get, ?USER_1_AUTH_HEADERS(Config), []),
     json_utils:decode(TransferStatus).
 
-schedule_file_replication(Worker, ProviderId, File, Config) ->
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(Worker,
-        <<"replicas/", File/binary, "?provider_id=", ProviderId/binary>>,
-        post, ?USER_1_AUTH_HEADERS(Config), []
-    ), ?ATTEMPTS),
-    DecodedBody = json_utils:decode(Body),
-    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-    Tid.
+schedule_file_replication(Worker, ProviderId, FileGuid, Config) ->
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-schedule_file_replication_by_id(Worker, ProviderId, FileId, Config) ->
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(Worker,
-        <<"replicas-id/", FileId/binary, "?provider_id=", ProviderId/binary>>,
-        post, ?USER_1_AUTH_HEADERS(Config), []
+    {ok, 201, _, Body} = ?assertMatch({ok, 201, _, _}, rest_test_utils:request(
+        Worker,
+        <<"transfers">>,
+        post,
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
+        json_utils:encode(#{
+            <<"type">> => <<"replication">>,
+            <<"replicatingProviderId">> => ProviderId,
+            <<"dataSourceType">> => <<"file">>,
+            <<"fileId">> => FileObjectId
+        })
     ), ?ATTEMPTS),
     DecodedBody = json_utils:decode(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
     Tid.
 
 create_test_file(Worker, SessionId, File, TestData) ->
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File, 8#700),
-    {ok, Handle} = lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File),
+    {ok, Handle} = lfm_proxy:open(Worker, SessionId, ?FILE_REF(FileGuid), write),
     lfm_proxy:write(Worker, Handle, 0, TestData),
     lfm_proxy:fsync(Worker, Handle),
     lfm_proxy:close(Worker, Handle),
@@ -1188,8 +824,8 @@ create_test_file(Worker, SessionId, File, TestData) ->
 create_test_file_by_size(Worker, SessionId, File, Size) ->
     ChunkSize = 100 * 1024 * 1024,
     Chunks = Size div (ChunkSize + 1) + 1,
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File, 8#700),
-    {ok, Handle} = lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File),
+    {ok, Handle} = lfm_proxy:open(Worker, SessionId, ?FILE_REF(FileGuid), write),
     Data = crypto:strong_rand_bytes(ChunkSize),
     lists:foldl(fun(_ChunkNum, WrittenSum) ->
         {ok, Written} = lfm_proxy:write(Worker, Handle, WrittenSum, binary_part(Data, 0, min(Size - WrittenSum, ChunkSize))),
@@ -1208,18 +844,26 @@ get_ended_transfers_for_file(Worker, FileGuid) ->
     Transfers.
 
 list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize) ->
-    Result = list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, <<"null">>, []),
-    % Make sure there are no duplicates
-    ?assertEqual(lists:sort(Result), lists:usort(Result)),
-    Result.
+    case list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, <<"null">>, []) of
+        Result when is_list(Result) ->
+            % Make sure there are no duplicates
+            ?assertEqual(lists:sort(Result), lists:usort(Result)),
+            Result;
+        Error ->
+            Error
+    end.
 
 list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, StartId, Acc) ->
-    {Transfers, NextPageToken} = list_transfers_via_rest(Config, Worker, Space, State, StartId, ChunkSize),
-    case NextPageToken of
-        <<"null">> ->
-            Acc ++ Transfers;
-        _ ->
-            list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, NextPageToken, Acc ++ Transfers)
+    case list_transfers_via_rest(Config, Worker, Space, State, StartId, ChunkSize) of
+        {ok, {Transfers, NextPageToken}} ->
+            case NextPageToken of
+                Null when Null =:= <<"null">> orelse Null =:= null ->
+                    Acc ++ Transfers;
+                _ ->
+                    list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, NextPageToken, Acc ++ Transfers)
+            end;
+        Error ->
+            Error
     end.
 
 list_transfers_via_rest(Config, Worker, Space, State, StartId, LimitOrUndef) ->
@@ -1232,13 +876,25 @@ list_transfers_via_rest(Config, Worker, Space, State, StartId, LimitOrUndef) ->
         Int when is_integer(Int) ->
             <<"&limit=", (integer_to_binary(Int))/binary>>
     end,
-    Url = str_utils:format_bin("spaces/~s/transfers?state=~s~s~s", [
+    Url = str_utils:format_bin("spaces/~ts/transfers?state=~ts~ts~ts", [
         Space, State, TokenParam, LimitParam
     ]),
-    {ok, _, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
-        Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>
-    )),
-    ParsedBody = json_utils:decode(Body),
-    Transfers = maps:get(<<"transfers">>, ParsedBody),
-    NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
-    {Transfers, NextPageToken}.
+    case rest_test_utils:request(Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>) of
+        {ok, 200, _, Body} ->
+            ParsedBody = json_utils:decode(Body),
+            Transfers = maps:get(<<"transfers">>, ParsedBody),
+            NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
+            {ok, {Transfers, NextPageToken}};
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
+    end.
+
+
+user1_token_with_access_limited_to_space3(Config) ->
+    OriginalAccessTokenBin = ?config({access_token, <<"user1">>}, Config),
+    LimitedAccessToken = tokens:confine(?check(tokens:deserialize(OriginalAccessTokenBin)), [
+        #cv_data_readonly{},
+        #cv_data_objectid{whitelist = [?RAND_OBJECTID(<<"space3">>), ?RAND_OBJECTID(<<"space2">>)]},
+        #cv_data_path{whitelist = [?RAND_CANONICAL_PATH(<<"space1">>), ?RAND_CANONICAL_PATH(<<"space3">>), ?RAND_CANONICAL_PATH(<<"space4">>)]}
+    ]),
+    ?check(tokens:serialize(LimitedAccessToken)).

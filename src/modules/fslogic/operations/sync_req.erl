@@ -14,11 +14,12 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/transfer.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type block() :: undefined | fslogic_blocks:block().
@@ -28,23 +29,20 @@
 -type fuse_response() :: fslogic_worker:fuse_response().
 -type provider_response() :: fslogic_worker:provider_response().
 
--export_type([block/0, transfer_id/0, provider_id/0]).
+-export_type([block/0, transfer_id/0, provider_id/0, query_view_params/0, provider_response/0]).
 
 %% API
 -export([
     synchronize_block/6,
     request_block_synchronization/6,
-    synchronize_block_and_compute_checksum/5,
-    get_file_distribution/2
+    synchronize_block_and_compute_checksum/5
 ]).
 
--export([
-    schedule_file_replication/6
-]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -55,18 +53,38 @@
     Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
 synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
     % trigger file_location creation
-    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
-    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
-    synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
-        Prefetch, TransferId, Priority);
+    case file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks) of
+        {#document{deleted = true}, _FileCtx2} ->
+            % The file's local location was deleted concurrently (delete race during transfer).
+            throw({error, not_found});
+        {#document{value = #file_location{size = 0} = FL}, FileCtx2} ->
+            LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx2),
+            FLC = #file_location_changed{file_location = FL#file_location{uuid = LogicalUuid},
+                change_beg_offset = 0, change_end_offset = 0},
+            #fuse_response{status = #status{code = ?OK}, fuse_response = FLC};
+        {#document{value = #file_location{size = Size} = FL, deleted = false} = FLDoc, FileCtx2} ->
+            case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
+                [#file_block{offset = 0, size = Size}] ->
+                    LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx2),
+                    FLC = #file_location_changed{file_location = FL#file_location{uuid = LogicalUuid},
+                        change_beg_offset = 0, change_end_offset = Size},
+                    #fuse_response{status = #status{code = ?OK}, fuse_response = FLC};
+                _ ->
+                    synchronize_block(UserCtx, FileCtx2, #file_block{offset = 0, size = Size},
+                        Prefetch, TransferId, Priority)
+            end
+    end;
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     case replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
-        Prefetch, TransferId, Priority) of
-        {ok, Ans} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
-        {error, _} = Error ->
-            throw(Error)
+        Prefetch, TransferId, Priority, transfer) of
+        {ok, #file_location_changed{file_location = FL} = Ans} ->
+            LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = Ans#file_location_changed{file_location = FL#file_location{uuid = LogicalUuid}}};
+        {error, Reason} ->
+            throw(Reason)
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -78,18 +96,27 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
 request_block_synchronization(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
     % trigger file_location creation
-    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
-    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
-    request_block_synchronization(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
-        Prefetch, TransferId, Priority);
+    case file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks) of
+        {#document{value = #file_location{size = 0}}, _FileCtx2} ->
+            #fuse_response{status = #status{code = ?OK}};
+        {#document{value = #file_location{size = Size}, deleted = false} = FLDoc, FileCtx2} ->
+            case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
+                [#file_block{offset = 0, size = Size}] ->
+                    #fuse_response{status = #status{code = ?OK}};
+                _ ->
+                    request_block_synchronization(UserCtx, FileCtx2, #file_block{offset = 0, size = Size},
+                        Prefetch, TransferId, Priority)
+            end
+    end;
 request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     case replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
-        Prefetch, TransferId, Priority) of
+        Prefetch, TransferId, Priority, transfer) of
         ok ->
             #fuse_response{status = #status{code = ?OK}};
-        {error, _} = Error ->
-            throw(Error)
+        {error, Reason} ->
+            throw(Reason)
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -103,90 +130,23 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     Range = #file_block{offset = Offset, size = Size}, Prefetch, Priority
 ) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
 
-    {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Range,
-        Prefetch, undefined, Priority),
+    {ok, #file_location_changed{file_location = FL} = Ans} =
+        replica_synchronizer:synchronize(UserCtx, FileCtx, Range, Prefetch, undefined, Priority, transfer),
 
-    %todo do not use lfm, operate on fslogic directly
-    {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read),
+    %TODO VFS-7393 do not use lfm, operate on fslogic directly
+    {ok, Handle} = lfm:open(SessId, ?FILE_REF(FileGuid), read),
     % does sync internally
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, off),
-    lfm_files:release(Handle),
+    lfm:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
+    LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #sync_response{
             checksum = Checksum,
-            file_location_changed = Ans
-        }
-    }.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets distribution of file over providers' storages.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) -> provider_response().
-get_file_distribution(_UserCtx, FileCtx) ->
-    {Locations, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
-    ProviderDistributions = lists:map(fun(#document{
-        value = #file_location{provider_id = ProviderId}
-    } = FL) ->
-        #provider_file_distribution{
-            provider_id = ProviderId,
-            blocks = fslogic_location_cache:get_blocks(FL)
-        }
-    end, Locations),
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #file_distribution{
-            provider_file_distributions = ProviderDistributions
-        }
-    }.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules file or dir replication, returns the id of created transfer doc
-%% wrapped in 'scheduled_transfer' provider response.
-%% Resolves file path based on file guid.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
-    od_provider:id(), transfer:callback(), transfer:index_name(),
-    query_view_params()) -> provider_response().
-schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
-    IndexName, QueryViewParams
-) ->
-    {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
-    schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId,
-        Callback, IndexName, QueryViewParams).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Schedules file or dir replication, returns the id of created transfer doc
-%% wrapped in 'scheduled_transfer' provider response.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
-    file_meta:path(), od_provider:id(), transfer:callback(),
-    transfer:index_name(), query_view_params()) -> provider_response().
-schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback,
-    IndexName, QueryViewParams
-) ->
-    SessionId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
-        TargetProviderId, Callback, IndexName, QueryViewParams),
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #scheduled_transfer{
-            transfer_id = TransferId
+            file_location_changed = Ans#file_location_changed{file_location = FL#file_location{uuid = LogicalUuid}}
         }
     }.

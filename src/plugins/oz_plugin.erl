@@ -35,8 +35,8 @@
 %%--------------------------------------------------------------------
 -spec get_oz_url() -> string().
 get_oz_url() ->
-    {ok, Hostname} = application:get_env(?APP_NAME, oz_domain),
-    "https://" ++ str_utils:to_list(Hostname).
+    Domain = oneprovider:get_oz_domain(),
+    "https://" ++ unicode:characters_to_list(Domain).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -45,8 +45,7 @@ get_oz_url() ->
 %%--------------------------------------------------------------------
 -spec get_oz_rest_port() -> integer().
 get_oz_rest_port() ->
-    {ok, Port} = application:get_env(?APP_NAME, oz_rest_port),
-    Port.
+    op_worker:get_env(oz_rest_port).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -55,8 +54,7 @@ get_oz_rest_port() ->
 %%--------------------------------------------------------------------
 -spec get_oz_rest_api_prefix() -> string().
 get_oz_rest_api_prefix() ->
-    {ok, Prefix} = application:get_env(?APP_NAME, oz_rest_api_prefix),
-    Prefix.
+    op_worker:get_env(oz_rest_api_prefix).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -65,7 +63,7 @@ get_oz_rest_api_prefix() ->
 %%--------------------------------------------------------------------
 -spec get_oz_rest_endpoint(string() | binary()) -> binary().
 get_oz_rest_endpoint(Path) ->
-    str_utils:format_bin("~s:~B~s~s", [
+    str_utils:format_bin("~ts:~B~ts~ts", [
         get_oz_url(),
         get_oz_rest_port(),
         get_oz_rest_api_prefix(),
@@ -79,8 +77,7 @@ get_oz_rest_endpoint(Path) ->
 %%--------------------------------------------------------------------
 -spec get_cacerts_dir() -> file:name_all().
 get_cacerts_dir() ->
-    {ok, CACertsDir} = application:get_env(?APP_NAME, cacerts_dir),
-    CACertsDir.
+    op_worker:get_env(cacerts_dir).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -91,29 +88,26 @@ get_cacerts_dir() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec auth_to_rest_client(Auth :: term()) ->
-    {user, macaroon, {Macaroon :: binary(), DischargeMacaroons :: [binary()]}} |
-    {provider, Macaroon :: binary()} |
+    {user, token, tokens:serialized()} |
+    {provider, tokens:serialized()} |
     none.
 auth_to_rest_client(none) ->
     none;
 
-auth_to_rest_client(#macaroon_auth{macaroon = Mac, disch_macaroons = DMacs}) ->
-    {user, macaroon, {Mac, DMacs}};
-
 auth_to_rest_client(provider) ->
-    {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
-    {provider, ProviderMacaroon};
+    {ok, ProviderAccessToken} = provider_auth:acquire_access_token(),
+    {provider, ProviderAccessToken};
 
 auth_to_rest_client(?ROOT_SESS_ID) ->
     auth_to_rest_client(provider);
 
 auth_to_rest_client(?GUEST_SESS_ID) ->
-    auth_to_rest_client(provider);
+    none;
 
 auth_to_rest_client(SessId) when is_binary(SessId) ->
     {ok, #document{
         value = #session{
-            auth = Auth,
+            credentials = Credentials,
             type = Type
         }}} = session:get(SessId),
     case Type of
@@ -122,5 +116,8 @@ auth_to_rest_client(SessId) when is_binary(SessId) ->
         provider_incoming ->
             auth_to_rest_client(provider);
         _ ->
-            auth_to_rest_client(Auth)
-    end.
+            auth_to_rest_client(Credentials)
+    end;
+
+auth_to_rest_client(TokenCredentials) ->
+    {user, token, auth_manager:get_access_token(TokenCredentials)}.

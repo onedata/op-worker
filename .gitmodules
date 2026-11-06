@@ -1,3 +1,6 @@
 [submodule "bamboos"]
 	path = bamboos
 	url = ../bamboos.git
+[submodule "one-env"]
+	path = one-env
+	url = ../one-env.git

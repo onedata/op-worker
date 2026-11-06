@@ -1,0 +1,5 @@
+{{package_name}} ({{version}}-{{build}}~{{distribution}}) {{distribution}}; urgency=low
+
+  * Build from {{version}}
+
+ -- Onedata Package Maintainer <support@onedata.org>  {{date}}

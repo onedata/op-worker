@@ -17,7 +17,7 @@
 
 %% API
 -export([maybe_emit_file_written/4, maybe_emit_file_read/4,
-    emit_file_truncated/3, emit_file_written/4]).
+    emit_file_truncated/3, emit_file_written/4, emit_file_read/3]).
 
 %%%===================================================================
 %%% API
@@ -38,6 +38,18 @@ emit_file_written(FileGuid, WrittenBlocks, FileSize, ManagerRef) ->
         blocks = WrittenBlocks,
         size = WrittenSize,
         file_size = FileSize
+    }, ManagerRef).
+
+
+
+-spec emit_file_read(fslogic_worker:file_guid(), fslogic_blocks:blocks(), event:manager_ref()) ->
+    ok | {error, Reason :: term()}.
+emit_file_read(FileGuid, ReadBlocks, ManagerRef) ->
+    ReadSize = size_of_blocks(ReadBlocks),
+    event:emit(#file_read_event{
+        file_guid = FileGuid,
+        blocks = ReadBlocks,
+        size = ReadSize
     }, ManagerRef).
 
 
@@ -65,12 +77,7 @@ maybe_emit_file_written(FileGuid, WrittenBlocks, SessionId, true) ->
 maybe_emit_file_read(_FileGuid, _ReadBlocks, _SessionId, false) ->
     ok;
 maybe_emit_file_read(FileGuid, ReadBlocks, SessionId, true) ->
-    ReadSize = size_of_blocks(ReadBlocks),
-    event:emit(#file_read_event{
-        file_guid = FileGuid,
-        blocks = ReadBlocks,
-        size = ReadSize
-    }, SessionId).
+    emit_file_read(FileGuid, ReadBlocks, SessionId).
 
 %%--------------------------------------------------------------------
 %% @doc

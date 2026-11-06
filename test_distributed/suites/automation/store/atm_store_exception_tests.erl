@@ -1,0 +1,349 @@
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2023 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Bodies of the automation exception store test cases, run by
+%%% 'atm_store_test_SUITE'.
+%%%
+%%% Supplies this store's parametrisation of the contract shared with the
+%%% other infinite-log backed stores, which is asserted in
+%%% 'atm_store_infinite_log_based_tests', and holds the exception specific
+%%% case: looking up entry indices by item trace id.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(atm_store_exception_tests).
+-author("Bartosz Walkowicz").
+
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
+-include("modules/automation/atm_execution.hrl").
+-include("modules/datastore/datastore_runner.hrl").
+-include("test_rpc.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
+
+
+%% test cases
+-export([
+    create_test/0,
+    update_content_test/0,
+    iterator_test/0,
+    browse_content_by_index_test/0,
+    browse_content_by_offset_test/0,
+
+    find_indices_by_trace_ids_test/0
+]).
+
+
+-define(STORE_SCHEMA(__CONFIG), #atm_system_store_schema{
+    id = ?RAND_STR(16),
+    name = ?RAND_STR(16),
+    type = exception,
+    config = __CONFIG
+}).
+
+-define(PROVIDER_SELECTOR, krakow).
+-define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
+
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+
+create_test() ->
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+
+    lists:foreach(fun(AtmStoreConfig) ->
+        InputItemGeneratorSeedDataSpec = get_input_item_generator_seed_data_spec(AtmStoreConfig),
+
+        ValidInputItemDataSeed = gen_valid_data(
+            AtmWorkflowExecutionAuth, InputItemGeneratorSeedDataSpec
+        ),
+        ValidInputItem = input_item_formatter(ValidInputItemDataSeed),
+
+        % Assert creating store with initial content fails
+        ?assertMatch(
+            {'EXIT', {function_clause, _}},
+            ?rpc(catch create_store(AtmWorkflowExecutionAuth, [ValidInputItem], AtmStoreConfig))
+        ),
+
+        ?assertMatch(
+            {ok, #document{value = #atm_store{initial_content = undefined, frozen = false}}},
+            ?rpc(create_store(AtmWorkflowExecutionAuth, undefined, AtmStoreConfig))
+        )
+    end, example_configs()).
+
+
+update_content_test() ->
+    atm_store_infinite_log_based_tests:update_content_test_base(#{
+        store_configs => example_configs(),
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        describe_item => fun describe_item/4,
+        build_content_update_options => fun build_content_update_options/1,
+        browse_content => fun browse_content/2
+    }),
+
+    % Assert it is possible to insert e.g. not existing file as exception store
+    % does not validate its input
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+
+    {ok, #document{key = AtmStoreId}} = ?rpc(create_store(
+        AtmWorkflowExecutionAuth, undefined, #atm_exception_store_config{
+            item_data_spec = #atm_file_data_spec{file_type = 'REG'}
+        }
+    )),
+    {ok, NonExistingObjectId} = file_id:guid_to_objectid(<<"none">>),
+    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth,
+        #atm_item_execution{trace_id = <<"ASD">>, value = #{<<"fileId">> => NonExistingObjectId}},
+        #atm_exception_store_content_update_options{function = append},
+        AtmStoreId
+    ))).
+
+
+iterator_test() ->
+    atm_store_infinite_log_based_tests:iterator_test_base(#{
+        store_configs => example_configs(),
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_iterated_item => fun input_item_to_exp_iterated_item/4,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
+        iterator_get_next => fun(AtmWorkflowExecutionEnv, Iterator) ->
+            ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator))
+        end
+    }).
+
+
+browse_content_by_index_test() ->
+    atm_store_infinite_log_based_tests:browse_content_test_base(index, #{
+        store_configs => example_configs(),
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        describe_item => fun describe_item/4,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
+        build_content_browse_options => fun build_content_browse_options/1,
+        build_content_browse_result => fun build_content_browse_result/2
+    }).
+
+
+browse_content_by_offset_test() ->
+    atm_store_infinite_log_based_tests:browse_content_test_base(offset, #{
+        store_configs => example_configs(),
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        describe_item => fun describe_item/4,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
+        build_content_browse_options => fun build_content_browse_options/1,
+        build_content_browse_result => fun build_content_browse_result/2
+    }).
+
+
+find_indices_by_trace_ids_test() ->
+    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
+        ?PROVIDER_SELECTOR, user1, space_krk
+    ),
+
+    AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_exception_store_config{
+        item_data_spec = #atm_string_data_spec{}
+    }),
+    {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
+    ))),
+
+    ItemsNum = rand:uniform(2000),
+    ContentUpdateOpts = build_content_update_options(append),
+    IndexPerTraceId = lists:foldl(fun(IndexInt, Acc) ->
+        Timestamp = time_test_utils:get_frozen_time_millis(),
+        TraceId = integer_to_binary(Timestamp),
+        ItemExecution = #atm_item_execution{trace_id = TraceId, value = ?RAND_STR()},
+
+        ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+            AtmWorkflowExecutionAuth, ItemExecution, ContentUpdateOpts, AtmStoreId
+        ))),
+        time_test_utils:simulate_millis_passing(1),
+
+        Acc#{TraceId => integer_to_binary(IndexInt)}
+    end, #{}, lists:seq(0, ItemsNum)),
+
+    lists:foreach(fun(_) ->
+        TraceIds = ?RAND_SUBLIST(maps:keys(IndexPerTraceId)),
+        {StartTimestamp, ExpIndexPerTraceId} = case ?RAND_ELEMENT([undefined | TraceIds]) of
+            undefined ->
+                {undefined, maps:with(TraceIds, IndexPerTraceId)};
+            TraceId ->
+                Timestamp = binary_to_integer(TraceId),
+
+                {Timestamp, lists:foldl(fun(TraceId, Acc) ->
+                    case binary_to_integer(TraceId) >= Timestamp of
+                        true -> Acc#{TraceId => maps:get(TraceId, IndexPerTraceId)};
+                        false -> Acc#{TraceId => undefined}
+                    end
+                end, #{}, TraceIds)}
+        end,
+
+        ?assertEqual(
+            ExpIndexPerTraceId,
+            ?rpc(begin
+                {ok, #atm_store{container = AtmStoreContainer}} = atm_store_api:get(AtmStoreId),
+                atm_exception_store_container:find_indices_by_trace_ids(
+                    AtmStoreContainer, TraceIds, StartTimestamp
+                )
+            end)
+        )
+    end, lists:seq(1, 10)).
+
+
+%===================================================================
+% Helper functions
+%===================================================================
+
+
+%% @private
+-spec create_workflow_execution_auth() -> atm_workflow_execution_auth:record().
+create_workflow_execution_auth() ->
+    atm_store_test_utils:create_workflow_execution_auth(
+        ?PROVIDER_SELECTOR, user1, space_krk
+    ).
+
+
+%% @private
+-spec gen_valid_data(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
+    automation:item().
+gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
+    atm_store_test_utils:gen_valid_data(
+        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemDataSpec
+    ).
+
+
+%% @private
+create_store(AtmWorkflowExecutionAuth, ContentInitializer, AtmStoreConfig) ->
+    atm_store_api:create(
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT,
+        ContentInitializer, ?STORE_SCHEMA(AtmStoreConfig)
+    ).
+
+
+%% @private
+-spec example_configs() -> [atm_single_value_store_config:record()].
+example_configs() ->
+    lists:map(fun(ItemDataType) ->
+        #atm_exception_store_config{item_data_spec = atm_store_test_utils:example_data_spec(
+            ItemDataType
+        )}
+    end, atm_data_type:all_data_types()).
+
+
+%% @private
+-spec get_input_item_generator_seed_data_spec(atm_exception_store_config:record()) ->
+    atm_data_spec:record().
+get_input_item_generator_seed_data_spec(#atm_exception_store_config{item_data_spec = ItemDataSpec}) ->
+    ItemDataSpec.
+
+
+%% @private
+-spec input_item_formatter(automation:item()) -> atm_workflow_execution_handler:item().
+input_item_formatter(Item) ->
+    #atm_item_execution{trace_id = ?RAND_STR(10), value = Item}.
+
+
+%% @private
+-spec describe_item(
+    atm_workflow_execution_auth:record(),
+    atm_workflow_execution_handler:item(),
+    atm_store:id(),
+    non_neg_integer()
+) ->
+    json_utils:json_term().
+describe_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec, _Index) ->
+    #{
+        <<"traceId">> => ItemInitializer#atm_item_execution.trace_id,
+        <<"value">> => atm_store_test_utils:to_described_item(
+            ?PROVIDER_SELECTOR,
+            AtmWorkflowExecutionAuth,
+            ItemInitializer#atm_item_execution.value,
+            ItemDataSpec
+        )
+    }.
+
+
+%% @private
+-spec input_item_to_exp_iterated_item(
+    atm_workflow_execution_auth:record(),
+    atm_workflow_execution_handler:item(),
+    atm_store:id(),
+    non_neg_integer()
+) ->
+    atm_workflow_execution_handler:item().
+input_item_to_exp_iterated_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec, _Index) ->
+    ItemInitializer#atm_item_execution{value = atm_store_test_utils:to_iterated_item(
+        ?PROVIDER_SELECTOR,
+        AtmWorkflowExecutionAuth,
+        ItemInitializer#atm_item_execution.value,
+        ItemDataSpec
+    )}.
+
+
+%% @private
+-spec randomly_remove_entity_referenced_by_item(
+    atm_workflow_execution_auth:record(),
+    atm_workflow_execution_handler:item(),
+    atm_data_spec:record()
+) ->
+    false | {true, errors:error()}.
+randomly_remove_entity_referenced_by_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
+    atm_store_test_utils:randomly_remove_entity_referenced_by_item(
+        ?PROVIDER_SELECTOR,
+        AtmWorkflowExecutionAuth,
+        case Item of
+            #atm_item_execution{value = Value} -> Value;
+            #{<<"traceId">> := _, <<"value">> := Value} -> Value;
+            Value -> Value
+        end,
+        ItemDataSpec
+    ).
+
+
+%% @private
+-spec build_content_update_options(atm_exception_store_content_update_options:update_function()) ->
+    atm_exception_store_content_update_options:record().
+build_content_update_options(UpdateFun) ->
+    #atm_exception_store_content_update_options{function = UpdateFun}.
+
+
+%% @private
+-spec browse_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
+    [automation:item()].
+browse_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
+    BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
+    #atm_exception_store_content_browse_result{
+        items = Items,
+        is_last = true
+    } = ?rpc(?PROVIDER_SELECTOR, atm_store_api:browse_content(
+        AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
+    )),
+    lists:map(fun({_, {ok, Item}}) -> Item end, Items).
+
+
+%% @private
+-spec build_content_browse_options(json_utils:json_map()) ->
+    atm_exception_store_content_browse_options:record().
+build_content_browse_options(OptsJson) ->
+    atm_exception_store_content_browse_options:sanitize(OptsJson#{
+        <<"type">> => <<"exceptionStoreContentBrowseOptions">>
+    }).
+
+
+%% @private
+-spec build_content_browse_result([atm_store_container_infinite_log_backend:entry()], boolean()) ->
+    atm_exception_store_content_browse_result:record().
+build_content_browse_result(Entries, IsLast) ->
+    #atm_exception_store_content_browse_result{items = Entries, is_last = IsLast}.

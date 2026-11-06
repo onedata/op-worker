@@ -36,6 +36,7 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
+    ets_state:init(session),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -52,8 +53,8 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 
-handle(_Request) ->
-    ?log_bad_request(_Request).
+handle(Request) ->
+    ?log_bad_request(Request).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -64,6 +65,7 @@ handle(_Request) ->
     Result :: ok | {error, Error},
     Error :: timeout | term().
 cleanup() ->
+    ets_state:terminate(session),
     ok.
 
 %%%===================================================================
@@ -86,11 +88,6 @@ supervisor_flags() ->
 %%--------------------------------------------------------------------
 -spec supervisor_children_spec() -> [supervisor:child_spec()].
 supervisor_children_spec() ->
-    [#{
-        id => session_sup,
-        start => {session_sup, start_link, []},
-        restart => temporary,
-        shutdown => infinity,
-        type => supervisor,
-        modules => [session_sup]
-    }].
+    [
+        session_sup:spec()
+    ].

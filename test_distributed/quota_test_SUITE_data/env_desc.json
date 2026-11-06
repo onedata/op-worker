@@ -15,6 +15,16 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st1"
+                },
+                {
+                    "type": "nulldevice",
+                    "name": "nulldevice",
+                    "latencyMin": "10",
+                    "latencyMax": "20",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -25,6 +35,16 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st2"
+                },
+                {
+                    "type": "nulldevice",
+                    "name": "nulldevice",
+                    "latencyMin": "10",
+                    "latencyMax": "20",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -61,7 +81,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -95,21 +115,13 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
         }
     },
     "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space_id1"
-            },
-            "user2": {
-                "default_space": "space_id1"
-            }
-        },
         "groups": {
         },
         "spaces": {
@@ -170,13 +182,64 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st1",
-                        "supported_size": 44
+                        "supported_size": 20
 
                     },
                     "p2": {
                         "storage": "/mnt/st2",
-                        "supported_size": 22
+                        "supported_size": 20
 
+                    }
+                }
+            },
+            "space_id4": {
+                "displayed_name": "space4",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 1000000000
+                    }
+                }
+            },
+            "space_id5": {
+                "displayed_name": "space5",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "nulldevice",
+                        "supported_size": 10000000000
+                    },
+                    "p2": {
+                        "storage": "nulldevice",
+                        "supported_size": 10000000000
+                    }
+                }
+            },
+            "space_id6": {
+                "displayed_name": "space6",
+                "users": [
+                    "user1",
+                    "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 20
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 30
                     }
                 }
             }

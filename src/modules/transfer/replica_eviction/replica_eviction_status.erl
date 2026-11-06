@@ -67,11 +67,14 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/transfer.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 
 -export([
     handle_enqueued/1, handle_active/1,
     handle_aborting/1, handle_completed/1,
-    handle_failed/2, handle_cancelled/1
+    handle_failed/2, handle_cancelled/1,
+    handle_restart/3
 ]).
 
 -type error() :: {error, term()}.
@@ -90,14 +93,12 @@ handle_enqueued(TransferId) ->
 
 -spec handle_active(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_active(TransferId) ->
-    EncodedPid = transfer_utils:encode_pid(self()),
     UpdateFun = fun(Transfer) ->
         case Transfer#transfer.eviction_status of
-            enqueued ->
+            ?ENQUEUED_STATUS ->
                 {ok, Transfer#transfer{
-                    eviction_status = active,
-                    files_to_process = Transfer#transfer.files_to_process + 1,
-                    pid = EncodedPid
+                    eviction_status = ?ACTIVE_STATUS,
+                    eviction_traverse_finished = false
                 }};
             Status ->
                 {error, Status}
@@ -119,8 +120,9 @@ handle_active(TransferId) ->
 
 -spec handle_aborting(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_aborting(TransferId) ->
-    OnSuccessfulUpdate = fun(#document{value = #transfer{space_id = SpaceId}}) ->
-        replica_deletion_master:cancel(TransferId, SpaceId)
+    OnSuccessfulUpdate = fun(Doc = #document{value = #transfer{space_id = SpaceId}}) ->
+        replica_eviction_traverse:cancel(Doc),
+        replica_deletion_master:cancel_request(SpaceId, TransferId, ?EVICTION_JOB)
     end,
 
     transfer:update_and_run(
@@ -162,6 +164,34 @@ handle_cancelled(TransferId) ->
     ).
 
 
+-spec handle_restart(transfer:id(), transfer:id(), boolean()) -> {ok, transfer:doc()} | error().
+handle_restart(TransferId, NewTransferId, MarkTransferFailed) ->
+    case MarkTransferFailed of
+        true ->
+            UpdateFun = fun(Transfer) ->
+                case mark_failed_forced(Transfer) of
+                    {ok, UpdatedTransfer} -> {ok, UpdatedTransfer#transfer{rerun_id = NewTransferId}};
+                    Other -> Other
+                end
+            end,
+
+            UpdateAns = transfer:update_and_run(
+                TransferId,
+                UpdateFun,
+                fun transfer_links:move_to_ended_if_not_migration/1
+            ),
+
+            % Marking transfer can fail if transfer is already ended.
+            % In such case set only rerun_id.
+            case UpdateAns of
+                {ok, _} -> UpdateAns;
+                _ -> transfer:set_rerun_id(TransferId, NewTransferId)
+            end;
+        false ->
+            transfer:set_rerun_id(TransferId, NewTransferId)
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -169,12 +199,12 @@ handle_cancelled(TransferId) ->
 
 %% @private
 -spec mark_enqueued(transfer()) -> {ok, transfer()} | error().
-mark_enqueued(T = #transfer{eviction_status = scheduled}) ->
+mark_enqueued(T = #transfer{eviction_status = ?SCHEDULED_STATUS}) ->
     {ok, T#transfer{
-        eviction_status = enqueued,
+        eviction_status = ?ENQUEUED_STATUS,
         start_time = case transfer:is_migration(T) of
             true -> T#transfer.start_time;
-            false -> provider_logic:zone_time_seconds()
+            false -> global_clock:monotonic_timestamp_seconds(T#transfer.start_time)
         end
     }};
 mark_enqueued(#transfer{eviction_status = Status}) ->
@@ -183,18 +213,18 @@ mark_enqueued(#transfer{eviction_status = Status}) ->
 
 %% @private
 -spec mark_aborting(transfer()) -> {ok, transfer()} | error().
-mark_aborting(T = #transfer{eviction_status = active}) ->
-    {ok, T#transfer{eviction_status = aborting}};
+mark_aborting(T = #transfer{eviction_status = ?ACTIVE_STATUS}) ->
+    {ok, T#transfer{eviction_status = ?ABORTING_STATUS}};
 mark_aborting(#transfer{eviction_status = Status}) ->
     {error, Status}.
 
 
 %% @private
 -spec mark_completed(transfer()) -> {ok, transfer()} | error().
-mark_completed(T = #transfer{eviction_status = active}) ->
+mark_completed(T = #transfer{eviction_status = ?ACTIVE_STATUS}) ->
     {ok, T#transfer{
-        eviction_status = completed,
-        finish_time = provider_logic:zone_time_seconds()
+        eviction_status = ?COMPLETED_STATUS,
+        finish_time = global_clock:monotonic_timestamp_seconds(T#transfer.start_time)
     }};
 mark_completed(#transfer{eviction_status = Status}) ->
     {error, Status}.
@@ -202,7 +232,7 @@ mark_completed(#transfer{eviction_status = Status}) ->
 
 %% @private
 -spec mark_failed(transfer:transfer()) -> {ok, transfer()} | error().
-mark_failed(T = #transfer{eviction_status = aborting}) ->
+mark_failed(T = #transfer{eviction_status = ?ABORTING_STATUS}) ->
     mark_failed_forced(T);
 mark_failed(#transfer{eviction_status = Status}) ->
     {error, Status}.
@@ -216,8 +246,8 @@ mark_failed_forced(Transfer) ->
             {error, already_ended};
         false ->
             {ok, Transfer#transfer{
-                eviction_status = failed,
-                finish_time = provider_logic:zone_time_seconds()
+                eviction_status = ?FAILED_STATUS,
+                finish_time = global_clock:monotonic_timestamp_seconds(Transfer#transfer.start_time)
             }}
     end.
 
@@ -226,14 +256,14 @@ mark_failed_forced(Transfer) ->
 -spec mark_cancelled(transfer()) -> {ok, transfer()} | error().
 mark_cancelled(Transfer) ->
     case Transfer#transfer.eviction_status of
-        scheduled ->
+        ?SCHEDULED_STATUS ->
             {ok, Transfer#transfer{
-                eviction_status = cancelled
+                eviction_status = ?CANCELLED_STATUS
             }};
-        Status when Status == enqueued orelse Status == aborting ->
+        Status when Status == ?ENQUEUED_STATUS orelse Status == ?ABORTING_STATUS ->
             {ok, Transfer#transfer{
-                eviction_status = cancelled,
-                finish_time = provider_logic:zone_time_seconds()
+                eviction_status = ?CANCELLED_STATUS,
+                finish_time = global_clock:monotonic_timestamp_seconds(Transfer#transfer.start_time)
             }};
         Status ->
             {error, Status}

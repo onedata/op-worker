@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
 %%% @copyright (C) 2017 ACK CYFRONET AGH
-%%% This software is released under the MIT license cited in 'LICENSE.txt'.
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
@@ -15,10 +16,11 @@
 -include("global_definitions.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([send/2, forward/1, broadcast/4]).
--export([request_changes/4, send_changes/5, broadcast_changes/4]).
+-export([request_changes/5, send_changes/6, broadcast_changes/5]).
 
 -type changes_batch() :: #changes_batch{}.
 -type changes_request() :: #changes_request2{}.
@@ -34,6 +36,10 @@
 -export_type([changes_batch/0, changes_request/0, tree_broadcast/0]).
 -export_type([msg_id/0, msg/0]).
 
+-define(SHOULD_COMPRESS_DOCS, op_worker:get_env(
+    dbsync_changes_batch_compress_docs, false
+)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -46,8 +52,7 @@
 -spec send(od_provider:id(), msg()) -> ok | {error, Reason :: term()}.
 send(ProviderId, Msg) ->
     SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
-    communicator:send_to_provider(#dbsync_message{message_body = Msg},
-        SessId, #{ignore_send_errors => true}).
+    communicator:send_to_provider(SessId, #dbsync_message{message_body = Msg}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -79,7 +84,7 @@ forward(#tree_broadcast2{
             ]);
         Other ->
             ?error("Wrong provider ids in tree broadcast:"
-                "receiver: ~p, sender: ~p, low_provider: ~p, high_provider: ~p",
+                "receiver: ~tp, sender: ~tp, low_provider: ~tp, high_provider: ~tp",
                 [Other, SrcProviderId, LowProviderId, HighProviderId])
     end.
 
@@ -111,10 +116,13 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
             message_body = Msg
         }),
         case Result of
-            ok -> ok;
+            ok ->
+                ok;
+            ?ERR_NO_CONNECTION_TO_PEER_ONEPROVIDER(_, _) ->
+                ?debug("Cannot broadcast changes batch to provider ~tp due to "
+                       "no available connection", [ProviderId]);
             {error, Reason} ->
-                ?warning("Cannot broadcast changes batch to provider ~p "
-                "due to: ~p", [ProviderId, Reason])
+                ?warning(?autoformat_with_msg("Cannot broadcast changes batch to provider", [ProviderId, Reason]))
         end
     end, Hops),
     Multipath.
@@ -126,13 +134,16 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec request_changes(od_provider:id(), od_space:id(),
-    couchbase_changes:since(), couchbase_changes:until()) ->
+    couchbase_changes:since(), couchbase_changes:until(),
+    dbsync_in_stream:mutators()
+) ->
     ok | {error, Reason :: term()}.
-request_changes(ProviderId, SpaceId, Since, Until) ->
+request_changes(ProviderId, SpaceId, Since, Until, IncludedMutators) ->
     dbsync_communicator:send(ProviderId, #changes_request2{
         space_id = SpaceId,
         since = Since,
-        until = Until
+        until = Until,
+        included_mutators = IncludedMutators
     }).
 
 %%--------------------------------------------------------------------
@@ -142,14 +153,18 @@ request_changes(ProviderId, SpaceId, Since, Until) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_changes(od_provider:id(), od_space:id(), couchbase_changes:since(),
-    couchbase_changes:until(), [datastore:doc()]) ->
+    couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()]) ->
     ok | {error, Reason :: term()}.
-send_changes(ProviderId, SpaceId, Since, Until, Docs) ->
+send_changes(ProviderId, SpaceId, Since, Until, Timestamp, Docs) ->
+    Compress = ?SHOULD_COMPRESS_DOCS,
+
     dbsync_communicator:send(ProviderId, #changes_batch{
         space_id = SpaceId,
         since = Since,
         until = Until,
-        compressed_docs = dbsync_utils:compress(Docs)
+        timestamp = Timestamp,
+        compressed = Compress,
+        docs = dbsync_utils:encode_batch(Docs, Compress)
     }).
 
 %%--------------------------------------------------------------------
@@ -159,14 +174,17 @@ send_changes(ProviderId, SpaceId, Since, Until, Docs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec broadcast_changes(od_space:id(), couchbase_changes:since(),
-    couchbase_changes:until(), [datastore:doc()]) -> ok.
-broadcast_changes(SpaceId, Since, Until, Docs) ->
+    couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()]) -> ok.
+broadcast_changes(SpaceId, Since, Until, Timestamp, Docs) ->
+    Compress = ?SHOULD_COMPRESS_DOCS,
     MsgId = dbsync_utils:gen_request_id(),
     Msg = #changes_batch{
         space_id = SpaceId,
         since = Since,
         until = Until,
-        compressed_docs = dbsync_utils:compress(Docs)
+        timestamp = Timestamp,
+        compressed = Compress,
+        docs = dbsync_utils:encode_batch(Docs, Compress)
     },
     case broadcast(SpaceId, MsgId, Msg, []) of
         true ->
@@ -199,7 +217,7 @@ get_next_broadcast_hops(SpaceId, Opts) ->
     ProviderIds = dbsync_utils:get_providers(SpaceId),
     ProviderIds2 = select_receiving_providers(ProviderIds, Opts),
 
-    MinSupport = application:get_env(?APP_NAME, multipath_broadcast_min_support, 8),
+    MinSupport = op_worker:get_env(multipath_broadcast_min_support, 8),
     Multipath = length(ProviderIds2) >= MinSupport,
 
     Pivot = case Multipath of

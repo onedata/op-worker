@@ -12,24 +12,34 @@
 -module(multi_provider_file_ops_test_base).
 -author("Jakub Kudzia").
 
+% This module indirectly includes eunit.hrl, whose parse transform would
+% otherwise auto-export every arity 0 function named *_test - clashing with
+% the export list below.
+-define(EUNIT_NOAUTO, 1).
+
 -include("global_definitions.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("proto/common/credentials.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/acl.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
 %% export for tests
 -export([
+    create_on_different_providers_test_base/1,
     basic_opts_test_base/4,
+    basic_opts_test_base/5,
     rtransfer_test_base/11,
     rtransfer_blocking_test_base/6,
     rtransfer_blocking_test_cleanup/1,
-    rtransfer_test_base2/5,
+    rtransfer_test_base2/6,
     many_ops_test_base/6,
     distributed_modification_test_base/4,
     multi_space_test_base/3,
@@ -46,18 +56,21 @@
     synchronize_stress_test_base/2,
     cancel_synchronizations_for_session_with_mocked_rtransfer_test_base/1,
     cancel_synchronizations_for_session_test_base/1,
-    transfer_files_to_source_provider/1
+    transfer_files_to_source_provider/1,
+    proxy_session_token_update_test_base/3
 ]).
--export([init_env/1, teardown_env/1]).
+-export([init_env/1, teardown_env/1, mock_sync_and_rtransfer_errors/1, unmock_sync_and_rtransfer_errors/1]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, create_location/4]).
 
 -export([extend_config/4]).
--export([verify/2, verify_workers/2]).
+-export([verify/2, verify_workers/2, verify_stats/3]).
 -export([sync_blocks/4]).
 -export([request_synchronization/3]).
 -export([async_synchronize/3]).
+-export([get_seq_and_timestamp_or_error/2]).
+-export([await_replication_end/3, await_replication_end/4]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -69,17 +82,47 @@
 ).
 -define(rpcTest(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
 
--define(deny_user(UserId),
-    #access_control_entity{
-        acetype = ?deny_mask,
-        aceflags = ?no_flags_mask,
-        identifier = UserId,
-        acemask = (?read_mask bor ?write_mask bor ?execute_mask)
-    }).
-
 %%%===================================================================
 %%% Test skeletons
 %%%===================================================================
+
+create_on_different_providers_test_base(Config) ->
+    [W1, _, W2 | _] = ?config(op_worker_nodes, Config),
+
+    UserW1SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
+    UserW2SessId = ?config({session_id, {<<"user4">>, ?GET_DOMAIN(W2)}}, Config),
+
+    SpaceRootDir = <<"/space1/">>,
+
+    % create file on provider1
+    FileName = generator:gen_name(),
+    FilePath = <<SpaceRootDir/binary, FileName/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:create(W1, UserW1SessId, FilePath)),
+
+    % file creation on provider2 after synchronizing documents should fail
+    ?assertMatch({ok, [{_, FileName}]}, lfm_proxy:get_children(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W2, UserW2SessId, FilePath)),
+
+    % file creation on provider2 after synchronizing documents should succeed
+    % after deleting it on provider1
+    ?assertMatch(ok, lfm_proxy:unlink(W1, UserW1SessId, {path, FilePath})),
+    ?assertMatch({ok, _}, lfm_proxy:create(W2, UserW2SessId, FilePath), 60),
+    ?assertMatch(ok, lfm_proxy:unlink(W2, UserW2SessId, {path, FilePath})),
+
+    % create dir on provider1
+    DirName = generator:gen_name(),
+    DirPath = <<SpaceRootDir/binary, DirName/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, UserW1SessId, DirPath)),
+
+    % dir creation on provider2 after synchronizing documents should fail
+    ?assertMatch({ok, [{_, DirName}]}, lfm_proxy:get_children(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:mkdir(W2, UserW2SessId, DirPath)),
+
+    % file creation on provider2 after synchronizing documents should succeed
+    % after deleting it on provider1
+    ?assertMatch(ok, lfm_proxy:unlink(W1, UserW1SessId, {path, DirPath})),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, UserW2SessId, DirPath), 60),
+    ?assertMatch(ok, lfm_proxy:unlink(W2, UserW2SessId, {path, DirPath})).
 
 synchronizer_test_base(Config0) ->
     Config = extend_config(Config0, <<"user1">>, {2,0,0,1}, 1),
@@ -111,7 +154,7 @@ synchronizer_test_base(Config0) ->
     PartSize = ChunksNum * ChunkSize,
 
     lists:foreach(fun(FilePath) ->
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), FilePath, 8#755)),
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), FilePath)),
         OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, FilePath}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
@@ -133,7 +176,7 @@ synchronizer_test_base(Config0) ->
     Blocks = case {SeparateBlocks, RandomRead} of
         {true, true} ->
             lists:map(fun(_Num) ->
-                random:uniform(FileSizeBytes)
+                rand:uniform(FileSizeBytes)
             end, lists:seq(1, BlocksCount));
         {true, _} ->
             lists:map(fun(Num) ->
@@ -153,8 +196,8 @@ synchronizer_test_base(Config0) ->
     {SyncTime1, SyncTime1_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
     {SyncTime2, SyncTime2_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
 
-    ct:print("Separate blocks: ~p, random read ~p, threads ~p,"
-    " iops remote 1: ~p, iops remote 2: ~p, iops local 1: ~p, iops local 2: ~p", [
+    ct:print("Separate blocks: ~tp, random read ~tp, threads ~tp,"
+    " iops remote 1: ~tp, iops remote 2: ~tp, iops local 1: ~tp, iops local 2: ~tp", [
         SeparateBlocks, RandomRead, Threads,  1000000 * Threads * BlocksCount / SyncTime1,
         1000000 * Threads * BlocksCount / SyncTime1_2, 1000000 * Threads * BlocksCount / SyncTime2,
         1000000 * Threads * BlocksCount / SyncTime2_2]).
@@ -178,7 +221,7 @@ synchronize_stress_test_base(Config0, RandomRead) ->
     FileCtxs = case RepNum of
         1 ->
             File = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-            ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File, 8#755)),
+            ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File)),
             OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
@@ -211,7 +254,7 @@ synchronize_stress_test_base(Config0, RandomRead) ->
     Blocks = case RandomRead of
         true ->
             lists:map(fun(_Num) ->
-                random:uniform(FileSizeBytes)
+                rand:uniform(FileSizeBytes)
             end, lists:seq(1, BlocksCount));
         _ ->
             lists:map(fun(Num) ->
@@ -222,8 +265,8 @@ synchronize_stress_test_base(Config0, RandomRead) ->
     {SyncTime1, SyncTime1_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
     {SyncTime2, SyncTime2_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
 
-    ct:print("Repeat: ~p: iops remote 1: ~p, iops remote 2: ~p, "
-        "iops local 1: ~p, iops local 2: ~p", [RepNum,  1000000 * BlocksCount / SyncTime1,
+    ct:print("Repeat: ~tp: iops remote 1: ~tp, iops remote 2: ~tp, "
+        "iops local 1: ~tp, iops local 2: ~tp", [RepNum,  1000000 * BlocksCount / SyncTime1,
         1000000 * BlocksCount / SyncTime1_2, 1000000 * BlocksCount / SyncTime2,
         1000000 * BlocksCount / SyncTime2_2]),
 
@@ -264,7 +307,7 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
                     FN
             end,
 
-            ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File, 8#755)),
+            ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File)),
             OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
@@ -290,9 +333,9 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
             get({file, SeparateBlocks})
     end,
 
-    Start1 = os:timestamp(),
+    Stopwatch1 = stopwatch:start(),
     OpenAns2 = lfm_proxy:open(Worker1, SessId(Worker1), {path, FilePath}, rdwr),
-    OpenTime = timer:now_diff(os:timestamp(), Start1),
+    OpenTime = stopwatch:read_micros(Stopwatch1),
     ?assertMatch({ok, _}, OpenAns2),
     {ok, Handle2} = OpenAns2,
 
@@ -303,7 +346,7 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
             end, lists:seq(1, BlocksCount));
         random ->
             lists:map(fun(_Num) ->
-                random:uniform(FileSizeBytes)
+                rand:uniform(FileSizeBytes)
             end, lists:seq(1, BlocksCount));
         _ ->
             lists:map(fun(Num) ->
@@ -313,13 +356,13 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
 
     ReadTime1 = read_blocks(Worker1, Handle2, BlockSize, Blocks),
     ReadTime2 = read_blocks(Worker1, Handle2, BlockSize, Blocks),
-    Start2 = os:timestamp(),
+    Stopwatch2 = stopwatch:start(),
     ?assertEqual(ok, lfm_proxy:close(Worker1, Handle2)),
-    CloseTime = timer:now_diff(os:timestamp(), Start2),
+    CloseTime = stopwatch:read_micros(Stopwatch2),
 
     case PrintAns of
         true ->
-            ct:print("Repeat: ~p, many blocks: ~p, read remote: ~p, read local: ~p, open: ~p, close: ~p", [
+            ct:print("Repeat: ~tp, many blocks: ~tp, read remote: ~tp, read local: ~tp, open: ~tp, close: ~tp", [
                 RepNum, SeparateBlocks, ReadTime1 / BlocksCount, ReadTime2 / BlocksCount, OpenTime, CloseTime]),
             ok;
         _ ->
@@ -345,7 +388,7 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
     Workers3 = (Workers -- Workers1) -- Workers2,
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
 
     verify_stats(Config, Dir, true),
     ct:print("Dir created"),
@@ -416,7 +459,7 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
         maps:put(Key, max(V, Time), Acc)
     end, #{}, Answers),
 
-    ct:print("Read max times ~p", [AnswersMap]),
+    ct:print("Read max times ~tp", [AnswersMap]),
 
     ok.
 
@@ -424,46 +467,57 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
 % updates per second and file location updates per second is checked.
 % For this test, environment with 2 1-node providers is assumed.
 rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
-    Attempts, TransferFileParts) ->
+    Attempts, TransferTimeout, ImportedFileSize) ->
     rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1},
-        Attempts, TransferFileParts);
+        Attempts, TransferTimeout, ImportedFileSize);
 rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
-    Attempts, TransferFileParts) ->
+    Attempts, TransferTimeout, ImportedFileSize) ->
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
-    SpaceName = ?config(space_name, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     Worker1 = ?config(worker1, Config),
     Workers2 = ?config(workers2, Config),
 
-    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
-    verify_stats(Config, Dir, true),
-    ct:pal("Dir created"),
+    ?assertMatch(ok, rpc:call(Worker1, storage_import, set_or_configure_auto_mode, [
+        SpaceId, #{max_depth => 5, sync_acl => false}
+    ])),
+    rpc:call(Worker1, auto_storage_import_worker, notify_connection_to_oz, []),
+    ?assertEqual(true, rpc:call(Worker1, storage_import_monitoring, is_initial_scan_finished, [SpaceId]), Attempts),
 
-    ChunkSize = 10240,
-    ChunkNum = 1024,
-    FileSize = ChunkSize * ChunkNum * TransferFileParts,
-    Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-    create_big_file(Config, ChunkSize, ChunkNum, TransferFileParts, Level2File, Worker1),
-    ct:pal("File created"),
+    {ok, [#file_attr{name = FileName}], _} = lfm_proxy:get_children_attrs(
+        Worker1, SessId(Worker1), {path, <<"/", SpaceName/binary>>}, #{
+            limit => 10, tune_for_large_continuous_listing => false
+        }
+    ),
+    FilePath = <<"/", SpaceName/binary, "/", FileName/binary>>,
+
+    lists:foreach(fun(Worker2) ->
+        ?assertMatch(
+            {ok, #file_attr{size = ImportedFileSize}},
+            lfm_proxy:stat(Worker2, SessId(Worker2), {path, FilePath}),
+            Attempts
+        )
+    end, Workers2),
+
+    ct:pal("File imported"),
 
     ok = test_utils:mock_new(Workers2, transfer, [passthrough]),
     ok = test_utils:mock_new(Workers2, replica_updater, [passthrough]),
 
-    Start = time_utils:system_time_seconds(),
+    Stopwatch = stopwatch:start(),
     Result = try
         verify_workers(Workers2, fun(W) ->
-            read_big_file(Config, FileSize, Level2File, W, true)
-        end, timer:seconds(Attempts)),
+            read_big_file(Config, ImportedFileSize, FilePath, W, TransferTimeout, true)
+        end, timer:seconds(TransferTimeout)),
         ok
     catch
         T:R -> {error, T, R}
     end,
     ?assertMatch(ok, Result),
 
-    Duration = time_utils:system_time_seconds() - Start,
+    Duration = stopwatch:read_seconds(Stopwatch),
     TransferUpdates = lists:sum(mock_get_num_calls(
-        Workers2, transfer, mark_data_transfer_finished, '_')),
+        Workers2, transfer, flush_stats, '_')),
     TUPS = TransferUpdates / Duration,
     FileLocationUpdates = lists:sum(mock_get_num_calls(
         Workers2, replica_updater, update, '_')),
@@ -472,9 +526,9 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     ok = test_utils:mock_unload(Workers2, transfer),
     ok = test_utils:mock_unload(Workers2, replica_updater),
 
-    ct:pal("Transfer duration [s]: ~p~n"
-           "Transfer stats updates per second ~p~n"
-           "File location updates per second ~p", [
+    ct:pal("Transfer duration [s]: ~tp~n"
+           "Transfer stats updates per second ~tp~n"
+           "File location updates per second ~tp", [
         Duration, TUPS, FLUPS
     ]),
     ok.
@@ -494,18 +548,18 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     Master = self(),
     test_utils:mock_new(Workers2, [replica_synchronizer, rtransfer_config], [passthrough]),
     test_utils:mock_expect(Workers2, replica_synchronizer, synchronize,
-        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
             case TransferId of
                 undefined ->
                     ok;
                 _ ->
                     Master ! transfer_started
             end,
-            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority])
+            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule])
         end),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
 
     verify_stats(Config, Dir, true),
     ct:print("Dir created"),
@@ -514,8 +568,8 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     TransferChunksNum = 1024,
     FileSize = ChunkSize * TransferChunksNum * TransferFileParts,
     SmallFile = {1, 1, false},
-    Transfer = {TransferChunksNum, TransferFileParts, true},
-    Files = [Transfer, SmallFile],
+    TransferredFile = {TransferChunksNum, TransferFileParts, true},
+    Files = [TransferredFile, SmallFile],
 
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
     Level2File2 = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -527,7 +581,7 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
 
     % Init rtransfer using another file
     verify_workers(Workers2, fun(W) ->
-        read_big_file(Config, ChunkSize, Level2File2, W, Transfer)
+        read_big_file(Config, ChunkSize, Level2File2, W, TransferredFile)
     end, timer:minutes(5), true),
 
     lists:foreach(fun({ChunksNum, PartNum, Transfer}) ->
@@ -581,7 +635,7 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     end, #{}, Answers),
 
     FetchCalls = rpc:call(Worker2, meck, num_calls, [rtransfer_config, fetch, 6]),
-    ct:print("Times ~p, fetch calls ~p", [AnswersMap, FetchCalls]),
+    ct:print("Times ~tp, fetch calls ~tp", [AnswersMap, FetchCalls]),
     ok.
 
 rtransfer_blocking_test_cleanup(Config) ->
@@ -595,25 +649,30 @@ rtransfer_blocking_test_cleanup(Config) ->
 
     test_utils:mock_validate_and_unload(Workers2, [replica_synchronizer, rtransfer_config]).
 
-% TODO - add reading with chunks to test prefetching
-basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
-    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
-basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+basic_opts_test_base(Config, User, NodesDescroption, Attempts) ->
+    basic_opts_test_base(Config, User, NodesDescroption, Attempts, true).
 
-%%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
+basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, CheckSequences) ->
+    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, CheckSequences);
+basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, CheckSequences) ->
+
+%%    ct:print("Test ~tp", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
+    SpaceId = ?config(first_space_id, Config),
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
+
+    Timestamp0 = rpc:call(Worker1, global_clock, timestamp_seconds, []),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir)),
 
     verify_stats(Config, Dir, true),
     verify_stats(Config, Level2Dir, true),
@@ -626,29 +685,73 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
 
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-%%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
+%%        ct:print("Verify dir ~tp", [{Level2TmpDir, W}]),
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir)),
         verify_stats(Config, Level2TmpDir, true),
 
         lists:foreach(fun(W2) ->
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-%%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
+%%            ct:print("Verify dir2 ~tp", [{Level3TmpDir, W}]),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir)),
             verify_stats(Config, Level3TmpDir, true)
         end, Workers),
-        ct:print("Tree verification from node ~p done", [W])
+        ct:print("Tree verification from node ~tp done", [W])
     end, Workers),
 
     lists:foreach(fun(W) ->
         Level2TmpFile = <<Dir/binary, "/", (generator:gen_name())/binary>>,
         create_file_on_worker(Config, FileBeg, 4, Level2TmpFile, W),
         verify_file(Config, FileBeg, {4, Level2TmpFile}),
-        ct:print("File from node ~p verified", [W])
+        ct:print("File from node ~tp verified", [W])
     end, Workers),
 
     verify(Config, fun(W) ->
         ?assertEqual(ok, lfm_proxy:close_all(W))
     end),
+
+    ProvIds = lists:foldl(fun(W, Acc) ->
+        sets:add_element(rpc:call(W, oneprovider, get_id, []), Acc)
+    end, sets:new(), Workers),
+
+    AreAllSeqsEqual = fun() ->
+        % Get list of states of all dbsync streams (for tested space) from all workers (all providers), e.g.:
+        % WorkersDbsyncStates = [StateOnWorker1, StateOnWorker2 ... StateOnWorkerN],
+        % StateOnWorker = [ProgressOfSynWithProv1, ProgressOfSynWithProv2 ... ProgressOfSynWithProvM]
+        WorkersDbsyncStates = lists:foldl(fun(W, Acc) ->
+            WorkerState = lists:foldl(fun(ProvID, Acc2) ->
+                case get_seq_and_timestamp_or_error(W, SpaceId, ProvID) of
+                    {error, not_found} ->
+                        % provider `ProvID` does not support space so there is no synchronization progress data
+                        % on this worker
+                        Acc2;
+                    {_, Timestamp} = Ans ->
+                        case Timestamp >= Timestamp0 of
+                            true -> ok;
+                            false -> throw(too_small_timestamp)
+                        end,
+                        [Ans | Acc2]
+                end
+            end, [], sets:to_list(ProvIds)),
+
+            case WorkerState of
+                [] -> Acc; % this worker belongs to provider that does not support this space
+                _ -> [WorkerState | Acc]
+            end
+        end, [], Workers),
+
+        % States of all workers (that belong to providers that support tested space) should be equal
+        % create set from list to remove duplicates
+        WorkersDbsyncStatesSet = sets:from_list(WorkersDbsyncStates),
+        case sets:size(WorkersDbsyncStatesSet) of
+            1 -> true; % States of all workers are equal
+            _ -> {false, WorkersDbsyncStates}
+        end
+    end,
+    % TODO VFS-6652 Always check sequences
+    case CheckSequences of
+        true -> ?assertEqual(true, catch AreAllSeqsEqual(), 60);
+        false -> ok
+    end,
 
     ok.
 
@@ -656,23 +759,28 @@ create_after_del_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritt
     create_after_del_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
 create_after_del_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
 
-%%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
+%%    ct:print("Test ~tp", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
 
     delete_test_skeleton(Config, "Standard, write 1", true, false, false, false),
     delete_test_skeleton(Config, "Standard", false, false, false, false),
 
-    delete_test_skeleton(Config, "Open and sleep, write 1", true, true, {true, 10}, false),
-    delete_test_skeleton(Config, "Open and sleep", false, true, {true, 10}, false),
+    case ?config(test_type, Config) of
+        standard ->
+            ok;
+        performance ->
+            delete_test_skeleton(Config, "Open and sleep, write 1", true, true, {true, 10}, false),
+            delete_test_skeleton(Config, "Open and sleep", false, true, {true, 10}, false),
 
-    delete_test_skeleton(Config, "Open no sleep, write 1", true, true, false, false),
-    delete_test_skeleton(Config, "Open no sleep", false, true, false, false),
+            delete_test_skeleton(Config, "Open no sleep, write 1", true, true, false, false),
+            delete_test_skeleton(Config, "Open no sleep", false, true, false, false),
 
-    delete_test_skeleton(Config, "Close after del, write 1", true, true, {true, 1}, true),
-    delete_test_skeleton(Config, "Close after del", false, true, {true, 1}, true),
+            delete_test_skeleton(Config, "Close after del, write 1", true, true, {true, 1}, true),
+            delete_test_skeleton(Config, "Close after del", false, true, {true, 1}, true),
 
-    ok.
+            ok
+    end.
 
 delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
     CloseAfterVerify) ->
@@ -682,11 +790,11 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
     Workers = ?config(op_worker_nodes, Config),
 
     lists:foreach(fun(I) ->
-        ct:print("~p ~p", [Desc, I]),
+        ct:print("~tp ~tp", [Desc, I]),
         DelFile = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
         lists:foldl(fun
             (W, undefined) ->
-                ct:print("Before del ~p", [{DelFile, W}]),
+                ct:print("Before del ~tp", [{DelFile, W}]),
                 WriteWorker = case WriteOn1 of
                     true -> Worker1;
                     _ -> W
@@ -696,7 +804,7 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
                 create_file_on_worker(Config, Beg, BegSize, DelFile, WriteWorker, 5),
                 verify_file(Config, Beg, {BegSize, DelFile});
             (W, DelInfo) ->
-                ct:print("Del ~p", [{DelFile, W}]),
+                ct:print("Del ~tp", [{DelFile, W}]),
                 WriteWorker = case WriteOn1 of
                     true -> Worker1;
                     _ -> W
@@ -725,7 +833,7 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
                         case CloseAfterVerify of
                             true ->
                                 ok = timer:sleep(timer:seconds(1)),
-                                ok = lfm_proxy:close(W, Handle);
+                                ?assertEqual(ok, lfm_proxy:close(W, Handle));
                             _ ->
                                 ok
                         end;
@@ -768,28 +876,28 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
         {Num, <<Level3Dir/binary, "/", (generator:gen_name())/binary>>}
     end, lists:seq(1,FilesNum)),
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir)),
 
     verify_stats(Config, Dir, true),
     verify_stats(Config, Level2Dir, true),
 
     lists:map(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D))
     end, Level3Dirs),
     ct:print("Dirs created"),
 
     lists:map(fun(D) ->
-        ct:print("Verify dir ~p", [D]),
+        ct:print("Verify dir ~tp", [D]),
         verify_stats(Config, D, true)
     end, Level3Dirs),
 
     lists:map(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D))
     end, Level3Dirs2),
     ct:print("Dirs created - second batch"),
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level3Dir, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level3Dir)),
     lists:map(fun(F) ->
         create_file(Config, FileBeg, F)
     end, Level4Files),
@@ -798,12 +906,12 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     verify_dir_size(Config, Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1),
 
     Level3Dirs2Uuids = lists:map(fun(D) ->
-        ct:print("Verify dir ~p", [D]),
+        ct:print("Verify dir ~tp", [D]),
         verify_stats(Config, D, true)
     end, Level3Dirs2),
 
     Level4FilesVerified = lists:map(fun(F) ->
-        ct:print("Verify file ~p", [F]),
+        ct:print("Verify file ~tp", [F]),
         verify_file(Config, FileBeg, F)
     end, Level4Files),
     verify_dir_size(Config, Level3Dir, length(Level4Files)),
@@ -819,11 +927,11 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     ct:print("Dirs and files deleted"),
 
     lists:map(fun(F) ->
-        ct:print("Verify file del ~p", [F]),
+        ct:print("Verify file del ~tp", [F]),
         verify_del(Config, F)
     end, Level4FilesVerified),
     lists:map(fun({D, Uuid}) ->
-        ct:print("Verify dir del ~p", [D]),
+        ct:print("Verify dir del ~tp", [D]),
         verify_del(Config, {D, Uuid, []})
     end, lists:zip(Level3Dirs2, Level3Dirs2Uuids)),
     verify_dir_size(Config, Level3Dir, 0),
@@ -850,7 +958,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
     verify_stats(Config, Dir, true),
     ct:print("Dir verified"),
 
@@ -860,7 +968,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
     ct:print("File verified"),
 
     lists:foldl(fun(W, Acc) ->
-        ct:print("Changes of file from node ~p", [W]),
+        ct:print("Changes of file from node ~tp", [W]),
         OpenAns = lfm_proxy:open(W, SessId(W), {path, Level2File}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
@@ -872,7 +980,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         verify(Config, fun(W2) ->
-            ct:print("Verify write ~p", [{Level2File, W2}]),
+            ct:print("Verify write ~tp", [{Level2File, W2}]),
             ?match({ok, NewAcc},
                 begin
                     {ok, Handle2} = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
@@ -883,7 +991,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
                     end
                 end, Attempts)
         end),
-        ct:print("Changes of file from node ~p verified", [W]),
+        ct:print("Changes of file from node ~tp verified", [W]),
         NewAcc
     end, <<>>, Workers),
 
@@ -891,7 +999,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
     lists:foreach(fun(W) ->
         spawn_link(fun() ->
             Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-            MkAns = lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755),
+            MkAns = lfm_proxy:mkdir(W, SessId(W), Level2TmpDir),
             Master ! {mkdir_ans, Level2TmpDir, MkAns}
         end)
     end, Workers),
@@ -907,7 +1015,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
             end,
         ?assertMatch({_, {ok, _}}, MkAnsCheck),
         {Level2TmpDir, _} = MkAnsCheck,
-%%        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
+%%        ct:print("Verify spawn1 ~tp", [{Level2TmpDir}]),
         verify_stats(Config, Level2TmpDir, true),
         ct:print("Dir verified"),
         [Level2TmpDir | Acc]
@@ -917,7 +1025,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         lists:foreach(fun(W2) ->
             spawn_link(fun() ->
                 Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-                MkAns = lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755),
+                MkAns = lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir),
                 Master ! {mkdir_ans, Level3TmpDir, MkAns}
             end)
         end, Workers)
@@ -935,7 +1043,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
                 end,
             ?assertMatch({_, {ok, _}}, MkAnsCheck),
             {Level3TmpDir, _} = MkAnsCheck,
-%%            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
+%%            ct:print("Verify spawn2 ~tp", [{Level3TmpDir}]),
             verify_stats(Config, Level3TmpDir, true),
             ct:print("Dir verified")
         end, Workers)
@@ -961,7 +1069,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
 
     MainDirs = lists:foldl(fun(_, Acc) ->
         Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
         verify_stats(Config, Dir, true),
         [Dir | Acc]
     end, [], lists:seq(1,6)),
@@ -988,7 +1096,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     ChildrenList = lists:foldl(fun({Dir, Nodes}, FinalAcc) ->
         TmpChildren = lists:foldl(fun(W, Acc) ->
             Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir)),
             [Level2TmpDir | Acc]
         end, [], Nodes),
         [{Dir, TmpChildren} | FinalAcc]
@@ -996,7 +1104,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     ct:print("Children created"),
 
     Test = fun(MainDir, Children, Desc, DelWorkers) ->
-        ct:print("Test ~p", [Desc]),
+        ct:print("Test ~tp", [Desc]),
 
         ChildrenWithUuids = lists:map(fun(Child) ->
             {Child, verify_stats(Config, Child, true)}
@@ -1024,7 +1132,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
         lists:foreach(fun(_) ->
             RmAnsCheck =
                 receive
-                    {rm_ans, W, D, Uuid, {error, enoent}} ->
+                    {rm_ans, W, D, Uuid, {error, ?ENOENT}} ->
                         {rm_ans, W, D, Uuid, ok};
                     {rm_ans, W, D, Uuid, RmAns} ->
                         {rm_ans, W, D, Uuid, RmAns}
@@ -1033,7 +1141,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
                 end,
             ?assertMatch({rm_ans, _, _, _, ok}, RmAnsCheck),
             {rm_ans, RecW, RecDir, RecUuid, ok} = RmAnsCheck,
-            ct:print("Verify spawn ~p", [{RecW, RecDir, RecUuid}]),
+            ct:print("Verify spawn ~tp", [{RecW, RecDir, RecUuid}]),
             verify_del(Config, {RecDir, RecUuid, []}),
             ct:print("Dir rm verified")
         end, Zipped),
@@ -1058,7 +1166,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     ok.
 
 file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
-    timer:sleep(10000), % TODO - connection must appear after mock setup
+    timer:sleep(10000), % NOTE - connection must appear after mock setup
     Attempts = 60,
     User = <<"user1">>,
 
@@ -1067,26 +1175,26 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     A1 = rpc:call(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
-    SpaceKey = SpaceDoc#document.key,
-%%    ct:print("Space key ~p", [SpaceKey]),
+%%    SpaceKey = SpaceDoc#document.key,
+%%    ct:print("Space key ~tp", [SpaceKey]),
 
     DoTest = fun(TaskList) ->
 %%        ct:print("Do test"),
 
         GenerateDoc = fun(Type) ->
             Name = generator:gen_name(),
-            Uuid = datastore_utils:gen_key(),
-            Doc = #document{key = Uuid, value =
-            #file_meta{
-                name = Name,
-                type = Type,
-                mode = 8#775,
-                owner = User,
-                scope = SpaceKey
-            },
+            Uuid = datastore_key:new(),
+            Doc = #document{
+                key = Uuid,
+                value = #file_meta{
+                    name = Name,
+                    type = Type,
+                    mode = ?DEFAULT_DIR_PERMS,
+                    owner = User
+                },
                 scope = SpaceId
             },
-%%            ct:print("Doc ~p ~p", [Uuid, Name]),
+%%            ct:print("Doc ~tp ~tp", [Uuid, Name]),
             {Doc, Name}
         end,
 
@@ -1324,7 +1432,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         ]
     ],
     lists:foreach(fun(Num) ->
-        ct:print("Consistency config number ~p", [Num]),
+        ct:print("Consistency config number ~tp", [Num]),
         DoTest(lists:nth(Num, TestConfigs))
     end, ConfigsNum),
 
@@ -1336,7 +1444,7 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
 
     CreateLog = lists:foldl(fun(W, Acc) ->
         lists:foldl(fun({_, SN}, Acc2) ->
-            ct:print("Create dirs: node ~p, space ~p", [W, SN]),
+            ct:print("Create dirs: node ~tp, space ~tp", [W, SN]),
 
             Config = proplists:get_value(SN, SpaceConfigs),
             SessId = ?config(session, Config),
@@ -1345,24 +1453,24 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
             Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
             Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Dir, 8#755)),
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2Dir, 8#755)),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Dir)),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2Dir)),
 
             [{Dir, Level2Dir, Level2File, W, SN} | Acc2]
         end, Acc, Spaces)
     end, [], Workers),
 
     lists:foreach(fun({Dir, Level2Dir, _Level2File, W, SN}) ->
-        ct:print("Verify dirs, node ~p, space ~p ~p", [W, SN, Dir]),
+        ct:print("Verify dirs, node ~tp, space ~tp ~tp", [W, SN, Dir]),
 
         Config = proplists:get_value(SN, SpaceConfigs),
         verify_stats(Config, Dir, true),
-        ct:print("Verify dirs, node ~p, space ~p ~p", [W, SN, Level2Dir]),
+        ct:print("Verify dirs, node ~tp, space ~tp ~tp", [W, SN, Level2Dir]),
         verify_stats(Config, Level2Dir, true)
     end, CreateLog),
 
     FileCreateLog = lists:foldl(fun({_Dir, _Level2Dir, Level2File, W, SN}, Acc) ->
-        ct:print("Create files: node ~p, space ~p", [W, SN]),
+        ct:print("Create files: node ~tp, space ~tp", [W, SN]),
 
         FileBeg = <<"1234567890abcd",  (generator:gen_name())/binary>>,
         Config = proplists:get_value(SN, SpaceConfigs),
@@ -1371,7 +1479,7 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
     end, [], CreateLog),
 
     lists:foreach(fun({Level2File, FileBeg, W, SN}) ->
-        ct:print("Verify file, node ~p, space ~p ~p", [W, SN, Level2File]),
+        ct:print("Verify file, node ~tp, space ~tp ~tp", [W, SN, Level2File]),
 
         Config = proplists:get_value(SN, SpaceConfigs),
         verify_file(Config, FileBeg, {2, Level2File})
@@ -1397,7 +1505,7 @@ mkdir_and_rmdir_loop_test_base(Config0, IterationsNum, User) ->
         MkdirAns = lfm_proxy:mkdir(Worker1, SessId(Worker1), DirPath),
         ?assertMatch({ok, _}, MkdirAns),
         {ok, Handle} = MkdirAns,
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, Handle}))
+        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(Handle)))
     end, lists:seq(1, IterationsNum)),
     ok.
 
@@ -1412,7 +1520,7 @@ create_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     FilePath = <<"/", SpaceName/binary, "/",  File/binary>>,
 
     lists:foreach(fun(_N) ->
-        ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessId(Worker1), FilePath, 8#755)),
+        ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessId(Worker1), FilePath)),
         ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, FilePath}))
     end, lists:seq(1, IterationsNum)),
     ok.
@@ -1430,7 +1538,7 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     BufSize = size(Text),
 
     lists:foreach(fun(_N) ->
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), FilePath, 8#755)),
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), FilePath)),
         OpenAns = lfm_proxy:open(Worker1, SessId(Worker1), {path, FilePath}, write),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
@@ -1449,7 +1557,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     BlocksCount = ?config(block_count, Config),
     UserCount = ?config(user_count, Config),
     BlockSizeBytes = BlockSize * 1024 * 1024,
-    
+
     Users = [<<"user", (integer_to_binary(Num))/binary>> || Num <- lists:seq(1, UserCount)],
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     SessId = fun(User, W) ->
@@ -1460,9 +1568,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     FileSize = BlocksCount * BlockSizeBytes,
 
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User1, Worker2),
-        FilePath, 8#755)
-    ),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User1, Worker2), FilePath)),
     ?assertMatch(ok, lfm_proxy:truncate(Worker2, SessId(User1, Worker2),
         {path, FilePath}, FileSize)
     ),
@@ -1479,7 +1585,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
         User = lists:nth(rand:uniform(length(Users)), Users),
         Block = #file_block{offset = Num * BlockSizeBytes, size = BlockSizeBytes},
         case Num rem 1000 of
-            0 -> ct:pal("REQ: ~p", [Num]);
+            0 -> ct:pal("REQ: ~tp", [Num]);
             _ -> ok
         end,
         request_synchronization(Worker1, User, SessId, FileCtx, Block)
@@ -1488,24 +1594,23 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     timer:sleep(timer:seconds(2)),
     ct:pal("Transfers started"),
 
-    Start = erlang:monotonic_time(millisecond),
+    StopwatchTotal = stopwatch:start(),
     Times = lists:map(fun(User) ->
         SessionId = SessId(User, Worker1),
-        Start1 = erlang:monotonic_time(millisecond),
+        StopwatchPerUser = stopwatch:start(),
         cancel_transfers_for_session_and_file_sync(Worker1, SessionId, FileCtx),
-        End1 = erlang:monotonic_time(millisecond),
-        End1-Start1
+        stopwatch:read_millis(StopwatchPerUser)
     end, Users),
-    End = erlang:monotonic_time(millisecond),
+    TotalTime = stopwatch:read_millis(StopwatchTotal),
 
     ct:pal("Transfers canceled"),
-    
-    ct:pal("Block size: ~p~n"
-           "Block count: ~p~n"
-           "Number of users: ~p~n"
-           "Total time[ms]: ~p~n"
-           "Average time per user[ms]: ~p", 
-        [BlockSize, BlocksCount, UserCount, End-Start, lists:sum(Times)/length(Times)]).
+
+    ct:pal("Block size: ~tp~n"
+           "Block count: ~tp~n"
+           "Number of users: ~tp~n"
+           "Total time[ms]: ~tp~n"
+           "Average time per user[ms]: ~tp",
+        [BlockSize, BlocksCount, UserCount, TotalTime, lists:sum(Times)/length(Times)]).
 
 cancel_synchronizations_for_session_test_base(Config0) ->
     ct:timetrap({minutes, 240}),
@@ -1528,9 +1633,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     FileSize = BlocksCount * BlockSizeBytes,
 
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User1, Worker2),
-        FilePath, 8#755)
-    ),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User1, Worker2), FilePath)),
     ?assertMatch(ok, lfm_proxy:truncate(Worker2, SessId(User1, Worker2),
         {path, FilePath}, FileSize)
     ),
@@ -1547,23 +1650,23 @@ cancel_synchronizations_for_session_test_base(Config0) ->
         User = lists:nth(rand:uniform(length(Users)), Users),
         Block = #file_block{offset = Num * BlockSizeBytes, size = BlockSizeBytes},
         case Num rem 1000 of
-            0 -> ct:pal("REQ: ~p", [Num]);
+            0 -> ct:pal("REQ: ~tp", [Num]);
             _ -> ok
         end,
         async_synchronize(Worker1, User, SessId, FileCtx, Block)
      end, lists:seq(0, BlocksCount - 1)),
-    
+
     timer:sleep(timer:seconds(5)),
     ct:pal("Transfers started"),
 
-    Start = erlang:monotonic_time(millisecond),
+    Stopwatch = stopwatch:start(),
     lists:foreach(fun(User) ->
         SessionId = SessId(User, Worker1),
         cancel_transfers_for_session_and_file(Worker1, SessionId, FileCtx)
     end, Users),
 
     ct:pal("Transfers canceled"),
-    
+
     {OkCount, CancelCount} = lists:foldl(fun(Promise, {Ok, Cancel}) ->
         case rpc:yield(Promise) of
             {error, cancelled} ->
@@ -1572,19 +1675,19 @@ cancel_synchronizations_for_session_test_base(Config0) ->
                 {Ok+1, Cancel}
         end
     end, {0,0}, Promises),
-    
+
     ?assertEqual(0, rpc:call(Worker1, ets, info, [rtransfer_link_requests, size]), 500),
-    End = erlang:monotonic_time(millisecond),
-    
-    ct:pal("Block size: ~p~n"
-    "Block count: ~p~n"
-    "Number of users: ~p~n"
-    "Total time[s]: ~p~n"
-    "Finished transfers: ~p~n"
-    "Cancelled transfers: ~p~n",
-        [BlockSize, BlocksCount, UserCount, (End-Start)/1000, OkCount, CancelCount]).
+    TimeSeconds = stopwatch:read_seconds(Stopwatch, float),
 
+    ct:pal("Block size: ~tp~n"
+    "Block count: ~tp~n"
+    "Number of users: ~tp~n"
+    "Total time[s]: ~tp~n"
+    "Finished transfers: ~tp~n"
+    "Cancelled transfers: ~tp~n",
+        [BlockSize, BlocksCount, UserCount, TimeSeconds, OkCount, CancelCount]).
 
+% @TODO VFS-6617 fix fsync failing on timeout
 transfer_files_to_source_provider(Config0) ->
     ct:timetrap(timer:minutes(10)),
     Config = extend_config(Config0, <<"user1">>, {0, 0, 0, 0}, 0),
@@ -1593,50 +1696,109 @@ transfer_files_to_source_provider(Config0) ->
     Worker = ?config(worker1, Config),
     FilesNum = ?config(files_num, Config),
     Size = ?config(file_size, Config),
-    
-    Guids = utils:pmap(fun(Num) ->
+    Attempts = 60,
+
+    Guids = lists_utils:pmap(fun(Num) ->
         FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
-        {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, 8#755),
-        {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
+        {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath),
+        {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), ?FILE_REF(Guid), write),
         {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(Size)),
         ok = lfm_proxy:close(Worker, Handle),
         Guid
     end, lists:seq(1, FilesNum)),
-    
-    ct:pal("~p files created", [FilesNum]),
-    
-    Start = erlang:monotonic_time(millisecond),
-    
-    TidsAndGuids = utils:pmap(fun(Guid) ->
-        {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
+
+    ct:pal("~tp files created", [FilesNum]),
+
+    StopwatchTransfers = stopwatch:start(),
+    TidsAndGuids = lists_utils:pmap(fun(Guid) ->
+        {ok, Tid} = opt_transfers:schedule_file_replication(Worker, SessionId(Worker), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(Worker)),
         {Tid, Guid}
     end, Guids),
-    
-    utils:pforeach(fun F({Tid, Guid}) ->
+
+    lists_utils:pforeach(fun F({Tid, Guid}) ->
         {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [Guid]),
         case Transfers of
             [Tid] ->
                 ok;
-            _ -> 
+            _ ->
                 F({Tid, Guid})
         end
     end, TidsAndGuids),
-    
-    End = erlang:monotonic_time(millisecond),
-    
-    StartGui = erlang:monotonic_time(millisecond),
-    utils:pforeach(fun(Num) ->
-        {ok, [{_, List}]} = 
-            rpc:call(Worker, transfer_data_backend, list_transfers, 
-                [SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),
+    TransfersTimeSec = stopwatch:read_seconds(StopwatchTransfers, float),
+
+    % Await all transfers links are added to ended tree
+    ListAllTransfersFun = fun() ->
+        {ok, List} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceName, undefined, 0, FilesNum]),
+        lists:usort(List)
+    end,
+    ?assertEqual(FilesNum, length(ListAllTransfersFun()), Attempts),
+
+    StopwatchGui = stopwatch:start(),
+    lists_utils:pforeach(fun(Num) ->
+        Data = #{
+            <<"state">> => ?ENDED_TRANSFERS_STATE,
+            <<"offset">> => (Num-1)*100,
+            <<"limit">> => 100
+        },
+        {ok, value, #{<<"transfers">> := List}} = ?assertMatch({ok, value, #{}}, rpc:call(
+            Worker, space_transfers_middleware_handler, get, [
+                #op_req{data = Data, gri = #gri{id = SpaceName, aspect = transfers}}, anything
+            ]
+        )),
         ?assertMatch(100, length(List))
     end, lists:seq(1, FilesNum div 100)),
-    EndGui = erlang:monotonic_time(millisecond),
-    
-    ct:pal("Transfer time[s]: ~p~n"
-           "Average time per file[ms]: ~p~n"
-           "GUI time [s]: ~p", 
-        [(End-Start)/1000, (End-Start)/FilesNum, (EndGui-StartGui)/1000]).
+    TimeSecGui = stopwatch:read_seconds(StopwatchGui, float),
+
+    ct:pal("Transfer time[s]: ~tp~n"
+           "Average time per file[ms]: ~tp~n"
+           "GUI time [s]: ~tp",
+        [TransfersTimeSec, TransfersTimeSec * 1000 / FilesNum, TimeSecGui]).
+
+
+proxy_session_token_update_test_base(Config, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
+    proxy_session_token_update_test_base(Config, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
+proxy_session_token_update_test_base(Config0, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+    User = <<"user1">>,
+    SpaceName = <<"space4">>,       % supported on P1 but not on P2
+
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    [P1 | _] = ?config(workers1, Config),
+    [P2 | _] = ?config(workers_not1, Config),
+    GetSessIdFun = ?config(session, Config),
+
+    SessionId = GetSessIdFun(P2),   % proxy session on P1 should have the same SessionId as session on P2
+
+    OriginalAccessToken = ?config({access_token, User}, Config),
+    OriginalClientTokens = #client_tokens{access_token = OriginalAccessToken, consumer_token = undefined},
+
+    NewAccessToken = tokens:confine(OriginalAccessToken, #cv_data_readonly{}),
+    ?assertNotEqual(OriginalAccessToken, NewAccessToken),
+
+    NewClientTokens = #client_tokens{access_token = NewAccessToken, consumer_token = undefined},
+
+    % After making request resulting in proxy request session with the same SessionId should
+    % exist on P1 (proxy one) and P2
+    DirPath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(P2, SessionId, DirPath)),
+
+    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
+    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
+
+    % Assert that when updating credentials on P2 proxy session on P1 is not automatically updated
+    ?assertEqual(ok, rpc:call(P2, incoming_session_watcher, update_credentials, [
+        SessionId, NewAccessToken, undefined
+    ]), Attempts),
+
+    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
+    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
+
+    % But any future proxy request will update those credentials (credentials are send with every
+    % proxy request)
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessionId, ?FILE_REF(DirGuid)), Attempts),
+    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
+    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
+
+    ok.
 
 
 %%%===================================================================
@@ -1647,14 +1809,12 @@ init_env(Config) ->
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, datastore_links_tree_order, 100),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2))
     end, ?config(op_worker_nodes, Config)),
 
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     initializer:disable_quota_limit(Config),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
 
@@ -1667,9 +1827,81 @@ teardown_env(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop().
 
+mock_sync_and_rtransfer_errors(Config) ->
+    % limit test with rtransfer errors to single file check
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+
+    RequestDelay = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(3)),
+
+    test_utils:mock_new(Workers,
+        [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config, dbsync_changes], [passthrough]),
+
+    test_utils:mock_expect(Workers, dbsync_in_stream_worker, handle_info, fun
+        ({batch_applied, {Since, Until}, Timestamp, Ans} = Info, State) ->
+            case Ans of
+                ok ->
+                    Counter = case get(test_counter) of
+                        undefined -> 1;
+                        Val -> Val
+                    end,
+                    case Counter < 4 of
+                        true ->
+                            put(test_counter, Counter + 1),
+                            meck:passthrough([{batch_applied, {Since, max(Until - 10, Since)}, Timestamp, Ans}, State]);
+                        _ ->
+                            put(test_counter, 1),
+                            meck:passthrough([Info, State])
+                    end;
+                _ ->
+                    meck:passthrough([Info, State])
+            end;
+        (Info, State) ->
+            meck:passthrough([Info, State])
+    end),
+
+    test_utils:mock_expect(Workers, dbsync_communicator, send_changes,
+        fun(ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs) ->
+            timer:sleep(1000),
+            meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs])
+        end),
+
+    test_utils:mock_expect(Workers, rtransfer_config, get_connection_secret,
+        fun(ProviderId, HostAndPort) ->
+            Counter = case get(test_counter) of
+                undefined -> 1;
+                Val -> Val
+            end,
+            case Counter < 4 of
+                true ->
+                    put(test_counter, Counter + 1),
+                    throw(connection_error);
+                _ ->
+                    meck:passthrough([ProviderId, HostAndPort])
+            end
+        end),
+
+    test_utils:mock_expect(Workers, dbsync_changes, apply,
+        fun(#document{seq = Seq} = Doc) ->
+            case ?RAND_INT(1, 10) > 7 of
+                true -> {error, Seq, test_error};
+                false -> meck:passthrough([Doc])
+            end
+        end),
+
+    [{request_delay, RequestDelay} | Config].
+
+unmock_sync_and_rtransfer_errors(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config, dbsync_changes]),
+    RequestDelay = ?config(request_delay, Config),
+    case RequestDelay of
+        undefined -> utils:rpc_multicall(Workers, application, unset_env, [?APP_NAME, dbsync_changes_request_delay]);
+        _ -> test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay)
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -1677,7 +1909,7 @@ teardown_env(Config) ->
 
 async_synchronize(SessionId, FileCtx, Block) ->
     UserCtx = user_ctx:new(SessionId),
-    replica_synchronizer:synchronize(UserCtx, FileCtx, Block, false, undefined, 96).
+    replica_synchronizer:synchronize(UserCtx, FileCtx, Block, false, undefined, 96, transfer).
 
 async_synchronize(Worker, User, SessId, FileCtx, Block) ->
     rpc:async_call(Worker, ?MODULE, async_synchronize, [
@@ -1687,7 +1919,7 @@ async_synchronize(Worker, User, SessId, FileCtx, Block) ->
 request_synchronization(SessionID, FileCtx, Block) ->
     UserCtx = user_ctx:new(SessionID),
     replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
-        false, undefined, 96
+        false, undefined, 96, transfer
     ).
 
 request_synchronization(Worker, User, SessId, FileCtx, Block) ->
@@ -1696,13 +1928,13 @@ request_synchronization(Worker, User, SessId, FileCtx, Block) ->
     ]).
 
 cancel_transfers_for_session_and_file(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session, [
         FileUuid, SessionId
     ]).
 
 cancel_transfers_for_session_and_file_sync(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session_sync, [
         FileUuid, SessionId
     ]).
@@ -1724,8 +1956,8 @@ get_links(FileUuid) ->
         {ok, Links} = datastore_model:fold_links(Ctx, FileUuid, all, Fun, #{}, #{}),
         Links
     catch
-        _:Reason ->
-            ct:print("Get links failed: ~p~n~p", [Reason, erlang:get_stacktrace()]),
+        _:Reason:Stacktrace ->
+            ct:print("Get links failed: ~tp~n~tp", [Reason, Stacktrace]),
             #{}
     end.
 
@@ -1744,17 +1976,15 @@ verify_locations(W, FileUuid, SpaceId) ->
     end, 0, IDs).
 
 get_locations(W, FileUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     {LocationIds, _} = rpc:call(W, file_ctx, get_file_location_ids, [FileCtx]),
     LocationIds.
 
 create_doc(Doc = #document{value = FileMeta}, #document{key = ParentUuid}, _LocId, _Path) ->
     SpaceId = Doc#document.scope,
     DocWithParentUuid = Doc#document{value = FileMeta#file_meta{parent_uuid = ParentUuid}},
-    {ok, FileUuid} = file_meta:save(DocWithParentUuid),
-    {ok, _} = times:save(#document{key = FileUuid, value = #times{},
-        scope = SpaceId}),
-    ok.
+    {ok, #document{} = CreatedDoc} = file_meta:save(DocWithParentUuid),
+    ok = times_api:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId)).
 
 set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     #document{key = ParentUuid} = ParentDoc,
@@ -1769,12 +1999,10 @@ set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     ok.
 
 create_location(Doc, _ParentDoc, LocId, Path) ->
-    FDoc = Doc#document.value,
     FileUuid = Doc#document.key,
     SpaceId = Doc#document.scope,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
-    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
+    {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
     FileId = Path,
     Location0 = #file_location{
         blocks = [#file_block{offset = 0, size = 3}],
@@ -1797,23 +2025,22 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     {ok, _} = datastore_model:save(Ctx, LocationDoc),
 
     LeafLess = filename:dirname(FileId),
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, LeafLess, undefined),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+    SDHandle0 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, LeafLess),
+    case storage_driver:mkdir(SDHandle0, ?DEFAULT_DIR_PERMS, true) of
         ok -> ok;
         {error, eexist} ->
             ok
     end,
 
 
-    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, FileId, undefined),
+    SDHandle1 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, FileId),
     FileContent = <<"abc">>,
-    storage_file_manager:unlink(SFMHandle1, size(FileContent)),
-    ok = storage_file_manager:create(SFMHandle1, 8#775),
-    {ok, SFMHandle2} = storage_file_manager:open(SFMHandle1, write),
-    SFMHandle3 = storage_file_manager:set_size(SFMHandle2),
-    {ok, 3} = storage_file_manager:write(SFMHandle3, 0, FileContent),
-    storage_file_manager:fsync(SFMHandle3, false),
+    storage_driver:unlink(SDHandle1, size(FileContent)),
+    ok = storage_driver:create(SDHandle1, ?DEFAULT_DIR_PERMS),
+    {ok, SDHandle2} = storage_driver:open_insecure(SDHandle1, write),
+    SDHandle3 = storage_driver:set_size(SDHandle2),
+    {ok, 3} = storage_driver:write(SDHandle3, 0, FileContent),
+    storage_driver:fsync(SDHandle3, false),
     ok.
 
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
@@ -1842,9 +2069,9 @@ extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfP
     end, {[], [], [], []}, Workers),
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1}, {workers2, Workers2},
-        {session, SessId}, {space_name, SpaceName}, {attempts, Attempts},
+        {session, SessId}, {first_space_id, SpaceId}, {space_name, SpaceName}, {attempts, Attempts},
         {nodes_number, {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider}} | Config].
 
 verify(Config, TestFun) ->
@@ -1905,7 +2132,7 @@ verify_stats(Config, File, IsDir) ->
     {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, _NodesOfProvider} = ?config(nodes_number, Config),
 
     VerAns = verify(Config, fun(W) ->
-%%        ct:print("VerifyStats ~p", [{File, IsDir, W}]),
+%%        ct:print("VerifyStats ~tp", [{File, IsDir, W}]),
         case IsDir of
             true ->
                 ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
@@ -1916,7 +2143,7 @@ verify_stats(Config, File, IsDir) ->
         end,
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
         {ok, #file_attr{guid = FileGuid}} = StatAns,
-        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        FileUuid = file_id:guid_to_uuid(FileGuid),
         {FileUuid, rpc:call(W, file_meta, get, [FileUuid])}
     end),
 
@@ -1937,12 +2164,12 @@ create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, Attempts) ->
     {ok, Handle} = case Attempts of
         0 ->
             ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker,
-                SessId(WriteWorker), File, 8#755)),
+                SessId(WriteWorker), File)),
             ?assertMatch({ok, _}, lfm_proxy:open(WriteWorker,
                 SessId(WriteWorker), {path, File}, rdwr));
         _ ->
             ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker,
-                SessId(WriteWorker), File, 8#755), Attempts),
+                SessId(WriteWorker), File), Attempts),
             ?assertMatch({ok, _}, lfm_proxy:open(WriteWorker,
                 SessId(WriteWorker), {path, File}, rdwr), Attempts)
     end,
@@ -1958,7 +2185,7 @@ create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, Attempts) ->
 create_big_file(Config, ChunkSize, ChunksNum, PartNum, File, Worker) ->
     SessId = ?config(session, Config),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId(Worker), File, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId(Worker), File)),
     OpenAns = lfm_proxy:open(Worker, SessId(Worker), {path, File}, rdwr),
     ?assertMatch({ok, _}, OpenAns),
     {ok, Handle} = OpenAns,
@@ -1975,20 +2202,22 @@ create_big_file(Config, ChunkSize, ChunksNum, PartNum, File, Worker) ->
 
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
-read_big_file(Config, _FileSize, File, Worker, true) ->
-    SessId = ?config(session, Config),
+read_big_file(Config, _FileSize, File, Worker, Transfer) ->
     Attempts = ?config(attempts, Config),
+    read_big_file(Config, _FileSize, File, Worker, Attempts, Transfer).
+
+read_big_file(Config, _FileSize, File, Worker, Attempts, true) ->
+    SessId = ?config(session, Config),
     Worker1 = ?config(worker1, Config),
 
     ProviderId = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
-    Start = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     {ok, TransferID} = ?assertMatch({ok, _},
-        lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
+        opt_transfers:schedule_file_replication(Worker1, SessId(Worker1),
             {path, File}, ProviderId)),
-    ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
-        rpc:call(Worker1, transfer, get, [TransferID]), Attempts),
-    timer:now_diff(os:timestamp(), Start);
-read_big_file(Config, FileSize, File, Worker, _) ->
+    await_replication_end(Worker1 ,TransferID, Attempts),
+    stopwatch:read_micros(Stopwatch);
+read_big_file(Config, FileSize, File, Worker, _Attempts, _) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
     read_big_file_loop(FileSize, File, Worker, SessId, Attempts, undefined, 0).
@@ -1998,19 +2227,19 @@ read_big_file_loop(_FileSize, _File, _Worker, _SessId, _, {{ok, _Time, true}, ok
 read_big_file_loop(_FileSize, _File, _Worker, _SessId, 0, LastAns, _TimeSum) ->
     LastAns;
 read_big_file_loop(FileSize, File, Worker, SessId, Attempts, _LastAns, TimeSum) ->
-    Ans = case logical_file_manager:open(SessId(Worker), {path, File}, rdwr) of
+    Ans = case lfm:open(SessId(Worker), {path, File}, rdwr) of
         {ok, Handle} ->
             ReadAns = try
-                Start = os:timestamp(),
-                {ok, _, Bytes} = logical_file_manager:read(Handle, 0, FileSize),
-                {ok, timer:now_diff(os:timestamp(), Start), FileSize == size(Bytes)}
+                Stopwatch = stopwatch:start(),
+                {ok, _, Bytes} = lfm:read(Handle, 0, FileSize),
+                {ok, stopwatch:read_micros(Stopwatch), FileSize == size(Bytes)}
             catch
                 E1:E2 ->
                     {read, E1, E2}
             end,
 
-            {ReadAns, logical_file_manager:fsync(Handle),
-                logical_file_manager:release(Handle)};
+            {ReadAns, lfm:fsync(Handle),
+                lfm:release(Handle)};
         OpenError ->
             {open_error, OpenError}
     end,
@@ -2051,10 +2280,10 @@ verify_file(Config, FileBeg, {Offset, File}) ->
     end,
 
 %%        VerAns0 = VerifyLocation(),
-%%        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
+%%        ct:print("Locations0 ~tp", [{Offset, File, VerAns0}]),
 
     verify(Config, fun(W) ->
-%%            ct:print("Verify file ~p", [{File, W}]),
+%%            ct:print("Verify file ~tp", [{File, W}]),
         ?match({ok, FileCheck},
             begin
                 {ok, Handle} = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
@@ -2069,12 +2298,12 @@ verify_file(Config, FileBeg, {Offset, File}) ->
     ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
     AssertLocations = fun() ->
         VerAns = VerifyLocation(),
-%%            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+%%            ct:print("Locations1 ~tp", [{Offset, File, VerAns}]),
         Flattened = lists:flatten(VerAns),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         LocationsList = lists:filter(fun(S) -> S >= 1 end, Flattened),
-%%            ct:print("Locations1 ~p", [{{length(ZerosList), length(LocationsList)}, ToMatch}]),
+%%            ct:print("Locations1 ~tp", [{{length(ZerosList), length(LocationsList)}, ToMatch}]),
         {length(ZerosList), length(LocationsList)}
     end,
     ?match(ToMatch, AssertLocations(), Attempts),
@@ -2083,7 +2312,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
         {ok, #file_attr{guid = FileGuid}} = StatAns,
-        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        FileUuid = file_id:guid_to_uuid(FileGuid),
 
         [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
         {W, get_locations(W, FileUuid, SpaceId)}
@@ -2095,18 +2324,8 @@ verify_del(Config, {F, FileUuid, _Locations}) ->
     Attempts = ?config(attempts, Config),
 
     verify(Config, fun(W) ->
-%%            ct:print("Del ~p", [{W, F,  FileUuid, Locations}]),
-%%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
-        % TODO - match to chosen error (check perms may also result in ENOENT)
         ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts),
-
         ?match({error, not_found}, rpc:call(W, file_meta, get, [FileUuid]), Attempts)
-%%        ?match(0, count_links(W, FileUuid), Attempts),
-%%
-%%        lists:foreach(fun(Location) ->
-%%            ?match({error, not_found},
-%%                rpc:call(W, file_meta, get, [Location]), Attempts)
-%%        end, proplists:get_value(W, Locations, []))
     end).
 
 verify_dir_size(Config, DirToCheck, DSize) ->
@@ -2116,7 +2335,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
     VerAns0 = verify(Config, fun(W) ->
         CountChilden = fun() ->
-            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 20000),
+            LSAns = lfm_proxy:get_children(W, SessId(W), {path, DirToCheck}, 0, 20000),
             ?assertMatch({ok, _}, LSAns),
             {ok, ListedDirs} = LSAns,
             length(ListedDirs)
@@ -2126,7 +2345,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
         StatAns = lfm_proxy:stat(W, SessId(W), {path, DirToCheck}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
         {ok, #file_attr{guid = FileGuid}} = StatAns,
-        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        FileUuid = file_id:guid_to_uuid(FileGuid),
         {W, FileUuid}
     end),
 
@@ -2151,9 +2370,9 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
 read_blocks(Worker, Handle, BlockSize, Blocks) ->
     lists:foldl(fun(BlockNum, Acc) ->
-        Start = os:timestamp(),
+        Stopwatch = stopwatch:start(),
         ReadAns = lfm_proxy:silent_read(Worker, Handle, BlockNum, BlockSize),
-        Time = timer:now_diff(os:timestamp(), Start),
+        Time = stopwatch:read_micros(Stopwatch),
         ?assertMatch({ok, _}, ReadAns),
         Acc + Time
     end, 0, Blocks).
@@ -2164,10 +2383,10 @@ sync_blocks(Worker, SessionID, FileCtx, BlockSize, Blocks) ->
 sync_blocks(SessionID, FileCtx, BlockSize, Blocks) ->
     UserCtx = user_ctx:new(SessionID),
     FinalTime = lists:foldl(fun(BlockNum, Acc) ->
-        Start = os:timestamp(),
+        Stopwatch = stopwatch:start(),
         SyncAns = replica_synchronizer:synchronize(UserCtx, FileCtx,
-            #file_block{offset = BlockNum, size = BlockSize}, false, undefined, 32),
-        Time = timer:now_diff(os:timestamp(), Start),
+            #file_block{offset = BlockNum, size = BlockSize}, false, undefined, 32, transfer),
+        Time = stopwatch:read_micros(Stopwatch),
         ?assertMatch({ok, _}, SyncAns),
         Acc + Time
     end, 0, Blocks),
@@ -2175,7 +2394,7 @@ sync_blocks(SessionID, FileCtx, BlockSize, Blocks) ->
 
 do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
     Master = self(),
-    Start = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     lists:foreach(fun(FileCtx) ->
         spawn(fun() ->
             try
@@ -2195,7 +2414,7 @@ do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
             {ans, ok, T} ->
                 T + Acc;
             {ans, Error} ->
-                ct:print("Error: ~p", [Error]),
+                ct:print("Error: ~tp", [Error]),
                 ?assertEqual(ok, Error),
                 Acc
         after timer:minutes(5) ->
@@ -2204,5 +2423,61 @@ do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
         end
     end, 0, FileCtxs),
 
-    SyncTime_2 = timer:now_diff(os:timestamp(), Start),
+    SyncTime_2 = stopwatch:read_micros(Stopwatch),
     {SyncTime / length(FileCtxs), SyncTime_2}.
+
+get_seq_and_timestamp_or_error(Worker, SpaceId, ProviderId) ->
+    rpc:call(Worker, ?MODULE, get_seq_and_timestamp_or_error, [SpaceId, ProviderId]).
+
+get_seq_and_timestamp_or_error(SpaceId, ProviderId) ->
+    case datastore_model:get(#{model => dbsync_state}, SpaceId) of
+        {ok, #document{value = #dbsync_state{seq = Seq}}} ->
+            maps:get(ProviderId, Seq, {error, not_found});
+        Error ->
+            Error
+    end.
+
+await_replication_end(Node, TransferId, Attempts) ->
+    await_replication_end(Node, TransferId, Attempts, get).
+
+await_replication_end(Node, TransferId, 1, GetFun) ->
+    ?assertMatch(
+        {ok, #document{value = #transfer{replication_status = completed}}},
+        rpc:call(Node, transfer, GetFun, [TransferId])
+    );
+await_replication_end(Node, TransferId, Attempts, GetFun) ->
+    case rpc:call(Node, transfer, GetFun, [TransferId]) of
+        {ok, #document{value = #transfer{replication_status = completed}}} ->
+            ok;
+        {ok, #document{key = Key, value = #transfer{replication_status = Status} = Transfer}} when
+            Status == failed;
+            Status == cancelled
+        ->
+            ct:pal("Replication failed, id ~tp, doc id ~tp, method ~tp~nrecord: ~tp",
+                [TransferId, Key, GetFun, Transfer]),
+            throw(replication_failed);
+        Result ->
+            % Log transfer statistics every 5 minutes
+            Attempts rem 300 == 0 andalso log_replication_stats(TransferId, Result),
+
+            timer:sleep(timer:seconds(1)),
+            await_replication_end(Node, TransferId, Attempts - 1, GetFun)
+    end.
+
+log_replication_stats(TransferId, {ok, #document{value = #transfer{
+    bytes_replicated = BytesReplicated
+}}}) ->
+    ct:pal("[Transfer ~tp] Bytes replicated: ~tp", [TransferId, BytesReplicated]);
+log_replication_stats(TransferId, Error = {error, _}) ->
+    ct:pal("[Transfer ~tp] Failed to fetch transfer stats due to: ~tp", [TransferId, Error]).
+
+%% @private
+-spec get_session_client_tokens(node(), session:id()) ->
+    {ok, auth_manager:client_tokens()} | {error, term()}.
+get_session_client_tokens(Node, SessionId) ->
+    case rpc:call(Node, session, get, [SessionId]) of
+        {ok, #document{value = #session{credentials = TokenCredentials}}} ->
+            {ok, auth_manager:get_client_tokens(TokenCredentials)};
+        {error, _} = Error ->
+            Error
+    end.

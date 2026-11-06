@@ -1,0 +1,122 @@
+%%%-------------------------------------------------------------------
+%%% @author Michal Wrzeszcz
+%%% @copyright (C) 2023 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module contains logger for dbsync.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(dbsync_logger).
+-author("Michal Wrzeszcz").
+
+
+-include("modules/datastore/datastore_models.hrl").
+
+
+%% API
+-export([log_apply/5, log_batch_received/5, log_batch_requested/4, log_batch_sending/4]).
+
+
+-define(CHANGES_FILE_MAX_SIZE, op_worker:get_env(dbsync_changes_audit_log_file_max_size, 10485760)). % 10 MB
+-define(OUT_STREAM_FILE_MAX_SIZE, op_worker:get_env(dbsync_out_stream_audit_log_file_max_size, 10485760)). % 10 MB
+-define(CHANGES_AUDIT_LOG_ROOT_DIR, op_worker:get_env(
+    dbsync_changes_audit_log_root_dir, "/tmp/dbsync_changes/"
+)).
+-define(OUT_STREAM_AUDIT_LOG_ROOT_DIR, op_worker:get_env(
+    dbsync_out_stream_audit_log_root_dir, "/tmp/dbsync_out_stream/"
+)).
+%% 1 day
+-define(OUT_STREAM_AUDIT_LOG_LAST_UNIQUE_SEQ_RANGE_TTL, op_worker:get_env(
+    dbsync_out_stream_audit_log_last_unique_seq_range_ttl, 86400
+)).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+-spec log_apply(
+    [datastore:doc()],
+    {couchbase_changes:since(), couchbase_changes:until()},
+    ok | timeout | {error, datastore_doc:seq(), term()},
+    od_space:id(),
+    od_provider:id()
+) -> ok.
+log_apply(Docs, BatchRange, Ans, SpaceId, ProviderId) ->
+    case ?CHANGES_FILE_MAX_SIZE of
+        0 ->
+            ok;
+        MaxSize ->
+            Seqs = lists:map(fun(#document{seq = Seq}) -> Seq end, Docs),
+            Log = "Seqs range ~tp applied with ans: ~tp~nSeqs in range: ~w",
+            Args = [BatchRange, Ans, Seqs],
+            onedata_logger:log_with_rotation(get_changes_log_file(SpaceId, ProviderId), Log, Args, MaxSize)
+    end.
+
+
+-spec log_batch_received(couchbase_changes:since(), couchbase_changes:until(), couchbase_changes:seq(),
+    od_space:id(), od_provider:id()) -> ok.
+log_batch_received(Seq, Seq, _CurrentSeq, _SpaceId, _ProviderId) ->
+    ok;
+log_batch_received(Since, Until, CurrentSeq, SpaceId, ProviderId) ->
+    case ?CHANGES_FILE_MAX_SIZE of
+        0 ->
+            ok;
+        MaxSize ->
+            Log = "Seqs range ~tp received, current seq ~tp",
+            Args = [{Since, Until}, CurrentSeq],
+            onedata_logger:log_with_rotation(get_changes_log_file(SpaceId, ProviderId), Log, Args, MaxSize)
+    end.
+
+
+-spec log_batch_requested(couchbase_changes:since(), couchbase_changes:until(), od_space:id(), od_provider:id()) -> ok.
+log_batch_requested(Since, Until, SpaceId, ProviderId) ->
+    case ?CHANGES_FILE_MAX_SIZE of
+        0 ->
+            ok;
+        MaxSize ->
+            Log = "Seqs range ~tp requested",
+            Args = [{Since, Until}],
+            onedata_logger:log_with_rotation(get_changes_log_file(SpaceId, ProviderId), Log, Args, MaxSize)
+    end.
+
+
+-spec log_batch_sending(couchbase_changes:since(), couchbase_changes:until(), od_provider:id() | all, od_space:id()) -> ok.
+log_batch_sending(Since, Until, ProviderId, SpaceId) ->
+    case ?OUT_STREAM_FILE_MAX_SIZE of
+        0 ->
+            ok;
+        MaxSize ->
+            CacheKey = {?MODULE, dbsync_out_stream, SpaceId},
+            ShouldLog = case node_cache:get(CacheKey, false) of
+                false ->
+                    true;
+                LastUniqueSeqRange ->
+                    not (LastUniqueSeqRange == {Since, Until})
+            end,
+
+            case ShouldLog of
+                true ->
+                    LogFile = ?OUT_STREAM_AUDIT_LOG_ROOT_DIR ++ str_utils:to_list(SpaceId) ++ ".log",
+
+                    Log = "Seqs range ~tp sent to ~tp",
+                    Args = [{Since, Until}, ProviderId],
+                    onedata_logger:log_with_rotation(LogFile, Log, Args, MaxSize),
+
+                    node_cache:put(CacheKey, {Since, Until}, ?OUT_STREAM_AUDIT_LOG_LAST_UNIQUE_SEQ_RANGE_TTL);
+                false ->
+                    ok
+            end
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec get_changes_log_file(od_space:id(), od_provider:id()) -> string().
+get_changes_log_file(SpaceId, ProviderId) ->
+    ?CHANGES_AUDIT_LOG_ROOT_DIR ++ str_utils:to_list(SpaceId) ++ "_" ++ str_utils:to_list(ProviderId) ++ ".log".

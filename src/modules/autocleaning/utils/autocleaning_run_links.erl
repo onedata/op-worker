@@ -29,7 +29,6 @@
 
 -define(EPOCH_INFINITY, 9999999999). % GMT: Saturday, 20 November 2286 17:46:39
 -define(LINK_NAME_ID_PART_LENGTH, 6).
--define(LINK_TIMESTAMP_PART_LENGTH, 10).
 
 
 %%%===================================================================
@@ -41,7 +40,7 @@
 %% Adds link to autocleaning_run document.
 %% @end
 %%--------------------------------------------------------------------
--spec add_link(autocleaning_run:id(), od_space:id(), non_neg_integer()) -> ok.
+-spec add_link(autocleaning:run_id(), od_space:id(), non_neg_integer()) -> ok.
 add_link(ARId, SpaceId, Timestamp) ->
     Ctx = ?CTX#{scope => SpaceId},
     TreeId = oneprovider:get_id(),
@@ -57,7 +56,7 @@ add_link(ARId, SpaceId, Timestamp) ->
 %% Delete link to autocleaning_run document.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_link(autocleaning_run:id(), od_space:id(), non_neg_integer()) -> ok.
+-spec delete_link(autocleaning:run_id(), od_space:id(), non_neg_integer()) -> ok.
 delete_link(ARId, SpaceId, Timestamp) ->
     Ctx = ?CTX#{scope => SpaceId},
     TreeId = oneprovider:get_id(),
@@ -69,8 +68,8 @@ delete_link(ARId, SpaceId, Timestamp) ->
 %% Lists autocleaning document ids.
 %% @end
 %%-------------------------------------------------------------------
--spec list(od_space:id(), autocleaning_run:id() | undefined,
-    offset(), list_limit()) -> {ok, [autocleaning_run:id()]}.
+-spec list(od_space:id(), autocleaning:run_id() | undefined,
+    offset(), list_limit()) -> {ok, [autocleaning:run_id()]}.
 list(SpaceId, StartId, Offset, Limit) ->
     Opts = #{offset => Offset},
 
@@ -94,7 +93,7 @@ list(SpaceId, StartId, Offset, Limit) ->
 %% Returns link key for given autocleaning_run id and its Timestamp.
 %% @end
 %%-------------------------------------------------------------------
--spec link_key(autocleaning_run:id(), non_neg_integer()) -> link_key().
+-spec link_key(autocleaning:run_id(), non_neg_integer()) -> link_key().
 link_key(ARId, Timestamp) ->
     TimestampPart = (integer_to_binary(?EPOCH_INFINITY - Timestamp)),
     IdPart = binary:part(ARId, 0, ?LINK_NAME_ID_PART_LENGTH),
@@ -121,7 +120,7 @@ space_link_root(SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec for_each_link(
-    Callback :: fun((link_key(), autocleaning_run:id(), Acc0 :: term()) -> Acc :: term()),
+    Callback :: fun((link_key(), autocleaning:run_id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id(), datastore_model:fold_opts()) ->
     {ok, Acc :: term()} | {error, term()}.
 for_each_link(Callback, Acc0, SpaceId, Options) ->

@@ -49,30 +49,30 @@ all() ->
 %%%===================================================================
 
 get_remote_document_msg_should_be_serializable(_Config) ->
-    {_, ProtoMsg} = translator:translate_to_protobuf(#get_remote_document{
+    {_, ProtoMsg} = clproto_translator:to_protobuf(#get_remote_document{
         model = some_model,
         key = <<"some_key">>,
         routing_key = <<"some_routing_key">>
     }),
     RawMsg = ?assertMatch(<<_/binary>>, messages:encode_msg(ProtoMsg)),
-    ?assertMatch(#get_remote_document{}, translator:translate_from_protobuf(
+    ?assertMatch(#get_remote_document{}, clproto_translator:from_protobuf(
         messages:decode_msg(RawMsg, 'GetRemoteDocument')
     )).
 
 remote_document_msg_should_be_serializable(_Config) ->
-    {_, ProtoMsg} = translator:translate_to_protobuf(#remote_document{
+    {_, ProtoMsg} = clproto_translator:to_protobuf(#remote_document{
         status = #status{code = ?OK},
         compressed_data = <<"some_data">>
     }),
     RawMsg = ?assertMatch(<<_/binary>>, messages:encode_msg(ProtoMsg)),
-    ?assertMatch(#remote_document{}, translator:translate_from_protobuf(
+    ?assertMatch(#remote_document{}, clproto_translator:from_protobuf(
         messages:decode_msg(RawMsg, 'RemoteDocument')
     )).
 
 get_remote_document_should_return_document(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, datastore_router),
-    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _, _, _) ->
+    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _) ->
         {ok, #document{
             key = <<"some_key">>,
             value = #custom_metadata{
@@ -95,7 +95,7 @@ get_remote_document_should_return_document(Config) ->
 get_remote_document_should_return_missing_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, datastore_router),
-    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _, _, _) ->
+    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _) ->
         {error, not_found}
     end),
     ?assertMatch(#remote_document{
@@ -110,7 +110,7 @@ get_remote_document_should_return_missing_error(Config) ->
 get_remote_document_should_return_internal_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, datastore_router),
-    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _, _, _) ->
+    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _) ->
         {error, internal}
     end),
     ?assertMatch(#remote_document{

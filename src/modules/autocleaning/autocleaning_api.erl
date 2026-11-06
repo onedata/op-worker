@@ -20,16 +20,13 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([force_start/1, maybe_start/2, configure/2, disable/1, get_configuration/1,
-    status/1, list_reports/1, list_reports/4, restart_autocleaning_run/1,
-    delete_config/1, maybe_check_and_start_autocleaning/1,
-    maybe_check_and_start_autocleaning/2, get_run_report/1, get_run_report/2]).
-
--define(AUTOCLEANING_CHECK_INTERVAL,
-    application:get_env(?APP_NAME, autocleaning_check_interval, 1000)). % 1s
+-export([force_run/1, check/1, configure/2, disable/1, get_configuration/1,
+    get_status/1, list_reports/1, list_reports/4, restart_autocleaning_run/1,
+    delete_config/1, get_run_report/1, get_run_report/2, cancel_run/1, cancel_run/2]).
 
 %%%===================================================================
 %%% API
@@ -41,8 +38,9 @@
 %% occupancy hasn't reached the configured threshold).
 %% @end
 %%-------------------------------------------------------------------
--spec force_start(od_space:id()) -> {ok, autocleaning_run:id()} | {error, term()}.
-force_start(SpaceId) ->
+-spec force_run(od_space:id()) ->
+    {ok, autocleaning:run_id()} | errors:error() | {error, term()}.
+force_run(SpaceId) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
             case exists_and_is_enabled(SpaceId) of
@@ -51,80 +49,54 @@ force_start(SpaceId) ->
                     CurrentSize = space_quota:current_size(SpaceId),
                     case autocleaning_config:is_target_reached(CurrentSize, Config) of
                         false ->
-                            autocleaning_controller:start(SpaceId, Config, CurrentSize);
+                            autocleaning_run_controller:start(SpaceId, Config, CurrentSize);
                         true ->
                             {error, nothing_to_clean}
                     end;
                 false ->
-                    {error, autocleaning_disabled}
+                    ?ERR_AUTO_CLEANING_DISABLED(?err_ctx())
             end;
         false ->
-            {error, file_popularity_disabled}
+            ?ERR_FILE_POPULARITY_DISABLED(?err_ctx())
     end .
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Calls autocleaning_api:maybe_start/2 if last autocleaning check has
-%% been performed longer than ?AUTOCLEANING_CHECK_INTERVAL seconds ago.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_check_and_start_autocleaning(od_space:id()) -> ok.
-maybe_check_and_start_autocleaning(SpaceId) ->
-    case space_quota:get(SpaceId) of
-        {ok, #document{value = SQ}} ->
-            maybe_check_and_start_autocleaning(SpaceId, SQ);
-        _ -> ok
+-spec cancel_run(od_space:id()) -> ok.
+cancel_run(SpaceId) ->
+    case autocleaning:get_current_run(SpaceId) of
+        undefined ->
+            ok;
+        ARId ->
+            cancel_run(SpaceId, ARId)
     end.
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Calls autocleaning_api:maybe_start/2 if last autocleaning check has
-%% been performed longer than ?AUTOCLEANING_CHECK_INTERVAL seconds ago.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_check_and_start_autocleaning(od_space:id(), space_quota:record()) -> ok.
-maybe_check_and_start_autocleaning(_SpaceId, #space_quota{
-    current_size = 0
-}) ->
-    ok;
-maybe_check_and_start_autocleaning(SpaceId, SQ = #space_quota{
-    last_autocleaning_check = LastCheckTimestamp
-}) ->
-    CurrentTimestamp = time_utils:system_time_millis(),
-    case should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) of
-        false ->
-            ok;
-        true ->
-            space_quota:update_last_check_timestamp(SpaceId, CurrentTimestamp),
-            autocleaning_api:maybe_start(SpaceId, SQ),
-            ok
-    end.
+-spec cancel_run(od_space:id(), autocleaning_run:id()) -> ok.
+cancel_run(SpaceId, ARId) ->
+    autocleaning_run_controller:cancel_cleaning(SpaceId, ARId).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% This function is responsible for scheduling autocleaning operations.
 %% It schedules autocleaning if cleanup is enabled and current storage
-%% occupation has reached threshold defined in cleanup configuration in
-%% space_storage record or if flag Force is set to true.
+%% occupation has reached threshold defined in cleanup configuration.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_start(od_space:id(), space_quota:record()) ->
-    ok | {ok, autocleaning_run:id()} | {error, term()}.
-maybe_start(SpaceId, SpaceQuota) ->
+-spec check(od_space:id()) -> ok | {ok, autocleaning:run_id()} | {error, term()}.
+check(SpaceId) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
             case exists_and_is_enabled(SpaceId) of
                 {true, AC} ->
                     Config = autocleaning:get_config(AC),
-                    CurrentSize = space_quota:current_size(SpaceQuota),
+                    CurrentSize = space_quota:current_size(SpaceId),
                     case {autocleaning_config:is_threshold_exceeded(CurrentSize, Config),
                         autocleaning_config:is_target_reached(CurrentSize, Config)} of
                         {true, false} ->
-                            autocleaning_controller:start(SpaceId, Config, CurrentSize);
+                            autocleaning_run_controller:start(SpaceId, Config, CurrentSize);
                         _ ->
                             ok
                     end;
-                _ -> ok
+                false ->
+                    ok
             end;
         false ->
             ok
@@ -135,7 +107,7 @@ maybe_start(SpaceId, SpaceQuota) ->
 %% Returns autocleaning details for given space.
 %% @end
 %%-------------------------------------------------------------------
--spec get_configuration(od_space:id()) -> maps:map().
+-spec get_configuration(od_space:id()) -> map().
 get_configuration(SpaceId) ->
     case autocleaning:get_config(SpaceId) of
         undefined ->
@@ -150,8 +122,8 @@ get_configuration(SpaceId) ->
 %% understandable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec get_run_report(autocleanint_run:id() | autocleanint_run:doc()) ->
-    {ok, maps:map()} | {error, term()}.
+-spec get_run_report(autocleaning_run:id() | autocleaning_run:doc()) ->
+    {ok, map()} | {error, term()}.
 get_run_report(#document{key = ARId, value = AR}) ->
     get_run_report(ARId, AR);
 get_run_report(ARId) ->
@@ -165,13 +137,13 @@ get_run_report(ARId) ->
 %% This function is responsible for updating auto-cleaning configuration.
 %% @end
 %%-------------------------------------------------------------------
--spec configure(od_space:id(), maps:map()) -> ok | {error, term()}.
+-spec configure(od_space:id(), map()) -> ok | {error, term()}.
 configure(SpaceId, Configuration) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
             autocleaning:create_or_update(SpaceId, Configuration);
         false ->
-            {error, file_popularity_disabled}
+            ?ERR_FILE_POPULARITY_DISABLED(?err_ctx())
     end.
 
 -spec disable(od_space:id()) -> ok | {error, term()}.
@@ -184,18 +156,21 @@ disable(SpaceId) ->
 %% understandable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec status(od_space:id()) -> maps:map().
-status(SpaceId) ->
+-spec get_status(od_space:id()) -> map().
+get_status(SpaceId) ->
     CurrentSize = space_quota:current_size(SpaceId),
-    InProgress = case autocleaning:get_current_run(SpaceId) of
-        undefined ->
-            false;
-        _ ->
-            true
+    Status = case list_reports(SpaceId, undefined, 0, 1) of
+        {ok, []} ->
+            null;
+        {ok, [ARId]} ->
+            case autocleaning_run:get(ARId) of
+                {ok, ARDoc} -> autocleaning_run:get_status(ARDoc);
+                _ -> null
+            end
     end,
     #{
-        in_progress => InProgress,
-        space_occupancy => CurrentSize
+        lastRunStatus => Status,
+        spaceOccupancy => CurrentSize
     }.
 
 %%-------------------------------------------------------------------
@@ -204,7 +179,7 @@ status(SpaceId) ->
 %% sorted by start time.
 %% @end
 %%-------------------------------------------------------------------
--spec list_reports(od_space:id()) -> {ok, [autocleaning_run:id()]}.
+-spec list_reports(od_space:id()) -> {ok, [autocleaning:run_id()]}.
 list_reports(SpaceId) ->
     list_reports(SpaceId, undefined, 0, all).
 
@@ -214,15 +189,15 @@ list_reports(SpaceId) ->
 %% Offset after StartId. The list is decreasingly sorted by start time.
 %% @end
 %%-------------------------------------------------------------------
--spec list_reports(od_space:id(), autocleaning_run:id() | undefined,
+-spec list_reports(od_space:id(), autocleaning:run_id() | undefined,
     autocleaning_run_links:offset(), autocleaning_run_links:list_limit()) ->
-    {ok, [autocleaning_run:id()]}.
+    {ok, [autocleaning:run_id()]}.
 list_reports(SpaceId, StartId, Offset, Limit) ->
     autocleaning_run_links:list(SpaceId, StartId, Offset, Limit).
 
 
 -spec restart_autocleaning_run(autocleaning:id()) ->
-    ok | {ok, autocleaning_run:id()} | {error, term()}.
+    ok | {ok, autocleaning:run_id()} | {error, term()}.
 restart_autocleaning_run(SpaceId) ->
     case autocleaning:get(SpaceId) of
         {ok, #document{value = #autocleaning{current_run = undefined}}} ->
@@ -231,15 +206,15 @@ restart_autocleaning_run(SpaceId) ->
         {ok, #document{value = #autocleaning{current_run = ARId, config = Config}}} ->
             case autocleaning_config:is_enabled(Config) of
                 true ->
-                    autocleaning_controller:restart(ARId, SpaceId, Config);
+                    autocleaning_run_controller:restart(ARId, SpaceId, Config);
                 false ->
-                    ?warning("Could not restart auto-cleaning run ~p in space "
+                    ?warning("Could not restart auto-cleaning run ~tp in space "
                     "because auto-cleaning mechanism has been disabled", [ARId])
             end;
         {error, not_found} ->
             ok;
         Error ->
-            ?error("Could not restart auto-cleaning run in space ~p due to ~p",
+            ?error("Could not restart auto-cleaning run in space ~tp due to ~tp",
                 [SpaceId, Error])
     end.
 
@@ -265,38 +240,29 @@ exists_and_is_enabled(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Checks whether last autocleaning check has been performed longer than
-%% ?AUTOCLEANING_CHECK_INTERVAL seconds ago.
-%% @end
-%%-------------------------------------------------------------------
--spec should_check_autocleaning(non_neg_integer(), non_neg_integer()) -> boolean().
-should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) ->
-    CurrentTimestamp - LastCheckTimestamp >= ?AUTOCLEANING_CHECK_INTERVAL.
-
-%%-------------------------------------------------------------------
-%% @doc
 %% Returns info about given auto-cleaning run in the form
 %% understandable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec get_run_report(autocleaning_run:id(), autocleaning_run:record()) -> {ok, maps:maps()}.
+-spec get_run_report(autocleaning:run_id(), autocleaning_run:record()) -> {ok, map()}.
 get_run_report(ARId, #autocleaning_run{
     started_at = StartedAt,
     stopped_at = StoppedAt,
+    status = Status,
     released_bytes = ReleasedBytes,
     bytes_to_release = BytesToRelease,
     released_files = ReleasedFiles
 }) ->
     StoppedAt2 = case StoppedAt of
         undefined -> null;
-        StoppedAt ->
-            time_utils:epoch_to_iso8601(StoppedAt)
+        StoppedAt -> time:seconds_to_iso8601(StoppedAt)
     end,
     {ok, #{
         id => ARId,
         index => autocleaning_run_links:link_key(ARId, StartedAt),
-        started_at => time_utils:epoch_to_iso8601(StartedAt),
+        started_at => time:seconds_to_iso8601(StartedAt),
         stopped_at => StoppedAt2,
+        status => atom_to_binary(Status, utf8),
         released_bytes => ReleasedBytes,
         bytes_to_release => BytesToRelease,
         files_number => ReleasedFiles

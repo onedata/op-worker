@@ -21,11 +21,11 @@
 -export([init/1, is_current_proc_cache/0, flush/0, flush/1, flush/2, check_flush/0,
     verify_flush_ans/3]).
 % File/UUID API
--export([get_uuid/0, get_local_location/0, get_all_locations/0,
-    cache_event/2, clear_events/0]).
+-export([get_uuid/0, get_local_location/0, get_local_location_including_deleted/0, get_all_locations/0,
+    cache_location_change/2, clear_location_changes/0]).
 % Doc API
--export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
-    attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1]).
+-export([get_doc/1, get_doc_including_deleted/1, save_doc/1, cache_doc/1, delete_doc/2, attach_blocks/1,
+    attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1, ensure_synced/1]).
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, check_blocks/1,
     get_blocks_tree/1, use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
@@ -40,7 +40,7 @@
 
 -define(MAIN_KEY, fslogic_cache).
 
--define(FLUSH_TIME, fslogic_cache_flush_time).
+-define(FLUSH_TIMER, fslogic_cache_flush_timer).
 -define(IS_FLUSH_PLANNED, fslogic_cache_flush_planned).
 -define(CHECK_FLUSH, fslogic_cache_check_flush).
 -define(FLUSH_PID, fslogic_cache_flush_pid).
@@ -53,13 +53,14 @@
 -define(SIZES, fslogic_cache_sizes).
 -define(SIZE_CHANGES, fslogic_cache_size_changes).
 -define(SPACE_IDS, fslogic_cache_space_ids).
+-define(ENSURE_SYNCED, ensure_synced).
 
 -define(KEYS, fslogic_cache_keys).
 -define(KEYS_MODIFIED, fslogic_cache_modified_keys).
 -define(KEYS_BLOCKS_MODIFIED, fslogic_cache_modified_blocks_keys).
 -define(BLOCKS_IN_USE, fslogic_cache_blocks_in_use).
 
--define(EVENTS_CACHE, fslogic_cache_events).
+-define(LOCATION_CHANGES_CACHE, fslogic_location_changes).
 
 -define(SAVED_BLOCKS, fslogic_cache_saved_blocks).
 -define(DELETED_BLOCKS, fslogic_cache_deleted_blocks).
@@ -67,11 +68,11 @@
 -define(LOCAL_CHANGES, fslogic_cache_local_changes).
 
 -define(LOCAL_BLOCKS_STORE,
-    application:get_env(?APP_NAME, local_blocks_store, doc)).
+    op_worker:get_env(local_blocks_store, doc)).
 -define(LOCAL_BLOCKS_FLUSH,
-    application:get_env(?APP_NAME, local_blocks_flush, on_terminate)).
--define(BLOCKS_FLUSH_DELAY,
-    application:get_env(?APP_NAME, blocks_flush_delay, timer:seconds(3))).
+    op_worker:get_env(local_blocks_flush, on_terminate)).
+-define(BLOCKS_FLUSH_DELAY_MILLIS,
+    op_worker:get_env(blocks_flush_delay, timer:seconds(3))).
 
 -type flush_type() :: sync | async | terminate.
 
@@ -87,7 +88,8 @@
 -spec init(file_location:id()) -> ok.
 init(Uuid) ->
     put(?MAIN_KEY, Uuid),
-    put(?FLUSH_TIME, {0,0,0}),
+    % init with a dummy timer that is already expired (flush will be triggered during next check)
+    put(?FLUSH_TIMER, countdown_timer:start_millis(0)),
     put(?KEYS, []),
     put(?KEYS_MODIFIED,[]),
     put(?KEYS_BLOCKS_MODIFIED,[]),
@@ -128,21 +130,24 @@ flush(Type) ->
 
     Saved = lists:foldl(fun(Key, Acc) ->
         case flush_key(Key, Type) of
-            ok -> [Key | Acc];
-            _ -> Acc
+            ok ->
+                [Key | Acc];
+            FlushError ->
+                ?warning("Fslogic cache flush error: ~tp for key ~tp", [FlushError, Key]),
+                Acc
         end
     end, [], KeysToFlush),
     NewKM = KM -- Saved,
     NewKBM = KBM -- Saved,
     put(?KEYS_MODIFIED, NewKM),
     put(?KEYS_BLOCKS_MODIFIED, NewKBM),
-    put(?FLUSH_TIME, os:timestamp()),
+    put(?FLUSH_TIMER, countdown_timer:start_millis(?BLOCKS_FLUSH_DELAY_MILLIS)),
     erase(?IS_FLUSH_PLANNED),
     case length(NewKM) + length(NewKBM) of
         0 ->
             ok;
         _ ->
-            ?warning("Not flushed keys: ~p", [NewKM ++ (NewKBM -- NewKM)]),
+            ?warning("Fslogic cache not flushed keys: ~tp", [NewKM ++ (NewKBM -- NewKM)]),
             init_flush_check(),
             flush_error
     end.
@@ -157,7 +162,7 @@ flush(Type) ->
 flush(Key, _FlushBlocks) ->
     KM = get(?KEYS_MODIFIED),
     KBM = get(?KEYS_BLOCKS_MODIFIED),
-    case lists:member(Key, KM) orelse lists:member(Key, KM) of
+    case lists:member(Key, KM) orelse lists:member(Key, KBM) of
         true ->
             case flush_key(Key, sync) of
                 ok ->
@@ -178,14 +183,12 @@ flush(Key, _FlushBlocks) ->
 %%-------------------------------------------------------------------
 -spec check_flush() -> ok.
 check_flush() ->
-    FlushTime = get(?FLUSH_TIME),
-    Now = os:timestamp(),
-    Delay = ?BLOCKS_FLUSH_DELAY,
-    case {timer:now_diff(Now, FlushTime) > Delay * 1000, get(?IS_FLUSH_PLANNED)} of
+    FlushTimer = get(?FLUSH_TIMER),
+    case {countdown_timer:is_expired(FlushTimer), get(?IS_FLUSH_PLANNED)} of
         {true, _} ->
             flush(async);
         {_, true} ->
-            erlang:send_after(Delay, self(), ?CHECK_FLUSH),
+            erlang:send_after(?BLOCKS_FLUSH_DELAY_MILLIS, self(), ?CHECK_FLUSH),
             ok;
         _ ->
             ok
@@ -211,12 +214,12 @@ verify_flush_ans(Key, Check1, Check2) ->
                     ok;
                 _ ->
                     ?error("Local blocks flush failed for key"
-                    " ~p: ~p", [Key, Check2]),
+                    " ~tp: ~tp", [Key, Check2]),
                     Check2
             end;
         _ ->
             ?error("Local blocks del failed for key"
-            " ~p: ~p", [Key, Check1]),
+            " ~tp: ~tp", [Key, Check1]),
             Check1
     end.
 
@@ -242,6 +245,11 @@ get_uuid() ->
 get_local_location() ->
     get_doc(file_location:local_id(get(?MAIN_KEY))).
 
+
+-spec get_local_location_including_deleted() -> file_location:doc() | {error, not_found}.
+get_local_location_including_deleted() ->
+    get_doc_including_deleted(file_location:local_id(get(?MAIN_KEY))).
+
 %%-------------------------------------------------------------------
 %% @doc
 %% Returns all file locations.
@@ -254,52 +262,65 @@ get_all_locations() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Caches events to be sent.
+%% Caches location change to be produce event in future.
 %% @end
 %%-------------------------------------------------------------------
--spec cache_event([session:id()], term()) -> ok.
-cache_event(SessionIds, Event) ->
-    case get(?EVENTS_CACHE) of
+-spec cache_location_change([session:id()], replica_updater:location_change_description()) -> ok.
+cache_location_change(SessionIds, LocationChange) ->
+    case get(?LOCATION_CHANGES_CACHE) of
         undefined ->
-            put(?EVENTS_CACHE, [{SessionIds, [Event]}]);
-        Events ->
-            TmpEvents = proplists:get_value(SessionIds, Events, []),
-            Events2 = proplists:delete(SessionIds, Events),
-            put(?EVENTS_CACHE, [{SessionIds, [Event | TmpEvents]} | Events2])
+            put(?LOCATION_CHANGES_CACHE, [{SessionIds, [LocationChange]}]);
+        CachedChanges ->
+            SessionCachedChanges = proplists:get_value(SessionIds, CachedChanges, []),
+            CachedChanges2 = proplists:delete(SessionIds, CachedChanges),
+            put(?LOCATION_CHANGES_CACHE, [{SessionIds, [LocationChange | SessionCachedChanges]} | CachedChanges2])
     end,
 
     ok.
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Clears events' cache and returns its content.
+%% Clears location changes' cache and returns its content.
 %% @end
 %%-------------------------------------------------------------------
--spec clear_events() -> list().
-clear_events() ->
-    Ans = case get(?EVENTS_CACHE) of
+-spec clear_location_changes() -> replica_updater:location_changes_description().
+clear_location_changes() ->
+    Ans = case get(?LOCATION_CHANGES_CACHE) of
         undefined -> [];
         Value -> Value
     end,
-    erase(?EVENTS_CACHE),
+    erase(?LOCATION_CHANGES_CACHE),
     Ans.
 
 %%%===================================================================
 %%% Doc API
 %%%===================================================================
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns file location.
-%% @end
-%%-------------------------------------------------------------------
 -spec get_doc(file_location:id()) -> file_location:doc() | {error, not_found}.
-get_doc(undefined) ->
-    {error, not_found};
 get_doc(Key) ->
+    get_doc(Key, false).
+
+-spec get_doc(file_location:id(), boolean()) -> file_location:doc() | {error, not_found}.
+get_doc(Key, ForceReload) ->
+    case get_doc_including_deleted(Key, ForceReload) of
+        #document{deleted = true} -> {error, not_found};
+        Ans -> Ans
+    end.
+
+
+-spec get_doc_including_deleted(file_location:id()) -> file_location:doc() | {error, not_found}.
+get_doc_including_deleted(Key) ->
+    get_doc_including_deleted(Key, false).
+
+-spec get_doc_including_deleted(file_location:id(), boolean()) -> file_location:doc() | {error, not_found}.
+get_doc_including_deleted(undefined, _) ->
+    {error, not_found};
+get_doc_including_deleted(Key, ForceReload) ->
     case get({?DOCS, Key}) of
-        undefined ->
-            case file_location:get(Key) of
+        #document{} = Doc when ForceReload =:= false ->
+            Doc;
+        GetAns ->
+            case file_location:get_including_deleted(Key) of
                 {ok, LocationDoc = #document{
                     key = Key,
                     value = Location = #file_location{blocks = PublicBlocks}}
@@ -307,7 +328,10 @@ get_doc(Key) ->
                     LocationDoc2 = LocationDoc#document{
                         value = Location#file_location{blocks = []}
                     },
-                    cache_doc(LocationDoc),
+                    case GetAns of
+                        undefined -> cache_doc(LocationDoc);
+                        _ -> store_doc(LocationDoc)
+                    end,
 
                     {Blocks, Sorted} = merge_local_blocks(LocationDoc),
                     put({?BLOCKS, Key}, blocks_to_tree(Blocks, Sorted)),
@@ -317,12 +341,11 @@ get_doc(Key) ->
                 {error, not_found} = ENF ->
                     ENF;
                 Error ->
-                    ?error("Fslogic cache error: ~p", [Error]),
+                    ?error("Fslogic cache error: ~tp", [Error]),
                     throw({fslogic_cache_error, Error})
-            end;
-        Doc ->
-            Doc
+            end
     end.
+
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -351,23 +374,31 @@ cache_doc(#document{key = Key} = LocationDoc) ->
 %% Deletes file location.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_doc(file_location:id()) -> ok | {error, term()}.
-delete_doc(Key) ->
-    Ans = file_location:delete(Key),
-
-    case get_doc(Key) of
-        #document{value = #file_location{uuid = FileUuid, space_id = SpaceId}} ->
-            Changes = case get({?SIZE_CHANGES, Key}) of
-                undefined -> [];
-                Value -> Value
-            end,
-            SpaceChange = proplists:get_value(SpaceId, Changes, 0),
-            Size = get_local_size(Key),
-            put({?SIZE_CHANGES, Key}, [{SpaceId, SpaceChange - Size} |
-                proplists:delete(SpaceId, Changes)]),
-            apply_size_change(Key, FileUuid);
-        _ ->
-            ok
+-spec delete_doc(file_location:id(), dir_size_stats:update_reason()) -> ok | {error, term()}.
+delete_doc(Key, StatsUpdateReason) ->
+    GetDocAns = case get_doc(Key) of
+        #document{} = Doc -> {ok, Doc};
+        _ -> file_location:get(Key)
+    end,
+    Ans = case GetDocAns of
+        {ok, #document{value = #file_location{
+            uuid = FileUuid,
+            space_id = SpaceId,
+            storage_id = StorageId,
+            size = LocationSize
+        }}} ->
+            dir_size_stats:report_virtual_size_changed(file_id:pack_guid(FileUuid, SpaceId), -LocationSize, StatsUpdateReason),
+            StorageSize = get_local_size(Key),
+            cache_size_change(Key, SpaceId, StorageId, -StorageSize),
+            apply_size_change(Key, FileUuid),
+            LocationDelAns = file_location:delete(Key),
+            delete_local_blocks(Key),
+            LocationDelAns;
+        {error, not_found} ->
+            ok;
+        Error ->
+            ?error("~tp:~tp error ~tp for key ~tp", [?MODULE, ?FUNCTION_NAME, Error, Key]),
+            Error
     end,
 
     erase({?DOCS, Key}),
@@ -378,6 +409,7 @@ delete_doc(Key) ->
     erase({?SIZE_CHANGES, Key}),
     erase({?SPACE_IDS, Key}),
     erase({?BLOCKS_IN_USE, Key}),
+    erase({?ENSURE_SYNCED, Key}),
 
     Keys = get(?KEYS_MODIFIED),
     put(?KEYS_MODIFIED, Keys -- [Key]),
@@ -423,6 +455,19 @@ attach_local_blocks(#document{value = Location} = LocationDoc) ->
     LocationDoc#document{value =
     Location#file_location{blocks = Blocks2}}.
 
+-spec ensure_synced(file_location:id()) -> ok.
+ensure_synced(Key) ->
+    case get_doc(Key) of
+        #document{} ->
+            put({?ENSURE_SYNCED, Key}, true),
+            Keys = get(?KEYS_MODIFIED),
+            put(?KEYS_MODIFIED, [Key | (Keys -- [Key])]),
+            init_flush_check(),
+            ok;
+        {error, not_found} ->
+            ok
+    end.
+
 %%%===================================================================
 %%% Block API
 %%%===================================================================
@@ -445,11 +490,11 @@ get_blocks(Key) ->
 get_public_blocks(Key) ->
     case get({?PUBLIC_BLOCKS, Key}) of
         undefined ->
-            case get_doc(Key) of
+            case get_doc(Key, true) of
                 #document{} ->
                     get_public_blocks(Key);
                 _ ->
-                    ?warning("Get public blocks for not existing key ~p", [Key]),
+                    ?warning("Get public blocks for not existing key ~tp", [Key]),
                     []
             end;
         Blocks ->
@@ -461,15 +506,15 @@ get_public_blocks(Key) ->
 %% Returns blocks of location as tree.
 %% @end
 %%-------------------------------------------------------------------
--spec get_blocks_tree(file_location:id()) -> fslogic_blocks:blocks_tree().
+-spec get_blocks_tree(file_location:id()) -> fslogic_location_cache:blocks_tree().
 get_blocks_tree(Key) ->
     case get({?BLOCKS, Key}) of
         undefined ->
-            case get_doc(Key) of
+            case get_doc(Key, true) of
                 #document{} ->
                     get_blocks_tree(Key);
                 _ ->
-                    ?warning("Get blocks for not existing key ~p", [Key]),
+                    % Possible when flushing events for deleted file
                     gb_sets:new()
             end;
         Blocks ->
@@ -481,7 +526,7 @@ get_blocks_tree(Key) ->
 %% Saves blocks (marks it to be flushed).
 %% @end
 %%-------------------------------------------------------------------
--spec save_blocks(file_location:id(), fslogic_blocks:stored_blocks()) -> ok.
+-spec save_blocks(file_location:id(), fslogic_location_cache:stored_blocks()) -> ok.
 save_blocks(Key, Blocks) ->
     init_flush_check(),
     Keys = get(?KEYS_BLOCKS_MODIFIED),
@@ -494,7 +539,7 @@ save_blocks(Key, Blocks) ->
 %% Caches blocks (blocks will not be flushed).
 %% @end
 %%-------------------------------------------------------------------
--spec cache_blocks(file_location:id(), fslogic_blocks:stored_blocks()) -> ok.
+-spec cache_blocks(file_location:id(), fslogic_location_cache:stored_blocks()) -> ok.
 cache_blocks(Key, Blocks) ->
     put({?BLOCKS, Key}, blocks_to_tree(Blocks, true)),
     put({?PUBLIC_BLOCKS, Key}, Blocks),
@@ -522,10 +567,11 @@ check_blocks(LocationDoc = #document{
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Marks blocks as "blocks in use".
+%% Marks blocks as "blocks in use". Argument is a list of blocks' lists because
+%% the blocks will be used in groups (each element of outer list at once).
 %% @end
 %%-------------------------------------------------------------------
--spec use_blocks(file_location:id(), fslogic_blocks:blocks()) -> ok.
+-spec use_blocks(file_location:id(), [fslogic_blocks:blocks()]) -> ok.
 use_blocks(Key, Blocks) ->
     put({?BLOCKS_IN_USE, Key}, Blocks),
     ok.
@@ -538,14 +584,20 @@ use_blocks(Key, Blocks) ->
 -spec finish_blocks_usage(file_location:id()) -> fslogic_blocks:blocks().
 finish_blocks_usage(Key) ->
     Ans = get({?BLOCKS_IN_USE, Key}),
-    erase({?BLOCKS_IN_USE, Key}),
     case Ans of
         undefined ->
             ?warning("Attepmted to finish usage of blocks that were not previously "
-                "declared for the key ~p", [Key]),
+                "declared for the key ~tp", [Key]),
             [];
-        _ ->
-            Ans
+        [] ->
+            ?warning("Empty list of blocks to use declared for the key ~tp", [Key]),
+            [];
+        [Head] ->
+            erase({?BLOCKS_IN_USE, Key}),
+            Head;
+        [Head | Tail] ->
+            use_blocks(Key, Tail),
+            Head
     end.
 
 %%-------------------------------------------------------------------
@@ -610,7 +662,7 @@ set_local_change(false) ->
 set_local_change(Value) ->
     put(?LOCAL_CHANGES, Value),
     UpdatedDoc = file_location:set_last_replication_timestamp(
-        get_local_location(), time_utils:system_time_seconds()),
+        get_local_location(), global_clock:timestamp_seconds()),
     save_doc(UpdatedDoc),
     ok.
 
@@ -639,21 +691,12 @@ get_local_size(Key) ->
 %% Updates size of location.
 %% @end
 %%-------------------------------------------------------------------
--spec update_size(file_location:id(), non_neg_integer()) -> ok.
+-spec update_size(file_location:doc(), non_neg_integer()) -> ok.
 % TODO VFS-4743 - do we use size of any other replica than local
-update_size(Key, Change) ->
+update_size(#document{key = Key, value = #file_location{space_id = SpaceId, storage_id = StorageId}}, Change) ->
     Size2 = get_local_size(Key) + Change,
     put({?SIZES, Key}, Size2),
-
-    SpaceId = get({?SPACE_IDS, Key}),
-    Changes = case get({?SIZE_CHANGES, Key}) of
-        undefined -> [];
-        Value -> Value
-    end,
-    SpaceChange = proplists:get_value(SpaceId, Changes, 0),
-    put({?SIZE_CHANGES, Key}, [{SpaceId, SpaceChange + Change} |
-        proplists:delete(SpaceId, Changes)]),
-    ok.
+    cache_size_change(Key, SpaceId, StorageId, Change).
 
 %%%===================================================================
 %%% Internal functions
@@ -670,7 +713,7 @@ init_flush_check() ->
     case get(?IS_FLUSH_PLANNED) of
         undefined ->
             put(?IS_FLUSH_PLANNED, true),
-            erlang:send_after(?BLOCKS_FLUSH_DELAY, self(), ?CHECK_FLUSH),
+            erlang:send_after(?BLOCKS_FLUSH_DELAY_MILLIS, self(), ?CHECK_FLUSH),
             ok;
         _ ->
             ok
@@ -704,9 +747,9 @@ flush_key(Key, Type) ->
                             _ -> Size0
                         end,
                         SizeThreshold = application:get_env(?APP_NAME,
-                            public_block_size_treshold, 104857600),
+                            public_block_size_threshold, 104857600),
                         PercentThreshold = application:get_env(?APP_NAME,
-                            public_block_percent_treshold, 10),
+                            public_block_percent_threshold, 10),
 
                         SavedBlocks = get_set({?SAVED_BLOCKS, Key}),
                         PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
@@ -742,19 +785,20 @@ flush_key(Key, Type) ->
                 undefined ->
                     ok;
                 FlushPid ->
-                    wait_for_flush(Key, FlushPid)
+                    wait_for_flush(Key, FlushPid, true)
             end,
 
-            Ans = case get({?FLUSHED_DOCS, Key}) =:= DocToSave of
-                true ->
+            Ans = case {get({?FLUSHED_DOCS, Key}) =:= DocToSave, utils:ensure_defined(get({?ENSURE_SYNCED, Key}), false)} of
+                {true, false} ->
                     flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
-                _ ->
-                    case file_location:save(DocToSave) of
+                {IsFlushed, EnsureSynced} ->
+                    case file_location:save(DocToSave, EnsureSynced) of
                         {ok, _} ->
-                            put({?FLUSHED_DOCS, Key}, DocToSave),
+                            IsFlushed orelse put({?FLUSHED_DOCS, Key}, DocToSave),
+                            erase({?ENSURE_SYNCED, Key}),
                             flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
                         Error ->
-                            ?error("Flush failed for key ~p: ~p", [Key, Error]),
+                            ?error("Flush failed for key ~tp: ~tp", [Key, Error]),
                             Error
                     end
             end,
@@ -775,6 +819,8 @@ flush_key(Key, Type) ->
 %%-------------------------------------------------------------------
 -spec flush_local_blocks(file_location:doc(), list(), list(), flush_type()) ->
     ok | {error, term()} | [{error, term()}].
+flush_local_blocks(_, [], [], _) ->
+    ok;
 flush_local_blocks(#document{key = Key,
     value = #file_location{blocks = PublicBlocks}}, DelBlocks, AddBlocks, Type) ->
     Proceed = case ?LOCAL_BLOCKS_FLUSH of
@@ -851,17 +897,20 @@ flush_local_links(Key, DelBlocks, AddBlocks) ->
 %% Waits for flush confirmation.
 %% @end
 %%-------------------------------------------------------------------
--spec wait_for_flush(file_location:id(), pid()) -> ok.
-wait_for_flush(Key, FlushPid) ->
+-spec wait_for_flush(file_location:id(), pid(), boolean()) -> ok.
+wait_for_flush(Key, FlushPid, CheckAndRetry) ->
     receive
         {?FLUSH_CONFIRMATION, Key, Check1, Check2} ->
             verify_flush_ans(Key, Check1, Check2),
             ok
     after
         1000 ->
-            case erlang:is_process_alive(FlushPid) of
-                true ->
-                    wait_for_flush(Key, FlushPid);
+            case {CheckAndRetry, erlang:is_process_alive(FlushPid)} of
+                {true, true} ->
+                    wait_for_flush(Key, FlushPid, CheckAndRetry);
+                {true, _} ->
+                    wait_for_flush(Key, FlushPid, false); % retry last time to prevent race between
+                                                          % confirmation sending / process terminating
                 _ ->
                     ok
             end
@@ -882,18 +931,25 @@ apply_size_change(Key, FileUuid) ->
             ok;
         Changes ->
             try
-                {ok, UserId} = file_location:get_owner_id(FileUuid),
-                lists:foreach(fun({SpaceId, ChangeSize}) ->
+                UserIdOrUndefined = case file_location:get_owner_id(FileUuid) of
+                    {ok, Id} -> Id;
+                    {error,not_found} -> undefined
+                end,
+                lists:foreach(fun({{SpaceId, StorageId}, ChangeSize}) ->
+                    % TODO VFS-8835 - cache parent when rename works properly
+                    dir_size_stats:report_physical_size_changed(
+                        file_id:pack_guid(FileUuid, SpaceId), StorageId, ChangeSize),
                     space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
                     monitoring_event_emitter:emit_storage_used_updated(
-                        SpaceId, UserId, ChangeSize)
+                        SpaceId, UserIdOrUndefined, ChangeSize)
                 end, Changes),
 
                 put({?SIZE_CHANGES, Key}, []),
                 ok
             catch
-                E1:E2 ->
-                    {apply_quota_error, E1, E2}
+                Error:Reason:Stacktrace ->
+                    ?error_stacktrace("Apply quota error ~tp:~tp", [Error, Reason], Stacktrace),
+                    {error, Reason}
             end
     end.
 
@@ -903,7 +959,7 @@ apply_size_change(Key, FileUuid) ->
 %% @equiv blocks_to_tree(Blocks, true).
 %% @end
 %%-------------------------------------------------------------------
--spec blocks_to_tree(fslogic_blocks:stored_blocks()) -> fslogic_blocks:blocks_tree().
+-spec blocks_to_tree(fslogic_location_cache:stored_blocks()) -> fslogic_location_cache:blocks_tree().
 blocks_to_tree(Blocks) ->
     blocks_to_tree(Blocks, true).
 
@@ -913,8 +969,8 @@ blocks_to_tree(Blocks) ->
 %% Translates blocks (list or tree) to tree.
 %% @end
 %%-------------------------------------------------------------------
--spec blocks_to_tree(fslogic_blocks:stored_blocks(), boolean()) ->
-    fslogic_blocks:blocks_tree().
+-spec blocks_to_tree(fslogic_location_cache:stored_blocks(), boolean()) ->
+    fslogic_location_cache:blocks_tree().
 blocks_to_tree(Blocks, true) when is_list(Blocks) ->
     gb_sets:from_ordset(lists:map(
         fun(#file_block{offset = O, size = S}) ->
@@ -934,7 +990,7 @@ blocks_to_tree(Blocks, _) ->
 %% Translates blocks (list or tree) to blocks list.
 %% @end
 %%-------------------------------------------------------------------
--spec tree_to_blocks(fslogic_blocks:stored_blocks()) -> fslogic_blocks:blocks().
+-spec tree_to_blocks(fslogic_location_cache:stored_blocks()) -> fslogic_blocks:blocks().
 tree_to_blocks(Tree) ->
     lists:map(
         fun(#file_block{offset = O, size = S}) ->
@@ -987,7 +1043,7 @@ merge_local_blocks(#document{key = Key,
 %% @end
 %%-------------------------------------------------------------------
 -spec store_doc(file_location:doc()) -> {ok, file_location:id()}.
-store_doc(#document{key = Key, value = #file_location{space_id = SpaceId} =
+store_doc(#document{key = Key, value = #file_location{space_id = SpaceId, storage_id = StorageId} =
     Location} = LocationDoc) ->
     LocationDoc2 = LocationDoc#document{value =
     Location#file_location{blocks = []}},
@@ -1002,18 +1058,51 @@ store_doc(#document{key = Key, value = #file_location{space_id = SpaceId} =
         SpaceId ->
             ok;
         OldSpaceId ->
-            Changes = case get({?SIZE_CHANGES, Key}) of
-                undefined -> [];
-                Value -> Value
-            end,
-            SpaceChange = proplists:get_value(SpaceId, Changes, 0),
-            OldSpaceChange = proplists:get_value(OldSpaceId, Changes, 0),
-            Size = get_local_size(Key),
-
-            put({?SIZE_CHANGES, Key}, [{OldSpaceId, -1 * Size + OldSpaceChange},
-                {SpaceId, Size + OldSpaceChange + SpaceChange} |
-                proplists:delete(OldSpaceId, proplists:delete(SpaceId, Changes))])
+            cache_size_on_space_change(Key, SpaceId, OldSpaceId, StorageId)
     end,
     put({?SPACE_IDS, Key}, SpaceId),
 
     {ok, Key}.
+
+%% @private
+-spec cache_size_change(file_location:id(), od_space:id(), storage:id(), integer()) -> ok.
+cache_size_change(LocationKey, SpaceId, StorageId, SizeChange) ->
+    Changes = case get({?SIZE_CHANGES, LocationKey}) of
+        undefined -> [];
+        Value -> Value
+    end,
+    ProplistKey = {SpaceId, StorageId},
+    SpaceChange = proplists:get_value(ProplistKey, Changes, 0),
+    put({?SIZE_CHANGES, LocationKey}, [{ProplistKey, SpaceChange + SizeChange} |
+        proplists:delete(ProplistKey, Changes)]),
+    ok.
+
+%% @private
+-spec cache_size_on_space_change(file_location:id(), od_space:id(), od_space:id(), storage:id()) -> ok.
+cache_size_on_space_change(LocationKey, SpaceId, OldSpaceId, StorageId) ->
+    Size = get_local_size(LocationKey),
+    Changes = case get({?SIZE_CHANGES, LocationKey}) of
+        undefined -> [];
+        Value -> Value
+    end,
+    ProplistKey = {SpaceId, StorageId},
+    SpaceChange = proplists:get_value(ProplistKey, Changes, 0),
+    case lists:filter(fun({{SId, _}, _}) -> SId =:= OldSpaceId end, Changes) of
+        [] ->
+            put({?SIZE_CHANGES, LocationKey}, [{ProplistKey, Size + SpaceChange} |
+                proplists:delete(ProplistKey, Changes)]);
+        [{OldSpaceProplistKey, OldSpaceChange} | _] ->
+            put({?SIZE_CHANGES, LocationKey}, [{OldSpaceProplistKey, -Size + OldSpaceChange},
+                {ProplistKey, Size + OldSpaceChange + SpaceChange} |
+                proplists:delete(OldSpaceProplistKey, proplists:delete(ProplistKey, Changes))])
+    end,
+    ok.
+
+%% @private
+-spec delete_local_blocks(file_location:id()) -> ok.
+delete_local_blocks(Key) ->
+    case ?LOCAL_BLOCKS_STORE of
+        doc -> file_local_blocks:delete(Key);
+        link -> file_local_blocks:delete_local_blocks(Key, all);
+        none -> ok
+    end.

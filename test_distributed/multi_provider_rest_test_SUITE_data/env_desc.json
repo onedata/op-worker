@@ -61,7 +61,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -95,22 +95,13 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
         }
     },
     "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space1"
-            },
-            "user2": {
-                "default_space": "space1"
-            }
-
-        },
         "groups": {
         },
         "spaces": {
@@ -172,6 +163,42 @@
                 "users": [
                     "user1",
                     "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space_duplicated1": {
+                "displayed_name": "space_duplicated",
+                "users": [
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space_duplicated2": {
+                "displayed_name": "space_duplicated",
+                "users": [
+                    "user3"
                 ],
                 "groups": [
                 ],

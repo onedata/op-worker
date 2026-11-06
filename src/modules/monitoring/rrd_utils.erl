@@ -13,9 +13,10 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/monitoring/rrd_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([create_rrd/4, update_rrd/4, export_rrd/3]).
@@ -25,9 +26,9 @@
 -type datastore() :: {DSName :: string(), StoreType :: atom(), Params :: list()}.
 -type rra() :: {ConsolidationFunction :: atom(), XffFactor :: float(),
     PDPsPerCDP :: non_neg_integer(), CDPsPerRRA :: non_neg_integer()}.
--type options() :: proplists:proplists().
+-type options() :: proplists:proplist().
 
--export_type([datastore/0, options/0]).
+-export_type([datastore/0, rra/0, options/0]).
 
 %%%===================================================================
 %%% API functions
@@ -38,7 +39,7 @@
 %% Creates rrd with given parameters if database entry for it is empty.
 %% @end
 %%--------------------------------------------------------------------
--spec create_rrd(datastore:key(), #monitoring_id{}, maps:map(), non_neg_integer()) -> ok.
+-spec create_rrd(datastore:key(), #monitoring_id{}, map(), non_neg_integer()) -> ok.
 create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
     case monitoring_state:exists(MonitoringId) of
         false ->
@@ -54,22 +55,22 @@ create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
             {ok, RRDFile} = read_rrd_from_file(TmpPath),
             RRDSize = byte_size(RRDFile),
 
-            SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+            SpaceDirGuid = space_dir:guid(SpaceId),
             RRDDirName = file_meta:hidden_file_name(?RRD_DIR),
             RRDFileName = monitoring_state:encode_id(MonitoringId),
             RRDDirGuid =
-                case logical_file_manager:mkdir(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName, undefined) of
+                case lfm:mkdir(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName, undefined) of
                     {ok, Guid_} -> Guid_;
                     {error, ?EEXIST} ->
-                        {ok, #file_attr{guid = Guid_}} = logical_file_manager:get_child_attr(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName),
+                        {ok, #file_attr{guid = Guid_}} = lfm:get_child_attr(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName),
                         Guid_
                 end,
-            {ok, Guid} = logical_file_manager:create(?ROOT_SESS_ID, RRDDirGuid, RRDFileName, undefined),
+            {ok, Guid} = lfm:create(?ROOT_SESS_ID, RRDDirGuid, RRDFileName, undefined),
 
-            {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {guid, Guid}, write),
-            {ok, Handle2, RRDSize} = logical_file_manager:write(Handle, 0, RRDFile),
-            ok = logical_file_manager:fsync(Handle2),
-            ok = logical_file_manager:release(Handle2),
+            {ok, Handle} = lfm:open(?ROOT_SESS_ID, ?FILE_REF(Guid), write),
+            {ok, Handle2, RRDSize} = lfm:write(Handle, 0, RRDFile),
+            ok = lfm:fsync(Handle2),
+            ok = lfm:release(Handle2),
 
             {ok, _} = monitoring_state:save(#document{
                 key = RRDFileName,
@@ -98,8 +99,8 @@ update_rrd(MonitoringId, MonitoringState, UpdateTime, UpdateValues) ->
         UpdateValues
     ),
 
-    {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {guid, RRDGuid}, rdwr),
-    {ok, Handle2, RRDFile} = lfm_files:silent_read(Handle, 0, ?RRD_READ_SIZE),
+    {ok, Handle} = lfm:open(?ROOT_SESS_ID, ?FILE_REF(RRDGuid), rdwr),
+    {ok, Handle2, RRDFile} = lfm:silent_read(Handle, 0, ?RRD_READ_SIZE),
 
     {ok, TmpPath} = write_rrd_to_file(RRDFile),
     poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
@@ -109,9 +110,9 @@ update_rrd(MonitoringId, MonitoringState, UpdateTime, UpdateValues) ->
     {ok, UpdatedRRDFile} = read_rrd_from_file(TmpPath),
 
     RRDSize = byte_size(UpdatedRRDFile),
-    {ok, Handle3, RRDSize} = logical_file_manager:write(Handle2, 0, UpdatedRRDFile),
-    ok = logical_file_manager:fsync(Handle3),
-    ok = logical_file_manager:release(Handle3),
+    {ok, Handle3, RRDSize} = lfm:write(Handle2, 0, UpdatedRRDFile),
+    ok = lfm:fsync(Handle3),
+    ok = lfm:release(Handle3),
 
     {ok, _} = monitoring_state:update(MonitoringId, fun(State = #monitoring_state{}) ->
         {ok, State#monitoring_state{last_update_time = UpdateTime}}
@@ -132,9 +133,9 @@ export_rrd(MonitoringId, Step, Format) ->
     {ok, #document{value = #monitoring_state{rrd_guid = RRDGuid, monitoring_id = #monitoring_id{provider_id = ProviderId}}}} =
         monitoring_state:get(MonitoringId),
 
-    {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {guid, RRDGuid}, read),
+    {ok, Handle} = lfm:open(?ROOT_SESS_ID, ?FILE_REF(RRDGuid), read),
     {ok, Handle2, RRDFile} = lfm_files:read_without_events(Handle, 0, ?RRD_READ_SIZE),
-    ok = logical_file_manager:release(Handle2),
+    ok = lfm:release(Handle2),
     {ok, TmpPath} = write_rrd_to_file(RRDFile),
     {CF, _, PDPsPerCDP, _} = maps:get(Step, RRASMap),
 
@@ -161,19 +162,19 @@ export_rrd(MonitoringId, Step, Format) ->
             "; " ++ atom_to_list(SecondarySubjectType) ++ " " ++ binary_to_list(SecondarySubjectId)
     end,
 
-    DescriptionBase = lists:flatten(io_lib:format("\"~s ~s; metric ~s~s; oneprovider ID ~s",
+    DescriptionBase = lists:flatten(io_lib:format("\"~ts ~ts; metric ~ts~ts; oneprovider ID ~ts",
         [atom_to_list(MainSubjectType), binary_to_list(MainSubjectId), atom_to_list(MetricType),
             SecondaryDescription, binary_to_list(ProviderId)])),
 
     Sources = lists:foldl(
         fun({DSName, _, _}, Acc) ->
-            lists:flatten(io_lib:format("~s DEF:~s=~s:~s:~s:step=~b",
+            lists:flatten(io_lib:format("~ts DEF:~ts=~ts:~ts:~ts:step=~b",
                 [Acc, DSName, TmpPath, DSName, atom_to_list(CF), StepInSeconds * PDPsPerCDP]))
         end, "", Datastores),
 
     Exports = lists:foldl(
         fun({DSName, _, _}, Acc) ->
-            lists:flatten(io_lib:format("~s XPORT:~s:~s; ~s[~s]\"",
+            lists:flatten(io_lib:format("~ts XPORT:~ts:~ts; ~ts[~ts]\"",
                 [Acc, DSName, DescriptionBase, DSName, Unit]))
         end, "", Datastores),
 

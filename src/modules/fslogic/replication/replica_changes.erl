@@ -5,7 +5,6 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @todo simplify rename logic
 %%% @doc
 %%% Functions responsible for adding and removing changes from file_location
 %%% documents.
@@ -25,9 +24,9 @@
 -define(MAX_CHANGES, 20).
 
 -type change() :: fslogic_blocks:blocks() | {shrink, non_neg_integer()} | {rename, last_rename()}.
--type last_rename() :: {{FileId :: helpers:file(), SpaceId :: binary()}, Seq :: non_neg_integer()}.
+-type last_rename() :: {{FileId :: helpers:file_id(), SpaceId :: binary()}, Seq :: non_neg_integer()}.
 
--export_type([change/0]).
+-export_type([change/0, last_rename/0]).
 
 %%%===================================================================
 %%% API
@@ -104,7 +103,7 @@ get_merged_changes(Doc, N) ->
 %% Sets last_rename field in given file_location
 %% @end
 %%--------------------------------------------------------------------
--spec set_last_rename(datastore:doc(), helpers:file(), binary()) -> ok.
+-spec set_last_rename(datastore:doc(), helpers:file_id(), binary()) -> ok.
 set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
     TargetFileId, TargetSpaceId) ->
     {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
@@ -128,7 +127,7 @@ set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
 
 
 %%--------------------------------------------------------------------
-%% @doc %todo get file system logic out of here, keep only replica changes
+%% @doc %TODO VFS-7394 get file system logic out of here, keep only replica changes
 %% Renames file on storage and updates local location if target space
 %% is supported in current provider, otherwise deletes local location and file.
 %% Document is unchanged if there was no rename or given rename
@@ -136,7 +135,7 @@ set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_or_delete(file_ctx:ctx(), file_location:doc(),
-    {{helpers:file(), binary()}, non_neg_integer()} | undefined) ->
+    {{helpers:file_id(), binary()}, non_neg_integer()} | undefined) ->
     {{renamed, file_location:doc(), file_meta:uuid(), od_space:id()}
     | skipped | deleted, file_ctx:ctx()}.
 rename_or_delete(FileCtx, _, undefined) ->
@@ -155,23 +154,34 @@ rename_or_delete(FileCtx,
 ) ->
     case provider_logic:supports_space(TargetSpaceId) of
         true ->
-            {ok, Storage} = fslogic_storage:select_storage(TargetSpaceId),
-            case sfm_utils:rename_storage_file(?ROOT_SESS_ID, TargetSpaceId,
-                Storage, FileUuid, SourceFileId, RemoteTargetFileId)
-            of
-                ok -> ok;
-                {error, ?ENOENT} -> ok
-            end,
-            NewFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
-            {#document{key = TargetStorageId}, NewFileCtx2} = file_ctx:get_storage_doc(NewFileCtx),
-
-            RenamedDoc = Doc#document{value = Loc#file_location{
-                file_id = RemoteTargetFileId,
-                space_id = TargetSpaceId,
-                storage_id = TargetStorageId,
-                last_rename = LastRename
-            }},
-            {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx2};
+            NewFileCtx = file_ctx:new_by_uuid(FileUuid, TargetSpaceId),
+            case file_ctx:is_readonly_storage(NewFileCtx) of
+                {true, NewFileCtx2} ->
+                    {skipped, NewFileCtx2};
+                {false, NewFileCtx2} ->
+                    {TargetStorageId, NewFileCtx3} = file_ctx:get_storage_id(NewFileCtx2),
+                    HelperSpec = storage:get_helper_spec(TargetStorageId),
+                    case helper_spec:get_storage_path_type(HelperSpec) of
+                        ?CANONICAL_STORAGE_PATH ->
+                            TargetStorageFileId = storage_file_id:canonical(RemoteTargetFileId, TargetSpaceId, TargetStorageId),
+                            % TODO VFS-6155 properly handle remote rename, target parent doc may not be synchronized yet, how do we know its mode?
+                            case sd_utils:rename(user_ctx:new(?ROOT_SESS_ID), TargetSpaceId,
+                                TargetStorageId, FileUuid, SourceFileId, undefined, TargetStorageFileId)
+                            of
+                                ok -> ok;
+                                {error, ?ENOENT} -> ok
+                            end,
+                            RenamedDoc = Doc#document{value = Loc#file_location{
+                                file_id = TargetStorageFileId,
+                                space_id = TargetSpaceId,
+                                storage_id = TargetStorageId,
+                                last_rename = LastRename
+                            }},
+                            {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx3};
+                        ?FLAT_STORAGE_PATH ->
+                            {skipped, NewFileCtx2}
+                    end
+            end;
         false ->
             %% TODO: VFS-2299 delete file locally without triggering deletion
             %% on other providers, also make sure all locally modified blocks

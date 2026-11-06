@@ -1,0 +1,82 @@
+# Name of the scenario to run
+scenario: "scenario-1oz-2op"
+
+# Path or list of paths in which look for sources (can be either relative to
+# cwd or absolute path)
+sourcesRoot: ".."
+
+# Sources are expected to be found in CWD (from where the 'up' script was run) or one dir above.
+# On bamboo all required sources will be pulled automatically.
+# NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources 
+# (by default cluster_manager provided as op_worker dependency will be used).
+sources:
+  onezone:
+    node-1:
+      - oz-panel
+      - oz-worker
+      - cluster-manager
+  oneprovider-1:
+    node-1:
+      - op-panel
+      - op-worker
+      - cluster-manager
+  oneprovider-2:
+    node-1:
+      - op-panel
+      - op-worker
+      - cluster-manager
+
+users:
+  - &user1
+    name: user1
+    password: password
+  - &user2
+    name: user2
+    password: password
+
+spaces:
+  - name: space1
+    user: *user1
+    users:
+      - user: *user2
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "ImportedNullStorage"
+        size: '1000000000'
+      - provider: "oneprovider-2"
+        storage_name: "IdealNullStorage"
+        size: '1000000000'
+  - name: space_krk_par_p
+    user: *user1
+    users:
+      - user: *user2
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "s3-archive-krakow"
+        size: '10000000000'
+      - provider: "oneprovider-2"
+        storage_name: "s3-archive-paris"
+        size: '10000000000'
+
+oneprovider-1:
+  external-storages:
+    s3-archive-krakow:
+      type: s3
+      hostname: dev-volume-s3-krakow.default:9000
+      bucketName: test
+      accessKey: accessKey
+      secretKey: verySecretKey
+      insecure: true
+
+oneprovider-2:
+  external-storages:
+    s3-archive-paris:
+      type: s3
+      hostname: dev-volume-s3-paris.default:9000
+      bucketName: test
+      accessKey: accessKey
+      secretKey: verySecretKey
+      insecure: true
+
+storages:
+  - s3

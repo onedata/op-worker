@@ -15,14 +15,12 @@
 
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([stress_test/1, stress_test_base/1, many_files_creation_tree_test/1,
     many_files_creation_tree_test_base/1]).
 
@@ -30,8 +28,6 @@
 -define(STRESS_NO_CLEARING_CASES, [
     many_files_creation_tree_test
 ]).
-
--define(TIMEOUT, timer:minutes(20)).
 
 all() ->
     ?STRESS_ALL(?STRESS_CASES, ?STRESS_NO_CLEARING_CASES).
@@ -64,7 +60,7 @@ many_files_creation_tree_test(Config) ->
         {description, "Creates directories' and files' tree using multiple process"}
     ]).
 many_files_creation_tree_test_base(Config) ->
-    files_stress_test_base:many_files_creation_tree_test_base(Config, false, true).
+    stress_test_traverse_pool:test_step(Config, #{cache_guids => true}, false).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -73,8 +69,17 @@ many_files_creation_tree_test_base(Config) ->
 init_per_suite(Config) ->
     files_stress_test_base:init_per_suite(Config).
 
-init_per_testcase(Case, Config) ->
-    files_stress_test_base:init_per_testcase(Case, Config).
+end_per_suite(Config) ->
+    files_stress_test_base:end_per_suite(Config).
 
-end_per_testcase(Case, Config) ->
-    files_stress_test_base:end_per_testcase(Case, Config).
+init_per_testcase(stress_test = Case, Config) ->
+    Config2 = stress_test_traverse_pool:init_pool(Config, 500),
+    files_stress_test_base:init_per_testcase(Case, Config2);
+init_per_testcase(_Case, Config) ->
+    Config.
+
+end_per_testcase(stress_test = Case, Config) ->
+    stress_test_traverse_pool:stop_pool(Config),
+    files_stress_test_base:end_per_testcase(Case, Config);
+end_per_testcase(_Case, Config) ->
+    Config.

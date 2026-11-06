@@ -1,0 +1,351 @@
+swagger: "2.0"
+info:
+  title: "Space Files Monitoring API"
+  version: "1.0.0"
+  description: |
+    Server-Sent Events (SSE) API for real-time file change monitoring in Onedata spaces.
+    
+    **Note**: This endpoint returns a streaming response using Server-Sent Events format.
+    The connection remains open and events are pushed to the client as they occur.
+    The server may close the connection if the space is unsupported or deleted.
+
+paths:
+  /spaces/{spaceId}/events/files:
+    post:
+      summary: "Subscribe to file change events in a space"
+      description: |
+        Opens a Server-Sent Events (SSE) stream for real-time file change notifications.
+        
+        The connection remains open and the server pushes events as they occur:
+        - `changedOrCreated` - File was created or modified
+        - `deleted` - File was deleted
+        - `heartbeat` - Periodic keep-alive to update event ID
+        
+        The connection will be closed by the server if the space is unsupported or deleted.
+        In typical usage, clients disconnect before such rare events occur.
+        
+        ## SSE Format
+        
+        Events follow the SSE standard format:
+        ```
+        id: 12346
+        event: changedOrCreated
+        data: {"fileId":"abc123","parentFileId":"parent456","attributes":{...}}
+        
+        id: 12347
+        event: deleted
+        data: {"fileId":"abc123","parentFileId":"parent456"}
+        
+        id: 12450
+        event: heartbeat
+        data: null
+        
+        ```
+        
+        ## Reconnection
+        
+        To reconnect and resume from last received event, include the `Last-Event-Id` header
+        with the event ID from the last successfully processed event. The server will:
+        - Replay missed events if behind and continue streaming live events
+        - Connect directly to live stream if already caught up
+        
+        ## Authorization
+        
+        User must be a space member with appropriate permissions. Each event is individually
+        authorized based on current user permissions at the time of event generation.
+        
+      operationId: "subscribeToFileEvents"
+      tags:
+        - "Space Events"
+      consumes:
+        - "application/json"
+      produces:
+        - "text/event-stream"
+      parameters:
+        - name: "spaceId"
+          in: "path"
+          required: true
+          type: "string"
+          description: "Space ID (GUID)"
+          
+        - name: "Last-Event-Id"
+          in: "header"
+          required: false
+          type: "integer"
+          format: "int64"
+          description: |
+            Event ID of the last successfully processed event. Event IDs are monotonically
+            increasing integers that can be used as a cursor for reconnection to resume
+            from where client left off. If not provided, starts from current event ID.
+            
+        - name: "body"
+          in: "body"
+          required: true
+          description: "Monitoring specification"
+          schema:
+            $ref: "#/definitions/SpaceFilesMonitoringRequest"
+            
+      responses:
+        200:
+          description: |
+            SSE stream opened successfully. Connection remains open and events are pushed
+            as they occur. Response is a continuous stream of Server-Sent Events (not a 
+            single JSON response).
+            
+            **SSE Stream Format**:
+            Each event in the stream has three fields:
+            - `id` - Event ID (monotonically increasing integer, can be used as a cursor)
+            - `event` - Event type name (discriminator: changedOrCreated, deleted, heartbeat)
+            - `data` - JSON-serialized SpaceFileEvent object (polymorphic based on event type)
+            
+            **Note**: This endpoint returns a streaming response in text/event-stream format,
+            NOT a single JSON object. The schema below describes the structure of individual
+            events within the stream. Code generators should create types for the event objects.
+            
+            Each event is followed by a blank line. Clients should:
+            1. Parse the SSE stream
+            2. Deserialize the `data` field based on `event` type
+            3. Handle the SpaceFileEvent polymorphically
+            
+          schema:
+            $ref: "#/definitions/SpaceFileEvent"
+          examples:
+            text/event-stream: |
+              id: 12346
+              event: changedOrCreated
+              data: {"fileId":"abc123","parentFileId":"parent456","attributes":{"name":"data.csv","size":1024,"mtime":1704067200}}
+              
+              id: 12347
+              event: deleted
+              data: {"fileId":"abc123","parentFileId":"parent456"}
+              
+              id: 12450
+              event: heartbeat
+              data: null
+              
+          headers:
+            Content-Type:
+              type: "string"
+              description: "Always text/event-stream"
+              default: "text/event-stream"
+            Cache-Control:
+              type: "string"
+              description: "No caching"
+              default: "no-cache"
+            Connection:
+              type: "string"
+              description: "Keep connection alive"
+              default: "keep-alive"
+              
+        400:
+          description: "Bad request - invalid parameters or body format"
+          schema:
+            $ref: "#/definitions/Error"
+          examples:
+            application/json:
+              error:
+                id: "badValueInteger"
+                description: "Last-Event-Id must be an integer"
+                
+        401:
+          description: "Unauthorized - missing or invalid token"
+          schema:
+            $ref: "#/definitions/Error"
+          examples:
+            application/json:
+              error:
+                id: "unauthorized"
+                description: "Authentication required"
+                
+        403:
+          description: "Forbidden - user not a space member or lacks permissions"
+          schema:
+            $ref: "#/definitions/Error"
+          examples:
+            application/json:
+              error:
+                id: "forbidden"
+                description: "Insufficient permissions"
+                
+      x-stream-type: "server-sent-events"
+      x-stream-events:
+        - changedOrCreated
+        - deleted
+        - heartbeat
+
+definitions:
+  SpaceFileEvent:
+    type: "object"
+    description: |
+      Polymorphic event object representing the SSE stream events.
+      
+      **Important**: In the actual SSE stream, there is NO `eventType` field in the JSON data.
+      The SSE `event` field (changedOrCreated, deleted, heartbeat) serves as the discriminator.
+      
+      For code generation purposes, this schema uses `eventType` as a discriminator to help
+      generators create proper type hierarchies (tagged unions, sealed classes, discriminated
+      unions, etc.). Client code should:
+      1. Parse SSE stream to get `event` field
+      2. Deserialize `data` field to the appropriate event type based on `event` value
+      
+      **Event Types**:
+      - `changedOrCreated` → FileChangedOrCreatedEvent (with fileId, parentFileId, attributes)
+      - `deleted` → FileDeletedEvent (with fileId, parentFileId)
+      - `heartbeat` → HeartbeatEvent (data is always null/empty)
+      
+    required:
+      - "eventType"
+    discriminator: "eventType"
+    properties:
+      eventType:
+        type: "string"
+        enum: ["changedOrCreated", "deleted", "heartbeat"]
+        description: |
+          Discriminator for code generators. In actual SSE stream, use the `event` field
+          to determine which type to deserialize `data` into.
+        
+  SpaceFilesMonitoringRequest:
+    type: "object"
+    required:
+      - "observedDirectories"
+    properties:
+      observedDirectories:
+        type: "array"
+        description: |
+          List of directory GUIDs to monitor. Only direct children of these directories
+          will generate events. Subdirectories are NOT monitored recursively.
+        items:
+          type: "string"
+        minItems: 1
+        example: ["$DIR_ID_1", "$DIR_ID_2"]
+
+      observedAttributes:
+        type: "array"
+        description: |
+          File attributes to include in changedOrCreated events. Must specify at least
+          one attribute. Optional, if not specified, all attributes are included.
+        items:
+          type: "string"
+          enum:
+            # From file_meta
+            - "name"
+            - "index"
+            - "type"
+            - "activePermissionsType"
+            - "posixPermissions"
+            - "acl"
+            - "parentFileId"
+            - "ownerUserId"
+            - "hardlinkCount"
+            - "symlinkValue"
+            - "originProviderId"
+            - "directShareIds"
+            # From times
+            - "mtime"
+            - "atime"
+            - "ctime"
+            - "creationTime"
+            # From file_location
+            - "size"
+            - "isFullyReplicatedLocally"
+            - "localReplicationRate"
+        example: ["name", "size", "mtime", "type"]
+        
+  FileChangedOrCreatedEvent:
+    description: |
+      Event sent when a file is created or modified in an observed directory.
+      This is returned in the SSE `data` field when `event: changedOrCreated`.
+    allOf:
+      - $ref: "#/definitions/SpaceFileEvent"
+      - type: "object"
+        required:
+          - "fileId"
+          - "parentFileId"
+          - "attributes"
+        properties:
+          fileId:
+            type: "string"
+            description: "GUID of the affected file"
+            example: "abc123def456"
+            
+          parentFileId:
+            type: "string"
+            description: "GUID of the parent directory (one of the observed directories)"
+            example: "parent456"
+            
+          attributes:
+            type: "object"
+            description: |
+              File attributes as requested in observedAttributes. Only attributes that
+              the user has permission to read are included. Structure depends on which
+              attributes were requested.
+            additionalProperties: true
+            example:
+              name: "data.csv"
+              size: 1024
+              mtime: 1704067200
+              type: "REG"
+    example:
+      fileId: "abc123def456"
+      parentFileId: "parent456"
+      attributes:
+        name: "data.csv"
+        size: 1024
+        mtime: 1704067200
+        type: "REG"
+          
+  FileDeletedEvent:
+    description: |
+      Event sent when a file is deleted from an observed directory.
+      This is returned in the SSE `data` field when `event: deleted`.
+      Note: No attributes are included since the file no longer exists.
+    allOf:
+      - $ref: "#/definitions/SpaceFileEvent"
+      - type: "object"
+        required:
+          - "fileId"
+          - "parentFileId"
+        properties:
+          fileId:
+            type: "string"
+            description: "GUID of the deleted file"
+            example: "abc123def456"
+            
+          parentFileId:
+            type: "string"
+            description: "GUID of the parent directory (one of the observed directories)"
+            example: "parent456"
+    example:
+      fileId: "abc123def456"
+      parentFileId: "parent456"
+        
+  HeartbeatEvent:
+    description: |
+      Periodic keep-alive event sent when the event ID has advanced significantly
+      but no relevant events occurred for the client. Updates the client's Last-Event-Id
+      to prevent unnecessary replay on reconnection. This is returned in the SSE `data`
+      field when `event: heartbeat`. Always null in actual implementation.
+    allOf:
+      - $ref: "#/definitions/SpaceFileEvent"
+      - type: "object"
+        properties: {}
+    example: null
+    
+  Error:
+    type: "object"
+    required:
+      - "error"
+    properties:
+      error:
+        type: "object"
+        required:
+          - "id"
+        properties:
+          id:
+            type: "string"
+            description: "Error identifier"
+            example: "unauthorized"
+          description:
+            type: "string"
+            description: "Human-readable error description"
+            example: "Authentication required"

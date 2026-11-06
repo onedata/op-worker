@@ -14,6 +14,7 @@
 
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API Handling
 -export([handle_file_written_events/2, handle_file_read_events/2]).
@@ -30,7 +31,7 @@
 %% Processes file written events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_file_written_events(Evts :: [event:event()], UserCtxMap :: maps:map()) ->
+-spec handle_file_written_events(Evts :: [event:type()], UserCtxMap :: map()) ->
     [ok | {error, Reason :: term()}].
 handle_file_written_events(Evts, #{session_id := SessId} = UserCtxMap) ->
     Results = lists:map(fun(Evt) ->
@@ -50,7 +51,7 @@ handle_file_written_events(Evts, #{session_id := SessId} = UserCtxMap) ->
 %% Processes file read events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_file_read_events(Evts :: [event:event()], UserCtxMap :: maps:map()) ->
+-spec handle_file_read_events(Evts :: [event:type()], UserCtxMap :: map()) ->
     [ok | {error, Reason :: term()}].
 handle_file_read_events(Evts, #{session_id := SessId} = _UserCtxMap) ->
     lists:map(fun(Ev) ->
@@ -86,13 +87,19 @@ aggregate_file_read_events(OldEvt, NewEvt) ->
 -spec aggregate_file_written_events(OldEvt :: event:type(), NewEvt :: event:type()) ->
     NewEvt :: event:type().
 aggregate_file_written_events(OldEvt, NewEvt) ->
+    {FileSize, OldBlocks} = case NewEvt#file_written_event.file_size of
+        undefined ->
+            {OldEvt#file_written_event.file_size, OldEvt#file_written_event.blocks};
+        NewSize ->
+            % file_size is set only during file truncate - filter blocks written before truncate
+            {NewSize, fslogic_blocks:filter_or_trim_truncated(OldEvt#file_written_event.blocks, NewSize)}
+    end,
+
     NewEvt#file_written_event{
         counter = OldEvt#file_written_event.counter + NewEvt#file_written_event.counter,
+        file_size = FileSize,
         size = OldEvt#file_written_event.size + NewEvt#file_written_event.size,
-        blocks = fslogic_blocks:aggregate(
-            OldEvt#file_written_event.blocks,
-            NewEvt#file_written_event.blocks
-        )
+        blocks = fslogic_blocks:aggregate(OldBlocks, NewEvt#file_written_event.blocks)
     }.
 
 %%--------------------------------------------------------------------
@@ -110,6 +117,10 @@ aggregate_attr_changed_events(OldEvent, NewEvent) ->
             size = case NewAttr#file_attr.size of
                 undefined -> OldAttr#file_attr.size;
                 X -> X
+            end,
+            is_fully_replicated = case NewAttr#file_attr.is_fully_replicated of
+                undefined -> OldAttr#file_attr.is_fully_replicated;
+                FR -> FR
             end
         }
     }.
@@ -124,7 +135,7 @@ aggregate_attr_changed_events(OldEvent, NewEvent) ->
 %% Processes a file written event and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_file_written_event(event:event(), session:id()) -> ok.
+-spec handle_file_written_event(event:type(), session:id()) -> ok.
 handle_file_written_event(#file_written_event{
     counter = Counter,
     size = Size,
@@ -137,15 +148,26 @@ handle_file_written_event(#file_written_event{
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     monitoring_event_emitter:emit_file_written_statistics(SpaceId, UserId, Size, Counter),
 
-    replica_synchronizer:force_flush_events(file_ctx:get_uuid_const(FileCtx)),
+    replica_synchronizer:force_flush_events(file_ctx:get_logical_uuid_const(FileCtx)),
     case replica_synchronizer:update_replica(FileCtx, Blocks, FileSize, true) of
-        {ok, size_changed} ->
-            fslogic_times:update_mtime_ctime(FileCtx),
-            fslogic_event_emitter:emit_file_attr_changed(FileCtx, [SessId]),
-            fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks);
-        {ok, size_not_changed} ->
-            fslogic_times:update_mtime_ctime(FileCtx),
-            fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks)
+        {ok, ReplicaUpdateResult} ->
+            LocationChanges = replica_updater:get_location_changes(ReplicaUpdateResult),
+            SizeChanged = replica_updater:has_size_changed(ReplicaUpdateResult),
+            ReplicaStatusChanged = replica_updater:has_replica_status_changed(ReplicaUpdateResult),
+            times_api:touch(FileCtx, [?attr_mtime, ?attr_ctime]),
+            case {ReplicaStatusChanged, SizeChanged} of
+                {true, _} ->
+                    fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, [SessId]);
+                {false, true} ->
+                    fslogic_event_emitter:emit_file_attr_changed(FileCtx, [SessId]);
+                _ ->
+                    ok
+            end,
+            fslogic_event_emitter:emit_file_locations_changed(LocationChanges, [SessId]);
+        {error, not_found} ->
+            ?debug("Handling file_written_event for file ~tp failed because file_location was not found.",
+                [FileGuid]),
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -154,7 +176,7 @@ handle_file_written_event(#file_written_event{
 %% Processes a file read event and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_file_read_event(event:event(), session:id()) ->
+-spec handle_file_read_event(event:type(), session:id()) ->
     ok | {error, Reason :: term()}.
 handle_file_read_event(#file_read_event{
     counter = Counter,
@@ -163,6 +185,11 @@ handle_file_read_event(#file_read_event{
 }, SessId) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {ok, UserId} = session:get_user_id(SessId),
-    monitoring_event_emitter:emit_file_read_statistics(SpaceId, UserId, Size, Counter),
-    fslogic_times:update_atime(FileCtx).
+    % TODO VFS-7851 handle case when get_user_id returns not_found
+    case session:get_user_id(SessId) of
+        {ok, UserId} ->
+            monitoring_event_emitter:emit_file_read_statistics(SpaceId, UserId, Size, Counter);
+        ?ERROR_NOT_FOUND ->
+            ok
+    end,
+    times_api:touch(FileCtx, [?attr_atime]).

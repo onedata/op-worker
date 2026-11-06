@@ -9,7 +9,21 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
+-ifndef(TRANSFER_HRL).
+-define(TRANSFER_HRL, 1).
+
 -include("global_definitions.hrl").
+
+-define(SCHEDULED_STATUS, scheduled).
+-define(ENQUEUED_STATUS, enqueued).
+-define(ACTIVE_STATUS, active).
+-define(COMPLETED_STATUS, completed).
+-define(ABORTING_STATUS, aborting).
+-define(FAILED_STATUS, failed).
+-define(CANCELLED_STATUS, cancelled).
+-define(SKIPPED_STATUS, skipped).
+-define(EVICTING_STATUS, evicting).
+-define(REPLICATING_STATUS, replicating).
 
 -define(WAITING_TRANSFERS_STATE, <<"waiting">>).
 -define(ONGOING_TRANSFERS_STATE, <<"ongoing">>).
@@ -21,7 +35,10 @@
 
 -define(JOB_TRANSFERS_TYPE, <<"job">>).
 -define(ON_THE_FLY_TRANSFERS_TYPE, <<"onTheFly">>).
+-define(QOS_TRANSFERS_TYPE, <<"qos">>).
 -define(ALL_TRANSFERS_TYPE, <<"all">>).
+
+-define(TRANSFER_TYPES, [?JOB_TRANSFERS_TYPE, ?ON_THE_FLY_TRANSFERS_TYPE, ?QOS_TRANSFERS_TYPE]).
 
 % Time windows and lengths of histograms. They offer one extra, historical
 % value, as the leading one is not yet measured - this way there are always
@@ -45,58 +62,14 @@
 -define(MONTH_HIST_LENGTH, 32).
 -define(MONTH_SPEED_HIST_LENGTH, 31).
 
--define(MINUTE_STAT_TYPE, <<"minute">>).
--define(HOUR_STAT_TYPE, <<"hour">>).
--define(DAY_STAT_TYPE, <<"day">>).
--define(MONTH_STAT_TYPE, <<"month">>).
+-define(MINUTE_PERIOD, <<"minute">>).
+-define(HOUR_PERIOD, <<"hour">>).
+-define(DAY_PERIOD, <<"day">>).
+-define(MONTH_PERIOD, <<"month">>).
 
-
--define(REPLICATION_WORKER, replication_worker).
--define(REPLICATION_WORKERS_POOL, replication_workers_pool).
--define(REPLICATION_WORKERS_NUM, application:get_env(
-    ?APP_NAME, replication_workers_num, 50)
-).
 
 -define(REPLICATION_CONTROLLER, replication_controller).
 -define(REPLICATION_CONTROLLERS_POOL, replication_controllers_pool).
--define(REPLICATION_CONTROLLERS_NUM, application:get_env(
-    ?APP_NAME, replication_controllers_num, 10)
-).
+-define(REPLICATION_CONTROLLERS_NUM, op_worker:get_env(replication_controllers_num, 10)).
 
--define(REPLICA_EVICTION_WORKER, replica_eviction_worker).
--define(REPLICA_EVICTION_WORKERS_POOL, replica_eviction_workers_pool).
--define(REPLICA_EVICTION_WORKERS_NUM, application:get_env(
-    ?APP_NAME, replica_eviction_workers_num, 10)
-).
-
--define(REPLICA_DELETION_WORKER, replica_deletion_worker).
--define(REPLICA_DELETION_WORKERS_POOL, replica_deletion_workers_pool).
--define(REPLICA_DELETION_WORKERS_NUM,
-    application:get_env(?APP_NAME, replica_deletion_workers_num, 10)).
-
-
--define(TRANSFER_DATA_REQ(__FileCtx, __Params, __Retries, __NextRetryTimestamp), {
-    transfer_data, __FileCtx, __Params, __Retries, __NextRetryTimestamp
-}).
-
--record(transfer_params, {
-    transfer_id :: transfer:id(),
-    user_ctx :: user_ctx:ctx(),
-
-    % Those fields are specified only for transfers by index.
-    % Otherwise are left undefined.
-    index_name = undefined :: transfer:index_name(),
-    query_view_params = undefined :: transfer:query_view_params(),
-
-    % CAUTION!!! This field is currently unused.
-    % This field is defined only if not whole but part of file
-    % should be transferred.
-    block = undefined :: undefined | fslogic_blocks:block(),
-
-    % This field is set to replicating provider during second part of migration,
-    % which is eviction. It speeds up eviction because evicting provider
-    % do not need to search for providers that have file replicas.
-    supporting_provider = undefined :: undefined | od_provider:id()
-}).
-
--type transfer_params() :: #transfer_params{}.
+-endif.

@@ -17,20 +17,23 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API - basic model function
--export([create/1, save/1, get/1, exists/1, update/2, delete/1]).
-%% API - link functions
--export([add_links/4, get_link/3, fold_links/3, delete_links/3]).
--export([add_local_links/4, get_local_link/3, fold_local_links/3,
-    delete_local_links/3]).
+-export([
+    create/1, save/1, get/1, exists/1, list/0,
+    update/2, update_doc_and_time/2, delete/1, delete_doc/1
+]).
+-export([is_space_owner/2]).
+
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
--export([get_auth/1, get_user_id/1]).
--export([set_direct_io/2]).
+-export([get_credentials/1, get_data_constraints/1, get_user_id/1]).
+-export([get_mode/1, get_proxy_via/1]).
+-export([set_direct_io/3]).
 
 % exometer callbacks
 -export([init_counters/0, init_report/0]).
@@ -43,17 +46,40 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
--type auth() :: #macaroon_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
--type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
--type status() :: active | inactive.
--type identity() :: #user_identity{}.
+-type grace_period() :: non_neg_integer().
+-type type() :: fuse | rest | gui | offline | provider_outgoing | provider_incoming | root | guest.
+-type client_type() :: oneclient | onedatafs | ones3.
+-type client_option() :: {binary(), binary()}.
+-type client_system_property() :: {binary(), binary()}.
 
--export_type([id/0, record/0, doc/0, ttl/0, auth/0, type/0, status/0, identity/0]).
+% Supported session modes:
+% - normal
+% - public_data - special session mode in which user traverses public data shares tree
+%                 (listing space dir return virtual share root dirs corresponding to
+%                 shares exposed as public data instead of space dirs and files) and is
+%                 treated as guest when checking privileges.
+%                 Currently supported only in 'fuse' and 'guest' session type.
+-type mode() :: normal | public_data.
+% All sessions, beside root and guest (they start with active status),
+% start with initializing status. When the last component of supervision tree
+% gets up (either incoming_session_watcher or outgoing_connection_manager),
+% meaning entire supervision tree finished getting up, it will set session
+% status to active.
+-type status() :: initializing | active | inactive.
+
+-export_type([
+    id/0, record/0, doc/0,
+    ttl/0, grace_period/0,
+    type/0,
+    client_type/0, client_option/0, client_system_property/0,
+    mode/0, status/0
+]).
 
 -define(CTX, #{
     model => ?MODULE,
     disc_driver => undefined,
-    fold_enabled => true
+    fold_enabled => true,
+    memory_copies => all
 }).
 
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, Param)).
@@ -71,7 +97,7 @@
 create(Doc = #document{value = Sess}) ->
     ?update_counter(?EXOMETER_NAME(active_sessions)),
     ?extract_key(datastore_model:create(?CTX, Doc#document{value = Sess#session{
-        accessed = time_utils:cluster_time_seconds()
+        accessed = global_clock:timestamp_seconds()
     }})).
 
 %%--------------------------------------------------------------------
@@ -82,7 +108,7 @@ create(Doc = #document{value = Sess}) ->
 -spec save(doc()) -> {ok, id()} | {error, term()}.
 save(Doc = #document{value = Sess}) ->
     ?extract_key(datastore_model:save(?CTX, Doc#document{value = Sess#session{
-        accessed = time_utils:cluster_time_seconds()
+        accessed = global_clock:timestamp_seconds()
     }})).
 
 %%--------------------------------------------------------------------
@@ -106,22 +132,47 @@ exists(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns the list of all sessions.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [doc()]} | {error, term()}.
+list() ->
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Updates session.
 %% @end
 %%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+-spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(SessId, Diff) when is_function(Diff) ->
+    datastore_model:update(?CTX, SessId, Diff).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates session and sets new access time.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_doc_and_time(id(), diff()) -> {ok, doc()} | {error, term()}.
+update_doc_and_time(SessId, Diff) when is_function(Diff) ->
     Diff2 = fun(Sess) ->
         case Diff(Sess) of
             {ok, NewSess} ->
-                {ok, NewSess#session{
-                    accessed = time_utils:cluster_time_seconds()
-                }};
+                {ok, NewSess#session{accessed = global_clock:timestamp_seconds()}};
             {error, Reason} ->
                 {error, Reason}
         end
     end,
-    ?extract_key(datastore_model:update(?CTX, SessId, Diff2)).
+    datastore_model:update(?CTX, SessId, Diff2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes session document only.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_doc(id()) -> ok | {error, term()}.
+delete_doc(SessId) ->
+    datastore_model:delete(?CTX, SessId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -131,102 +182,15 @@ update(SessId, Diff) when is_function(Diff) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(SessId) ->
     ?update_counter(?EXOMETER_NAME(active_sessions), -1),
-    session_helpers:delete_helpers(SessId),
     session_handles:remove_handles(SessId),
+    session_remote_handles:remove_all(SessId),
     session_open_files:invalidate_entries(SessId),
     datastore_model:delete(?CTX, SessId).
 
-%%%===================================================================
-%%% API - link functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds link to a tree.
-%% @end
-%%--------------------------------------------------------------------
--spec add_links(id(), datastore:tree_id(), datastore:link_name(),
-    datastore:link_target()) -> ok | {error, term()}.
-add_links(SessId, TreeID, HandleId, Key) ->
-    ?extract_ok(datastore_model:add_links(?CTX, SessId,
-        TreeID, {HandleId, Key}
-    )).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets link from a tree.
-%% @end
-%%--------------------------------------------------------------------
--spec get_link(id(), datastore:tree_id(), datastore:link_name()) ->
-    {ok, [datastore:link()]} | {error, term()}.
-get_link(SessId, TreeID, HandleId) ->
-    datastore_model:get_links(?CTX, SessId, TreeID, HandleId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Iterates over tree and executes Fun on each link.
-%% @end
-%%--------------------------------------------------------------------
--spec fold_links(id(), datastore:tree_id(),
-    datastore:fold_fun(datastore:link())) ->
-    {ok, datastore:fold_acc()} | {error, term()}.
-fold_links(SessId, TreeID, Fun) ->
-    datastore_model:fold_links(?CTX, SessId, TreeID, Fun, [], #{}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes link from a tree.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_links(id(), datastore:tree_id(), datastore:link_name()) ->
-    ok | {error, term()}.
-delete_links(SessId, TreeID, HandleId) ->
-    datastore_model:delete_links(?CTX, SessId, TreeID, HandleId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds local link to a tree.
-%% @end
-%%--------------------------------------------------------------------
--spec add_local_links(id(), datastore:tree_id(), datastore:link_name(),
-    datastore:link_target()) -> ok | {error, term()}.
-add_local_links(SessId, TreeID, HandleId, Key) ->
-    ?extract_ok(datastore_model:add_links(?CTX#{routing => local}, SessId,
-        TreeID, {HandleId, Key}
-    )).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets local link from a tree.
-%% @end
-%%--------------------------------------------------------------------
--spec get_local_link(id(), datastore:tree_id(), datastore:link_name()) ->
-    {ok, [datastore:link()]} | {error, term()}.
-get_local_link(SessId, TreeID, HandleId) ->
-    datastore_model:get_links(?CTX#{routing => local}, SessId, TreeID, HandleId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Iterates over local tree and executes Fun on each link.
-%% @end
-%%--------------------------------------------------------------------
--spec fold_local_links(id(), datastore:tree_id(),
-    datastore:fold_fun(datastore:link())) ->
-    {ok, datastore:fold_acc()} | {error, term()}.
-fold_local_links(SessId, TreeID, Fun) ->
-    datastore_model:fold_links(?CTX#{routing => local},
-        SessId, TreeID, Fun, [], #{}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes local link from a tree.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_local_links(id(), datastore:tree_id(), datastore:link_name()) ->
-    ok | {error, term()}.
-delete_local_links(SessId, TreeID, HandleId) ->
-    datastore_model:delete_links(?CTX#{routing => local},
-        SessId, TreeID, HandleId).
+-spec is_space_owner(id() | record() | doc(), od_space:id()) -> boolean().
+is_space_owner(Session, SpaceId) ->
+    {ok, UserId} = get_user_id(Session),
+    space_logic:is_owner(SpaceId, UserId).
 
 %%%===================================================================
 %%% API - field access functions
@@ -244,7 +208,11 @@ get_user_id(<<_/binary>> = SessId) ->
         {ok, Doc} -> get_user_id(Doc);
         {error, Reason} -> {error, Reason}
     end;
-get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
+get_user_id(#session{identity = ?SUB(root, ?ROOT_USER_ID)}) ->
+    {ok, ?ROOT_USER_ID};
+get_user_id(#session{identity = ?SUB(nobody, ?GUEST_USER_ID)}) ->
+    {ok, ?GUEST_USER_ID};
+get_user_id(#session{identity = ?SUB(user, UserId)}) ->
     {ok, UserId};
 get_user_id(#document{value = #session{} = Value}) ->
     get_user_id(Value).
@@ -301,35 +269,82 @@ get_sequencer_manager(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns auth record associated with session.
+%% Returns credentials associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth
-    (id()) -> {ok, Auth :: auth()} | {ok, undefined} | {error, term()};
-    (record() | doc()) -> auth().
-get_auth(<<_/binary>> = SessId) ->
+-spec get_credentials
+    (id()) -> {ok, undefined | auth_manager:credentials()} | {error, term()};
+    (record() | doc()) -> auth_manager:credentials().
+get_credentials(?ROOT_SESS_ID) ->
+    {ok, ?ROOT_CREDENTIALS};
+get_credentials(?GUEST_SESS_ID) ->
+    {ok, ?GUEST_CREDENTIALS};
+get_credentials(<<_/binary>> = SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{auth = Auth}}} -> {ok, Auth};
-        {error, Reason} -> {error, Reason}
+        {ok, #document{value = #session{credentials = Credentials}}} ->
+            {ok, Credentials};
+        {error, _} = Error ->
+            Error
     end;
-get_auth(#session{auth = Auth}) ->
-    Auth;
-get_auth(#document{value = Session}) ->
-    get_auth(Session).
+get_credentials(#session{credentials = Credentials}) ->
+    Credentials;
+get_credentials(#document{value = Session}) ->
+    get_credentials(Session).
+
+
+-spec get_data_constraints(record() | doc()) -> data_constraints:constraints().
+get_data_constraints(#session{data_constraints = DataConstraints}) ->
+    DataConstraints;
+get_data_constraints(#document{value = Session}) ->
+    get_data_constraints(Session).
+
+
+-spec get_mode(id() | record() | doc()) -> {ok, mode()} | {error, term()}.
+get_mode(<<_/binary>> = SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{mode = SessMode}}} ->
+            {ok, SessMode};
+        {error, _} = Error ->
+            Error
+    end;
+get_mode(#session{mode = SessMode}) ->
+    {ok, SessMode};
+get_mode(#document{value = #session{mode = SessMode}}) ->
+    {ok, SessMode}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the provider that the session's requests come through, if the session
+%% was created for another provider acting on behalf of its own client.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_proxy_via(id() | record() | doc()) -> {ok, undefined | oneprovider:id()} | {error, term()}.
+get_proxy_via(<<_/binary>> = SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{proxy_via = ProxyVia}}} ->
+            {ok, ProxyVia};
+        {error, _} = Error ->
+            Error
+    end;
+get_proxy_via(#session{proxy_via = ProxyVia}) ->
+    {ok, ProxyVia};
+get_proxy_via(#document{value = #session{proxy_via = ProxyVia}}) ->
+    {ok, ProxyVia}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Sets direct_io property of session.
 %% @end
 %%--------------------------------------------------------------------
--spec set_direct_io(id(), boolean()) ->
-    ok | datastore:update_error().
-set_direct_io(SessId, DirectIO) ->
-    Diff = fun(Sess) ->
-        {ok, Sess#session{direct_io = DirectIO}}
+-spec set_direct_io(id(), od_space:id(), boolean()) -> ok | {error, term()}.
+set_direct_io(SessId, SpaceId, Value) ->
+    Diff = fun(Sess = #session{direct_io = DirectIO}) ->
+        {ok, Sess#session{direct_io = DirectIO#{SpaceId => Value}}}
     end,
     case session:update(SessId, Diff) of
-        {ok, SessId} -> ok;
+        {ok, #document{key = SessId}} -> ok;
         Other -> Other
     end.
 

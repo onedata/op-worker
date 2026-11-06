@@ -13,12 +13,13 @@
 -author("Krzysztof Trzepla").
 
 -include("modules/events/definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([get_routing_key/1, get_stream_key/1, get_stream/1, is_remote/1]).
--export([get_context/1, update_context/2]).
+-export([get_context/1]).
 
--type ctx() :: undefined | {file, file_ctx:ctx()}.
+-type ctx() :: undefined | {file, file_id:file_guid()}.
 
 -export_type([ctx/0]).
 
@@ -37,24 +38,28 @@
 get_routing_key(#subscription{type = Type}) ->
     get_routing_key(Type);
 get_routing_key(#file_attr_changed_subscription{file_guid = FileGuid}) ->
-    {ok, <<"file_attr_changed.", FileGuid/binary>>};
+    {ok, gen_routing_key_for_guid(<<"file_attr_changed.">>, FileGuid)};
+get_routing_key(#replica_status_changed_subscription{file_guid = FileGuid}) ->
+    {ok, gen_routing_key_for_guid(<<"replica_status_changed.">>, FileGuid)};
 get_routing_key(#file_location_changed_subscription{file_guid = FileGuid}) ->
-    {ok, <<"file_location_changed.", FileGuid/binary>>};
+    {ok, gen_routing_key_for_guid(<<"file_location_changed.">>, FileGuid)};
 get_routing_key(#file_perm_changed_subscription{file_guid = FileGuid}) ->
-    {ok, <<"file_perm_changed.", FileGuid/binary>>};
+    {ok, gen_routing_key_for_guid(<<"file_perm_changed.">>, FileGuid)};
 get_routing_key(#file_removed_subscription{file_guid = FileGuid}) ->
-    {ok, <<"file_removed.", FileGuid/binary>>};
+    {ok, gen_routing_key_for_guid(<<"file_removed.">>, FileGuid)};
 get_routing_key(#file_renamed_subscription{file_guid = FileGuid}) ->
-    {ok, <<"file_renamed.", FileGuid/binary>>};
+    {ok, gen_routing_key_for_guid(<<"file_renamed.">>, FileGuid)};
 get_routing_key(#quota_exceeded_subscription{}) ->
     {ok, <<"quota_exceeded">>};
+get_routing_key(#helper_params_changed_subscription{storage_id = StorageId}) ->
+    {ok, <<"helper_params_changed.", StorageId/binary>>};
 get_routing_key(_) ->
     {error, session_only}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns a key of a stream responsible for processing events associated with
-%% a subscription..
+%% a subscription.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_stream_key(Sub :: subscription:base() | subscription:type()) ->
@@ -63,11 +68,13 @@ get_stream_key(#subscription{type = Type}) -> get_stream_key(Type);
 get_stream_key(#file_read_subscription{}) -> file_read;
 get_stream_key(#file_written_subscription{}) -> file_written;
 get_stream_key(#file_attr_changed_subscription{}) -> file_attr_changed;
+get_stream_key(#replica_status_changed_subscription{}) -> file_attr_changed;
 get_stream_key(#file_location_changed_subscription{}) -> file_location_changed;
 get_stream_key(#file_perm_changed_subscription{}) -> file_perm_changed;
 get_stream_key(#file_removed_subscription{}) -> file_removed;
 get_stream_key(#file_renamed_subscription{}) -> file_renamed;
 get_stream_key(#quota_exceeded_subscription{}) -> quota_exceeded;
+get_stream_key(#helper_params_changed_subscription{}) -> helper_params_changed;
 get_stream_key(#monitoring_subscription{}) -> monitoring.
 
 %%--------------------------------------------------------------------
@@ -107,42 +114,46 @@ is_remote(_) -> false.
 get_context(#subscription{type = Type}) ->
     get_context(Type);
 get_context(#file_attr_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
+get_context(#replica_status_changed_subscription{file_guid = FileGuid}) ->
+    {file, FileGuid};
 get_context(#file_location_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_perm_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_removed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_renamed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(_) ->
     undefined.
 
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Updates the subscription context.
+%% Gets routing key for events where it bases on guid.
 %% @end
 %%--------------------------------------------------------------------
--spec update_context(Sub :: subscription:base() | subscription:type(), Ctx :: ctx()) ->
-    NewSub :: subscription:base() | subscription:type().
-update_context(#subscription{type = Type} = Sub, Ctx) ->
-    Sub#subscription{type = update_context(Type, Ctx)};
-update_context(#file_attr_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    Object#file_attr_changed_subscription{file_guid = FileGuid};
-update_context(#file_location_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    Object#file_location_changed_subscription{file_guid = FileGuid};
-update_context(#file_perm_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    Object#file_perm_changed_subscription{file_guid = FileGuid};
-update_context(#file_removed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    Object#file_removed_subscription{file_guid = FileGuid};
-update_context(#file_renamed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    Object#file_renamed_subscription{file_guid = FileGuid};
-update_context(Object, _Ctx) ->
-    Object.
+-spec gen_routing_key_for_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
 
+gen_routing_key_for_guid(<<"file_attr_changed.">> = Prefix, FileGuid) ->
+    Uuid = file_id:guid_to_uuid(FileGuid),
+    % Clients are subscribed on ?GLOBAL_ROOT_DIR_UUID instead of individual user root directories, so there is
+    % no need to generate all those directories each time this event is emitted.
+    % This event is later properly filtered (consult subscription_manager:apply_space_id_filter).
+    case user_root_dir:is_special(uuid, Uuid) of
+        true ->
+            % Change user's root uuid to main root dir uuid
+            RootUuid = ?GLOBAL_ROOT_DIR_UUID,
+            <<Prefix/binary, RootUuid/binary>>;
+        _ ->
+            <<Prefix/binary, Uuid/binary>>
+    end;
+gen_routing_key_for_guid(Prefix, FileGuid) ->
+    Uuid = file_id:guid_to_uuid(FileGuid),
+    <<Prefix/binary, Uuid/binary>>.

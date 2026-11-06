@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
 %%% @copyright (C) 2017 ACK CYFRONET AGH
-%%% This software is released under the MIT license cited in 'LICENSE.txt'.
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
@@ -15,6 +16,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -33,7 +35,8 @@
     apply_batch :: undefined | couchbase_changes:until(),
     first_batch_processed = false :: boolean(),
     lower_changes_count = 0 :: non_neg_integer(),
-    first_lower_seq = 1 :: non_neg_integer()
+    first_lower_seq = 1 :: non_neg_integer(),
+    requested_until :: undefined | couchbase_changes:seq()
 }).
 
 -type state() :: #state{}.
@@ -87,6 +90,9 @@ init([SpaceId, ProviderId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call(terminate, From, State) ->
+    gen_server:reply(From, ok),
+    {stop, normal, State};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -101,7 +107,7 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({changes_batch, Since, Until, Docs}, State = #state{
+handle_cast({changes_batch, Since, Until, Timestamp, Docs}, State = #state{
     space_id = SpaceId,
     provider_id = ProviderId
 }) ->
@@ -110,23 +116,39 @@ handle_cast({changes_batch, Since, Until, Docs}, State = #state{
         ProviderId
     ]),
     case Supported of
-        true -> {noreply, handle_changes_batch(Since, Until, Docs, State)};
+        true -> {noreply, handle_changes_batch(Since, Until, Timestamp, Docs, State)};
         false -> {stop, normal, State}
     end;
 handle_cast(check_batch_stash, State = #state{
     changes_stash = Stash,
-    seq = Seq
+    seq = Seq,
+    requested_until = RequestedUntil,
+    changes_request_ref = Ref
 }) ->
     case ets:first(Stash) of
         '$end_of_table' ->
             {noreply, State};
-        {Seq, Until} ->
-            Key = {Seq, Until},
-            Docs = ets:lookup_element(Stash, Key, 2),
+        {Seq, Until} = Key ->
+            {Timestamp, Docs} = ets:lookup_element(Stash, Key, 2),
             ets:delete(Stash, Key),
-            {noreply, apply_changes_batch(Seq, Until, Docs, State)};
+            {noreply, apply_changes_batch(Seq, Until, Timestamp, Docs, State)};
+        {_, Until} = Key when Until =< Seq ->
+            ets:delete(Stash, Key),
+            gen_server2:cast(self(), check_batch_stash);
+        {Since, Until} = Key when Since < Seq ->
+            {Timestamp, Docs} = ets:lookup_element(Stash, Key, 2),
+            ets:delete(Stash, Key),
+            FilteredDocs = lists:filter(fun(#document{seq = DocSeq}) -> DocSeq >= Seq end, Docs),
+            {noreply, apply_changes_batch(Seq, Until, Timestamp, FilteredDocs, State)};
         _ ->
-            {noreply, schedule_changes_request(State)}
+            case Seq of
+                RequestedUntil ->
+                    Ref =/= undefined andalso erlang:cancel_timer(Ref),
+                    self() ! request_changes,
+                    {noreply, State#state{requested_until = undefined, changes_request_ref = undefined}};
+                _ ->
+                    {noreply, schedule_changes_request(State)}
+            end
     end;
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
@@ -160,18 +182,29 @@ handle_info(request_changes, State = #state{
             {noreply, State#state{changes_request_ref = undefined}};
         {Until, _} ->
             MaxSize = application:get_env(?APP_NAME,
-                dbsync_changes_max_request_size, 20000),
+                dbsync_changes_max_request_size, 500000),
             Until2 = min(Until, Seq + MaxSize),
+            {FinalUntil, IncludedMutators} = case dbsync_state:maybe_set_initial_sync(SpaceId, ProviderId, Until) of
+                undefined ->
+                    {Until2, ?ALL_MUTATORS_EXCEPT_SENDER};
+                #synchronization_params{target_seq = TargetSeq, included_mutators = Mutators} ->
+                    {min(TargetSeq, Until2), Mutators}
+            end,
             dbsync_communicator:request_changes(
-                ProviderId, SpaceId, Seq, Until2
+                ProviderId, SpaceId, Seq, FinalUntil, IncludedMutators
             ),
+
+            dbsync_logger:log_batch_requested(Seq, FinalUntil, SpaceId, ProviderId),
             {noreply, schedule_changes_request(State#state{
-                changes_request_ref = undefined
+                changes_request_ref = undefined,
+                requested_until = FinalUntil
             })}
     end;
-handle_info({batch_applied, {Since, Until}, Ans}, #state{} = State) ->
-    State2 = change_applied(Since, Until, Ans, State),
-    {noreply, State2};
+handle_info({batch_applied, {Since, Until}, Timestamp, Ans}, #state{} = State) ->
+    case change_applied(Since, Until, Timestamp, Ans, State) of
+        {continue, State2} -> {noreply, State2};
+        {reset, State2} -> {stop, normal, State2}
+    end;
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -214,44 +247,53 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
-    [datastore:doc()], state()) -> state().
-handle_changes_batch(Since, Until, Docs,
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
+handle_changes_batch(Since, Until, Timestamp, Docs,
     State0 = #state{seq = Seq, apply_batch = Apply, first_batch_processed = FBP,
-        lower_changes_count = LCC, first_lower_seq = FLS, space_id = SpaceID}) ->
+        lower_changes_count = LCC, first_lower_seq = FLS, provider_id = ProviderId, space_id = SpaceId}) ->
+    dbsync_logger:log_batch_received(Since, Until, Seq, SpaceId, ProviderId),
     State = State0#state{first_batch_processed = true, lower_changes_count = 0},
     case {Since, Apply} of
         {Seq, undefined} ->
-            apply_changes_batch(Since, Until, Docs, State);
+            apply_changes_batch(Since, Until, Timestamp, Docs, State);
         {Higher, undefined} when Higher > Seq ->
-            State2 = stash_changes_batch(Since, Until, Docs, State),
+            State2 = stash_changes_batch(Since, Until, Timestamp, Docs, State),
             schedule_changes_request(State2);
         {Higher, _} when Higher >= Apply ->
-            State2 = stash_changes_batch(Since, Until, Docs, State),
+            State2 = stash_changes_batch(Since, Until, Timestamp, Docs, State),
             schedule_changes_request(State2);
         {Lower, _} when Lower < Seq ->
-            case FBP of
+            case op_worker:get_env(reset_dbsync_changes_when_lower_seq_appears, false) of
                 true ->
-                    MaxLowerChanges = application:get_env(?APP_NAME,
-                        lower_changes_before_reset, 10),
-                    case {LCC < MaxLowerChanges, LCC, MaxLowerChanges} of
-                        {true, 0, _} ->
-                            State#state{lower_changes_count = 1,
-                                first_lower_seq = Lower};
-                        {true, _, _} ->
-                            State#state{lower_changes_count = LCC + 1};
-                        {_, _, 0} ->
-                            ?info("Reset changes seq for space ~p,"
-                            " old ~p, new ~p", [SpaceID, Seq, Lower]),
-                            State#state{seq = Lower};
+                    % Lower sequence can appear after source provider crash (some changes and counter have not been
+                    % persisted) or when a batch had been lost and than applied with other batches from stash
+                    case FBP of
+                        true ->
+                            % TODO VFS-10189 - do not reset after application of lost batch together with stashed changes
+                            MaxLowerChanges = application:get_env(?APP_NAME,
+                                lower_changes_before_reset, 10),
+                            case {LCC < MaxLowerChanges, LCC, MaxLowerChanges} of
+                                {true, 0, _} ->
+                                    State#state{lower_changes_count = 1,
+                                        first_lower_seq = Lower};
+                                {true, _, _} ->
+                                    State#state{lower_changes_count = LCC + 1};
+                                {_, _, 0} ->
+                                    ?info("Reset changes seq for space ~tp,"
+                                    " old ~tp, new ~tp", [SpaceId, Seq, Lower]),
+                                    State#state{seq = Lower};
+                                _ ->
+                                    ?info("Reset changes seq for space ~tp,"
+                                    " old ~tp, new ~tp", [SpaceId, Seq, FLS]),
+                                    State#state{seq = FLS}
+                            end;
                         _ ->
-                            ?info("Reset changes seq for space ~p,"
-                            " old ~p, new ~p", [SpaceID, Seq, FLS]),
-                            State#state{seq = FLS}
+                            ?info("Reset changes seq with first batch for space ~tp,"
+                            " old ~tp, new ~tp", [SpaceId, Seq, Lower]),
+                            State#state{seq = Lower}
                     end;
-                _ ->
-                    ?info("Reset changes seq with first batch for space ~p,"
-                    " old ~p, new ~p", [SpaceID, Seq, Lower]),
-                    State#state{seq = Lower}
+                false ->
+                    State
             end;
         _ ->
             State
@@ -265,24 +307,39 @@ handle_changes_batch(Since, Until, Docs,
 %% @end
 %%--------------------------------------------------------------------
 -spec stash_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
-    [datastore:doc()], state()) -> state().
-stash_changes_batch(Since, Until, Docs, State = #state{
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
+stash_changes_batch(Seq, Seq, Timestamp, [] = Docs, State = #state{changes_stash = Stash}) ->
+    case ets:first(Stash) of
+        '$end_of_table' ->
+            % Init stash after failure to have range for changes request
+            ets:insert(Stash, {{Seq, Seq}, {Timestamp, Docs}});
+        _ ->
+            ok
+    end,
+    State;
+stash_changes_batch(Since, Until, Timestamp, Docs, State = #state{
+    changes_stash = Stash,
+    requested_until = RequestedUntil
+}) when Since =< RequestedUntil ->
+    ets:insert(Stash, {{Since, Until}, {Timestamp, Docs}}),
+    State;
+stash_changes_batch(Since, Until, Timestamp, Docs, State = #state{
     changes_stash = Stash,
     seq = Seq
 }) ->
-    Max = application:get_env(?APP_NAME, dbsync_changes_stash_max_size, 100000),
+    Max = op_worker:get_env(dbsync_changes_stash_max_size, 100000),
     case Until > Seq + Max of
         true ->
             case ets:first(Stash) of
                 '$end_of_table' ->
                     % Init stash after failure to have range for changes request
-                    ets:insert(Stash, {{Since, Until}, Docs});
+                    ets:insert(Stash, {{Since, Until}, {Timestamp, Docs}});
                 _ ->
                     ok
             end,
             State;
         false ->
-            ets:insert(Stash, {{Since, Until}, Docs}),
+            ets:insert(Stash, {{Since, Until}, {Timestamp, Docs}}),
             State
     end.
 
@@ -294,13 +351,13 @@ stash_changes_batch(Since, Until, Docs, State = #state{
 %% @end
 %%--------------------------------------------------------------------
 -spec apply_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
-    [datastore:doc()], state()) -> state().
-apply_changes_batch(Since, Until, Docs, State) ->
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
+apply_changes_batch(Since, Until, Timestamp, Docs, #state{space_id = SpaceId, provider_id = ProviderId} = State) ->
     State2 = cancel_changes_request(State),
-    {Docs2, Until2, State3} = prepare_batch(Docs, Until, State2),
-    dbsync_changes:apply_batch(Docs2, {Since, Until2}),
+    {Docs2, Timestamp2, Until2, State3} = prepare_batch(Docs, Timestamp, Until, State2),
+    dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2, SpaceId, ProviderId),
 
-    case application:get_env(?APP_NAME, dbsync_in_stream_worker_gc, on) of
+    case op_worker:get_env(dbsync_in_stream_worker_gc, on) of
         on ->
             erlang:garbage_collect();
         _ ->
@@ -315,19 +372,19 @@ apply_changes_batch(Since, Until, Docs, State) ->
 %% Updates sequence when changes applying ends.
 %% @end
 %%--------------------------------------------------------------------
--spec change_applied(couchbase_changes:since(), couchbase_changes:until(),
-    ok | timeout | {error, datastore:seq(), term()}, state()) -> state().
-change_applied(_Since, Until, Ans, State) ->
+-spec change_applied(couchbase_changes:since(), couchbase_changes:until(), dbsync_changes:timestamp(),
+    ok | timeout | {error, datastore_doc:seq(), term()}, state()) -> {continue | reset, state()}.
+change_applied(_Since, Until, Timestamp, Ans, State) ->
     State2 = State#state{apply_batch = undefined},
     case Ans of
         ok ->
             gen_server2:cast(self(), check_batch_stash),
-            update_seq(Until, State2);
+            update_seq(Until, Timestamp, State2);
         {error, Seq, _} ->
-            State3 = update_seq(Seq - 1, State2),
-            schedule_changes_request(State3);
+            {UpdateAns, State3} = update_seq(Seq - 1, undefined, State2),
+            {UpdateAns, schedule_changes_request(State3)};
         timeout ->
-            schedule_changes_request(State2)
+            {continue, schedule_changes_request(State2)}
     end.
 
 %%--------------------------------------------------------------------
@@ -337,27 +394,30 @@ change_applied(_Since, Until, Ans, State) ->
 %% it merges them.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_batch([datastore:doc()], couchbase_changes:until(), state()) ->
-    {[datastore:doc()], couchbase_changes:until(), state()}.
-prepare_batch(Docs, Until, State = #state{
+-spec prepare_batch([datastore:doc()], dbsync_changes:timestamp(), couchbase_changes:until(), state()) ->
+    {[datastore:doc()], dbsync_changes:timestamp(), couchbase_changes:until(), state()}.
+prepare_batch(Docs, Timestamp, Until, State = #state{
     changes_stash = Stash
 }) ->
     case ets:first(Stash) of
         '$end_of_table' ->
-            {Docs, Until, State};
+            {Docs, Timestamp, Until, State};
         {Until, NextUntil} = Key ->
-            MaxSize = application:get_env(?APP_NAME,
-                dbsync_changes_apply_max_size, 500),
+            MaxSize = op_worker:get_env(dbsync_changes_apply_max_size, 5000),
             case length(Docs) > MaxSize of
                 true ->
-                    {Docs, Until, State};
+                    {Docs, Timestamp, Until, State};
                 _ ->
-                    NextDocs = ets:lookup_element(Stash, Key, 2),
+                    {NextTimestamp, NextDocs} = ets:lookup_element(Stash, Key, 2),
+                    UsedTimestamp = case NextTimestamp of
+                        undefined -> Timestamp;
+                        _ -> NextTimestamp
+                    end,
                     ets:delete(Stash, Key),
-                    prepare_batch(Docs ++ NextDocs, NextUntil, State)
+                    prepare_batch(Docs ++ NextDocs, UsedTimestamp, NextUntil, State)
             end;
         _ ->
-            {Docs, Until, schedule_changes_request(State)}
+            {Docs, Timestamp, Until, schedule_changes_request(State)}
     end.
 
 
@@ -367,12 +427,13 @@ prepare_batch(Docs, Until, State = #state{
 %% Updates sequence number of the beginning of expected changes range.
 %% @end
 %%--------------------------------------------------------------------
--spec update_seq(couchbase_changes:seq(), state()) -> state().
-update_seq(Seq, State = #state{seq = Seq}) ->
-    State;
-update_seq(Seq, State = #state{space_id = SpaceId, provider_id = ProviderId}) ->
-    dbsync_state:set_seq(SpaceId, ProviderId, Seq),
-    State#state{seq = Seq}.
+-spec update_seq(couchbase_changes:seq(), dbsync_changes:timestamp() | undefined, state()) ->
+    {continue | reset, state()}.
+update_seq(Seq, _Timestamp, State = #state{seq = Seq}) ->
+    {continue, State};
+update_seq(Seq, Timestamp, State = #state{space_id = SpaceId, provider_id = ProviderId}) ->
+    Ans = dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Seq, Timestamp),
+    {Ans, State#state{seq = Seq}}.
 
 %%--------------------------------------------------------------------
 %% @private

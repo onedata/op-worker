@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -123,8 +123,8 @@ event_stream_should_not_aggregate_events_with_different_keys(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, Stm} = start_event_stream(Worker,
         fun(Ctr) -> Ctr >= 2 end, infinity),
-    emit(Worker, Stm, file_read_event(<<"file_uuid_1">>, 1, [{0, 1}])),
-    emit(Worker, Stm, file_read_event(<<"file_uuid_2">>, 1, [{0, 1}])),
+    emit(Worker, Stm, file_read_event(file_id:pack_guid(<<"file_uuid_1">>, <<"space_id">>), 1, [{0, 1}])),
+    emit(Worker, Stm, file_read_event(file_id:pack_guid(<<"file_uuid_2">>, <<"space_id">>), 1, [{0, 1}])),
     ?assertReceivedMatch({event_handler, [_ | _]}, ?TIMEOUT),
     stop_event_stream(Stm).
 
@@ -138,6 +138,22 @@ event_stream_should_reset_metadata_after_event_handler_execution(Config) ->
         ?assertReceivedMatch({event_handler, [#file_read_event{}]}, ?TIMEOUT)
     end, lists:seq(0, CtrThr - 1)),
     stop_event_stream(Stm).
+
+%%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
+
+init_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, event_manager),
+    test_utils:mock_expect(Workers, event_manager, handle, fun(Manager, Message) ->
+        gen_server2:cast(Manager, Message)
+    end),
+    Config.
+
+end_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [event_manager]).
 
 %%%===================================================================
 %%% Internal functions
@@ -184,6 +200,7 @@ start_event_stream(Worker, EmRule, EmTime) ->
             transition_rule = fun(Ctr, _) -> Ctr + 1 end
         }
     },
+
     ?assertMatch({ok, _}, rpc:call(Worker, gen_server, start, [
         event_stream, [Mgr, Sub, SessId], []
     ])).
@@ -211,13 +228,13 @@ emit(Worker, Stm, Evt) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv file_read_event(<<"file_uuid">>, Size, Blocks)
+%% @equiv file_read_event(file_id:pack_guid(<<"file_uuid">>, <<"space_id">>), Size, Blocks)
 %% @end
 %%--------------------------------------------------------------------
 -spec file_read_event(Size :: file_meta:size(), Blocks :: proplists:proplist()) ->
     Evt :: #event{}.
 file_read_event(Size, Blocks) ->
-    file_read_event(<<"file_uuid">>, Size, Blocks).
+    file_read_event(file_id:pack_guid(<<"file_uuid">>, <<"space_id">>), Size, Blocks).
 
 %%--------------------------------------------------------------------
 %% @private

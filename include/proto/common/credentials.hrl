@@ -6,17 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Credentials that can be exchanged for user identity in identity model
+%%% Credentials used to authenticate a user together with context
+%%% information such as peer IP or interface (see auth_manager).
 %%% @end
 %%%-------------------------------------------------------------------
 
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
-% Record containing macaroons for user authorization in OZ.
--record(macaroon_auth, {
-    macaroon :: binary(),
-    disch_macaroons = [] :: [binary()]
+-record(client_tokens, {
+    access_token :: tokens:serialized(),
+    consumer_token = undefined :: undefined | tokens:serialized()
 }).
 
 -endif.

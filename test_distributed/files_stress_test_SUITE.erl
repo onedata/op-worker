@@ -22,7 +22,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 -export([stress_test/1, stress_test_base/1, many_files_creation_tree_test/1,
     many_files_creation_tree_test_base/1]).
 
@@ -64,7 +64,7 @@ many_files_creation_tree_test(Config) ->
         {description, "Creates directories' and files' tree using multiple process"}
     ]).
 many_files_creation_tree_test_base(Config) ->
-    files_stress_test_base:many_files_creation_tree_test_base(Config, true, true).
+    files_stress_test_base:many_files_creation_tree_test_base(Config, #{write_to_file => true, cache_guids => true}).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -72,6 +72,9 @@ many_files_creation_tree_test_base(Config) ->
 
 init_per_suite(Config) ->
     files_stress_test_base:init_per_suite(Config).
+
+end_per_suite(Config) ->
+    files_stress_test_base:end_per_suite(Config).
 
 init_per_testcase(Case, Config) ->
     files_stress_test_base:init_per_testcase(Case, Config).

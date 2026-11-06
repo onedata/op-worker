@@ -13,9 +13,9 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -101,7 +101,7 @@ random_read_test_base(Config, SeparateBlocks) ->
       {ans, Num, {RT1_2, RT2_2, OT_2, CT_2}} ->
         {RT1+RT1_2, RT2+RT2_2, OT+OT_2, CT+CT_2};
       {ans, Num, Error} ->
-        ct:print("Error: ~p", [Error]),
+        ct:print("Error: ~tp", [Error]),
         timer:sleep(5000),
         Acc
     after timer:minutes(5) ->
@@ -111,7 +111,7 @@ random_read_test_base(Config, SeparateBlocks) ->
     end
   end, {0,0,0,0}, Names),
 
-  ct:print("Repeat: ~p, many blocks: ~p, read remote: ~p, read local: ~p, open: ~p, close: ~p", [
+  ct:print("Repeat: ~tp, many blocks: ~tp, read remote: ~tp, read local: ~tp, open: ~tp, close: ~tp", [
     RepNum, SeparateBlocks, ReadTime1 / Num, ReadTime2 / Num, OpenTime / Num, CloseTime / Num]),
   ok.
 
@@ -130,9 +130,9 @@ init_per_testcase(stress_test, Config) ->
   end, ?config(op_worker_nodes, Config)),
 
   ssl:start(),
-  hackney:start(),
+  application:ensure_all_started(hackney),
   initializer:disable_quota_limit(Config),
-  ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+  ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config, true),
   lfm_proxy:init(ConfigWithSessionInfo);
 
 init_per_testcase(_Case, Config) ->
@@ -143,7 +143,7 @@ end_per_testcase(stress_test, Config) ->
   %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
   initializer:clean_test_users_and_spaces_no_validate(Config),
   initializer:unload_quota_mocks(Config),
-  hackney:stop(),
+  application:stop(hackney),
   ssl:stop();
 
 end_per_testcase(_Case, Config) ->

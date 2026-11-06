@@ -26,14 +26,12 @@
 
 -define(STRESS_CASES, [
     file_meta_basic_operations_test
-    %% TODO add simmilar test without mocks within cluster
     %% sequencer_manager_multiple_streams_messages_ordering_test, connection_multi_ping_pong_test,
     %% event_stream_different_file_id_aggregation_test,
     %% event_manager_multiple_subscription_test, event_manager_multiple_clients_test
 ]).
 -define(STRESS_NO_CLEARING_CASES, [
     many_files_creation_test
-    %% TODO add no clearing option to other tests
 ]).
 
 all() ->
@@ -49,7 +47,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 90}, % Allow errors because of throttling
+            {success_rate, 100}, % Allow errors because of throttling
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
@@ -88,9 +86,6 @@ many_files_creation_test(Config) ->
         {description, "Performs multiple datastore operations using many threads. Level - database."}
     ]).
 many_files_creation_test_base(Config) ->
-    % Sleep because test does to many operations for Cauchbase when running for a long time
-    % TODO - make mnesia slower when Cauchbase working too slow
-%%    timer:sleep(timer:seconds(15)),
 
     LastFails = ?config(last_fails, Config),
     RepNum = ?config(rep_num, Config),
@@ -102,41 +97,29 @@ many_files_creation_test_base(Config) ->
             timer:sleep(timer:minutes(1))
     end,
 
-    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+    [_Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     FilesPerThead = ?config(files_per_thead, Config),
 
     put(file_beg, get_random_string()),
     Master = self(),
     AnswerDesc = get(file_beg),
-    RootUuid = <<>>,
-
-    case RepNum of
-        1 ->
-            ?assertMatch({ok, _}, rpc:call(Worker1, file_meta, create,
-                [{uuid, RootUuid}, #document{value = #file_meta{name = <<"spaces">>, is_scope = true}}]));
-        _ ->
-            ok
-    end,
 
     SpaceNameString = "Space" ++ AnswerDesc,
-    ct:print("Space name: ~p", [SpaceNameString]),
-    SpaceName = list_to_binary(SpaceNameString),
+    ct:print("Space name: ~tp", [SpaceNameString]),
     FullSpaceNameString = "/" ++ SpaceNameString,
-    {ok, SpaceUuid} = ?assertMatch({ok, _}, rpc:call(Worker2, file_meta, create, [{uuid, RootUuid},
-            #document{key = fslogic_uuid:spaceid_to_space_dir_uuid(list_to_binary(SpaceNameString)),
-                value = #file_meta{name = SpaceName, is_scope = true}}])),
+    SpaceId = list_to_binary(SpaceNameString),
+    ?assertEqual(ok, rpc:call(Worker2, space_dir, ensure_exists, [SpaceId])),
 
     CreateFiles = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
-            BeforeProcessing = os:timestamp(),
-            Ans = file_meta:create({uuid, SpaceUuid}, #document{
+            Stopwatch = stopwatch:start(),
+            Ans = file_meta:create({uuid, space_dir:uuid(SpaceId)}, #document{
                 value = #file_meta{
                     name = list_to_binary(DocsSet ++ integer_to_list(I))
                 }
             }),
-            AfterProcessing = os:timestamp(),
-            Master ! {store_ans, AnswerDesc, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            Master ! {store_ans, AnswerDesc, Ans, stopwatch:read_micros(Stopwatch)}
         end)
     end,
 
@@ -147,10 +130,9 @@ many_files_creation_test_base(Config) ->
 
     Get = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
-            BeforeProcessing = os:timestamp(),
+            Stopwatch = stopwatch:start(),
             Ans = file_meta:get({path, list_to_binary(FullSpaceNameString ++ "/" ++ DocsSet ++ integer_to_list(I))}),
-            AfterProcessing = os:timestamp(),
-            Master ! {store_ans, AnswerDesc, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            Master ! {store_ans, AnswerDesc, Ans, stopwatch:read_micros(Stopwatch)}
         end)
     end,
 
@@ -166,10 +148,9 @@ many_files_creation_test_base(Config) ->
 
     ClearMany = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
-            BeforeProcessing = os:timestamp(),
+            Stopwatch = stopwatch:start(),
             Ans = file_meta:delete({path, list_to_binary(FullSpaceNameString ++ "/" ++ DocsSet ++ integer_to_list(I))}),
-            AfterProcessing = os:timestamp(),
-            Master ! {store_ans, AnswerDesc, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            Master ! {store_ans, AnswerDesc, Ans, stopwatch:read_micros(Stopwatch)}
         end)
     end,
 
@@ -181,7 +162,7 @@ many_files_creation_test_base(Config) ->
 
     FailedNum = ?config(failed_num, Config),
     DocsInDB = (ThreadsNum - NewTN) * FilesPerThead,
-    ct:print("Files in system: ~p", [DocsInDB * (RepNum - FailedNum)]),
+    ct:print("Files in system: ~tp", [DocsInDB * (RepNum - FailedNum)]),
 
     [
         #parameter{name = files_in_datastore, value = DocsInDB,
@@ -207,7 +188,7 @@ init_per_suite(Config) ->
             fun(_) -> [] end),
         NewConfig,
         initializer:mock_provider_id(
-            Workers, <<"provider1">>, <<"auth-macaroon">>, <<"identity-macaroon">>
+            Workers, <<"provider1">>, <<"access-token">>, <<"identity-token">>
         ),
         NewConfig
     end,
@@ -247,8 +228,8 @@ spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, Conflicted
             receive start -> ok end,
             Fun(integer_to_list(DocsSetNum) ++ FileBeg)
         catch
-            E1:E2 ->
-                Master ! {store_ans, AnswerDesc, {uncatched_error, E1, E2, erlang:get_stacktrace()}, 0}
+            E1:E2:Stacktrace ->
+                Master ! {store_ans, AnswerDesc, {uncatched_error, E1, E2, Stacktrace}, 0}
         end
     end),
     spawn_at_nodes(Nodes, [N | Nodes2], Threads - 1, DocsSetNum, DocNumInSet + 1, ConflictedThreads, Fun, [Pid | Pids]).

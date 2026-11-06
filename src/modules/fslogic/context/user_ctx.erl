@@ -13,8 +13,11 @@
 -module(user_ctx).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Context definition
@@ -23,11 +26,20 @@
 }).
 
 -type ctx() :: #user_ctx{}.
+-export_type([ctx/0]).
 
 %% API
 -export([new/1]).
--export([get_user/1, get_user_id/1, get_session_id/1, get_auth/1]).
--export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/1]).
+-export([
+    get_user/1, get_user_id/1,
+    get_eff_spaces/1,
+    get_session_id/1,
+    get_credentials/1, get_data_constraints/1
+]).
+-export([is_space_owner/2]).
+-export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/2]).
+-export([is_in_public_data_mode/1, get_session_mode/1, set_session_mode/2,
+    get_client_type/1, get_client_options/1, get_client_system_properties/1]).
 
 %%%===================================================================
 %%% API functions
@@ -40,10 +52,34 @@
 %%--------------------------------------------------------------------
 -spec new(session:id()) -> ctx() | no_return().
 new(SessId) ->
-    {ok, Session} = session:get(SessId),
-    #user_ctx{
-        session = Session
-    }.
+    case session:get(SessId) of
+        {ok, #document{value = #session{type = rest, accessed = LastAccess}} = Session} ->
+            Now = global_clock:timestamp_seconds(),
+            TTL = op_worker:get_env(rest_session_grace_period_seconds),
+            % TODO VFS-6586 - refactor rest session expiration
+            {ok, UpdatedSession} = case Now > LastAccess + 0.6 * TTL of
+                true ->
+                    session:update_doc_and_time(SessId, fun(Rec) -> {ok, Rec} end);
+                false ->
+                    {ok, Session}
+            end,
+            #user_ctx{session = UpdatedSession};
+        {ok, #document{value = #session{type = gui, accessed = LastAccess}} = Session} ->
+            Now = global_clock:timestamp_seconds(),
+            TTL = op_worker:get_env(gui_session_grace_period_seconds),
+            % TODO VFS-6586 - refactor gui session expiration
+            {ok, UpdatedSession} = case Now > LastAccess + 0.6 * TTL of
+                true ->
+                    session:update_doc_and_time(SessId, fun(Rec) -> {ok, Rec} end);
+                false ->
+                    {ok, Session}
+            end,
+            #user_ctx{session = UpdatedSession};
+        {ok, Session} ->
+            #user_ctx{session = Session};
+        {error, not_found} ->
+            throw(?EACCES)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -52,16 +88,21 @@ new(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
 get_user(#user_ctx{session = #document{key = SessId, value = #session{
-    identity = #user_identity{user_id = UserId}
-}}}) ->
-    case get(user_ctx_cache) of
-        undefined ->
+    identity = ?SUB(Type, UserId)
+}}}) when
+    (Type =:= root andalso UserId =:= ?ROOT_USER_ID);
+    (Type =:= nobody andalso UserId =:= ?GUEST_USER_ID);
+    Type =:= user
+->
+    % TODO VFS-7313 get rid of this hacked cache
+%%    case get(user_ctx_cache) of
+%%        undefined ->
             {ok, User} = user_logic:get(SessId, UserId),
-            put(user_ctx_cache, User),
-            User;
-        CachedUser ->
-            CachedUser
-    end.
+%%            put(user_ctx_cache, User),
+            User.
+%%        CachedUser ->
+%%            CachedUser
+%%    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -75,6 +116,17 @@ get_user_id(#user_ctx{session = Session}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Gets effective spaces from user context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_eff_spaces(ctx()) -> [od_space:id()].
+get_eff_spaces(UserCtx) ->
+    #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
+    Spaces.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Gets SessionId from user context.
 %% @end
 %%--------------------------------------------------------------------
@@ -84,12 +136,25 @@ get_session_id(#user_ctx{session = #document{key = SessId}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets session's auth from user context.
+%% Gets session's credentials from user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth(ctx()) -> session:auth().
-get_auth(#user_ctx{session = Session}) ->
-    session:get_auth(Session).
+-spec get_credentials(ctx()) -> auth_manager:credentials().
+get_credentials(#user_ctx{session = Session}) ->
+    session:get_credentials(Session).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets session's data constraints from user context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_data_constraints(ctx()) -> data_constraints:constraints().
+get_data_constraints(#user_ctx{session = Session}) ->
+    session:get_data_constraints(Session).
+
+-spec is_space_owner(ctx(), od_space:id()) -> boolean().
+is_space_owner(#user_ctx{session = SessionDoc}, SpaceId) ->
+    session:is_space_owner(SessionDoc, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,8 +188,36 @@ is_normal_user(#user_ctx{session = #document{key = SessId}}) ->
 %% Checks if session uses direct_io.
 %% @end
 %%--------------------------------------------------------------------
--spec is_direct_io(ctx()) -> boolean().
+-spec is_direct_io(ctx(), od_space:id()) -> boolean().
 is_direct_io(#user_ctx{session = #document{
-    value = #session{direct_io = DirectIO}
-}}) ->
-    DirectIO.
+    value = #session{direct_io = DirectIO, type = fuse}
+}}, SpaceId) ->
+    maps:get(SpaceId, DirectIO, true);
+is_direct_io(_, _) ->
+    false.
+
+-spec is_in_public_data_mode(ctx()) -> boolean().
+is_in_public_data_mode(UserCtx) ->
+    get_session_mode(UserCtx) =:= public_data.
+
+-spec get_session_mode(ctx()) -> session:mode().
+get_session_mode(#user_ctx{session = #document{value = #session{mode = SessMode}}}) ->
+    SessMode.
+
+-spec get_client_type(ctx()) -> undefined | session:client_type().
+get_client_type(#user_ctx{session = #document{value = #session{client_type = ClientType}}}) ->
+    ClientType.
+
+-spec get_client_options(ctx()) -> undefined | [session:client_option()].
+get_client_options(#user_ctx{session = #document{value = #session{client_options = ClientOptions}}}) ->
+    ClientOptions.
+
+-spec get_client_system_properties(ctx()) -> undefined | [session:client_system_property()].
+get_client_system_properties(#user_ctx{session = #document{value = #session{client_system_properties = ClientSystemProperties}}}) ->
+    ClientSystemProperties.
+
+-spec set_session_mode(ctx(), session:mode()) -> ctx().
+set_session_mode(#user_ctx{session = #document{value = SessRec} = SessDoc} = UserCtx, SessMode) ->
+    UserCtx#user_ctx{session = SessDoc#document{
+        value = SessRec#session{mode = SessMode}
+    }}.

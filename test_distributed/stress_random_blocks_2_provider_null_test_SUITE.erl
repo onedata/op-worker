@@ -13,9 +13,9 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -79,9 +79,9 @@ init_per_testcase(stress_test, Config) ->
   end, Workers),
 
   ssl:start(),
-  hackney:start(),
+  application:ensure_all_started(hackney),
   initializer:disable_quota_limit(Config),
-  ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+  ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config, true),
   lfm_proxy:init(ConfigWithSessionInfo);
 
 init_per_testcase(_Case, Config) ->
@@ -93,7 +93,7 @@ end_per_testcase(stress_test, Config) ->
   %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
   initializer:clean_test_users_and_spaces_no_validate(Config),
   initializer:unload_quota_mocks(Config),
-  hackney:stop(),
+  application:stop(hackney),
   ssl:stop(),
 
   lists:foreach(fun(Worker) ->

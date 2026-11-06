@@ -19,7 +19,7 @@
 -export_type([size/0, histogram/0]).
 
 %% API
--export([new/1, shift/2, increment/2, decrement/2, merge/2]).
+-export([new/1, shift/2, increment/2, decrement/2, reset/1, merge/2]).
 
 %%%===================================================================
 %%% API
@@ -65,6 +65,10 @@ increment([Head | Rest], N) ->
 -spec decrement(histogram(), non_neg_integer()) -> histogram().
 decrement([Head | Rest], N) ->
     [Head - N | Rest].
+
+-spec reset(histogram()) -> histogram().
+reset([_ | Rest]) ->
+    [0 | Rest].
 
 %%--------------------------------------------------------------------
 %% @doc

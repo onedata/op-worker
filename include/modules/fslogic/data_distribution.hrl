@@ -1,0 +1,62 @@
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% File distribution related record definitions.
+%%% @end
+%%%-------------------------------------------------------------------
+-ifndef(DATA_DISTRIBUTION_HRL).
+-define(DATA_DISTRIBUTION_HRL, 1).
+
+%% Dir distribution
+
+% used as a result in middleware_worker
+-record(provider_dir_distribution, {
+    logical_size :: file_meta:size() | undefined,
+    virtual_size :: file_meta:size() | undefined,
+    physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size() | errors:error()},
+    locations_per_storage = #{} :: data_distribution:locations_per_storage() | #{storage:id() => errors:error()}
+}).
+
+
+% used in provider communication via provider_rpc
+% NOTE: translated to protobuf
+-record(provider_dir_distribution_get_result, {
+    current_dir_size_stats :: provider_dir_distribution:current_dir_size_stats_result(),
+    locations_per_storage = #{} :: data_distribution:locations_per_storage() | #{storage:id() => errors:error()}
+}).
+
+-record(dir_distribution_gather_result, {
+    distribution_per_provider = #{} :: #{
+        od_provider:id() => data_distribution:provider_dir_distribution() | errors:error()
+    }
+}).
+
+%% Reg distribution
+
+% NOTE: translated to protobuf
+-record(provider_reg_distribution_get_result, {
+    virtual_size = 0 :: file_meta:size(),
+    blocks_per_storage = #{} :: #{storage:id() => fslogic_blocks:blocks()},
+    locations_per_storage = #{} :: data_distribution:locations_per_storage()
+}).
+
+-record(reg_distribution_gather_result, {
+    distribution_per_provider = #{} :: #{
+        od_provider:id() => data_distribution:provider_reg_distribution() | errors:error()
+    }
+}).
+
+%% Common
+
+-record(data_distribution_gather_result, {
+    distribution ::
+        data_distribution:dir_distribution() |
+        data_distribution:reg_distribution()
+}).
+
+-endif.

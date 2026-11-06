@@ -8,46 +8,55 @@
 %%% @doc
 %%% This module is responsible for handing requests operating on file access
 %%% control lists.
+%%% Note: this module operates on referenced uuids - all operations on hardlinks
+%%% are treated as operations on original file. Thus, acls are shared
+%%% between hardlinks and original file.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(acl_req).
 -author("Tomasz Lichon").
 
--include("proto/oneprovider/provider_messages.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 %% API
--export([get_acl/2, set_acl/5, remove_acl/2]).
+-export([get_acl/2, set_acl/3, remove_acl/2]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_acl_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-get_acl(_UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_acl],
-        [_UserCtx, FileCtx],
-        fun get_acl_insecure/2).
+    fslogic_worker:provider_response() | no_return().
+get_acl(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_acl_mask)]
+    ),
+    get_acl_insecure(UserCtx, FileCtx1).
+
 
 %%--------------------------------------------------------------------
 %% @equiv set_acl_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(user_ctx:ctx(), file_ctx:ctx(), #acl{}, Create :: boolean(),
-    Replace :: boolean()) -> fslogic_worker:provider_response().
-set_acl(_UserCtx, FileCtx, Acl, Create, Replace) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_acl],
-        [_UserCtx, FileCtx, Acl, Create, Replace],
-        fun set_acl_insecure/5).
+-spec set_acl(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
+    fslogic_worker:provider_response().
+set_acl(UserCtx, FileCtx0, Acl) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_acl_mask)]
+    ),
+    set_acl_insecure(UserCtx, FileCtx1, Acl).
+
 
 %%--------------------------------------------------------------------
 %% @equiv remove_acl_insecure/2 with permission checks
@@ -55,17 +64,21 @@ set_acl(_UserCtx, FileCtx, Acl, Create, Replace) ->
 %%--------------------------------------------------------------------
 -spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-remove_acl(_UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_acl],
-        [_UserCtx, FileCtx],
-        fun remove_acl_insecure/2).
+remove_acl(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_acl_mask)]
+    ),
+    remove_acl_insecure(UserCtx, FileCtx1).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gets access control list of file.
 %% @end
@@ -73,83 +86,64 @@ remove_acl(_UserCtx, FileCtx) ->
 -spec get_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_acl_insecure(_UserCtx, FileCtx) ->
-    case xattr:get_by_name(FileCtx, ?ACL_KEY) of
-        {ok, Val} ->
-            % ACLs are kept in database without names, as they might change.
-            % Resolve the names here.
-            Acl = acl_names:add(acl_logic:from_json_format_to_acl(Val)),
-            #provider_response{
-                status = #status{code = ?OK},
-                provider_response = #acl{
-                    value = Acl
-                }
-            };
-        {error, not_found} ->
-            #provider_response{status = #status{code = ?ENOATTR}}
-    end.
+    {Acl, _} = file_ctx:get_acl(file_ctx:ensure_based_on_referenced_guid(FileCtx)),
+    % ACLs are kept in database without names, as they might change.
+    % Resolve the names here.
+    #provider_response{
+        status = #status{code = ?OK},
+        provider_response = #acl{
+            value = acl:add_names(Acl)
+        }
+    }.
+
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Sets access control list of file.
+%% Modifies access control list of specified file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), #acl{},
-    Create :: boolean(), Replace :: boolean()) ->
+-spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
     fslogic_worker:provider_response().
-set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
+set_acl_insecure(_UserCtx, FileCtx, Acl) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+
+    case IsDir of
+        true -> acl:validate(Acl, dir);
+        false -> acl:validate(Acl, file)
+    end,
+
     % ACLs are kept in database without names, as they might change.
     % Strip the names here.
-    AclJson = acl_logic:from_acl_to_json_format(acl_names:strip(Val)),
-    case xattr:set(FileCtx, ?ACL_KEY, AclJson, Create, Replace) of
-        {ok, _} ->
+    AclWithoutNames = acl:strip_names(Acl),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    case file_meta:update_acl(FileUuid, AclWithoutNames) of
+        ok ->
             ok = permissions_cache:invalidate(),
-            maybe_chmod_storage_file(FileCtx, 8#000),
-            fslogic_times:update_ctime(FileCtx),
+            times_api:touch(FileCtx2, [?attr_ctime]),
+            fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
             #provider_response{status = #status{code = ?OK}};
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Removes access control list of file.
+%% Clears access control list of specified file.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 remove_acl_insecure(_UserCtx, FileCtx) ->
-    case xattr:delete_by_name(FileCtx, ?ACL_KEY) of
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    case file_meta:update_acl(FileUuid, []) of
         ok ->
             ok = permissions_cache:invalidate(),
-            {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
-                file_ctx:get_file_doc(FileCtx),
-            ok = sfm_utils:chmod_storage_file(
-                user_ctx:new(?ROOT_SESS_ID),
-                FileCtx2, Mode
-            ),
-            ok = fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
-            fslogic_times:update_ctime(FileCtx2),
+            times_api:touch(FileCtx, [?attr_ctime]),
+            fslogic_event_emitter:emit_file_perm_changed(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOENT}}
-    end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Tries to chmod file on storage. Succeeds if chmod succeeds or
-%% if chmod returns {error, ?EROFS} succeeds.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_chmod_storage_file(file_ctx:ctx(), file_meta:mode()) -> ok.
-maybe_chmod_storage_file(FileCtx, Mode) ->
-    case sfm_utils:chmod_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx, Mode) of
-        ok ->
-            ok;
-        {error, ?EROFS} ->
-            ok
     end.

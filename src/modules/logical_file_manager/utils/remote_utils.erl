@@ -35,32 +35,31 @@
     Return when Return :: term().
 call_fslogic(SessId, file_request, ContextGuid, Request, OKHandle) ->
     call_fslogic(SessId, fuse_request,
-        #file_request{context_guid = ContextGuid, extended_direct_io = false,
-            file_request = Request}, OKHandle);
+        #file_request{context_guid = ContextGuid, file_request = Request}, OKHandle);
 call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
-    case worker_proxy:call(fslogic_worker, {provider_request, SessId,
+    Uuid = file_id:guid_to_uuid(ContextGuid),
+    case worker_proxy:call({id, fslogic_worker, Uuid}, {provider_request, SessId,
         #provider_request{context_guid = ContextGuid, provider_request = Request}}) of
         {ok, #provider_response{status = #status{code = ?OK}, provider_response = Response}} ->
             OKHandle(Response);
         {ok, #provider_response{status = #status{code = Code}}} ->
+            {error, Code};
+        {ok, #status{code = Code}} ->
             {error, Code}
     end.
 
--spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request | proxyio_request,
+-spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request | proxyio_request | multipart_upload_request,
     Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
-call_fslogic(SessId, fuse_request, Request = #file_request{
-    context_guid = FileGuid,
-    file_request = FileReq
-}, OKHandle) when is_record(FileReq, open_file) orelse
-    is_record(FileReq, open_file_with_extended_info) orelse is_record(FileReq, release) ->
-    Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
-
-    case worker_proxy:call({fslogic_worker, Node}, {fuse_request, SessId,
+call_fslogic(SessId, fuse_request, #file_request{context_guid = ContextGuid} = Request, OKHandle) ->
+    Uuid = file_id:guid_to_uuid(ContextGuid),
+    case worker_proxy:call({id, fslogic_worker, Uuid}, {fuse_request, SessId,
         #fuse_request{fuse_request = Request}}) of
         {ok, #fuse_response{status = #status{code = ?OK}, fuse_response = Response}} ->
             OKHandle(Response);
         {ok, #fuse_response{status = #status{code = Code}}} ->
+            {error, Code};
+        {ok, #status{code = Code}} ->
             {error, Code}
     end;
 call_fslogic(SessId, fuse_request, Request, OKHandle) ->
@@ -69,15 +68,22 @@ call_fslogic(SessId, fuse_request, Request, OKHandle) ->
         {ok, #fuse_response{status = #status{code = ?OK}, fuse_response = Response}} ->
             OKHandle(Response);
         {ok, #fuse_response{status = #status{code = Code}}} ->
+            {error, Code};
+        {ok, #status{code = Code}} ->
             {error, Code}
     end;
 call_fslogic(SessId, proxyio_request, Request = #proxyio_request{
     parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
 }, OKHandle) ->
-    Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
-    case worker_proxy:call({fslogic_worker, Node}, {proxyio_request, SessId, Request}) of
+    Uuid = file_id:guid_to_uuid(FileGuid),
+    case worker_proxy:call({id, fslogic_worker, Uuid}, {proxyio_request, SessId, Request}) of
         {ok, #proxyio_response{status = #status{code = ?OK}, proxyio_response = Response}} ->
             OKHandle(Response);
         {ok, #proxyio_response{status = #status{code = Code}}} ->
+            {error, Code};
+        {ok, #status{code = Code}} ->
             {error, Code}
-    end.
+    end;
+call_fslogic(SessId, multipart_upload_request, Request, OKHandle) ->
+    call_fslogic(SessId, fuse_request,
+        #multipart_upload_request{multipart_request = Request}, OKHandle).

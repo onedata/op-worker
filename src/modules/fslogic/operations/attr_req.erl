@@ -12,196 +12,139 @@
 -module(attr_req).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/metadata.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 %% API
--export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
-    get_file_attr_insecure/4, get_child_attr/3, chmod/3, update_times/5,
-    chmod_attrs_only_insecure/2]).
+-export([
+    get_file_attr/3, 
+    get_file_attr_by_path/4,
+    get_file_references/2,
+    get_child_attr/4, chmod/3, update_times/5,
+    get_fs_stats/2
+]).
+
+%% Protected API (for use only by *_req level modules)
+-export([
+    get_file_attr_insecure/3,
+    chmod_attrs_only_insecure/2
+]).
+
+-type attribute() :: onedata_file:attr_name().
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv get_file_attr_insecure/2 with permission checks
+%% @equiv get_file_attr_insecure/3 with permission checks and default options
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec get_file_attr(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts() | [attribute()]) ->
     fslogic_worker:fuse_response().
-get_file_attr(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx],
-        fun get_file_attr_insecure/2).
+get_file_attr(UserCtx, FileCtx, Options) when is_map(Options) ->
+    do_get_file_attr(UserCtx, FileCtx, Options#{check_perms => true});
+get_file_attr(UserCtx, FileCtx, Attributes) when is_list(Attributes) ->
+    get_file_attr(UserCtx, FileCtx, #{attributes => Attributes}).
 
-%%--------------------------------------------------------------------
-%% @equiv get_file_attr_insecure(UserCtx, FileCtx, false).
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
+
+-spec get_file_attr_by_path(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), [attribute()]) ->
     fslogic_worker:fuse_response().
-get_file_attr_insecure(UserCtx, FileCtx) ->
-    get_file_attr_insecure(UserCtx, FileCtx, false).
+get_file_attr_by_path(UserCtx, RootFileCtx, Path, Attributes) ->
+    #fuse_response{fuse_response = #guid{guid = Guid}} =
+        guid_req:resolve_guid_by_relative_path(UserCtx, RootFileCtx, Path),
+    get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), Attributes).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file attributes. When the AllowDeletedFiles flag is set to true,
-%% function will return attributes even for files that are marked as deleted.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    AllowDeletedFiles :: boolean()) ->
-fslogic_worker:fuse_response().
-get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
-    get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, true).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file attributes. When the AllowDeletedFiles flag is set to true,
-%% function will return attributes even for files that are marked as deleted.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    AllowDeletedFiles :: boolean(), IncludeSize :: boolean()) ->
+-spec get_file_references(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
-get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
-    {#document{
-        key = Uuid,
-        value = #file_meta{
-            type = Type,
-            mode = Mode,
-            provider_id = ProviderId,
-            owner = OwnerId,
-            shares = Shares
-        }
-    }, FileCtx2} = case AllowDeletedFiles of
-        true ->
-            file_ctx:get_file_doc_including_deleted(FileCtx);
-        false ->
-            file_ctx:get_file_doc(FileCtx)
-    end,
-    ShareId = file_ctx:get_share_id_const(FileCtx),
-    {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx3),
-    {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3, UserCtx),
+get_file_references(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_attributes_mask)]
+    ),
+    FileCtx2 = file_ctx:assert_not_dir(FileCtx1),
 
-    {Size, FileCtx5} = case IncludeSize of
-        true -> file_ctx:get_file_size(FileCtx4);
-        _ -> {undefined, FileCtx4}
-    end,
-
-    {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
-    {ParentGuid, _FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    {ok, RefUuids} = file_ctx:list_references_const(FileCtx2),
 
     #fuse_response{
         status = #status{code = ?OK},
-        fuse_response = #file_attr{
-            uid = Uid,
-            gid = Gid,
-            parent_uuid = ParentGuid,
-            guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
-            type = Type,
-            mode = Mode,
-            atime = ATime,
-            mtime = MTime,
-            ctime = CTime,
-            size = Size,
-            name = FileName,
-            provider_id = ProviderId,
-            shares = Shares,
-            owner_id = OwnerId
-        }
+        fuse_response = #file_references{references = lists:map(fun(RefUuid) ->
+            file_id:pack_guid(RefUuid, SpaceId)
+        end, RefUuids)}
     }.
 
+
 %%--------------------------------------------------------------------
-%% @equiv get_child_attr_insecure/3 with permission checks
+%% @equiv get_child_attr_insecure/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
-    Name :: file_meta:name()) -> fslogic_worker:fuse_response().
-get_child_attr(UserCtx, ParentFileCtx, Name) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?traverse_container],
-        [UserCtx, ParentFileCtx, Name],
-        fun get_child_attr_insecure/3).
+    Name :: file_meta:name(), [attribute()]) -> fslogic_worker:fuse_response().
+get_child_attr(UserCtx, ParentFileCtx0, Name, Attributes) ->
+    ParentFileCtx1 = ensure_access_to_child(UserCtx, ParentFileCtx0, Name),
+    get_child_attr_insecure(
+        UserCtx, ParentFileCtx1, Name, Attributes
+    ).
+
 
 %%--------------------------------------------------------------------
 %% @equiv chmod_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec chmod(user_ctx:ctx(), file_ctx:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
+-spec chmod(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
-chmod(UserCtx, FileCtx, Mode) ->
-    check_permissions:execute(
-        [traverse_ancestors, owner],
-        [UserCtx, FileCtx, Mode],
-        fun chmod_insecure/3).
+chmod(UserCtx, FileCtx0, Mode) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [?TRAVERSE_ANCESTORS, ?OWNERSHIP]
+    ),
+    chmod_insecure(UserCtx, FileCtx1, Mode).
+
 
 %%--------------------------------------------------------------------
 %% @equiv update_times_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec update_times(user_ctx:ctx(), file_ctx:ctx(),
-    ATime :: file_meta:time() | undefined,
-    MTime :: file_meta:time() | undefined,
-    CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
-update_times(_UserCtx, FileCtx, ATime, MTime, CTime) ->
-    check_permissions:execute(
-        [traverse_ancestors, {owner, 'or', ?write_attributes}],
-        [_UserCtx, FileCtx, ATime, MTime, CTime],
-        fun update_times_insecure/5).
+-spec update_times(user_ctx:ctx(), file_ctx:ctx(), times:a_time() | undefined, times:m_time() | undefined,
+    times:c_time() | undefined) -> fslogic_worker:fuse_response().
+update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [?TRAVERSE_ANCESTORS, ?OR(?OWNERSHIP, ?OPERATIONS(?write_attributes_mask))]
+    ),
+    update_times_insecure(UserCtx, FileCtx1, ATime, MTime, CTime).
+
+
+%%--------------------------------------------------------------------
+%% @equiv get_fs_stats/2 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec get_fs_stats(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_fs_stats(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]
+    ),
+    get_fs_stats_insecure(UserCtx, FileCtx1).
+
 
 %%%===================================================================
-%%% Internal functions
+%%% Protected API (for use only by *_req level modules)
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns attributes of directory child (if exists).
+%% Returns file attributes depending on specific flags set.
 %% @end
 %%--------------------------------------------------------------------
--spec get_child_attr_insecure(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
-    Name :: file_meta:name()) -> fslogic_worker:fuse_response().
-get_child_attr_insecure(UserCtx, ParentFileCtx, Name) ->
-    {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserCtx),
-    Response = attr_req:get_file_attr(UserCtx, ChildFileCtx),
-    ensure_proper_file_name(Response, Name).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function ensures that requested Name is in returned #file_attr{}.
-%% @end
-%%-------------------------------------------------------------------
--spec ensure_proper_file_name(fslogic_worker:fuse_response(), file_meta:name()) ->
+-spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts()) ->
     fslogic_worker:fuse_response().
-ensure_proper_file_name(FuseResponse = #fuse_response{
-    status = #status{code = ?OK},
-    fuse_response = FileAttr
-}, Name) ->
-    FuseResponse#fuse_response{fuse_response = FileAttr#file_attr{name = Name}};
-ensure_proper_file_name(FuseResponse, _Name) ->
-    FuseResponse.
+get_file_attr_insecure(UserCtx, FileCtx, Opts) ->
+    do_get_file_attr(UserCtx, FileCtx, Opts#{check_perms => false}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Changes file permissions.
-%% @end
-%%--------------------------------------------------------------------
--spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
-    fslogic_worker:fuse_response().
-chmod_insecure(UserCtx, FileCtx, Mode) ->
-    ok = sfm_utils:chmod_storage_file(UserCtx, FileCtx, Mode),
-    % remove acl
-    xattr:delete_by_name(FileCtx, ?ACL_KEY),
-    chmod_attrs_only_insecure(FileCtx, Mode),
-    fslogic_times:update_ctime(FileCtx),
-
-    #fuse_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -209,39 +152,153 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod_attrs_only_insecure(file_ctx:ctx(),
-    fslogic_worker:posix_permissions()) -> ok | {error, term()}.
+    fslogic_worker:posix_permissions()) -> file_ctx:ctx().
 chmod_attrs_only_insecure(FileCtx, Mode) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, _} = file_meta:update({uuid, FileUuid}, fun(FileMeta = #file_meta{}) ->
-        {ok, FileMeta#file_meta{mode = Mode}}
-    end),
+    % TODO VFS-7524 - verify if file_meta doc updates invalidate cached docs in file_ctx everywhere
+    % TODO VFS-7525 - Protect races on events production after parallel file_meta updates
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    {ok, NewDoc} = file_meta:update_mode(FileUuid, Mode),
     ok = permissions_cache:invalidate(),
-    fslogic_event_emitter:emit_file_perm_changed(FileCtx).
+    FileCtx2 = file_ctx:set_file_doc(FileCtx, NewDoc),
+    fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx2),
+    fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
+    FileCtx2.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec ensure_access_to_child(user_ctx:ctx(), file_ctx:ctx(), file_meta:name()) ->
+    file_ctx:ctx().
+ensure_access_to_child(UserCtx, ParentFileCtx0, ChildName) ->
+    case fslogic_authz:ensure_authorized_readdir(
+        UserCtx, ParentFileCtx0,
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask)]
+    ) of
+        {undefined, ParentFileCtx1} ->
+            ParentFileCtx1;
+        {CanonicalChildrenWhitelist, ParentFileCtx1} ->
+            CanonicalChildName = case file_ctx:is_user_root_dir_const(ParentFileCtx1, UserCtx) of
+                true ->
+                    SessionId = user_ctx:get_session_id(UserCtx),
+                    UserDoc = user_ctx:get_user(UserCtx),
+
+                    case user_logic:get_space_by_name(SessionId, UserDoc, ChildName) of
+                        {true, SpaceId} -> SpaceId;
+                        false -> throw(?ENOENT)
+                    end;
+                false ->
+                    ChildName
+            end,
+            lists:member(CanonicalChildName, CanonicalChildrenWhitelist) orelse throw(?ENOENT),
+            ParentFileCtx1
+    end.
+
 
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns attributes of directory child (if exists).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child_attr_insecure(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
+    Name :: file_meta:name(), [attribute()]) -> fslogic_worker:fuse_response().
+get_child_attr_insecure(UserCtx, ParentFileCtx, Name, Attributes) ->
+    {ChildFileCtx, _NewParentFileCtx} = file_tree:get_child(ParentFileCtx, Name, UserCtx),
+    Response = get_file_attr_insecure(UserCtx, ChildFileCtx, #{attributes => Attributes}),
+    ensure_proper_file_name(Response, Name).
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function ensures that requested Name is in returned #file_attr{} if it has no suffix.
+%% Used to prevent races connected with remote rename.
+%% @end
+%%-------------------------------------------------------------------
+-spec ensure_proper_file_name(fslogic_worker:fuse_response(), file_meta:name()) ->
+    fslogic_worker:fuse_response().
+ensure_proper_file_name(FuseResponse = #fuse_response{
+    status = #status{code = ?OK},
+    fuse_response = #file_attr{name = AnsName} = FileAttr
+}, Name) ->
+    case file_meta:is_disambiguated(Name) of
+        {true, AnsName} -> FuseResponse;
+        _ -> FuseResponse#fuse_response{fuse_response = FileAttr#file_attr{name = Name}}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Changes file posix mode.
+%% @end
+%%--------------------------------------------------------------------
+-spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->
+    fslogic_worker:fuse_response().
+chmod_insecure(UserCtx, FileCtx, Mode) ->
+    sd_utils:chmod(UserCtx, FileCtx, Mode),
+    FileCtx2 = chmod_attrs_only_insecure(FileCtx, Mode),
+    times_api:touch(FileCtx2, [?attr_ctime]),
+
+    #fuse_response{status = #status{code = ?OK}}.
+
+
+%%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Changes file access times.
 %% @end
 %%--------------------------------------------------------------------
--spec update_times_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    ATime :: file_meta:time() | undefined,
-    MTime :: file_meta:time() | undefined,
-    CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
-update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
-    TimesDiff1 = fun
-        (Times = #times{}) when ATime == undefined -> Times;
-        (Times = #times{}) -> Times#times{atime = ATime}
-    end,
-    TimesDiff2 = fun
-        (Times = #times{}) when MTime == undefined -> Times;
-        (Times = #times{}) -> Times#times{mtime = MTime}
-    end,
-    TimesDiff3 = fun
-        (Times = #times{}) when CTime == undefined -> Times;
-        (Times = #times{}) -> Times#times{ctime = CTime}
-    end,
-    TimesDiff = fun(Times = #times{}) ->
-        {ok, TimesDiff1(TimesDiff2(TimesDiff3(Times)))}
-    end,
-    fslogic_times:update_times_and_emit(FileCtx, TimesDiff),
+-spec update_times_insecure(user_ctx:ctx(), file_ctx:ctx(), times:a_time() | undefined,
+    times:m_time() | undefined, times:c_time() | undefined) -> fslogic_worker:fuse_response().
+update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
+    % Flush events queue to prevent race with file_written_event
+    % TODO VFS-7139: This is temporary solution to be removed after fixing oneclient
+    SessId = user_ctx:get_session_id(UserCtx),
+    catch lfm_event_controller:flush_event_queue(
+        SessId, oneprovider:get_id(), file_ctx:get_logical_guid_const(FileCtx)),
+
+    times_api:report_change(FileCtx, #times{
+        atime = utils:ensure_defined(ATime, 0),
+        mtime = utils:ensure_defined(MTime, 0),
+        ctime = utils:ensure_defined(CTime, 0)
+    }),
     #fuse_response{status = #status{code = ?OK}}.
+
+
+%% @private
+-spec get_fs_stats_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_fs_stats_insecure(_UserCtx, FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    
+    %% @TODO VFS-5497 Calc size/occupied for all supporting storages
+    {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
+    {ok, SupportSize} = provider_logic:get_support_size(SpaceId),
+    Occupied = space_quota:current_size(SpaceId),
+    
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #fs_stats{
+            space_id = SpaceId,
+            storage_stats = [#storage_stats{
+                storage_id = StorageId,
+                size = SupportSize,
+                occupied = Occupied
+            }]
+        }
+    }.
+
+
+%% @private
+-spec do_get_file_attr(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts()) ->
+    fslogic_worker:fuse_response().
+do_get_file_attr(UserCtx, FileCtx, Opts) ->
+    {FileAttr, _FileCtx2} = file_attr:resolve(UserCtx, FileCtx, Opts),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = FileAttr
+    }.

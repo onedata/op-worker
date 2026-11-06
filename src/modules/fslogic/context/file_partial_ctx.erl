@@ -15,10 +15,10 @@
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -record(file_partial_ctx, {
@@ -27,9 +27,12 @@
 
 -type ctx() :: #file_partial_ctx{} | file_ctx:ctx().
 
+-export_type([ctx/0]).
+
 %% API
 -export([new_by_guid/1, new_by_logical_path/2, new_by_canonical_path/2]).
--export([get_space_id_const/1, is_space_dir_const/1, is_user_root_dir_const/2]).
+-export([get_space_id_const/1, get_share_id_const/1]).
+-export([is_space_dir_const/1, is_user_root_dir_const/2]).
 -export([get_parent/2, get_canonical_path/1]).
 
 %%%===================================================================
@@ -54,7 +57,7 @@ new_by_guid(Guid)->
 %%--------------------------------------------------------------------
 -spec new_by_logical_path(user_ctx:ctx(), file_meta:path()) -> ctx().
 new_by_logical_path(UserCtx, Path) ->
-    {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
+    {ok, Tokens} = filepath_utils:split_and_skip_dots(Path),
     case session_utils:is_special(user_ctx:get_session_id(UserCtx)) of
         true ->
             throw({invalid_request, <<"Path resolution requested in the context"
@@ -63,7 +66,7 @@ new_by_logical_path(UserCtx, Path) ->
             case Tokens of
                 [<<"/">>] ->
                     UserId = user_ctx:get_user_id(UserCtx),
-                    UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserId),
+                    UserRootDirGuid = user_root_dir:guid(UserId),
                     file_ctx:new_by_guid(UserRootDirGuid);
                 [<<"/">>, SpaceName | Rest] ->
                     SpaceId = get_space_id_from_user_spaces(SpaceName, UserCtx),
@@ -84,10 +87,10 @@ new_by_logical_path(UserCtx, Path) ->
     ctx().
 new_by_canonical_path(UserCtx, Path) ->
     UserId = user_ctx:get_user_id(UserCtx),
-    {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
+    {ok, Tokens} = filepath_utils:split_and_skip_dots(Path),
     case Tokens of
         [<<"/">>] ->
-            UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserId),
+            UserRootDirGuid = user_root_dir:guid(UserId),
             file_ctx:new_by_guid(UserRootDirGuid);
         [<<"/">>, SpaceId | Rest] ->
             #file_partial_ctx{
@@ -108,7 +111,7 @@ get_parent(FilePartialCtx = #file_partial_ctx{
     ParentPartialCtx = new_by_canonical_path(UserCtx, filename:dirname(CanonicalPath)),
     {ParentPartialCtx, FilePartialCtx};
 get_parent(FileCtx, UserCtx) ->
-    file_ctx:get_parent(FileCtx, UserCtx).
+    file_tree:get_parent(FileCtx, UserCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -128,7 +131,7 @@ get_canonical_path(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_space_id_const(ctx()) -> od_space:id() | undefined.
 get_space_id_const(#file_partial_ctx{canonical_path = Path}) ->
-    case fslogic_path:split(Path) of
+    case filepath_utils:split(Path) of
         [<<"/">>, SpaceId | _] ->
             SpaceId;
         _ ->
@@ -137,6 +140,12 @@ get_space_id_const(#file_partial_ctx{canonical_path = Path}) ->
 get_space_id_const(FileCtx) ->
     file_ctx:get_space_id_const(FileCtx).
 
+-spec get_share_id_const(ctx()) -> od_share:id() | undefined.
+get_share_id_const(#file_partial_ctx{}) ->
+    undefined;
+get_share_id_const(FileCtx) ->
+    file_ctx:get_share_id_const(FileCtx).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if file is a space root dir.
@@ -144,7 +153,7 @@ get_space_id_const(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec is_space_dir_const(ctx()) -> boolean().
 is_space_dir_const(#file_partial_ctx{canonical_path = Path}) ->
-    case fslogic_path:split(Path) of
+    case filepath_utils:split(Path) of
         [<<"/">>, _SpaceId] ->
             true;
         _ ->
@@ -180,7 +189,7 @@ get_space_id_from_user_spaces(SpaceName, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
         false ->
-            throw(?ENOENT);
+            throw(?EACCES);
         {true, SpaceId} ->
             SpaceId
     end.

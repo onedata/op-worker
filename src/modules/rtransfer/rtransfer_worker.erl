@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Worker_plugin used only for adding rtransfer_server to supervision
+%%% Worker_plugin used only for adding rtransfer to supervision
 %%% tree.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -53,14 +53,14 @@ handle(healthcheck) ->
 handle(refresh_disabled_spaces) ->
     case space_quota:get_disabled_spaces() of
         {ok, BlockedSpaces} ->
-            {_, BadNodes} = rpc:multicall(consistent_hasing:get_all_nodes(),
+            {_, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
                 rtransfer_link_quota_manager,
                 update_disabled_spaces,
                 [BlockedSpaces]),
             BadNodes =/= [] andalso
-                ?error("Failed to update disabled spaces on nodes ~p", [BadNodes]);
+                ?error("Failed to update disabled spaces on nodes ~tp", [BadNodes]);
         {error, _} = Error ->
-            ?debug("Cannot update disabled spaces due to ~p", [Error])
+            ?debug("Cannot update disabled spaces due to ~tp", [Error])
     end,
     schedule_refresh_disabled_spaces();
 handle(Request) ->
@@ -86,7 +86,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec supervisor_flags() -> supervisor:sup_flags().
 supervisor_flags() ->
-    #{strategy => one_for_all, intensity => 1000, period => 3600}.
+    #{strategy => one_for_all, intensity => 10, period => 3600}.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -8,8 +8,7 @@
 %%% @doc
 %%% This module implements dynamic_page_behaviour and is called
 %%% when provider configuration page is visited.
-%%% This is the legacy configuration endpoint,
-%%% not documented in swagger.
+%%% This is the legacy configuration endpoint, not documented in swagger.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(page_provider_configuration).
@@ -18,24 +17,28 @@
 -behaviour(dynamic_page_behaviour).
 
 -include("global_definitions.hrl").
-
--define(to_binaries(__List), [list_to_binary(V) || V <- __List]).
+-include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([handle/2]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link dynamic_page_behaviour} callback handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(new_gui:method(), cowboy_req:req()) -> cowboy_req:req().
+-spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
 handle(<<"GET">>, Req) ->
-    cowboy_req:reply(200,
-        #{<<"content-type">> => <<"application/json">>},
-        json_utils:encode(configuration:gather_configuration()),
+    cowboy_req:reply(
+        ?HTTP_200_OK,
+        #{?HDR_CONTENT_TYPE => <<"application/json">>},
+        % TODO VFS-5622
+        json_utils:encode(provider_middleware_plugin:gather_configuration()),
         Req
     ).

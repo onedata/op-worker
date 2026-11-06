@@ -25,13 +25,20 @@
 %% remote_driver callbacks
 -export([get_async/2, wait/1]).
 
--type ctx() :: #{model := datastore_model:model(),
-                 routing_key := key(),
-                 source_ids := [oneprovider:id()]}.
+-type ctx() :: #{
+    model := datastore_model:model(),
+    routing_key := key(),
+    % One of following must be defined
+    source_ids => [oneprovider:id()],
+    scope => od_space:id() | undefined
+}.
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
--type future() :: {ok, message_id:id()} | {error, term()}.
+-type communicator_ans() :: {ok, clproto_message_id:id()} | {error, term()}.
+-type provider_future() :: {communicator_ans(), session:id()} | {error, term()}.
+-type future() :: [provider_future()].
 
+-define(ALLOW_GET_FROM_SCOPE, op_worker:get_env(remote_driver_get_from_scope, true)).
 
 %%%===================================================================
 %%% API
@@ -48,8 +55,13 @@ handle(#get_remote_document{
 }) ->
     Ctx = datastore_model_default:get_ctx(Model),
     Ctx2 = datastore_multiplier:extend_name(RoutingKey, Ctx),
-    Ctx3 = Ctx2#{include_deleted => true, remote_driver => undefined},
-    case datastore_router:route(Ctx3, RoutingKey, get, [Ctx3, Key]) of
+    Ctx3 = maps:remove(memory_copies, Ctx2#{
+        direct_disc_fallback => true,
+        include_deleted => true,
+        remote_driver => undefined,
+        routing_key => RoutingKey
+    }),
+    case datastore_router:route(get, [Ctx3, Key]) of
         {ok, Doc} ->
             Data = zlib:compress(jiffy:encode(datastore_json:encode(Doc))),
             #remote_document{
@@ -82,23 +94,21 @@ handle(#get_remote_document{
 get_async(#{
     model := Model,
     routing_key := RoutingKey,
-    source_ids := [ProviderId | _]
+    source_ids := ProviderIds
 }, Key) ->
-    try
-        case oneprovider:get_id() of
-            ProviderId ->
-                {error, not_found};
-            _ ->
-                SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
-                communicator:communicate_with_provider(#get_remote_document{
-                    model = Model,
-                    key = Key,
-                    routing_key = RoutingKey
-                }, SessId, self())
-        end
-    catch
-        _:Reason ->
-            ?error_stacktrace("Datastore remote get failed due to: ~p", [Reason]),
+    lists:map(fun(ProviderId) ->
+        get_async(Key, Model, RoutingKey, ProviderId)
+    end, ProviderIds);
+get_async(#{scope := undefined}, _Key) ->
+    {error, not_found};
+get_async(Ctx = #{scope := SpaceId}, Key) ->
+    case ?ALLOW_GET_FROM_SCOPE of
+        true ->
+            case dbsync_utils:get_providers(SpaceId) -- [oneprovider:get_id()] of
+                [] -> {error, not_found};
+                ProviderIds -> get_async(Ctx#{source_ids => ProviderIds}, Key)
+            end;
+        false ->
             {error, not_found}
     end.
 
@@ -108,9 +118,57 @@ get_async(#{
 %% @end
 %%--------------------------------------------------------------------
 -spec wait(future()) -> {ok, doc()} | {error, term()}.
-wait({ok, MsgId}) ->
-    Timeout = application:get_env(op_worker, datastore_remote_driver_timeout,
-        timer:minutes(1)),
+wait([ProviderFuture]) ->
+    wait_on_provider_future(ProviderFuture);
+wait([ProviderFuture | Futures]) ->
+    case {wait_on_provider_future(ProviderFuture), wait(Futures)} of
+        {{ok, #document{revs = [Rev1 | _]}} = Ans1, {ok, #document{revs = [Rev2 | _]}} = Ans2} ->
+            case datastore_rev:is_greater(Rev1, Rev2) of
+                true -> Ans1;
+                false -> Ans2
+            end;
+        {{ok, _} = Ans1, _} ->
+            Ans1;
+        {_, Ans2} ->
+            Ans2
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec get_async(key(), datastore_model:model(), key(), oneprovider:id()) -> provider_future().
+get_async(Key, Model, RoutingKey, ProviderId) ->
+    try
+        case oneprovider:get_id() of
+            ProviderId ->
+                {error, not_found};
+            _ ->
+                SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
+                Msg = #get_remote_document{
+                    model = Model,
+                    key = Key,
+                    routing_key = RoutingKey
+                },
+                SendAns = try
+                    communicator:send_to_provider(SessId, Msg, self(), 1, throw)
+                catch
+                    _:Reason ->
+                        {error, Reason}
+                end,
+                {SendAns, SessId}
+        end
+    catch
+        _:Reason2:Stacktrace ->
+            ?error_stacktrace("Datastore remote get failed due to: ~tp", [Reason2], Stacktrace),
+            {error, Reason2}
+    end.
+
+
+-spec wait_on_provider_future(provider_future()) -> {ok, doc()} | {error, term()}.
+wait_on_provider_future({{ok, MsgId}, _} = Future) ->
+    Timeout = op_worker:get_env(datastore_remote_driver_timeout, timer:minutes(1)),
     receive
         #server_message{
             message_id = MsgId,
@@ -118,13 +176,15 @@ wait({ok, MsgId}) ->
                 status = #status{code = ?OK},
                 compressed_data = Data
             }
-        } -> {ok, datastore_json:decode(jiffy:decode(zlib:uncompress(Data)))};
+        } ->
+            {ok, datastore_json:decode(jiffy:decode(zlib:uncompress(Data), [copy_strings]))};
         #server_message{
             message_id = MsgId,
             message_body = #remote_document{
                 status = #status{code = ?ENOENT}
             }
-        } -> {error, not_found};
+        } ->
+            {error, not_found};
         #server_message{
             message_id = MsgId,
             message_body = #remote_document{
@@ -133,10 +193,25 @@ wait({ok, MsgId}) ->
                     description = Description
                 }
             }
-        } -> {error, binary_to_term(Description)}
+        } ->
+            {error, binary_to_term(Description)};
+        #server_message{
+            message_id = MsgId,
+            message_body = #processing_status{code = 'IN_PROGRESS'}
+        } ->
+            wait_on_provider_future(Future)
     after
-        % TODO VFS-4025 - multiprovider communication
+    % TODO VFS-4025 - multiprovider communication
         Timeout -> {error, timeout}
     end;
-wait({error, Reason}) ->
-    {error, Reason}.
+wait_on_provider_future({{error, {badmatch, {error, internal_call}}}, SessId}) ->
+    ?debug("Remote driver internal call"),
+    spawn(fun() ->
+        session_connections:ensure_connected(SessId)
+    end),
+    {error, interrupted_call};
+wait_on_provider_future({{error, Reason}, _}) ->
+    ?debug("Remote driver error ~tp", [Reason]),
+    {error, interrupted_call};
+wait_on_provider_future({error, _Reason} = Error) ->
+    Error.

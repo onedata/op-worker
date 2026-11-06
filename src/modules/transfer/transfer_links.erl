@@ -40,7 +40,6 @@
 -define(CTX, (transfer:get_ctx())).
 
 -define(LINK_NAME_ID_PART_LENGTH, 6).
--define(EPOCH_INFINITY, 9999999999). % GMT: Saturday, 20 November 2286 17:46:39
 
 
 %%%===================================================================
@@ -62,7 +61,7 @@ add_waiting(#document{key = TransferId, value = Transfer}) ->
         undefined ->
             ok;
         FileUuid ->
-            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+            FileGuid = file_id:pack_guid(FileUuid, SpaceId),
             transferred_file:report_transfer_start(FileGuid, TransferId, ScheduleTime)
     end,
     ok = add_link(?WAITING_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
@@ -90,7 +89,7 @@ add_ended(#document{key = TransferId, value = Transfer}) ->
         undefined ->
             ok;
         FileUuid ->
-            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+            FileGuid = file_id:pack_guid(FileUuid, SpaceId),
             transferred_file:report_transfer_finish(FileGuid, TransferId, ScheduleTime, FinishTime)
     end,
     ok = add_link(?ENDED_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).

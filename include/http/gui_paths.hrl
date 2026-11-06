@@ -17,16 +17,7 @@
 -define(PROVIDER_CONFIGURATION_PATH, "/api/v3/oneprovider/configuration").
 -define(DEPRECATED_ZONE_CONFIGURATION_PATH, "/configuration").
 -define(ZONE_CONFIGURATION_PATH, "/api/v3/onezone/configuration").
-
-% Endpoint for logging in
--define(LOGIN_PATH, "/login.html").
-
-% Endpoint for logging out
--define(LOGOUT_PATH, "/logout.html").
-
-% Endpoint for logging in via Onezone
--define(VALIDATE_LOGIN_PATH, "/onezone-login/consume").
--define(VALIDATE_LOGIN_PATH_DEPRECATED, "/validate_login.html").
+-define(ZONE_COMPATIBILITY_REGISTRY_PATH, "/compatibility.json").
 
 % Endpoint for nagios healthcheck
 -define(NAGIOS_PATH, "/nagios").
@@ -34,17 +25,14 @@
 % Endpoint for nagios healthcheck
 -define(NAGIOS_OZ_CONNECTIVITY_PATH, "/nagios/oz_connectivity").
 
-% Endpoint for uploading files
--define(FILE_UPLOAD_PATH, "/upload").
+% New endpoint for uploading files
+-define(FILE_UPLOAD_PATH, "/file_upload").
 
 % Endpoint for downloading files
--define(FILE_DOWNLOAD_PATH, "/download").
+-define(GUI_FILE_CONTENT_DOWNLOAD_PATH, "/download").
 
-%% Endpoint used to get provider's identity macaroon
--define(IDENTITY_MACAROON_PATH, "/get_identity_macaroon").
-
-%% Endpoint used to verify authorization nonces issued by this provider
--define(NONCE_VERIFY_PATH, "/verify_authorization_nonce").
+%% Endpoint used to get provider's identity token
+-define(IDENTITY_TOKEN_PATH, "/identity_token").
 
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").
@@ -52,7 +40,25 @@
 %% Protocol name for HTTP upgrade headers on client protocol endpoint
 -define(CLIENT_PROTOCOL_UPGRADE_NAME, "clproto").
 
+% Endpoint for viewing public shares
+-define(SHARE_ID_BINDING, share_id).
+-define(PUBLIC_SHARE_COWBOY_ROUTE, "/share/:share_id").
+
+%% All requests to this endpoint will be proxied to onepanel.
+-define(PANEL_REST_PROXY_PATH, "/api/v3/onepanel/").
+
+% Graph Sync websocket endpoint
+-define(GUI_GRAPH_SYNC_WS_PATH, "/graph_sync/gui").
+
+% WebSocket endpoint for reporting activity in OpenFaaS (e.g. pod status changes or 'file_pipe' lambda results)
+-define(OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, "/automation/openfaas/activity_feed/:client_type").
+
+% Endpoint for downloading atm store dump
+-define(GUI_ATM_STORE_DUMP_DOWNLOAD_PATH, "/automation/execution/stores/download").
+
+%% Endpoint used as callback for Openfaas
+-define(ATM_JOB_OUTPUT_CALLBACK_PATH, "/automation/workflow/executions/:wf_exec_id/jobs/:jid/output").
+-define(ATM_JOB_HEARTBEAT_CALLBACK_PATH, "/automation/workflow/executions/:wf_exec_id/jobs/:jid/heartbeat").
+
+
 -endif.
-
-
-

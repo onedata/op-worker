@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type rule_setting() :: autocleaning_rule_setting:rule_setting().
@@ -45,7 +46,7 @@
 %%% API
 %%%===================================================================
 
--spec to_map(rules()) -> maps:map().
+-spec to_map(rules()) -> map().
 to_map(#autocleaning_rules{
     enabled = Enabled,
     min_file_size = MinFileSize,
@@ -67,7 +68,7 @@ to_map(#autocleaning_rules{
         max_monthly_moving_average => setting_to_map(MaxMonthlyMovingAverage)
     }.
 
--spec update(rules(), maps:map()) -> rules().
+-spec update(rules(), map()) -> rules().
 update(undefined, UpdateRulesMap) ->
     update(default(), UpdateRulesMap);
 update(#autocleaning_rules{
@@ -126,7 +127,7 @@ are_all_rules_satisfied(FileCtx, #autocleaning_rules{
     max_daily_moving_average = MaxDailyMovingAvgSetting,
     max_monthly_moving_average = MaxMonthlyMovingAvgSetting
 }) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     {ok, #document{value=FilePopularity}} = file_popularity:get(Uuid),
     is_max_open_count_rule_satisfied(FilePopularity, MaxOpenCountSetting)
     andalso is_min_file_size_rule_satisfied(FilePopularity, MinFileSizeSetting)
@@ -140,24 +141,30 @@ are_all_rules_satisfied(FileCtx, #autocleaning_rules{
 %%% Internal functions
 %%%===================================================================
 
--spec setting_to_map(rule_setting()) -> maps:map().
+-spec setting_to_map(rule_setting()) -> map().
 setting_to_map(RuleSetting) ->
     autocleaning_rule_setting:to_map(RuleSetting).
 
--spec update_setting(atom(), rule_setting(), maps:map()) -> rule_setting().
+-spec update_setting(atom(), rule_setting(), map()) -> rule_setting().
 update_setting(RuleName, CurrentSetting, UpdateRulesMap) ->
     try
         update_setting(CurrentSetting, get_update_setting_map(RuleName, UpdateRulesMap))
     catch
-        throw:Reason ->
-            throw({Reason, RuleName})
+        throw:(?ERR_BAD_VALUE_INTEGER(ErrorCtx, Key)) ->
+            throw(?ERR_BAD_VALUE_INTEGER(ErrorCtx, str_utils:join_as_binaries([RuleName, Key], <<".">>)));
+        throw:(?ERR_BAD_VALUE_BOOLEAN(ErrorCtx, Key)) ->
+            throw(?ERR_BAD_VALUE_BOOLEAN(ErrorCtx, str_utils:join_as_binaries([RuleName, Key], <<".">>)));
+        throw:(?ERR_BAD_VALUE_TOO_LOW(ErrorCtx, Key, Minimum)) ->
+            throw(?ERR_BAD_VALUE_TOO_LOW(ErrorCtx, str_utils:join_as_binaries([RuleName, Key], <<".">>), Minimum));
+        throw:(?ERR_BAD_VALUE_TOO_HIGH(ErrorCtx, Key, Maximum)) ->
+            throw(?ERR_BAD_VALUE_TOO_HIGH(ErrorCtx, str_utils:join_as_binaries([RuleName, Key], <<".">>), Maximum))
     end.
 
--spec update_setting(rule_setting(), maps:map()) -> rule_setting().
+-spec update_setting(rule_setting(), map()) -> rule_setting().
 update_setting(CurrentSetting, UpdateSettingMap) ->
     autocleaning_rule_setting:update(CurrentSetting, UpdateSettingMap).
 
--spec get_update_setting_map(atom(), maps:map()) -> maps:map().
+-spec get_update_setting_map(atom(), map()) -> map().
 get_update_setting_map(RuleName, UpdateRulesMap) ->
     autocleaning_utils:get_defined(RuleName, UpdateRulesMap, #{}).
 
@@ -192,7 +199,7 @@ is_max_file_size_rule_satisfied(#file_popularity{size = Size},
 is_min_hours_since_last_open_rule_satisfied(#file_popularity{last_open = LastOpen},
     RuleSetting
 ) ->
-    CurrentTimeInHours = time_utils:cluster_time_seconds() div 3600,
+    CurrentTimeInHours = global_clock:timestamp_hours(),
     autocleaning_rule_setting:is_greater_or_equal(CurrentTimeInHours - LastOpen,
         RuleSetting).
 

@@ -14,235 +14,152 @@
 -include("modules/fslogic/metadata.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
+-include("modules/fslogic/file_attr.hrl").
 
 -type file_attributes() :: #file_attr{}.
+-type fs_stats() :: #fs_stats{}.
 
--export_type([file_attributes/0]).
+-export_type([file_attributes/0, fs_stats/0]).
 
 %% API
--export([stat/2, get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4, update_times/5]).
--export([get_transfer_encoding/2, set_transfer_encoding/3,
-    get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
-    set_mimetype/3]).
--export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
+-export([
+    stat/3,
+    get_fs_stats/2,
+    get_references/2,
+    resolve_symlink/2,
+    update_times/5
+]).
+-export([
+    list_xattr/4,
+    set_xattr/5,
+    get_xattr/4,
+    remove_xattr/3
+]).
+-export([has_custom_metadata/2]).
+
+-type success_callback() :: fun((term()) -> term()).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file attributes.
-%% @end
-%%--------------------------------------------------------------------
--spec stat(SessId :: session:id(), FileKey :: logical_file_manager:file_key()) ->
-    {ok, file_attributes()} | logical_file_manager:error_reply().
-stat(SessId, FileKey) ->
-    case FileKey of
-        {path, Path} ->
-            remote_utils:call_fslogic(SessId, fuse_request,
-                #resolve_guid{path = Path},
-                fun(#guid{guid = Guid}) ->
-                    stat(SessId, {guid, Guid})
-                end);
-        {guid, FileGuid} ->
-            remote_utils:call_fslogic(SessId, file_request, FileGuid, #get_file_attr{},
-                fun(#file_attr{} = Attrs) ->
-                    {ok, Attrs}
-                end)
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Changes file timestamps.
+%% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
--spec update_times(session:id(), logical_file_manager:file_key(),
-    ATime :: file_meta:time(), MTime :: file_meta:time(),
-    CTime :: file_meta:time()) -> ok | logical_file_manager:error_reply().
+-spec stat(SessId :: session:id(), lfm:file_key(), [onedata_file:attr_name()]) ->
+    {ok, file_attributes()} | lfm:error_reply().
+stat(SessId, FileKey, Attributes) ->
+    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    
+    remote_utils:call_fslogic(
+        SessId, file_request, FileGuid, #get_file_attr{attributes = Attributes},
+        fun(#file_attr{} = Attrs) -> {ok, Attrs} end
+    ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns fs_stats() containing support e.g. size and occupied size.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_fs_stats(session:id(), lfm:file_key()) ->
+    {ok, fs_stats()} | lfm:error_reply().
+get_fs_stats(SessId, FileKey) ->
+    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+
+    remote_utils:call_fslogic(
+        SessId,
+        fuse_request,
+        #get_fs_stats{file_id = FileGuid},
+        fun(#fs_stats{} = FsStats) -> {ok, FsStats} end
+    ).
+
+
+-spec get_references(session:id(), lfm:file_key()) ->
+    {ok, [file_id:file_guid()]} | lfm:error_reply().
+get_references(SessId, FileKey) ->
+    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+
+    remote_utils:call_fslogic(
+        SessId, file_request, FileGuid, #get_file_references{},
+        fun(#file_references{references = References}) -> {ok, References} end
+    ).
+
+
+-spec resolve_symlink(session:id(), lfm:file_key()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
+resolve_symlink(SessId, FileKey) ->
+    {ok, FileGuid} = lfm_file_key:ensure_guid(SessId, FileKey),
+
+    remote_utils:call_fslogic(
+        SessId,
+        file_request,
+        FileGuid,
+        #resolve_symlink{},
+        fun(#guid{guid = TargetGuid}) -> {ok, TargetGuid} end
+    ).
+
+
+-spec update_times(
+    session:id(),
+    lfm:file_key(),
+    times:a_time(),
+    times:m_time(),
+    times:c_time()
+) ->
+    ok | lfm:error_reply().
 update_times(SessId, FileKey, ATime, MTime, CTime) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
+
+    remote_utils:call_fslogic(
+        SessId, file_request, FileGuid,
         #update_times{atime = ATime, mtime = MTime, ctime = CTime},
-        fun(_) -> ok end).
+        fun(_) -> ok end
+    ).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's extended attribute by key.
-%% @end
-%%--------------------------------------------------------------------
--spec get_xattr(SessId :: session:id(), FileKey :: logical_file_manager:file_key(),
-    XattrName :: xattr:name(), boolean()) ->
-    {ok, #xattr{}} | logical_file_manager:error_reply().
-get_xattr(SessId, FileKey, XattrName, Inherited) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #get_xattr{name = XattrName, inherited = Inherited},
-        fun(#xattr{} = Xattr) ->
-            {ok, Xattr}
-        end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates file's extended attribute by key.
-%% @end
-%%--------------------------------------------------------------------
--spec set_xattr(SessId :: session:id(),
-    FileKey :: logical_file_manager:file_key(), Xattr :: #xattr{},
-    Create :: boolean(), Replace :: boolean()) ->
-    ok | logical_file_manager:error_reply().
-set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #set_xattr{xattr = Xattr, create = Create, replace = Replace},
-        fun(_) -> ok end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file's extended attribute by key.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_xattr(SessId :: session:id(), FileKey :: logical_file_manager:file_key(),
-    XattrName :: xattr:name()) ->
-    ok | logical_file_manager:error_reply().
-remove_xattr(SessId, FileKey, XattrName) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #remove_xattr{name = XattrName},
-        fun(_) -> ok end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns complete list of extended attributes of a file.
-%% @end
-%%--------------------------------------------------------------------
--spec list_xattr(session:id(), FileUuid :: logical_file_manager:file_key(),
-    boolean(), boolean()) ->
-    {ok, [xattr:name()]} | logical_file_manager:error_reply().
+-spec list_xattr(session:id(), lfm:file_key(), boolean(), boolean()) ->
+    {ok, [onedata_file:xattr_name()]} | lfm:error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+    call_xattr(
+        SessId, FileKey,
         #list_xattr{inherited = Inherited, show_internal = ShowInternal},
-        fun(#xattr_list{names = Names}) ->
-            {ok, Names}
-        end).
+        fun(#xattr_list{names = Names}) -> {ok, Names} end
+    ).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns encoding suitable for rest transfer.
-%% @end
-%%--------------------------------------------------------------------
--spec get_transfer_encoding(session:id(), logical_file_manager:file_key()) ->
-    {ok, xattr:transfer_encoding()} | logical_file_manager:error_reply().
-get_transfer_encoding(SessId, FileKey) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_transfer_encoding{},
-        fun(#transfer_encoding{value = Val}) -> {ok, Val} end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets encoding suitable for rest transfer.
-%% @end
-%%--------------------------------------------------------------------
--spec set_transfer_encoding(session:id(), logical_file_manager:file_key(),
-    xattr:transfer_encoding()) ->
-    ok | logical_file_manager:error_reply().
-set_transfer_encoding(SessId, FileKey, Encoding) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #set_transfer_encoding{value = Encoding},
-        fun(_) -> ok end).
+-spec set_xattr(session:id(), lfm:file_key(), #xattr{}, boolean(), boolean()) ->
+    ok | lfm:error_reply().
+set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
+    call_xattr(
+        SessId, FileKey,
+        #set_xattr{xattr = Xattr, create = Create, replace = Replace},
+        fun(_) -> ok end
+    ).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns completion status, which tells if the file is under modification by
-%% cdmi at the moment.
-%% @end
-%%--------------------------------------------------------------------
--spec get_cdmi_completion_status(session:id(), logical_file_manager:file_key()) ->
-    {ok, xattr:cdmi_completion_status()} | logical_file_manager:error_reply().
-get_cdmi_completion_status(SessId, FileKey) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_cdmi_completion_status{},
-        fun(#cdmi_completion_status{value = Val}) -> {ok, Val} end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets completion status, which tells if the file is under modification by
-%% cdmi at the moment.
-%% @end
-%%--------------------------------------------------------------------
--spec set_cdmi_completion_status(session:id(), logical_file_manager:file_key(),
-    xattr:cdmi_completion_status()) ->
-    ok | logical_file_manager:error_reply().
-set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #set_cdmi_completion_status{value = CompletionStatus},
-        fun(_) -> ok end).
+-spec get_xattr(session:id(), lfm:file_key(), onedata_file:xattr_name(), boolean()) ->
+    {ok, #xattr{}} | lfm:error_reply().
+get_xattr(SessId, FileKey, XattrName, Inherited) ->
+    call_xattr(
+        SessId, FileKey,
+        #get_xattr{name = XattrName, inherited = Inherited},
+        fun(#xattr{} = Xattr) -> {ok, Xattr} end
+    ).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns mimetype of file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_mimetype(session:id(), logical_file_manager:file_key()) ->
-    {ok, xattr:mimetype()} | logical_file_manager:error_reply().
-get_mimetype(SessId, FileKey) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_mimetype{},
-        fun(#mimetype{value = Val}) -> {ok, Val} end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets mimetype of file.
-%% @end
-%%--------------------------------------------------------------------
--spec set_mimetype(session:id(), logical_file_manager:file_key(), xattr:mimetype()) ->
-    ok | logical_file_manager:error_reply().
-set_mimetype(SessId, FileKey, Mimetype) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #set_mimetype{value = Mimetype},
-        fun(_) -> ok end).
+-spec remove_xattr(session:id(), lfm:file_key(), onedata_file:xattr_name()) ->
+    ok | lfm:error_reply().
+remove_xattr(SessId, FileKey, XattrName) ->
+    call_xattr(SessId, FileKey, #remove_xattr{name = XattrName}, fun(_) -> ok end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets metadata linked with file
-%% @end
-%%--------------------------------------------------------------------
--spec get_metadata(session:id(), logical_file_manager:file_key(), custom_metadata:type(), custom_metadata:filter(), boolean()) ->
-    {ok, custom_metadata:value()} | logical_file_manager:error_reply().
-get_metadata(SessId, FileKey, Type, Names, Inherited) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_metadata{type = Type, names = Names, inherited = Inherited},
-        fun(#metadata{value = Value}) -> {ok, Value} end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets metadata linked with file
-%% @end
-%%--------------------------------------------------------------------
--spec set_metadata(session:id(), logical_file_manager:file_key(), custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()) ->
-    ok | logical_file_manager:error_reply().
-set_metadata(SessId, FileKey, Type, Value, Names) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #set_metadata{names = Names, metadata = #metadata{type = Type, value = Value}},
-        fun(_) -> ok end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if file has custom metadata defined
-%% @end
-%%--------------------------------------------------------------------
--spec has_custom_metadata(session:id(), logical_file_manager:file_key()) ->
-{ok, boolean()} | logical_file_manager:error_reply().
+-spec has_custom_metadata(session:id(), lfm:file_key()) ->
+    {ok, boolean()} | lfm:error_reply().
 has_custom_metadata(SessId, FileKey) ->
     case list_xattr(SessId, FileKey, false, true) of
         {ok, List} ->
@@ -263,15 +180,15 @@ has_custom_metadata(SessId, FileKey) ->
             Error
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes metadata linked with file
-%% @end
-%%--------------------------------------------------------------------
--spec remove_metadata(session:id(), logical_file_manager:file_key(), custom_metadata:type()) ->
-    ok | logical_file_manager:error_reply().
-remove_metadata(SessId, FileKey, Type) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #remove_metadata{type = Type},
-        fun(_) -> ok end).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec call_xattr(session:id(), lfm:file_key(), file_request_type(), success_callback()) ->
+    term().
+call_xattr(SessId, FileKey, Request, SuccessCallback) ->
+    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
+    remote_utils:call_fslogic(SessId, file_request, Guid, Request, SuccessCallback).

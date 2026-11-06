@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -122,7 +123,7 @@ rrd_test(Config) ->
 
     lists:foreach(fun({MonitoringId, UpdateValue, _}) ->
         %% create
-        CurrentTime = time_utils:system_time_seconds(),
+        CurrentTime = global_clock:timestamp_seconds(),
         ?assertEqual(false, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
         ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd,
@@ -201,7 +202,7 @@ rrdtool_pool_test(Config) ->
                 metric_type = storage_used,
                 provider_id = ?GET_PROVIDER_ID(Worker)
             },
-            CurrentTime = time_utils:system_time_seconds(),
+            CurrentTime = global_clock:timestamp_seconds(),
             ?assertEqual(ok, rpc:call(Worker, monitoring_utils, create,
                 [?SPACE_ID, MonitoringId, CurrentTime - ?STEP_IN_SECONDS])),
             {ok, #document{value = MonitoringState}} =
@@ -279,7 +280,7 @@ end_per_testcase(_Case, Config) ->
 clear_state(Worker) ->
     {ok, Docs} = rpc:call(Worker, monitoring_state, list, []),
     lists:foreach(fun(#document{key = Id, value = #monitoring_state{rrd_guid = Guid}}) ->
-        lfm_proxy:unlink(Worker, ?ROOT_SESS_ID, {guid, Guid}),
+        lfm_proxy:unlink(Worker, ?ROOT_SESS_ID, ?FILE_REF(Guid)),
         ?assertMatch(ok, rpc:call(Worker, monitoring_state, delete, [Id]))
     end, Docs).
 

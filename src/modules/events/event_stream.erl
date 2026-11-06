@@ -38,14 +38,14 @@
     emission_time/0]).
 
 -type key() :: atom().
--type ctx() :: maps:map().
+-type ctx() :: map().
 -type metadata() :: term().
 -type init_handler() :: fun((subscription:id(), session:id()) -> ctx()).
 -type terminate_handler() :: fun((ctx()) -> term()).
 -type event_handler() :: fun((Evts :: [event:type()], ctx()) -> ok).
 -type aggregation_rule() :: fun((OldEvt :: event:type(), Evt :: event:type()) ->
     NewEvt :: event:type()).
--type transition_rule() :: fun((metadata(), Evt :: event:object()) -> metadata()).
+-type transition_rule() :: fun((metadata(), Evt :: event:type()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type emission_time() :: timeout().
 -type subscriptions() :: #{subscription:id() => subscription_manager:key() | local}.
@@ -88,7 +88,7 @@
 %% Starts the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Mgr :: pid(), Sub :: #subscription{}, SessId :: session:id()) ->
+-spec start_link(Mgr :: pid(), Sub :: subscription:base(), SessId :: session:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(Mgr, Sub, SessId) ->
     gen_server2:start_link(?MODULE, [Mgr, Sub, SessId], []).
@@ -156,7 +156,7 @@ init_report() ->
 init([Mgr, #subscription{id = SubId} = Sub, SessId]) ->
     Key = subscription_type:get_stream_key(Sub),
     Stm = subscription_type:get_stream(Sub),
-    ?debug("Initializing event stream ~p in session ~p", [Key, SessId]),
+    ?debug("Initializing event stream ~tp in session ~tp", [Key, SessId]),
     process_flag(trap_exit, true),
     gen_server2:cast(Mgr, {register_stream, Key, self()}),
     {ok, #state{
@@ -180,6 +180,10 @@ init([Mgr, #subscription{id = SubId} = Sub, SessId]) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_call({add_subscription, Sub}, _From, #state{} = State) ->
+    #state{session_id = SessId, subscriptions = Subs} = State,
+    {reply, ok, State#state{subscriptions = add_subscription(SessId, Sub, Subs)}};
+
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
     handle_cast(Request, State).
@@ -195,12 +199,8 @@ handle_call(Request, From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(#event{type = Evt}, #state{key = Key, session_id = SessId} = State) ->
-    ?debug("Handling event ~p in event stream ~p and session ~p", [Evt, Key, SessId]),
+    ?debug("Handling event ~tp in event stream ~tp and session ~tp", [Evt, Key, SessId]),
     {noreply, process_event(Evt, State)};
-
-handle_cast({add_subscription, Sub}, #state{} = State) ->
-    #state{session_id = SessId, subscriptions = Subs} = State,
-    {noreply, State#state{subscriptions = add_subscription(SessId, Sub, Subs)}};
 
 handle_cast({remove_subscription, SubId}, #state{} = State) ->
     #state{session_id = SessId, subscriptions = Subs} = State,
@@ -215,8 +215,8 @@ handle_cast({flush, NotifyFun}, #state{ctx = Ctx} = State) ->
     ),
     {noreply, NewState#state{ctx = maps:remove(notify, NewCtx)}};
 
-handle_cast(_Request, State) ->
-    ?log_bad_request(_Request),
+handle_cast(Request, State) ->
+    ?log_bad_request(Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -249,8 +249,8 @@ handle_info({periodic_emission, Ref}, #state{emission_ref = Ref} = State) ->
 handle_info({periodic_emission, _}, State) ->
     {noreply, State};
 
-handle_info(_Info, State) ->
-    ?log_bad_request(_Info),
+handle_info(Info, State) ->
+    ?log_bad_request(Info),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -312,17 +312,17 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
         Duration = erlang:monotonic_time(milli_seconds) - Start,
         ?update_counter(?EXOMETER_NAME(events_handler_execution_time_ms),
             Duration),
-        ?debug("Execution of handler on events ~p in event stream ~p and session
-        ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
+        ?debug("Execution of handler on events ~tp in event stream ~tp and session
+        ~tp took ~tp milliseconds", [EvtsList, StmKey, SessId, Duration])
     catch
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             case Ctx of
                 #{notify := NotifyFun} -> NotifyFun(#server_message{message_body = #status{code = ?EAGAIN}});
                 _ -> ok
             end,
 
-            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
-                [?MODULE, State, Error, Reason])
+            ?error_stacktrace("~tp event handler of state ~tp failed with ~tp:~tp",
+                [?MODULE, State, Error, Reason], Stacktrace)
     end;
 
 execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
@@ -342,7 +342,7 @@ execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
 %% Adds subscription.
 %% @end
 %%--------------------------------------------------------------------
--spec add_subscription(SessId :: session:id(), Sub :: #subscription{},
+-spec add_subscription(SessId :: session:id(), Sub :: subscription:base(),
     Subs :: subscriptions()) -> NewSubs :: subscriptions().
 add_subscription(SessId, #subscription{id = SubId} = Sub, Subs) ->
     case subscription_manager:add_subscriber(Sub, SessId) of
@@ -386,7 +386,7 @@ remove_subscriptions(#state{session_id = SessId, subscriptions = Subs}) ->
                 ok ->
                     ok;
                 Error ->
-                    ?error("Removing subscriptions error: ~p, for key ~p, session ~p",
+                    ?error("Removing subscriptions error: ~tp, for key ~tp, session ~tp",
                         [Error, Key, SessId]),
                     Error
             end
@@ -429,7 +429,7 @@ spawn_event_handler(Force, #state{stream = Stm} = State) ->
 %% Processes event on the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec process_event(Evt :: event:object(), State :: #state{}) -> NewState :: #state{}.
+-spec process_event(Evt :: event:type(), State :: #state{}) -> NewState :: #state{}.
 process_event(Evt, #state{events = Evts, metadata = Meta, stream = Stm} = State) ->
     EvtKey = event_type:get_aggregation_key(Evt),
     NewEvts = case maps:find(EvtKey, Evts) of

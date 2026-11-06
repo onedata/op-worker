@@ -16,9 +16,10 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(REMOVE_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
     remove_storage_test_file_delay_seconds, 300))).
@@ -55,7 +56,7 @@ get_configuration(SessId) ->
         {error, _} -> []
     end,
     #configuration{
-        root_guid = fslogic_uuid:user_root_dir_guid(UserId),
+        root_guid = user_root_dir:guid(UserId),
         subscriptions = Subs,
         disabled_spaces = DisabledSpaces
     }.
@@ -68,34 +69,16 @@ get_configuration(SessId) ->
 -spec get_helper_params(user_ctx:ctx(), storage:id(),
     od_space:id(), atom()) -> #fuse_response{}.
 get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
-    {ok, Helper} = case storage:get(StorageId) of
-        {ok, StorageDoc} ->
-            fslogic_storage:select_helper(StorageDoc);
-        {error, not_found} ->
-            {ok, undefined}
-    end,
-    case HelperMode of
-        ?FORCE_DIRECT_HELPER_MODE ->
-            SessionId = user_ctx:get_session_id(UserCtx),
-            UserId = user_ctx:get_user_id(UserCtx),
-            HelperName = helper:get_name(Helper),
-            {ok, StorageDoc2} = storage:get(StorageId),
-            case luma:get_client_user_ctx(SessionId, UserId, SpaceId,
-                StorageDoc2, HelperName) of
-                {ok, ClientStorageUserCtx} ->
-                    HelperParams = helper:get_params(Helper,
-                        ClientStorageUserCtx),
-                    #fuse_response{
-                        status = #status{code = ?OK},
-                        fuse_response = HelperParams};
-                {error, _} ->
-                    #fuse_response{status = #status{code = ?ENOENT}}
-            end;
-        _ProxyOrAutoMode ->
-            HelperParams = helper:get_proxy_params(Helper, StorageId),
-            #fuse_response{
-               status = #status{code = ?OK},
-               fuse_response = HelperParams}
+    SessionId = user_ctx:get_session_id(UserCtx),
+    UserId = user_ctx:get_user_id(UserCtx),
+    case {storage:get(StorageId), is_root_credentials(SessionId, UserId)} of
+        {_, true} ->
+            % This should never happen as client cannot pass root credentials
+            #fuse_response{status = #status{code = ?EACCES}};
+        {{ok, StorageData}, _} ->
+            get_local_storage_helper_params(SessionId, UserId, SpaceId, HelperMode, StorageData);
+        {?ERROR_NOT_FOUND, _} ->
+            get_proxy_storage_helper_params(StorageId, undefined)
     end.
 
 %%--------------------------------------------------------------------
@@ -107,50 +90,70 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
 -spec create_storage_test_file(user_ctx:ctx(), fslogic_worker:file_guid(),
     storage:id()) -> #fuse_response{}.
 create_storage_test_file(UserCtx, Guid, StorageId) ->
-    FileCtx = file_ctx:new_by_guid(Guid),
+    % TODO VFS-6121 pass SpaceId instead of Guid here
+    SpaceId = try file_id:guid_to_space_id(Guid) of
+        <<_/binary>> = Id -> Id
+        catch
+            error:{invalid_guid, _Guid} ->
+            % TODO VFS-6121 log not existing SpaceId here
+            ?error("Detecting storage ~tp failed due to not existing space.", [StorageId]),
+            throw(?ENOENT)
+    end,
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    SpaceCtx = file_ctx:new_by_guid(SpaceDirGuid),
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
-    SpaceId = case file_ctx:get_space_id_const(FileCtx) of
-        undefined -> throw(?ENOENT);
-        <<_/binary>> = Id -> Id
+
+    {ok, Storage} = case storage:get(StorageId) of
+        {ok, Doc} -> {ok, Doc};
+        {error, not_found} ->
+            ?error("Detecting storage ~tp failed due to not found storage document.", [StorageId]),
+            throw(?ENOENT)
     end,
 
-    {ok, StorageDoc} = storage:get(StorageId),
-    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
+    SpaceCtx2 = file_ctx:assert_not_readonly_storage(SpaceCtx),
 
-    case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) of
-        {ok, ClientStorageUserCtx} ->
-            {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId,
-                StorageDoc, HelperName),
-            HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
+    case is_root_credentials(SessionId, UserId) of
+        true ->
+            % This should never happen as client cannot pass root credentials
+            throw(?EACCES);
+        false ->
+            ok
+    end,
 
-            {RawStoragePath, FileCtx2} = file_ctx:get_raw_storage_path(FileCtx),
-            Dirname = filename:dirname(RawStoragePath),
-            FileCtx3 = sfm_utils:create_parent_dirs(FileCtx2),
-            {Size, _} = file_ctx:get_file_size(FileCtx3),
-            TestFileName = storage_detector:generate_file_id(),
-            TestFileId = fslogic_path:join([Dirname, TestFileName]),
-            FileContent = storage_detector:create_test_file(Helper, ServerStorageUserCtx, TestFileId),
-
-            spawn(storage_req, remove_storage_test_file, [
-                Helper, ServerStorageUserCtx, TestFileId, Size, ?REMOVE_STORAGE_TEST_FILE_DELAY]),
-
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #storage_test_file{
-                    helper_params = HelperParams, space_id = SpaceId,
-                    file_id = TestFileId, file_content = FileContent
+    HelperSpec = storage:get_helper_spec(Storage),
+    case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
+        {ok, StorageCredentials} ->
+            HelperParams = helper_spec:get_params(HelperSpec, StorageCredentials),
+            {SpaceStorageFileId, _SpaceCtx3} = file_ctx:get_storage_file_id(SpaceCtx2),
+            DirName = filename:dirname(SpaceStorageFileId),
+            try
+                {ok, TestFileId} = storage_detector:create_test_file(HelperSpec, StorageCredentials, DirName),
+                {ok, FileContent} = storage_detector:write_test_file(HelperSpec, StorageCredentials, TestFileId),
+                spawn(storage_req, remove_storage_test_file, [
+                    HelperSpec, StorageCredentials, TestFileId, byte_size(FileContent), ?REMOVE_STORAGE_TEST_FILE_DELAY]),
+                #fuse_response{
+                    status = #status{code = ?OK},
+                    fuse_response = #storage_test_file{
+                        helper_params = HelperParams, space_id = SpaceId,
+                        file_id = TestFileId, file_content = FileContent
+                    }
                 }
-            };
-        {error, _} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
+            catch
+                error:{badmatch, {error, Reason}}:Stacktrace ->
+                    ?error_stacktrace("Detecting storage ~tp failed due to ~tp", [StorageId, Reason], Stacktrace),
+                    #fuse_response{status = #status{code = Reason}}
+            end;
+        {error, Reason} ->
+            ?error("Detecting storage ~tp failed with error ~tp when getting client user context.", [StorageId, Reason]),
+            #fuse_response{status = #status{code = ?EACCES}}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates handle to the test file in ROOT context and tries to verify
-%% its content VERIFY_STORAGE_TEST_FILE_ATTEMPTS times.
+%% Tries to verify the content of the test file, VERIFY_STORAGE_TEST_FILE_ATTEMPTS
+%% times. The storage is reached with the storage credentials of the calling user -
+%% the same ones the file was created with.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_storage_test_file(user_ctx:ctx(), od_space:id(),
@@ -158,16 +161,45 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
 verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
-    {ok, StorageDoc} = storage:get(StorageId),
-    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
-    {ok, StorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName),
-    verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
+    {ok, Storage} = storage:get(StorageId),
+    HelperSpec = storage:get_helper_spec(Storage),
+    {ok, StorageCredentials} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
+    verify_storage_test_file_loop(HelperSpec, StorageCredentials, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec get_local_storage_helper_params(session:id(), od_user:id(), od_space:id(), atom(),
+    storage:data()) -> #fuse_response{}.
+get_local_storage_helper_params(SessionId, UserId, SpaceId, HelperMode, StorageData) ->
+    HelperSpec = storage:get_helper_spec(StorageData),
+    case HelperMode of
+        ?FORCE_DIRECT_HELPER_MODE ->
+            case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, StorageData) of
+                {ok, ClientStorageCredentials} ->
+                    HelperParams = helper_spec:get_params(HelperSpec, ClientStorageCredentials),
+                    #fuse_response{
+                        status = #status{code = ?OK},
+                        fuse_response = HelperParams};
+                {error, _} ->
+                    #fuse_response{status = #status{code = ?ENOENT}}
+            end;
+        _ProxyOrAutoMode ->
+            get_proxy_storage_helper_params(storage:get_id(StorageData), HelperSpec)
+    end.
+
+%% @private
+-spec get_proxy_storage_helper_params(storage:id(), helper_spec:t() | undefined) ->
+    #fuse_response{}.
+get_proxy_storage_helper_params(StorageId, HelperSpec) ->
+    Timeout = helper_spec:get_effective_timeout(HelperSpec),
+    HelperParams = helper_spec:get_proxy_params(Timeout, StorageId),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = HelperParams}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -175,37 +207,42 @@ verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
 %% Removes test file referenced by handle after specified delay.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_storage_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id(),
+-spec remove_storage_test_file(helper_spec:t(), helper_spec:credentials(), helpers:file_id(),
     Size::non_neg_integer(), Delay :: timeout()) -> ok.
-remove_storage_test_file(Helper, StorageUserCtx, FileId, Size, Delay) ->
+remove_storage_test_file(HelperSpec, StorageCredentials, FileId, Size, Delay) ->
     timer:sleep(Delay),
-    storage_detector:remove_test_file(Helper, StorageUserCtx, FileId, Size).
+    storage_detector:remove_test_file(HelperSpec, StorageCredentials, FileId, Size).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Verifies storage test file by reading its content and checking it with the
-%% one sent by the client. Retires 'Attempts' times if file is not found or
+%% one sent by the client. Retries 'Attempts' times if file is not found or
 %% its content doesn't match expected one.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_storage_test_file_loop(helpers:helper(), helper:user_ctx(),
+-spec verify_storage_test_file_loop(helper_spec:t(), helper_spec:credentials(),
     helpers:file_id(), FileContent :: binary(), Code :: atom(),
     Attempts :: non_neg_integer()) -> #fuse_response{}.
 verify_storage_test_file_loop(_, _, _, _, Code, 0) ->
     #fuse_response{status = #status{code = Code}};
-verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, _, Attempts) ->
-    try storage_detector:read_test_file(Helper, StorageUserCtx, FileId) of
-        FileContent ->
-            storage_detector:remove_test_file(Helper, StorageUserCtx, FileId, size(FileContent)),
+verify_storage_test_file_loop(HelperSpec, StorageCredentials, FileId, FileContent, _, Attempts) ->
+    try storage_detector:read_test_file(HelperSpec, StorageCredentials, FileId) of
+        {ok, FileContent} ->
+            storage_detector:remove_test_file(HelperSpec, StorageCredentials, FileId, size(FileContent)),
             #fuse_response{status = #status{code = ?OK}};
         _ ->
             timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
-            verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent,
+            verify_storage_test_file_loop(HelperSpec, StorageCredentials, FileId, FileContent,
                 ?EINVAL, Attempts - 1)
     catch
         {_, {error, ?ENOENT}} ->
             timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
-            verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent,
+            verify_storage_test_file_loop(HelperSpec, StorageCredentials, FileId, FileContent,
                 ?ENOENT, Attempts - 1)
     end.
+
+-spec is_root_credentials(session:id(), od_user:id()) -> boolean().
+is_root_credentials(?ROOT_SESS_ID, _) -> true;
+is_root_credentials(_SessionId, ?ROOT_USER_ID) -> true;
+is_root_credentials(_, _) -> false.

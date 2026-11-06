@@ -20,9 +20,13 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 
--export([get/2, get_public_data/2]).
--export([create/5, update_name/3, delete/2]).
+
+-export([get/2, get_public_data/2, get_handle/2]).
+-export([force_fetch/1]).
+-export([create/7, update/3, delete/2]).
+
 
 %%%===================================================================
 %%% API
@@ -34,7 +38,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_share:id()) ->
-    {ok, od_share:doc()} | gs_protocol:error().
+    {ok, od_share:doc()} | errors:error().
 get(SessionId, ShareId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -49,7 +53,7 @@ get(SessionId, ShareId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_public_data(gs_client_worker:client(), od_share:id()) ->
-    {ok, od_share:doc()} | gs_protocol:error().
+    {ok, od_share:doc()} | errors:error().
 get_public_data(SessionId, ShareId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -58,40 +62,57 @@ get_public_data(SessionId, ShareId) ->
     }).
 
 
+-spec get_handle(gs_client_worker:client(), od_share:id()) ->
+    {ok, od_handle:id() | undefined} | errors:error().
+get_handle(SessionId, ShareId) ->
+    case get_public_data(SessionId, ShareId) of
+        {ok, #document{value = #od_share{handle = HandleId}}} -> {ok, HandleId};
+        {error, _} = Error -> Error
+    end.
+
+
+-spec force_fetch(od_share:id()) -> {ok, od_share:doc()}.
+force_fetch(ShareId) ->
+    gs_client_worker:force_fetch_entity(#gri{type = od_share, id = ShareId, aspect = instance}).
+
+
 -spec create(gs_client_worker:client(), od_share:id(), od_share:name(),
-    od_space:id(), od_share:share_guid()) ->
-    {ok, od_share:id()} | gs_protocol:error().
-create(SessionId, ShareId, Name, SpaceId, ShareFileGuid) ->
+    od_share:description(), od_space:id(), od_share:root_file_guid(), od_share:file_type()
+) ->
+    {ok, od_share:id()} | errors:error().
+create(SessionId, ShareId, Name, Description, SpaceId, ShareFileGuid, FileType) ->
     Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_share, id = undefined, aspect = instance},
         data = #{
             <<"shareId">> => ShareId,
             <<"name">> => Name,
+            <<"description">> => Description,
+            <<"spaceId">> => SpaceId,
             <<"rootFileId">> => ShareFileGuid,
-            <<"spaceId">> => SpaceId
+            <<"fileType">> => FileType
         },
         subscribe = true
     })),
     ?ON_SUCCESS(Res, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId)
+        space_logic:force_fetch(SpaceId)
     end).
 
 
--spec update_name(gs_client_worker:client(), od_share:id(), od_share:name()) ->
-    ok | gs_protocol:error().
-update_name(SessionId, ShareId, NewName) ->
+-spec update(gs_client_worker:client(), od_share:id(), gs_protocol:data()) ->
+    ok | errors:error().
+update(SessionId, ShareId, Data) ->
     Res = gs_client_worker:request(SessionId, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_share, id = ShareId, aspect = instance},
-        data = #{<<"name">> => NewName}
+        data = Data
     }),
     ?ON_SUCCESS(Res, fun(_) ->
-        gs_client_worker:invalidate_cache(od_share, ShareId)
+        share_logic:force_fetch(ShareId)
     end).
 
 
--spec delete(gs_client_worker:client(), od_share:id()) -> ok | gs_protocol:error().
+-spec delete(gs_client_worker:client(), od_share:id()) -> ok | errors:error().
 delete(SessionId, ShareId) ->
     Res = gs_client_worker:request(SessionId, #gs_req_graph{
         operation = delete,

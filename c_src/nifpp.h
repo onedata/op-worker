@@ -49,6 +49,7 @@
 #endif
 #include <cassert>
 #include <cstring>
+#include <sys/stat.h>
 
 #include <folly/FBString.h>
 #include <folly/FBVector.h>
@@ -192,6 +193,8 @@ int get(ErlNifEnv *env, ERL_NIF_TERM term, std::tuple<Ts...> &var);
 template <typename... Ts>
 TERM make(ErlNifEnv *env, const std::tuple<Ts...> &var);
 
+TERM make(ErlNifEnv *env, const struct stat &var);
+
 template <typename T>
 int get(ErlNifEnv *env, ERL_NIF_TERM term, std::vector<T> &var);
 template <typename T> TERM make(ErlNifEnv *env, const std::vector<T> &var);
@@ -295,6 +298,18 @@ inline TERM make(ErlNifEnv *env, const folly::fbvector<T> &var)
     return detail::makeVector(env, var);
 }
 
+inline int get(ErlNifEnv *env, ERL_NIF_TERM term, std::pair<const uint8_t*, size_t> &var)
+{
+    ErlNifBinary bin;
+    if (!enif_inspect_binary(env, term, &bin))
+        return 0;
+
+    var.first = bin.data;
+    var.second = bin.size;
+
+    return 1;
+}
+
 // folly::IOBufQueue
 inline int get(ErlNifEnv *env, ERL_NIF_TERM term, folly::IOBufQueue &var)
 {
@@ -304,7 +319,7 @@ inline int get(ErlNifEnv *env, ERL_NIF_TERM term, folly::IOBufQueue &var)
     if (!enif_inspect_binary(env, term, &bin))
         return 0;
 
-    var.append(bin.data, bin.size);
+    var.wrapBuffer(bin.data, bin.size);
     return 1;
 }
 inline TERM make(ErlNifEnv *env, const folly::IOBufQueue &var)
@@ -822,6 +837,14 @@ template <> struct tuple_to_arrayer<0> {
 };
 } // namespace detail
 
+template <typename T1, typename T2>
+TERM make(ErlNifEnv *env, const std::pair<T1, T2> &var)
+{
+    std::array<ERL_NIF_TERM, 2> array {
+        make(env, var.first), make(env, var.second)};
+    return TERM(enif_make_tuple_from_array(env, array.begin(), array.size()));
+}
+
 template <typename... Ts>
 TERM make(ErlNifEnv *env, const std::tuple<Ts...> &var)
 {
@@ -829,6 +852,16 @@ TERM make(ErlNifEnv *env, const std::tuple<Ts...> &var)
     detail::tuple_to_arrayer<std::tuple_size<std::tuple<Ts &...>>::value>::go(
         env, var, array.end());
     return TERM(enif_make_tuple_from_array(env, array.begin(), array.size()));
+}
+
+TERM make(ErlNifEnv *env, const struct stat &s)
+{
+    auto record =
+        std::make_tuple(nifpp::str_atom("statbuf"), s.st_dev, s.st_ino,
+            s.st_mode, s.st_nlink, s.st_uid, s.st_gid, s.st_rdev, s.st_size,
+            s.st_atime, s.st_mtime, s.st_ctime, s.st_blksize, s.st_blocks);
+
+    return make(env, std::move(record));
 }
 
 /*
@@ -1128,7 +1161,7 @@ inline typename std::enable_if<
     std::is_same<typename Vector::value_type, TERM>::value, TERM>::type
 makeVector(ErlNifEnv *env, const Vector &var)
 {
-    if(var.empty())
+    if (var.empty())
         return TERM(enif_make_list(env, 0));
     return TERM(
         enif_make_list_from_array(env, (ERL_NIF_TERM *)&var[0], var.size()));

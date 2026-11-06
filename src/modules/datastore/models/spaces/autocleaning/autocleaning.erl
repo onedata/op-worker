@@ -21,9 +21,9 @@
 -type id() :: od_space:id().
 -type record() :: #autocleaning{}.
 -type doc() :: datastore_doc:doc(record()).
--type diff() :: datastore:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 -type run_id() :: autocleaning_run:id().
--type config() :: autocleanig_config:config().
+-type config() :: autocleaning_config:config().
 -type error() :: {error, term()}.
 
 -export_type([id/0, run_id/0, record/0, doc/0, config/0]).
@@ -76,9 +76,12 @@ get_current_run(SpaceId) ->
             undefined
     end.
 
--spec create_or_update(id(), maps:map()) -> ok | error().
+-spec create_or_update(id(), map()) -> ok | error().
 create_or_update(SpaceId, NewConfiguration) ->
-    {ok, SupportSize} = provider_logic:get_support_size(SpaceId),
+    SupportSize = case provider_logic:get_support_size(SpaceId) of
+        {ok, S} -> S;
+        ?ERROR_NOT_FOUND -> 0
+    end,
     case autocleaning:get(SpaceId) of
         {error, not_found} ->
             ?extract_ok(create(SpaceId, NewConfiguration, SupportSize));
@@ -119,8 +122,8 @@ delete(SpaceId) ->
     case get_current_run(SpaceId) of
         undefined -> ok;
         ARId ->
-            autocleaning_controller:stop_cleaning(SpaceId),
-            autocleaning_run:delete(ARId, SpaceId)
+            % TODO VFS-6050 stop autocleaning gracefully when space is unsupported
+            autocleaning_api:cancel_run(SpaceId, ARId)
     end,
     datastore_model:delete(?CTX, SpaceId).
 
@@ -128,7 +131,7 @@ delete(SpaceId) ->
 %%% Internal functions
 %%%===================================================================
 
--spec create(id(), maps:map(), non_neg_integer()) -> {ok, doc()} | error().
+-spec create(id(), map(), non_neg_integer()) -> {ok, doc()} | error().
 create(SpaceId, Configuration, SupportSize)->
     case default_doc(SpaceId, Configuration, SupportSize) of
         {ok, Doc} -> create(Doc);
@@ -143,7 +146,7 @@ create(Doc) ->
 update(SpaceId, UpdateFun) ->
     datastore_model:update(?CTX, SpaceId, UpdateFun).
 
--spec default_doc(id(), maps:map(), non_neg_integer()) -> {ok, doc()} | error().
+-spec default_doc(id(), map(), non_neg_integer()) -> {ok, doc()} | error().
 default_doc(SpaceId, Configuration, SupportSize) ->
     case autocleaning_config:create_or_update(undefined, Configuration, SupportSize) of
         {ok, NewConfig} ->

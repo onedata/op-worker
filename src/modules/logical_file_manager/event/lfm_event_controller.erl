@@ -28,16 +28,17 @@
 %% for a given session, uuid and provider_id.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_event_queue(session:id(), od_provider:id(), file_meta:uuid()) ->
+-spec flush_event_queue(session:id(), od_provider:id(), file_id:file_guid()) ->
     ok | {error, term()}.
-flush_event_queue(SessionId, ProviderId, FileUuid) ->
+% TODO VFS-7448 - test production of events for hardlinks
+flush_event_queue(SessionId, ProviderId, FileGuid) ->
     case session_utils:is_special(SessionId) of
         true ->
             ok;
         false ->
             [Manager] = event:get_event_managers(SessionId),
-            RecvRef = event:flush(ProviderId, FileUuid, ?FILE_WRITTEN_SUB_ID,
-                self(), Manager),
+            RecvRef = event:flush(ProviderId, fslogic_file_id:ensure_referenced_guid(FileGuid),
+                ?FILE_WRITTEN_SUB_ID, self(), Manager),
             receive_loop(RecvRef, Manager)
     end.
 

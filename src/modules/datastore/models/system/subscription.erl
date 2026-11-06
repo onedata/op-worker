@@ -27,11 +27,13 @@
 -type id() :: binary().
 -type base() :: #subscription{}.
 -type type() :: #file_attr_changed_subscription{} |
+                #replica_status_changed_subscription{} |
                 #file_location_changed_subscription{} |
                 #file_read_subscription{} | #file_written_subscription{} |
                 #file_perm_changed_subscription{} |
                 #file_removed_subscription{} | #file_renamed_subscription{} |
-                #quota_exceeded_subscription{} | #monitoring_subscription{}.
+                #quota_exceeded_subscription{} | #monitoring_subscription{} |
+                #helper_params_changed_subscription{}.
 -type cancellation() :: #subscription_cancellation{}.
 -type doc() :: datastore_doc:doc(base()).
 

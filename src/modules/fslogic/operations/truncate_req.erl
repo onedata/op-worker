@@ -12,16 +12,18 @@
 -module(truncate_req).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([truncate/3, truncate_insecure/4]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv truncate_insecure/3 with permission checks
@@ -29,16 +31,19 @@
 %%--------------------------------------------------------------------
 -spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
-truncate(UserCtx, FileCtx, Size) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, Size, true],
-        fun truncate_insecure/4).
+truncate(UserCtx, FileCtx0, Size) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_object_mask)]
+    ),
+    FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx1),
+    truncate_insecure(UserCtx, FileCtx2, Size, true).
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Truncates file on storage and returns only if operation is complete.
-%% Does not change file size in #file_meta model. Model's size should be
+%% Model's size should be
 %% changed by write events.
 %% @end
 %%--------------------------------------------------------------------
@@ -46,64 +51,81 @@ truncate(UserCtx, FileCtx, Size) ->
     Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
 truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
-    FileCtx2 = update_quota(FileCtx, Size),
+    truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes, true).
 
-    FileCtx4 = case file_ctx:get_extended_direct_io_const(FileCtx2) of
-        true ->
-            FileCtx2;
-        _ ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-            case storage_file_manager:open(SFMHandle, write) of
+
+-spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    Size :: non_neg_integer(), UpdateTimes :: boolean(), CreateFileIfNotExist :: boolean()) ->
+    fslogic_worker:fuse_response().
+truncate_insecure(UserCtx, FileCtx1, Size, UpdateTimes, CreateFileIfNotExist) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    case file_ctx:is_readonly_storage(FileCtx1) of
+        {true, FileCtx2} ->
+            on_successful_truncate(FileCtx2, Size, UpdateTimes);
+        {false, FileCtx2} ->
+            {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
+            case storage_driver:open_for_write_insecure(SDHandle) of
                 {ok, Handle} ->
+                    % Flush events queue to get proper file size
+                    catch lfm_event_controller:flush_event_queue(
+                        SessId, oneprovider:get_id(), file_ctx:get_logical_guid_const(FileCtx3)),
                     {CurrentSize, _} = file_ctx:get_file_size(FileCtx3),
-                    case storage_file_manager:truncate(Handle, Size, CurrentSize) of
+                    case storage_driver:truncate(Handle, Size, CurrentSize) of
                         ok ->
                             ok;
                         Error = {error, ?EBUSY} ->
-                            log_warning(storage_file_manager, truncate, Error, FileCtx3)
+                            log_warning(storage_driver, truncate, Error, FileCtx3)
                     end,
-                    case storage_file_manager:release(Handle) of
+                    case storage_driver:release(Handle) of
                         ok -> ok;
                         Error2 = {error, ?EDOM} ->
-                            log_warning(storage_file_manager, release, Error2, FileCtx3)
+                            log_warning(storage_driver, release, Error2, FileCtx3)
                     end,
-                    ok = file_popularity:update_size(FileCtx3, Size);
+                    on_successful_truncate(FileCtx3, Size, UpdateTimes);
                 {error, ?ENOENT} ->
-                    ok
-            end,
-            FileCtx3
-    end,
+                    case CreateFileIfNotExist of
+                        true ->
+                            case sd_utils:create_deferred(FileCtx3, user_ctx:new(?ROOT_SESS_ID), true) of
+                                {#document{}, FileCtx4} ->
+                                    truncate_insecure(UserCtx, FileCtx4, Size, UpdateTimes, false);
+                                Error3 = {error, _} ->
+                                    log_warning(storage_driver, truncate, Error3, FileCtx3),
+                                    on_successful_truncate(FileCtx3, Size, UpdateTimes)
+                            end;
+                        false ->
+                            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx3),
+                            ?warning("Cannot truncate file ~tp on storage because it does not exist", [StorageFileId]),
+                            #fuse_response{status = #status{code = ?ENOENT}}
+                    end
+            end
+    end.
 
-    case UpdateTimes of
-        true ->
-            fslogic_times:update_mtime_ctime(FileCtx4);
-        false ->
-            ok
-    end,
-    #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates space quota.
-%% @end
-%%--------------------------------------------------------------------
--spec update_quota(file_ctx:ctx(), file_meta:size()) -> NewFileCtx :: file_ctx:ctx().
-update_quota(FileCtx, Size) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {OldSize, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
-    ok = space_quota:assert_write(SpaceId, Size - OldSize),
-    FileCtx2.
 
+%% @private
 -spec log_warning(atom(), atom(), {error, term()}, file_ctx:ctx()) -> ok.
 log_warning(Module, Function, Error, FileCtx) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
-    Guid = file_ctx:get_guid_const(FileCtx3),
-    ?warning("~p:~p on file {~p, ~p} with file_id ~p returned ~p",
-        [Module, Function, Path, Guid, StorageFileId, Error]).
+    Guid = file_ctx:get_logical_guid_const(FileCtx3),
+    ?warning("~tp:~tp on file {~tp, ~tp} with file_id ~tp returned ~tp", [
+        Module, Function, Path, Guid, StorageFileId, Error
+    ]).
+
+
+%% @private
+-spec on_successful_truncate(file_ctx:ctx(), Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
+    fslogic_worker:fuse_response().
+on_successful_truncate(FileCtx, Size, UpdateTimes) ->
+    ok = file_popularity:update_size(FileCtx, Size),
+    case UpdateTimes of
+        true ->
+            times_api:touch(FileCtx, [?attr_mtime, ?attr_ctime]);
+        false ->
+            ok
+    end,
+    #fuse_response{status = #status{code = ?OK}}.

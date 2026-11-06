@@ -71,7 +71,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -105,7 +105,7 @@
                             "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -139,18 +139,13 @@
                             "127.0.0.1:49163"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
         }
     },
     "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space1"
-            }
-        },
         "groups": {
         },
         "spaces": {
@@ -163,13 +158,16 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     },
                     "p3": {
-                        "storage": "/mnt/st3"
+                        "storage": "/mnt/st3",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -182,7 +180,8 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -195,7 +194,8 @@
                 ],
                 "providers": {
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -208,7 +208,8 @@
                 ],
                 "providers": {
                     "p3": {
-                        "storage": "/mnt/st3"
+                        "storage": "/mnt/st3",
+                        "supported_size": 10000000000
                     }
                 }
             }

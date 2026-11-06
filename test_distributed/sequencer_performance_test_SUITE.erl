@@ -14,19 +14,28 @@
 
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
-  route_message_should_forward_messages_in_right_order/1,
-  route_message_should_work_for_multiple_streams/1,
-  route_message_should_forward_messages_in_right_order_base/1,
-  route_message_should_work_for_multiple_streams_base/1]).
+    route_message_should_forward_messages_in_right_order/1,
+    route_message_should_work_for_multiple_streams/1,
+    route_message_should_forward_messages_in_right_order_base/1,
+    route_message_should_work_for_multiple_streams_base/1,
+    manager_test/1]).
+
+%% for rpc
+-export([manager_test_on_node/2]).
 
 -define(TEST_CASES, [
     route_message_should_forward_messages_in_right_order,
@@ -58,6 +67,69 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 %%% Test functions
 %%%===================================================================
 
+manager_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    StreamId = 1,
+    {ok, SessId} = session_setup(Worker),
+    MsgNum = 2000,
+    ProcNum = 100,
+
+    InitMessage = client_message(SessId, StreamId, 0),
+    ?assertEqual(ok, rpc:call(Worker, sequencer,
+        communicate_with_sequencer_manager, [InitMessage, SessId, true])),
+
+    Messages = lists:map(fun(SeqNum) ->
+        client_message(SessId, StreamId, SeqNum)
+    end, lists:seq(1, MsgNum)),
+
+    {ok, Manager} = ?assertMatch({ok, _},
+        rpc:call(Worker, session, get_sequencer_manager, [SessId])),
+
+    {ok, Ans} = ?assertMatch({ok, _},
+        rpc:call(Worker, ?MODULE, manager_test_on_node, [Manager, Messages])),
+    ct:print("Ans ~tp", [Ans]),
+
+    lists:foreach(fun(StmId) ->
+        InitMessage2 = client_message(SessId, StmId, 0),
+        ?assertEqual(ok, rpc:call(Worker, sequencer,
+            communicate_with_sequencer_manager, [InitMessage2, SessId, true]))
+    end, lists:seq(2, ProcNum + 1)),
+
+    Messages2 = lists:map(fun(StmId) ->
+        lists:map(fun(SeqNum) ->
+            client_message(SessId, StmId, SeqNum)
+        end, lists:seq(1, MsgNum))
+    end, lists:seq(2, ProcNum + 1)),
+
+    Master = self(),
+    lists:foreach(fun(MessagesList) ->
+        spawn(fun() ->
+            RpcAns = rpc:call(Worker, ?MODULE, manager_test_on_node, [Manager, MessagesList]),
+            Master ! {rpc_ans, RpcAns}
+        end)
+    end, Messages2),
+
+    Ans2 = lists:foldl(fun(_, Acc) ->
+        RecAns = receive
+                     {rpc_ans, RpcAns} -> RpcAns
+                 after
+                     timer:seconds(30) -> timeout
+                 end,
+        {ok, AnsTime} = ?assertMatch({ok, _}, RecAns),
+        Acc + AnsTime
+    end, 0, Messages2),
+    ct:print("Ans2 ~tp", [Ans2]),
+
+    session_teardown(Worker, SessId),
+    ok.
+
+manager_test_on_node(Manager, Messages) ->
+    Stopwatch = stopwatch:start(),
+    lists:foreach(fun(Msg) ->
+        ok = sequencer_manager:handle(Manager, Msg)
+    end, Messages),
+    {ok, stopwatch:read_micros(Stopwatch)}.
+
 route_message_should_forward_messages_in_right_order(Config) ->
   ?PERFORMANCE(Config, [
     {repeats, 10},
@@ -83,7 +155,7 @@ route_message_should_forward_messages_in_right_order_base(Config) ->
   SeqNums = case MsgOrd of
               normal -> lists:seq(0, MsgNum - 1);
               reverse -> lists:seq(MsgNum - 1, 0, -1);
-              random -> utils:random_shuffle(lists:seq(0, MsgNum - 1))
+              random -> lists_utils:shuffle(lists:seq(0, MsgNum - 1))
             end,
 
   initializer:remove_pending_messages(),
@@ -147,13 +219,13 @@ route_message_should_work_for_multiple_streams_base(Config) ->
     % Production of 'MsgNum' messages in random order belonging to 'StmsCount'
     % streams. Requests are routed through random workers.
     {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
-      utils:pforeach(fun(StmId) ->
+      lists_utils:pforeach(fun(StmId) ->
         lists:foreach(fun(Msg) ->
-          [Wrk | _] = utils:random_shuffle(Workers),
+          [Wrk | _] = lists_utils:shuffle(Workers),
           route_message(Wrk, #client_message{session_id = SessId,
             message_stream = Msg#message_stream{stream_id = StmId}
           })
-        end, utils:random_shuffle(Msgs))
+        end, lists_utils:shuffle(Msgs))
       end, lists:seq(1, StmNum))
     end),
 
@@ -187,18 +259,23 @@ route_message_should_work_for_multiple_streams_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    [{?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     mock_router(Workers),
     mock_communicator(Workers),
+    initializer:mock_auth_manager(Config),
     Config.
+
+end_per_suite(_Config) ->
+    ok.
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator, router,
-        stream_router]).
+    test_utils:mock_validate_and_unload(Workers, [
+        communicator, event_router, stream_router
+    ]).
 
 %%%===================================================================
 %%% Internal functions
@@ -212,24 +289,8 @@ end_per_testcase(_Case, Config) ->
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
 session_setup(Worker) ->
-    SessId = base64:encode(crypto:strong_rand_bytes(20)),
-    session_setup(Worker, SessId).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates session document in datastore with given ID.
-%% @end
-%%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id()) ->
-    {ok, SessId :: session:id()}.
-session_setup(Worker, SessId) ->
-    Self = self(),
-    Iden = #user_identity{user_id = <<"user_id">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Self]
-    )),
-    {ok, SessId}.
+    Nonce = base64:encode(crypto:strong_rand_bytes(20)),
+    fuse_test_utils:setup_fuse_session(Worker, <<"user_id">>, Nonce).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -239,7 +300,7 @@ session_setup(Worker, SessId) ->
 %%--------------------------------------------------------------------
 -spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
 session_teardown(Worker, SessId) ->
-    rpc:call(Worker, session_manager, remove_session, [SessId]).
+    rpc:call(Worker, session_manager, terminate_session, [SessId]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -274,8 +335,8 @@ client_message(SessId, StmId, SeqNum) ->
 mock_communicator(Workers) ->
     Self = self(),
     test_utils:mock_new(Workers, [communicator]),
-    test_utils:mock_expect(Workers, communicator, send_to_client, fun
-        (Msg, _, _) -> Self ! Msg, ok
+    test_utils:mock_expect(Workers, communicator, send_to_oneclient, fun
+        (_, Msg, _) -> Self ! Msg, ok
     end).
 
 %%--------------------------------------------------------------------
@@ -287,8 +348,8 @@ mock_communicator(Workers) ->
 -spec mock_router(Workers :: [node()]) -> ok.
 mock_router(Workers) ->
     Self = self(),
-    test_utils:mock_new(Workers, [router]),
-    test_utils:mock_expect(Workers, router, route_message, fun
+    test_utils:mock_new(Workers, [event_router]),
+    test_utils:mock_expect(Workers, event_router, route_message, fun
         (Msg) -> Self ! Msg
     end),
     test_utils:mock_new(Workers, [stream_router]),

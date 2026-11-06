@@ -21,7 +21,7 @@
 -include_lib("proto/oneclient/stream_messages.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -150,19 +150,20 @@ sequencer_out_stream_should_unregister_from_sequencer_manager_on_acknowledged_en
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
+end_per_suite(_) ->
+    ok.
+
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     mock_communicator(Worker),
-    mock_session(Worker),
     {ok, SeqStm} = start_sequencer_out_stream(Worker),
     [{sequencer_out_stream, SeqStm} | Config].
 
 end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_sequencer_out_stream(?config(sequencer_out_stream, Config)),
-    test_utils:mock_validate_and_unload(Worker,
-        [communicator, session_connections]).
+    test_utils:mock_validate_and_unload(Worker, [communicator]).
 
 %%%===================================================================
 %%% Internal functions
@@ -233,20 +234,6 @@ server_message(Body) ->
 mock_communicator(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, communicator),
-    test_utils:mock_expect(Worker, communicator, send_to_client, fun
-        (Msg, _, _) -> Self ! Msg, ok
-    end).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks session, so that it returns this process as random connection.
-%% @end
-%%--------------------------------------------------------------------
--spec mock_session(Worker :: node()) -> ok.
-mock_session(Worker) ->
-    Self = self(),
-    test_utils:mock_new(Worker, session_connections),
-    test_utils:mock_expect(Worker, session_connections, get_random_connection, fun
-        (_) -> {ok, Self}
+    test_utils:mock_expect(Worker, communicator, send_to_oneclient, fun
+        (_, Msg, _) -> Self ! Msg, ok
     end).

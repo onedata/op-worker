@@ -12,7 +12,7 @@
 -module(lfm_context).
 -author("Tomasz Lichon").
 
-%% Internal opaque file-handle used by logical_file_manager
+%% Internal opaque file-handle used by lfm
 -record(lfm_context, {
     handle_id :: lfm_context:handle_id(),
     provider_id :: oneprovider:id(),
@@ -81,7 +81,7 @@ get_session_id(#lfm_context{session_id = SessionId}) ->
 %%--------------------------------------------------------------------
 -spec get_share_id(ctx()) -> od_share:id() | undefined.
 get_share_id(#lfm_context{file_guid = Guid}) ->
-    fslogic_uuid:guid_to_share_id(Guid).
+    file_id:guid_to_share_id(Guid).
 
 %%--------------------------------------------------------------------
 %% @doc

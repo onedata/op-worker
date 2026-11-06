@@ -12,15 +12,18 @@
 -module(permission_req).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([check_perms/3]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -29,61 +32,20 @@
 %%--------------------------------------------------------------------
 -spec check_perms(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:open_flag()) ->
     fslogic_worker:provider_response().
-check_perms(UserCtx, FileCtx, read) ->
-    check_perms_read(UserCtx, FileCtx);
-check_perms(UserCtx, FileCtx, write) ->
-    check_perms_write(UserCtx, FileCtx);
-check_perms(UserCtx, FileCtx, rdwr) ->
-    check_perms_rdwr(UserCtx, FileCtx).
+check_perms(UserCtx, FileCtx, OpenFlag) ->
+    fslogic_authz:ensure_authorized(UserCtx, FileCtx, required_perms(OpenFlag)),
+    #provider_response{status = #status{code = ?OK}}.
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks read permission on file.
-%% @end
-%%--------------------------------------------------------------------
--spec check_perms_read(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-check_perms_read(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_object],
-        [UserCtx, FileCtx],
-        fun(_UserCtx, _FileCtx) ->
-            #provider_response{status = #status{code = ?OK}}
-        end).
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks write permission on file.
-%% @end
-%%--------------------------------------------------------------------
--spec check_perms_write(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-check_perms_write(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx],
-        fun(_UserCtx, _FileCtx) ->
-            #provider_response{status = #status{code = ?OK}}
-        end).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks rdwr permission on file.
-%% @end
-%%--------------------------------------------------------------------
--spec check_perms_rdwr(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-check_perms_rdwr(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_object, ?write_object],
-        [UserCtx, FileCtx],
-        fun(_UserCtx, _FileCtx) ->
-            #provider_response{status = #status{code = ?OK}}
-    end).
+required_perms(read) ->
+    [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask)];
+required_perms(write) ->
+    [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_object_mask)];
+required_perms(rdwr) ->
+    [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask, ?write_object_mask)].

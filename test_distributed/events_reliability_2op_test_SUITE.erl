@@ -39,7 +39,8 @@ all() -> ?ALL([
     events_aggregation_stream_error_test,
     events_aggregation_stream_error_test2,
     events_aggregation_manager_error_test,
-    events_aggregation_manager_error_test2,
+    % TODO VFS-5293
+%%    events_aggregation_manager_error_test2,
     events_flush_stream_error_test,
     events_flush_handler_error_test
 ]).

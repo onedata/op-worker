@@ -51,7 +51,7 @@ route_message(#client_message{message_body = #events{events = Evts}}, SessionID)
     lists:foreach(fun(#event{} = Evt) ->
         event:emit(Evt, SessionID) end, Evts),
     ok;
-route_message(#client_message{message_body = #subscription{} = Sub}, SessionID) ->
+route_message(#client_message{message_body = #subscription{} = Sub, message_id = undefined}, SessionID) ->
     case session_utils:is_provider_session_id(SessionID) of
         true ->
             ok; %% Do not route subscriptions from other providers (route only subscriptions from users)
@@ -59,6 +59,20 @@ route_message(#client_message{message_body = #subscription{} = Sub}, SessionID) 
             event:subscribe(Sub, SessionID),
             ok
     end;
+route_message(#client_message{
+    message_body = #subscription{},
+    message_id = MsgId,
+    session_id = OriginSessId
+} = ClientMessage, SessionID) ->
+    % Spawn because send or subscription delegation can last long time and block sequencer_in_stream
+    spawn(fun() ->
+        route_message(ClientMessage#client_message{message_id = undefined}, SessionID),
+        communicator:send_to_oneclient(OriginSessId, #server_message{
+            message_id = MsgId,
+            message_body = #status{code = ?OK}
+        })
+    end),
+    ok;
 route_message(#client_message{message_body = #subscription_cancellation{} = SubCan}, SessionID) ->
     case session_utils:is_provider_session_id(SessionID) of
         true ->
@@ -69,6 +83,7 @@ route_message(#client_message{message_body = #subscription_cancellation{} = SubC
     end;
 route_message(#client_message{
     session_id = OriginSessId,
+    % TODO VFS-5326
     message_id = MsgId,
     message_body = FlushMsg = #flush_events{}
 }, SessionID) ->
@@ -77,7 +92,7 @@ route_message(#client_message{
         % Spawn because send can wait and block event_stream
         % Probably not needed after migration to asynchronous connections
         spawn(fun() ->
-            communicator:send_to_client(Result#server_message{message_id = MsgId}, OriginSessId)
+            communicator:send_to_oneclient(OriginSessId, Result#server_message{message_id = MsgId})
         end)
     end
     }, SessionID),

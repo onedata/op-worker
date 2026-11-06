@@ -18,7 +18,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("modules/monitoring/rrd_definitions.hrl").
 
 %% API
@@ -51,8 +51,8 @@ supervisor_children_spec() ->
         poolboy:child_spec(?RRDTOOL_POOL_NAME, [
             {name, {local, ?RRDTOOL_POOL_NAME}},
             {worker_module, rrdtool},
-            {size, application:get_env(?APP_NAME, rrdtool_pool_size, 10)},
-            {max_overflow, application:get_env(?APP_NAME, rrdtool_pool_max_overflow, 20)}
+            {size, op_worker:get_env(rrdtool_pool_size, 10)},
+            {max_overflow, op_worker:get_env(rrdtool_pool_max_overflow, 20)}
         ], [os:find_executable("rrdtool")])
     ].
 
@@ -81,7 +81,7 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
     Request :: ping | healthcheck | term(),
-    Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
+    Result :: cluster_status:status() | ok | {ok, Response} |
     {error, Reason} | pong,
     Response :: term(),
     Reason :: term().
@@ -101,8 +101,8 @@ handle({export, MonitoringId, Step, Format}) ->
         false -> {error, ?ENOENT}
     end;
 
-handle(_Request) ->
-    ?log_bad_request(_Request),
+handle(Request) ->
+    ?log_bad_request(Request),
     {error, wrong_request}.
 
 %%--------------------------------------------------------------------

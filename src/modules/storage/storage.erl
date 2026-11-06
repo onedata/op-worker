@@ -1,0 +1,467 @@
+%%%-------------------------------------------------------------------
+%%% @author Michal Stanisz
+%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Module responsible for all storage model related operations.
+%%%
+%%% This module is an overlay to `storage_config` which manages private
+%%% local storage configuration and `storage_logic` that is responsible
+%%% for management of storage details shared via GraphSync.
+%%% Functions from those two modules should not be called directly.
+%%%
+%%% This module contains datastore functions for a deprecated model 'storage'.
+%%% The model has been renamed to `storage_config` and those functions are
+%%% needed to properly perform upgrade procedure.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(storage).
+-author("Michal Stanisz").
+
+-include("middleware/middleware.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/storage/helpers/helpers.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+%% API
+-export([
+    create/1,
+    update/2,
+    describe/1, get/1, get_all/0, exists/1,
+    delete/1, clear_storages/0
+]).
+
+%%% Functions to retrieve storage details
+-export([
+    get_id/1, get_block_size/1, get_helper_spec/1, get_helper_name/1,
+    get_luma_feed/1, get_luma_config/1,
+    get_luma_db_namespace/1, get_stale_luma_db_namespaces/1, with_luma_db_namespace/2
+]).
+-export([
+    fetch_shared_data/2,
+    fetch_name_of_local_storage/1, fetch_name_of_remote_storage/2,
+    fetch_provider_id_of_remote_storage/2,
+    fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2
+]).
+-export([is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
+-export([has_non_auto_luma_feed/1]).
+-export([is_local/1]).
+
+%%% Support related functions
+-export([support_space/4, update_space_support_size/3, revoke_space_support/2]).
+-export([supports_any_space/1]).
+
+% exported for initializer and env_up escripts
+-export([on_storage_created/1]).
+
+
+-type id() :: od_storage:id().
+-opaque data() :: storage_config:doc().
+-type name() :: od_storage:name().
+-type qos_parameters() :: od_storage:qos_parameters().
+-type luma_feed() :: luma:feed().
+-type luma_config() :: luma_config:config().
+-type access_type() :: ?READONLY | ?READWRITE.
+-type imported() :: boolean().
+-type readonly() :: boolean().
+
+-export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0, access_type/0,
+    imported/0, readonly/0]).
+
+-compile({no_auto_import, [get/1]}).
+
+
+-define(WAIT_FOR_SUPPORT_INTERVAL, 500).
+-define(WAIT_FOR_SUPPORT_ATTEMPTS, 6).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec create(onedata_storage:create_spec()) -> {ok, storage:id()} | {error, term()}.
+create(StorageCreateSpec) ->
+    storage_creator:create(StorageCreateSpec).
+
+
+-spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
+update(StorageId, UpdateSpec) ->
+    lock_on_storage_by_id(StorageId, fun() ->
+        storage_updater:update(StorageId, UpdateSpec)
+    end).
+
+
+-spec describe(storage:id()) -> {ok, onedata_storage:description()} | errors:error().
+describe(StorageId) ->
+    storage_describer:describe(StorageId).
+
+
+-spec get(id() | data() | storage_config:doc()) -> {ok, data()} | {error, term()}.
+get(StorageId) when is_binary(StorageId) ->
+    storage_config:get(StorageId);
+get(StorageData = #document{}) ->
+    {ok, StorageData}.
+
+
+-spec get_all() -> {ok, [data()]} | {error, term()}.
+get_all() ->
+    storage_config:list_all().
+
+
+-spec exists(id()) -> boolean().
+exists(StorageId) ->
+    storage_config:exists(StorageId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes storage. Fails with an error if the storage supports
+%% any space.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(id()) -> ok | od_error_storage_in_use:t() | {error, term()}.
+delete(StorageId) ->
+    lock_on_storage_by_id(StorageId, fun() ->
+        case supports_any_space(StorageId) of
+            true ->
+                ?ERR_STORAGE_IN_USE(?err_ctx());
+            false ->
+                % TODO VFS-5124 Remove from rtransfer
+                delete_insecure(StorageId)
+        end
+    end).
+
+
+%% @private
+-spec delete_insecure(id()) -> ok | {error, term()}.
+delete_insecure(StorageId) ->
+    {ok, StorageData} = get(StorageId),
+
+    case storage_logic:delete_in_zone(StorageId) of
+        ok ->
+            ok = storage_config:delete(StorageId),
+            % the storage config is gone, so this is the last moment its stale
+            % namespaces can still be reached
+            luma_crud_api:clear_db_with_stale_namespaces(StorageData);
+        Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes all storages after provider have been deregistered.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_storages() -> ok.
+clear_storages() ->
+    % all storages should have been deleted by Onezone after
+    % provider was deregistered, so clear only local data
+    storage_config:delete_all().
+
+
+%%%===================================================================
+%%% Functions to retrieve storage details
+%%%===================================================================
+
+-spec get_id(id() | data()) -> id().
+get_id(StorageId) when is_binary(StorageId) ->
+    StorageId;
+get_id(StorageData) ->
+    storage_config:get_id(StorageData).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns size of block used by underlying object storage.
+%% For posix-compatible ones 'undefined' is returned.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_block_size(id()) -> non_neg_integer() | undefined.
+get_block_size(StorageId) ->
+    helper_spec:get_block_size(get_helper_spec(StorageId)).
+
+
+-spec get_helper_spec(data() | id()) -> helper_spec:t().
+get_helper_spec(StorageDataOrId) ->
+    storage_config:get_helper_spec(StorageDataOrId).
+
+-spec get_helper_name(data() | id()) -> helper_spec:name().
+get_helper_name(StorageDataOrId) ->
+    HelperSpec = storage_config:get_helper_spec(StorageDataOrId),
+    helper_spec:get_name(HelperSpec).
+
+-spec get_luma_feed(id() | data()) -> luma_feed().
+get_luma_feed(Storage) ->
+    storage_config:get_luma_feed(Storage).
+
+-spec get_luma_config(id() | data()) -> luma_config().
+get_luma_config(StorageData) ->
+    storage_config:get_luma_config(StorageData).
+
+
+-spec get_luma_db_namespace(id() | data()) -> undefined | luma_db:namespace().
+get_luma_db_namespace(Storage) ->
+    storage_config:get_luma_db_namespace(Storage).
+
+
+-spec get_stale_luma_db_namespaces(id() | data()) -> [undefined | luma_db:namespace()].
+get_stale_luma_db_namespaces(Storage) ->
+    storage_config:get_stale_luma_db_namespaces(Storage).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage data addressing a different LUMA DB namespace than the
+%% storage's current one. Nothing is written - see storage_config.
+%% @end
+%%--------------------------------------------------------------------
+-spec with_luma_db_namespace(data(), undefined | luma_db:namespace()) -> data().
+with_luma_db_namespace(StorageData, Namespace) ->
+    storage_config:with_luma_db_namespace(StorageData, Namespace).
+
+
+-spec fetch_shared_data(id(), od_space:id()) -> od_storage:doc().
+fetch_shared_data(StorageId, SpaceId) when is_binary(StorageId) ->
+    ?check(storage_logic:get_shared_data(StorageId, SpaceId)).
+
+
+-spec fetch_name_of_local_storage(id()) -> name().
+fetch_name_of_local_storage(StorageId) when is_binary(StorageId) ->
+    ?check(storage_logic:get_name_of_local_storage(StorageId)).
+
+
+-spec fetch_name_of_remote_storage(id(), od_space:id()) -> name().
+fetch_name_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
+    ?check(storage_logic:get_name_of_remote_storage(StorageId, SpaceId)).
+
+
+-spec fetch_provider_id_of_remote_storage(id(), od_space:id()) -> od_provider:id().
+fetch_provider_id_of_remote_storage(StorageId, SpaceId) ->
+    ?check(storage_logic:get_provider(StorageId, SpaceId)).
+
+
+-spec fetch_qos_parameters_of_local_storage(id()) -> qos_parameters().
+fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
+    ?check(storage_logic:get_qos_parameters_of_local_storage(StorageId)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves QoS parameters from storage details shared between providers
+%% through given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_qos_parameters_of_remote_storage(id(), od_space:id()) -> qos_parameters().
+fetch_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
+    ?check(storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId)).
+
+
+-spec is_imported(id() | data()) -> boolean().
+is_imported(StorageId) when is_binary(StorageId) ->
+    ?check(storage_logic:is_imported(StorageId));
+is_imported(StorageData) ->
+    is_imported(storage:get_id(StorageData)).
+
+
+-spec is_local_storage_readonly(id() | data()) -> boolean().
+is_local_storage_readonly(StorageId) when is_binary(StorageId) ->
+    ?check(storage_logic:is_local_storage_readonly(StorageId));
+is_local_storage_readonly(StorageData) ->
+    is_local_storage_readonly(storage:get_id(StorageData)).
+
+
+-spec is_storage_readonly(id() | data(), od_space:id()) -> boolean().
+is_storage_readonly(StorageId, SpaceId) when is_binary(StorageId) ->
+    ?check(storage_logic:is_storage_readonly(StorageId, SpaceId));
+is_storage_readonly(StorageData, SpaceId) ->
+    is_storage_readonly(storage:get_id(StorageData), SpaceId).
+
+
+-spec has_non_auto_luma_feed(data()) -> boolean().
+has_non_auto_luma_feed(Storage) ->
+    get_luma_feed(Storage) =/= ?AUTO_FEED.
+
+
+-spec is_local(id()) -> boolean().
+is_local(StorageId) ->
+    provider_logic:has_storage(StorageId).
+
+
+-spec is_posix_compatible(id() | data()) -> boolean().
+is_posix_compatible(StorageDataOrId) ->
+    HelperSpec = get_helper_spec(StorageDataOrId),
+    helper_spec:is_posix_compatible(HelperSpec).
+
+
+%%%===================================================================
+%%% Support related functions
+%%%===================================================================
+
+-spec support_space(
+    id(),
+    tokens:serialized(),
+    od_space:support_size(),
+    support_parameters:record()
+) ->
+    {ok, od_space:id()} | errors:error().
+support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
+    case validate_support_request(SerializedToken) of
+        {ok, SpaceId} ->
+            case dir_stats_service_state:enable_for_new_support(SpaceId, SupportParameters) of
+                ok -> ok;
+                StatsError -> ?warning("Error enabling statistics for new space ~tp~nGot: ~tp", [SpaceId, StatsError])
+            end,
+            case storage_logic:support_space(StorageId, SerializedToken, SupportSize, SupportParameters) of
+                {ok, SpaceId} ->
+                    on_space_supported(SpaceId, StorageId),
+                    {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
+                    {ok, StorageName} = storage_logic:get_name_of_local_storage(StorageId),
+                    ?notice(
+                        "New support has been granted:~n"
+                        "> Space:    '~ts' (~ts)~n"
+                        "> Storage:  '~ts' (~ts)~n"
+                        "> Size:     ~ts", [
+                            SpaceName, SpaceId,
+                            StorageName, StorageId,
+                            str_utils:format_byte_size(SupportSize)
+                        ]
+                    ),
+                    wait_for_space_support(SpaceId),
+                    {ok, SpaceId};
+                {error, _} = SupportError ->
+                    ok = dir_stats_service_state:clean(SpaceId),
+                    SupportError
+            end;
+        ValidateError ->
+            ValidateError
+    end.
+
+
+%% @private
+-spec wait_for_space_support(od_space:id()) -> ok.
+wait_for_space_support(SpaceId) ->
+    try
+        ?info("Awaiting synchronization of support-related documents (id: ~ts)...", [SpaceId]),
+        utils:wait_until(
+            fun() ->
+                case space_logic:is_supported_locally(SpaceId) of
+                    true ->
+                        true;
+                    false ->
+                        provider_logic:force_fetch(),
+                        false
+                end
+            end,
+            ?WAIT_FOR_SUPPORT_INTERVAL,
+            ?WAIT_FOR_SUPPORT_ATTEMPTS
+        ),
+        ?notice("Support-related documents synchronized, the space is fully functional (id: ~ts)", [SpaceId])
+    catch error:timeout ->
+        ?warning("Timeout synchronizing support-related documents, the space will not be functional "
+            "for some time - until the synchronization is completed in the background (id: ~ts)", [SpaceId])
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if given token is valid support token and whether provider
+%% does not already support this space.
+%% @TODO VFS-5497 This check will not be needed when multisupport is implemented
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_support_request(tokens:serialized()) -> {ok, od_space:id()} | errors:error().
+validate_support_request(SerializedToken) ->
+    case tokens:deserialize(SerializedToken) of
+        {ok, #token{type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId)}} ->
+            case provider_logic:supports_space(SpaceId) of
+                true ->
+                    ?ERR_RELATION_ALREADY_EXISTS(
+                        ?err_ctx(), od_space, SpaceId, od_provider, oneprovider:get_id()
+                    );
+                false ->
+                    {ok, SpaceId}
+            end;
+        {ok, #token{type = ReceivedType}} ->
+            ?ERR_BAD_VALUE_TOKEN(?err_ctx(), <<"token">>,
+                ?ERR_NOT_AN_INVITE_TOKEN(?err_ctx(), ?SUPPORT_SPACE, ReceivedType));
+        {error, _} = Error ->
+            ?ERR_BAD_VALUE_TOKEN(?err_ctx(), <<"token">>, Error)
+    end.
+
+
+-spec update_space_support_size(id(), od_space:id(), NewSupportSize :: integer()) ->
+    ok | errors:error().
+update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
+    CurrentOccupiedSize = space_quota:current_size(SpaceId),
+    case NewSupportSize < CurrentOccupiedSize of
+        true -> ?ERR_BAD_VALUE_TOO_LOW(?err_ctx(), <<"size">>, CurrentOccupiedSize);
+        false -> storage_logic:update_space_support_size(StorageId, SpaceId, NewSupportSize)
+    end.
+
+
+-spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
+revoke_space_support(StorageId, SpaceId) ->
+    %% @TODO VFS-6132 Use space_unsupport when it is implemented
+    %% @TODO VFS-6208 Cancel sync and auto-cleaning traverse and clean up ended tasks when unsupporting
+    case storage_logic:revoke_space_support(StorageId, SpaceId) of
+        ok -> on_space_unsupported(SpaceId, StorageId);
+        Error -> Error
+    end.
+
+
+-spec supports_any_space(id() | data()) -> boolean().
+supports_any_space(StorageId) when is_binary(StorageId) ->
+    case storage_logic:get_spaces(StorageId) of
+        {ok, []} -> false;
+        {ok, _Spaces} -> true;
+        {error, _} = Error -> throw(Error)
+    end;
+supports_any_space(StorageData) ->
+    supports_any_space(get_id(StorageData)).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec on_storage_created(id()) -> ok.
+on_storage_created(StorageId) ->
+    % NOTE: registration is best effort and reports its own failures - by this
+    % point the storage is in Onezone and in the local datastore, with no
+    % compensation left to undo either, so a failure to reach rtransfer must not
+    % turn a created storage into a reported failure
+    rtransfer_config:add_storage(StorageId).
+
+
+%% @private
+-spec on_space_supported(od_space:id(), id()) -> ok.
+on_space_supported(SpaceId, StorageId) ->
+    % remove possible remnants of previous support
+    % (when space was unsupported in Onezone without provider knowledge)
+    space_unsupport:cleanup_local_documents(SpaceId, StorageId),
+    space_logic:on_space_supported(SpaceId).
+
+
+%% @private
+-spec on_space_unsupported(od_space:id(), id()) -> ok.
+on_space_unsupported(SpaceId, StorageId) ->
+    space_unsupport:cleanup_local_documents(SpaceId, StorageId),
+    auto_storage_import_worker:notify_space_unsupported(SpaceId),
+    main_harvesting_stream:space_unsupported(SpaceId),
+    files_monitoring_manager:notify_space_unsupported(SpaceId),
+    dir_stats_service_state:clean(SpaceId).
+
+
+%% @private
+-spec lock_on_storage_by_id(id(), fun(() -> Result)) -> Result.
+lock_on_storage_by_id(Identifier, Fun) ->
+    critical_section:run({storage_id, Identifier}, Fun).

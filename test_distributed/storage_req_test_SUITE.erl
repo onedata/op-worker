@@ -13,6 +13,7 @@
 -author("Krzysztof Trzepla").
 
 -include("global_definitions.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -56,7 +57,7 @@ get_configuration_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     UserId = ?config({user_id, <<"user1">>}, Config),
 
-    UserRootGuid = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId), undefined),
+    UserRootGuid = user_root_dir:guid(UserId),
 
     ?assertMatch(#configuration{subscriptions = [_ | _], root_guid = UserRootGuid},
         ?fcm_req(Worker, get_configuration, [SessId])).
@@ -67,12 +68,9 @@ get_helper_params_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#644)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath)),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    SpaceId = case file_ctx:get_space_id_const(FileCtx) of
-        undefined -> throw(?ENOENT);
-        <<_/binary>> = Id -> Id
-    end,
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     %% Test forced proxy mode
     Response1 = ?req(Worker, SessId, #get_helper_params{
@@ -113,7 +111,7 @@ create_storage_test_file_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#600)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath)),
 
     Response1 = ?req(Worker, SessId, #create_storage_test_file{
         storage_id = StorageId,
@@ -132,7 +130,16 @@ create_storage_test_file_test(Config) ->
         storage_id = <<"unknown_id">>,
         file_guid = FileGuid
     }),
-    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response3).
+    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response3),
+
+    StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
+    ok = rpc:call(Worker, file, change_mode, [StorageDir, 8#444]),
+
+    Response5 = ?req(Worker, SessId, #create_storage_test_file{
+        storage_id = StorageId,
+        file_guid = FileGuid
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, Response5).
 
 verify_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -142,13 +149,13 @@ verify_storage_test_file_test(Config) ->
     test_utils:set_env(Worker, ?APP_NAME, remove_storage_test_file_attempts, 1),
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#600)),
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath)),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, 0, <<"test">>)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
 
     FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [FileGuid]),
-    {FileId, _} = rpc:call(Worker, file_ctx, get_raw_storage_path, [FileCtx]),
+    {FileId, _} = rpc:call(Worker, file_ctx, get_storage_file_id, [FileCtx]),
     SpaceId = <<"space_id1">>,
 
     Response1 = ?req(Worker, SessId, #verify_storage_test_file{
@@ -190,6 +197,12 @@ init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:disable_quota_limit(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
+
+end_per_testcase(create_storage_test_file_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
+    ok = rpc:call(Worker, file, change_mode, [StorageDir, 8#777]),
+    end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),

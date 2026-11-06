@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
 %%% @copyright (C) 2017 ACK CYFRONET AGH
-%%% This software is released under the MIT license cited in 'LICENSE.txt'.
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
@@ -17,8 +18,10 @@
 
 -behaviour(gen_server).
 
+-include("modules/dbsync/dbsync.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %% API
 -export([start_link/1]).
@@ -35,6 +38,16 @@
 
 -type msg_id_history() :: queue:queue(binary()).
 -type state() :: #state{}.
+-type sync_start_seq() :: integer(). % Sequences are positive integers. sync_start_seq() that is not positive integer
+                                     % is added to the current sequence to determine the start sequence.
+-type sync_target_seq() :: couchbase_changes:seq() | current.
+-type mutators() :: [binary() | od_provider:id()]. % NOTE: special id values (values that are not provider ids)
+                                                   %       are defined in dbsync.hrl
+-export_type([sync_start_seq/0, sync_target_seq/0, mutators/0]).
+
+
+-define(RESYNCHRONIZED_SEQS_ON_CLOSING_PROCEDURE_FAILURE,
+    op_worker:get_env(resynchronized_seqs_on_closing_procedure_failure, 1000000)).
 
 %%%===================================================================
 %%% API
@@ -82,6 +95,8 @@ init([SpaceId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call({resynchronize, ProviderId, IncludedMutators, StartSeq, TargetSeq}, _From, State) ->
+    {reply, ok, resynchronize(ProviderId, IncludedMutators, StartSeq, TargetSeq, State)};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -96,9 +111,9 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({changes_batch, MsgId, ProviderId, Since, Until, Docs}, State) ->
+handle_cast({changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}, State) ->
     {noreply, handle_changes_batch(
-        MsgId, ProviderId, Since, Until, Docs, State
+        MsgId, ProviderId, Since, Until, Timestamp, Docs, State
     )};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
@@ -162,17 +177,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec handle_changes_batch(undefined | dbsync_communicator:msg_id(),
     od_provider:id(), couchbase_changes:since(), couchbase_changes:until(),
-    [datastore:doc()], state()) -> state().
-handle_changes_batch(undefined, ProviderId, Since, Until, Docs, State) ->
-    forward_changes_batch(ProviderId, Since, Until, Docs, State);
-handle_changes_batch(MsgId, ProviderId, Since, Until, Docs, State = #state{
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
+handle_changes_batch(undefined, ProviderId, Since, Until, Timestamp, Docs, State) ->
+    forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State);
+handle_changes_batch(MsgId, ProviderId, Since, Until, Timestamp, Docs, State = #state{
     msg_id_history = History
 }) ->
     case queue:member(MsgId, History) of
         true ->
             State;
         false ->
-            forward_changes_batch(ProviderId, Since, Until, Docs, State#state{
+            forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State#state{
                 msg_id_history = save_msg_id(MsgId, History)
             })
     end.
@@ -184,33 +199,53 @@ handle_changes_batch(MsgId, ProviderId, Since, Until, Docs, State = #state{
 %% it is started.
 %% @end
 %%--------------------------------------------------------------------
--spec forward_changes_batch(od_provider:id(), couchbase_changes:since(),
-    couchbase_changes:until(), [datastore:doc()], state()) -> state().
-forward_changes_batch(ProviderId, Since, Until, Docs, State = #state{
+-spec forward_changes_batch(od_provider:id(), couchbase_changes:since(), couchbase_changes:until(),
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
+forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
     space_id = SpaceId,
     workers = Workers
 }) ->
     State2 = case maps:find(ProviderId, Workers) of
         {ok, Worker} ->
-            gen_server:cast(Worker, {changes_batch, Since, Until, Docs}),
+            gen_server:cast(Worker, {changes_batch, Since, Until, Timestamp, Docs}),
             State;
         error ->
+            resynchronize_if_closing_procedure_failed(SpaceId, ProviderId),
             {ok, Worker} = dbsync_in_stream_worker:start_link(
                 SpaceId, ProviderId
             ),
-            gen_server:cast(Worker, {changes_batch, Since, Until, Docs}),
+            gen_server:cast(Worker, {changes_batch, Since, Until, Timestamp, Docs}),
             State#state{
                 workers = maps:put(ProviderId, Worker, Workers)
             }
     end,
 
-    case application:get_env(?APP_NAME, dbsync_in_stream_gc, on) of
+    case op_worker:get_env(dbsync_in_stream_gc, on) of
         on ->
             erlang:garbage_collect();
         _ ->
             ok
     end,
 
+    State2.
+
+%% @private
+-spec resynchronize(od_provider:id(), mutators(), sync_start_seq(), sync_target_seq(), state()) -> state().
+resynchronize(ProviderId, IncludedMutators, StartSeq, TargetSeq, State = #state{
+    space_id = SpaceId,
+    workers = Workers
+}) ->
+    State2 = case maps:find(ProviderId, Workers) of
+        {ok, Worker} ->
+            gen_server:call(Worker, terminate, infinity),
+            State#state{
+                workers = maps:remove(ProviderId, Workers)
+            };
+        error ->
+            State
+    end,
+
+    dbsync_state:resynchronize_stream(SpaceId, ProviderId, IncludedMutators, StartSeq, TargetSeq),
     State2.
 
 %%--------------------------------------------------------------------
@@ -222,7 +257,7 @@ forward_changes_batch(ProviderId, Since, Until, Docs, State = #state{
 -spec save_msg_id(dbsync_communicator:msg_id(), msg_id_history()) ->
     msg_id_history().
 save_msg_id(MsgId, History) ->
-    MaxSize = application:get_env(?APP_NAME, dbsync_msg_id_history_len, 10000),
+    MaxSize = op_worker:get_env(dbsync_msg_id_history_len, 10000),
     History2 = queue:in(MsgId, History),
     case queue:len(History2) > MaxSize of
         true ->
@@ -230,4 +265,68 @@ save_msg_id(MsgId, History) ->
             History3;
         false ->
             History2
+    end.
+
+
+%% @private
+-spec resynchronize_if_closing_procedure_failed(od_space:id(), od_provider:id()) -> ok.
+resynchronize_if_closing_procedure_failed(SpaceId, ProviderId) ->
+    case check_closing_procedure() of
+        succeeded ->
+            ok;
+        Error ->
+            case check_resynchronization_on_closing_procedure_failure(SpaceId, ProviderId) of
+                resynchronization_not_needed ->
+                    ok;
+                resynchronize ->
+                    case ?RESYNCHRONIZED_SEQS_ON_CLOSING_PROCEDURE_FAILURE of
+                        0 ->
+                            ?error("Possible dbsync errors in stream {~tp, ~tp} due to node closing problems: ~tp",
+                                [SpaceId, ProviderId, Error]),
+                            ok;
+                        Seq ->
+                            ?info(?autoformat_with_msg("Resynchronizing ~tp sequences on dbsync in stream {~tp, ~tp} due to:",
+                                [Seq, SpaceId, ProviderId], Error)),
+                            ok = dbsync_state:resynchronize_stream(
+                                SpaceId, ProviderId, ?ALL_MUTATORS_EXCEPT_SENDER, -1 * Seq, current)
+                    end
+            end
+    end.
+
+
+%% @private
+-spec check_closing_procedure() -> succeeded | {bad_closing_statuses | bad_nodes, list()}.
+check_closing_procedure() ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, datastore_worker, get_application_closing_status, []),
+
+    case BadNodes of
+        [] ->
+            FilteredRes = lists:filtermap(fun
+                (?CLOSING_PROCEDURE_SUCCEEDED) -> false;
+                (undefined) -> false; % First start of node
+                (Error) -> {true, Error}
+            end, Res),
+
+            case FilteredRes of
+                [] -> succeeded;
+                _ -> {bad_closing_statuses, FilteredRes}
+            end;
+        _ ->
+            {bad_nodes, BadNodes}
+    end.
+
+
+%% @private
+-spec check_resynchronization_on_closing_procedure_failure(od_space:id(), od_provider:id()) ->
+    resynchronize | resynchronization_not_needed.
+check_resynchronization_on_closing_procedure_failure(SpaceId, ProviderId) ->
+    ProvidersResynchronized = node_cache:get({providers_resynchronized_on_closing_procedure_failure, SpaceId}, []),
+    case lists:member(ProviderId, ProvidersResynchronized) of
+        true ->
+            resynchronization_not_needed;
+        false ->
+            node_cache:put({providers_resynchronized_on_closing_procedure_failure, SpaceId},
+                [ProviderId | ProvidersResynchronized]),
+            resynchronize
     end.

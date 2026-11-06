@@ -12,6 +12,7 @@
 -module(event).
 -author("Krzysztof Trzepla").
 
+-include("modules/events/routing.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
@@ -19,12 +20,12 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
--export([emit/1, emit/2, flush/2, flush/5, subscribe/2, unsubscribe/2]).
+-export([emit/1, emit/2, emit_to_filtered_subscribers/3, flush/2, flush/5, subscribe/2, unsubscribe/2]).
 -export([get_event_managers/1]).
 
 -export([init_counters/0, init_report/0]).
 
--export_type([key/0, base/0, type/0, stream/0, manager_ref/0]).
+-export_type([key/0, base/0, aggregated/0, type/0, stream/0, manager_ref/0]).
 
 -type key() :: term().
 -type base() :: #event{}.
@@ -32,8 +33,8 @@
 -type type() :: #file_read_event{} | #file_written_event{} |
                 #file_attr_changed_event{} | #file_location_changed_event{} |
                 #file_perm_changed_event{} | #file_removed_event{} |
-                #quota_exceeded_event{} | #file_renamed_event{} |
-                #monitoring_event{}.
+                #quota_exceeded_event{} | #helper_params_changed_event{} |
+                #file_renamed_event{} | #monitoring_event{}.
 -type stream() :: #event_stream{}.
 -type manager_ref() :: pid() | session:id() | [pid() | session:id()] |
 % reference all event managers except one provided
@@ -55,10 +56,7 @@
 %%--------------------------------------------------------------------
 -spec emit(Evt :: base() | type()) -> ok | {error, Reason :: term()}.
 emit(Evt) ->
-    case subscription_manager:get_subscribers(Evt) of
-        {ok, SessIds} -> emit(Evt, SessIds);
-        {error, Reason} -> {error, Reason}
-    end.
+    emit_to_filtered_subscribers(Evt, undefined, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -68,21 +66,23 @@ emit(Evt) ->
 -spec emit(Evt :: base() | aggregated() | type(), MgrRef :: manager_ref()) ->
     ok | {error, Reason :: term()}.
 emit(Evt, {exclude, MgrRef}) ->
-    case subscription_manager:get_subscribers(Evt) of
-        {ok, SessIds} ->
-            Excluded = get_event_managers(MgrRef),
-            Subscribed = get_event_managers(SessIds),
-            emit(Evt, subtract_unique(Subscribed, Excluded));
-        {error, Reason} ->
-            {error, Reason}
-    end;
+    emit_to_filtered_subscribers(Evt, undefined, MgrRef);
 
 emit(#event{} = Evt, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
-    send_to_event_managers(Evt, get_event_managers(MgrRef));
+    case event_type:get_context(Evt) of
+        {file, Guid} ->
+            case special_dirs:is_included_in_events(file_id:guid_to_uuid(Guid)) of
+                true -> send_to_event_managers(Evt, get_event_managers(MgrRef));
+                false -> ok
+            end;
+        _ ->
+            send_to_event_managers(Evt, get_event_managers(MgrRef))
+    end;
 
 emit({aggregated, [#event{} | _]} = Evts, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
+    % Aggregated events are produced only for regular files - trash dir does not have to be filtered
     send_to_event_managers(Evts, get_event_managers(MgrRef));
 
 emit({aggregated, Evts}, MgrRef) ->
@@ -91,6 +91,29 @@ emit({aggregated, Evts}, MgrRef) ->
 
 emit(Evt, MgrRef) ->
     emit(#event{type = Evt}, MgrRef).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets subscribers and sends an event to event managers that represent subscribers.
+%% Filters subscribers list if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_to_filtered_subscribers(Evt :: base() | aggregated() | type(), subscription_manager:routing_info(),
+    ExcludedRef :: pid() | session:id() | [pid() | session:id()]) ->
+    ok | {error, Reason :: term()}.
+emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
+    case subscription_manager:get_subscribers(Evt, RoutingInfo) of
+        #event_subscribers{subscribers = SessIds} = EventSubscribers ->
+            SubscribedMap = map_sessions_to_managers(SessIds, get_event_managers(ExcludedRef)),
+            EventsMap = extend_event_for_space_dir(Evt, maps:keys(SubscribedMap)),
+            maps:fold(fun(FinalEvt, SessionIds, _) ->
+                emit(FinalEvt, [maps:get(S, SubscribedMap) || S <- SessionIds])
+            end, ok, EventsMap),
+            emit_for_file_links(Evt, EventSubscribers);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -222,15 +245,15 @@ init_report() ->
 get_event_manager(MgrRef) when is_pid(MgrRef) ->
     {ok, MgrRef};
 
-get_event_manager(MgrRef) ->
-    case session:get_event_manager(MgrRef) of
+get_event_manager(SessId) ->
+    case session:get_event_manager(SessId) of
         {ok, Mgr} ->
             {ok, Mgr};
         {error, not_found = Reason} ->
             {error, Reason};
         {error, Reason} ->
-            ?warning("Cannot get event manager for session ~p due to: ~p",
-                [MgrRef, Reason]),
+            ?warning("Cannot get event manager for session ~tp due to: ~tp",
+                [SessId, Reason]),
             {error, Reason}
     end.
 
@@ -253,33 +276,103 @@ send_to_event_managers(Message, Managers) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a list consisting of unique elements that occurs in the ListA
-%% but not in the ListB.
-%% @end
-%%--------------------------------------------------------------------
--spec subtract_unique(ListA :: list(), ListB :: list()) -> Diff :: list().
-subtract_unique(ListA, ListB) ->
-    SetA = gb_sets:from_list(ListA),
-    SetB = gb_sets:from_list(ListB),
-    gb_sets:to_list(gb_sets:subtract(SetA, SetB)).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Sends message to event manager.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_to_event_manager(Manager :: pid(), Message :: term(), RetryCounter :: non_neg_integer()) -> ok.
 send_to_event_manager(Manager, Message, 0) ->
-    ok = event_manager:send(Manager, Message);
+    ok = event_manager:handle(Manager, Message);
 send_to_event_manager(Manager, Message, RetryCounter) ->
     try
-        ok = event_manager:send(Manager, Message)
+        ok = event_manager:handle(Manager, Message)
     catch
         exit:{timeout, _} ->
-            ?debug("Timeout of event manager for message ~p, retry", [Message]),
+            ?debug("Timeout of event manager for message ~tp, retry", [Message]),
             send_to_event_manager(Manager, Message, RetryCounter - 1);
-        Reason1:Reason2 ->
-            ?error_stacktrace("Cannot process event ~p due to: ~p", [Message, {Reason1, Reason2}]),
+        Reason1:Reason2:Stacktrace ->
+            ?error_stacktrace("Cannot process event ~tp due to: ~tp", [Message, {Reason1, Reason2}], Stacktrace),
             send_to_event_manager(Manager, Message, RetryCounter - 1)
+    end.
+
+
+%% @private
+-spec map_sessions_to_managers([session:id()], [pid()]) -> #{session:id() => pid()}.
+map_sessions_to_managers(SessionIds, ExcludedManagers) ->
+    lists:foldl(fun(SessionId, Acc) ->
+        case get_event_manager(SessionId) of
+            {ok, Mgr} ->
+                case lists:member(Mgr, ExcludedManagers) of
+                    true ->
+                        Acc;
+                    false ->
+                        Acc#{SessionId => Mgr}
+                end;
+            {error, _} ->
+                Acc
+        end
+    end, #{}, SessionIds).
+
+
+%% @private
+-spec emit_for_file_links(base() | aggregated() | type(), subscription_manager:event_subscribers()) -> ok.
+emit_for_file_links(Evt, #event_subscribers{subscribers_for_links = SessIdsForLinks}) ->
+    lists:foreach(fun({Context, AdditionalSessIds}) ->
+        try
+            emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
+        catch
+            Class:Reason:Stacktrace ->
+                % Race with file/link deletion can result in error logged here
+                ?warning_exception(?autoformat_with_msg("Error emitting event for additional guid ", [Context, Evt]),
+                    Class, Reason, Stacktrace)
+        end
+    end, SessIdsForLinks).
+
+
+%% @private
+-spec extend_event_for_space_dir(base() | aggregated() | type(), [session:id()]) -> #{type() => [session:id()]}.
+extend_event_for_space_dir(#file_attr_changed_event{file_attr = #file_attr{guid = Guid} = Attr} = Evt, SessionIds) ->
+    case space_dir:is_special(guid, Guid) of
+        true ->
+            SpaceId = file_id:guid_to_space_id(Guid),
+            lists:foldl(fun(SessionId, Acc) ->
+                % file_attr can contain invalid values when fetched with root sess id for space dir. Fill proper values here.
+                case get_space_dir_event_details(SpaceId, SessionId) of
+                    {ok, Name, UserRootDirGuid} ->
+                        FilledAttr = Attr#file_attr{name = Name, parent_guid = UserRootDirGuid},
+                        FinalEvent = Evt#file_attr_changed_event{file_attr = FilledAttr},
+                        Acc#{FinalEvent => [SessionId | maps:get(FinalEvent, Acc, [])]};
+                    not_applicable ->
+                        Acc
+                end
+            end, #{}, SessionIds);
+        false ->
+            #{Evt => SessionIds}
+    end;
+extend_event_for_space_dir(#event{type = Type}, SessionIds) ->
+    extend_event_for_space_dir(Type, SessionIds);
+extend_event_for_space_dir({aggregated, Evts}, SessionIds) ->
+    lists:foldl(fun(Evt, Acc) ->
+        maps:merge(Acc, extend_event_for_space_dir(Evt, SessionIds))
+    end, #{}, Evts);
+extend_event_for_space_dir(Evt, SessionIds) ->
+    #{Evt => SessionIds}.
+
+
+%% @private
+-spec get_space_dir_event_details(od_space:id(), session:id()) ->
+    {ok, file_meta:name(), file_id:file_guid()} | not_applicable.
+get_space_dir_event_details(SpaceId, SessionId) ->
+    case space_logic:get_protected_data(SessionId, SpaceId) of
+        {ok, #document{value = #od_space{name = Name, providers = Providers}}} when map_size(Providers) > 0 ->
+            case session:get_user_id(SessionId) of
+                {ok, UserId} ->
+                    {FinalName, _} = user_root_dir:get_space_name_and_conflicts(SessionId, UserId, Name, SpaceId),
+                    {ok, FinalName, user_root_dir:guid(UserId)};
+                {error, not_found} ->
+                    not_applicable
+            end;
+        {ok, #document{value = #od_space{providers = Providers}}} when map_size(Providers) == 0 ->
+            not_applicable;
+        ?ERR_FORBIDDEN ->
+            not_applicable
     end.

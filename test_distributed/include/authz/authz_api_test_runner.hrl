@@ -1,0 +1,148 @@
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%%--------------------------------------------------------------------
+%%% @doc
+%%% This file contains definitions of specs used by the authz api test runner.
+%%% Permission definitions themselves are kept in `authz_test.hrl`.
+%%% @end
+%%%-------------------------------------------------------------------
+
+-ifndef(AUTHZ_API_TEST_RUNNER_HRL).
+-define(AUTHZ_API_TEST_RUNNER_HRL, 1).
+
+-include("authz/authz_test.hrl").
+-include_lib("ctool/include/errors.hrl").
+
+
+-record(authz_file_spec, {
+    % name of file
+    name :: binary(),
+    % permissions needed to perform #test_spec.operation
+    required_perms = [] :: [Perms :: binary()],
+    % function called during environment setup. Term returned will be stored in `ExtraData`
+    % and can be used during test (described in `operation` of #authz_test_suite_spec{}).
+    on_create = undefined :: undefined | fun((node(), session:id(), file_id:file_guid()) -> term())
+}).
+
+-record(authz_dir_spec, {
+    % name of directory
+    name :: binary(),
+    % permissions needed to perform #test_spec.operation
+    required_perms = [] :: [Perms :: binary()],
+    % function called during environment setup. Term returned will be stored in `ExtraData`
+    % and can be used during test (described in `operation` of #authz_test_suite_spec{}).
+    on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term()),
+    % children of directory if needed
+    children = [] :: [#authz_dir_spec{} | #authz_file_spec{}]
+}).
+
+-record(authz_test_suite_spec, {
+    % Unique name of test suite.
+    name :: binary(),
+
+    % Selector of provider on which tests will be carried out.
+    provider_selector = krakow :: oct_background:entity_selector(),
+
+    % Selector of space within which tests will be carried out.
+    space_id = space_krk :: od_space:id(),
+
+    % Selector of user being owner of space. He should be allowed to perform
+    % any operation on files in space regardless of permissions set.
+    space_owner_selector = space_owner :: oct_background:entity_selector(),
+
+    % Selector of user belonging to space specified in `space_id` in
+    % context of which all files required for tests will be created. It will
+    % be used to test `user` posix bits and `OWNER@` special acl identifier.
+    files_owner_selector = user1 :: oct_background:entity_selector(),
+
+    % Selector of user belonging to space specified in `space_id` which
+    % aren't the same as `owner_user`. It will be used to test `group` posix
+    % bits and acl for his Id.
+    other_member_selector = user2 :: oct_background:entity_selector(),
+
+    % Selector of group to which belongs `other_space_member_selector` and which itself
+    % belong to `space_id`. It will be used to test acl group identifier.
+    other_member_group_selector = group1 :: oct_background:entity_selector(),
+
+    % Selector of user not belonging to space specified in `space_id`.
+    % It will be used to test `other` posix bits and `EVERYONE@` special acl
+    % identifier.
+    non_member_selector = user3 :: oct_background:entity_selector(),
+
+    % Tells whether `operation` needs `traverse_ancestors` permission. If so
+    % `traverse_container` perm will be added to test root dir as needed perm
+    % to perform `operation` (since traverse_ancestors means that one can
+    % traverse dirs up to file in question).
+    requires_traverse_ancestors = true :: boolean(),
+
+    % Tells which space privileges are needed to perform `operation`
+    % in case of posix access mode.
+    posix_requires_space_privs = [] ::
+        % only owner with specified privs can perform operation
+        {file_owner, [privileges:space_privilege()]} |
+        % any user with specified privs can perform
+        [privileges:space_privilege()],
+
+    % Tells which space privileges are needed to perform `operation`
+    % in case of acl access mode
+    acl_requires_space_privs = [] :: [privileges:space_privilege()],
+
+    % Description of environment (files and permissions on them) needed to
+    % perform `operation`.
+    files :: [#authz_dir_spec{} | #authz_file_spec{}],
+
+    % Tells whether operation is blocked if session token contains data caveats
+    blocked_by_data_access_caveats = false :: false | {true, errors:error()},
+
+    % Tells whether operation should work in readonly mode (readonly caveats set)
+    available_in_readonly_mode = false :: boolean(),
+
+    % Tells whether operation should work in share mode. For some operation this
+    % check is entirely inapplicable due to operation call not using file guid
+    % (can't be called via shared guid == no share mode).
+    available_for_share_guid = false :: boolean() | not_a_file_guid_based_operation,
+
+    % Tells whether operation should work in public data mode.
+    available_in_public_data_mode = false :: boolean(),
+
+    % Operation being tested. It will be called for various combinations of
+    % either posix or acl permissions. It is expected to fail for combinations
+    % not having all perms specified in `files` and space privileges and
+    % succeed for combination consisting of only them.
+    % It takes following arguments:
+    % - TestNode - node on which operation should be performed,
+    % - ExecutionerSessId - session id of user which should perform operation,
+    % - TestCaseRootDirPath - absolute path to root dir of testcase,
+    % - ExtraData - mapping of file path (for every file specified in `files`) to
+    %               term returned from `on_create` #authz_dir_spec{} or #authz_file_spec{} fun.
+    %               If mentioned fun is left undefined then by default ?FILE_REF(GUID) will
+    %               be used.
+    %               If `on_create` fun returns FileGuid it should be returned as
+    %               following tuple ?FILE_REF(FileGuid), which is required by framework.
+    operation :: fun((node(), session:id(), file_meta:path(), map()) ->
+        ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()} | {error, term()}
+    ),
+
+    % Tells whether failed operation returns:
+    % - old 'errno_errors' in format {error, Errno} (e.g. {error, enoent}) - see errno.hrl
+    % - new 'api_errors' defined in errors.hrl
+    returned_errors = errno_errors :: errno_errors | api_errors,
+
+    % Tells whether successfully executed operation should change ownership on underlying storage
+    final_ownership_check = fun(_) -> skip end :: fun((TestCaseRootDirPath :: file_meta:path()) ->
+        % Reason can be arbitrary and is only used to communicate why the check is inapplicable,
+        % does not impact the tests.
+        {inapplicable_due_to, Reason :: atom()} |
+
+        {should_preserve_ownership, LogicalFilePath :: file_meta:path()} |
+        {should_change_ownership, LogicalFilePath :: file_meta:path()}
+    ),
+
+    special_dirs_supporting_the_operation = [] :: not_applicable | [module()],
+    expected_result_for_supporting_special_dirs = ok :: ok | errors:error()
+}).
+
+-endif.

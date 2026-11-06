@@ -20,8 +20,10 @@
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
+-export([supervisor_flags/0, supervisor_children_spec/0]).
+-export([is_storage_accessible/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
@@ -40,30 +42,38 @@
 -type response() :: fuse_response() | provider_response() | proxyio_response().
 
 -type file() :: file_meta:entry(). %% Type alias for better code organization
--type ext_file() :: file_meta:entry() | {guid, file_guid()}.
 -type open_flag() :: helpers:open_flag().
 -type posix_permissions() :: file_meta:posix_permissions().
--type file_guid() :: binary().
--type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
+-type file_guid() :: file_id:file_guid().
 
--export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
-    posix_permissions/0, file_guid/0, file_guid_or_path/0]).
+-type operation() :: fuse_request_type() | file_request_type() | provider_request_type() | proxyio_request_type().
+
+-export_type([
+    request/0, response/0, file/0, open_flag/0, posix_permissions/0,
+    file_guid/0, fuse_response/0, provider_response/0, proxyio_response/0, fuse_response_type/0,
+    operation/0
+]).
 
 % requests
--define(INVALIDATE_PERMISSIONS_CACHE, invalidate_permissions_cache).
--define(PERIODICAL_SPACES_CLEANUP, periodical_spaces_cleanup).
+-define(PERIODIC_SPACES_AUTOCLEANING_CHECK, periodic_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
+-define(PERIODIC_STORAGES_CHECK, periodic_storages_check).
+-define(TIMES_CACHE_FLUSH, times_cache_flush).
+
+-define(SHOULD_PERFORM_PERIODIC_SPACES_AUTOCLEANING_CHECK,
+    op_worker:get_env(autocleaning_periodic_spaces_check_enabled, true)).
 
 % delays and intervals
--define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL,
-    application:get_env(?APP_NAME, invalidate_permissions_cache_interval, timer:seconds(30))).
--define(PERIODICAL_SPACES_CLEANUP_INTERVAL,
-    application:get_env(?APP_NAME, periodical_spaces_cleanup_interval, timer:minutes(15))).
+-define(AUTOCLEANING_PERIODIC_SPACES_CHECK_INTERVAL,
+    op_worker:get_env(autocleaning_periodic_spaces_check_interval, timer:minutes(1))).
 -define(RERUN_TRANSFERS_DELAY,
-    application:get_env(?APP_NAME, rerun_transfers_delay, 0)).
+    op_worker:get_env(rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
-    application:get_env(?APP_NAME, restart_autocleaning_runs_delay, 0)).
+    op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
+-define(PERIODIC_STORAGES_CHECK_INTERVAL, timer:seconds(op_worker:get_env(storages_check_interval_sec, 300))).
+% NOTE: times_cache flush interval should be below 10s in order to fit in acceptance tests timeout.
+-define(TIMES_CACHE_FLUSH_INTERVAL, timer:seconds(op_worker:get_env(times_cache_flush_interval_sec, 8))).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
@@ -77,7 +87,98 @@
     list_xattr, fsync]).
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
--define(FSLOGIC_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?MODULE)).
+% This macro is used to disable automatic rerun of transfers in tests
+-define(SHOULD_RERUN_TRANSFERS, op_worker:get_env(rerun_transfers, true)).
+
+% This macro is used to disable automatic restart of autocleaning runs in tests
+-define(SHOULD_RESTART_AUTOCLEANING_RUNS, op_worker:get_env(autocleaning_restart_runs, true)).
+
+-define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
+    % Checking perms for operations other than 'read' should result in immediate ?EACCES
+    check_perms,
+    get_parent,
+    % TODO VFS-6057 resolve share path up to share not user root dir
+    %%    get_file_path,
+    resolve_symlink,
+
+    list_xattr,
+    get_xattr,
+
+    % Opening file is available but only in 'read' mode
+    open_file,
+    open_file_with_extended_info,
+    synchronize_block,
+    remote_read,
+    fsync,
+    release,
+
+    read_symlink,
+
+    get_file_attr,
+    get_file_children,
+    get_child_attr,
+    get_file_children_attrs
+]).
+-define(AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE, [
+    % Necessary operations for direct-io to work (contains private information
+    % like storage id, etc.)
+    get_file_location,
+    get_helper_params
+
+    | ?OPERATIONS_AVAILABLE_IN_SHARE_MODE
+]).
+
+-define(UNHEALTHY_STORAGES_KEY, unhealthy_storages).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a fslogic worker supervisor flags.
+%% @end
+%%--------------------------------------------------------------------
+-spec supervisor_flags() -> supervisor:sup_flags().
+supervisor_flags() ->
+    #{strategy => one_for_one, intensity => 10, period => 3600}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a children spec for a fslogic supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec supervisor_children_spec() -> [supervisor:child_spec()].
+supervisor_children_spec() ->
+    [
+        auth_cache:spec(),
+        lfm_handles_monitor:spec(),
+        transfer_stats_cache_aggregator:spec(),
+        files_monitoring_sup:spec()
+    ].
+
+
+-spec is_storage_accessible(file_ctx:ctx() | undefined) -> boolean().
+is_storage_accessible(undefined) ->
+    true;
+is_storage_accessible(FileCtx) ->
+    case worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY) of
+        [] ->
+            true;
+        Storages ->
+            case file_ctx:is_filesystem_root_dir_const(FileCtx)  of
+                true -> true;
+                false ->
+                    SpaceId = file_ctx:get_space_id_const(FileCtx),
+                    case space_logic:get_local_supporting_storage(SpaceId) of
+                        {ok, StorageId} ->
+                            not lists:member(StorageId, Storages);
+                        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
+                            %% @TODO VFS-12036 no longer needed when there is no proxy anymore
+                            true % access via proxy
+                    end
+            end
+    end.
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -92,11 +193,20 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     transfer:init(),
+    replica_deletion_master:init_workers_pool(),
+    file_registration:init_pool(),
+    autocleaning_view_traverse:init_pool(),
+    tree_deletion_traverse:init_pool(),
+    bulk_download_traverse:init_pool(),
+    clproto_serializer:load_msg_defs(),
+    archivisation_traverse:init_pool(),
+    times_cache:init(),
 
-    schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
     schedule_restart_autocleaning_runs(),
-    schedule_periodical_spaces_cleanup(),
+    schedule_periodic_spaces_autocleaning_check(),
+    schedule_periodic_storages_check(),
+    schedule_periodic_times_cache_flush(),
 
     lists:foreach(fun({Fun, Args}) ->
         case apply(Fun, Args) of
@@ -112,7 +222,17 @@ init(_Args) ->
         {fun session_manager:create_guest_session/0, []}
     ]),
 
-    {ok, #{}}.
+    %% @TODO VFS-12272 - properly handle imported storages during storage monitoring
+    UnhealthyStorageIds = try
+         storage_monitoring:perform_regular_checks([])
+    catch Class:Reason ->
+        case {error, datastore_runner:normalize_error(Reason)} of
+            ?ERR_NO_CONNECTION_TO_ONEZONE(_) -> [];
+            _ -> erlang:apply(erlang, Class, [Reason])
+        end
+    end,
+    {ok, #{?UNHEALTHY_STORAGES_KEY => UnhealthyStorageIds}}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -126,16 +246,12 @@ init(_Args) ->
     {fuse_request, session:id(), fuse_request()} |
     {provider_request, session:id(), provider_request()} |
     {proxyio_request, session:id(), proxyio_request()},
-    Result :: nagios_handler:healthcheck_response() | ok | {ok, response()} |
+    Result :: cluster_status:status() | ok | {ok, response()} |
     {error, Reason :: term()} | pong.
 handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle(?INVALIDATE_PERMISSIONS_CACHE) ->
-    ?debug("Invalidating permissions cache"),
-    invalidate_permissions_cache(),
-    schedule_invalidate_permissions_cache();
 handle(?RERUN_TRANSFERS) ->
     ?debug("Rerunning unfinished transfers"),
     rerun_transfers(),
@@ -144,27 +260,38 @@ handle(?RESTART_AUTOCLEANING_RUNS) ->
     ?debug("Restarting unfinished auto-cleaning runs"),
     restart_autocleaning_runs(),
     ok;
-handle(?PERIODICAL_SPACES_CLEANUP) ->
-    ?debug("Triggering periodical spaces cleanup"),
-    periodical_spaces_cleanup(),
-    schedule_periodical_spaces_cleanup();
+handle(?PERIODIC_SPACES_AUTOCLEANING_CHECK) ->
+    case ?SHOULD_PERFORM_PERIODIC_SPACES_AUTOCLEANING_CHECK of
+        true ->
+            periodic_spaces_autocleaning_check();
+        false ->
+            ok
+    end,
+    schedule_periodic_spaces_autocleaning_check();
+handle(?PERIODIC_STORAGES_CHECK) ->
+    ?catch_exceptions(handle_periodic_storages_check()),
+    schedule_periodic_storages_check(),
+    ok;
+handle(?TIMES_CACHE_FLUSH) ->
+    times_cache:flush(),
+    schedule_periodic_times_cache_flush();
 handle({fuse_request, SessId, FuseRequest}) ->
-    ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
+    ?debug("fuse_request(~tp): ~tp", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
-    ?debug("fuse_response: ~p", [Response]),
+    ?debug("fuse_response: ~tp", [Response]),
     {ok, Response};
 handle({provider_request, SessId, ProviderRequest}) ->
-    ?debug("provider_request(~p): ~p", [SessId, ProviderRequest]),
+    ?debug("provider_request(~tp): ~tp", [SessId, ProviderRequest]),
     Response = handle_request_and_process_response(SessId, ProviderRequest),
-    ?debug("provider_response: ~p", [Response]),
+    ?debug("provider_response: ~tp", [Response]),
     {ok, Response};
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    ?debug("proxyio_request(~p): ~p", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
+    ?debug("proxyio_request(~tp): ~tp", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
-    ?debug("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
+    ?debug("proxyio_response: ~tp", [fslogic_log:mask_data_in_message(Response)]),
     {ok, Response};
-handle(_Request) ->
-    ?log_bad_request(_Request),
+handle(Request) ->
+    ?log_bad_request(Request),
     {error, wrong_request}.
 
 %%--------------------------------------------------------------------
@@ -176,8 +303,17 @@ handle(_Request) ->
     Result :: ok | {error, Error},
     Error :: timeout | term().
 cleanup() ->
+    times_cache:flush(),
+    times_cache:destroy(),
     transfer:cleanup(),
+    autocleaning_view_traverse:stop_pool(),
+    file_registration:stop_pool(),
+    replica_deletion_master:stop_workers_pool(),
+    tree_deletion_traverse:stop_pool(),
+    bulk_download_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
+    archivisation_traverse:stop_pool(),
+    permissions_cache:terminate(),
     ok.
 
 %%%===================================================================
@@ -229,21 +365,94 @@ init_report() ->
 -spec handle_request_and_process_response(session:id(), request()) -> response().
 handle_request_and_process_response(SessId, Request) ->
     try
-        UserCtx = user_ctx:new(SessId),
-        FilePartialCtx = fslogic_request:get_file_partial_ctx(UserCtx, Request),
-        Providers = fslogic_request:get_target_providers(UserCtx,
-            FilePartialCtx, Request),
+        OriginalUserCtx = user_ctx:new(SessId),
+        FilePartialCtx = fslogic_request:get_file_partial_ctx(OriginalUserCtx, Request),
+
+        EffLocalUserCtx = infer_eff_user_ctx(OriginalUserCtx, Request, FilePartialCtx),
+        Providers = fslogic_request:get_target_providers(EffLocalUserCtx, FilePartialCtx, Request),
+
         case lists:member(oneprovider:get_id(), Providers) of
             true ->
-                handle_request_and_process_response_locally(UserCtx, Request,
-                    FilePartialCtx);
+                OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
+                handle_request_and_process_response_locally(
+                    OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
+                );
             false ->
-                handle_request_remotely(UserCtx, Request, Providers)
+                case user_ctx:get_client_type(OriginalUserCtx) of
+                    %% The use of ENXIO posix error code here is arbitrary, chosen because it's not
+                    %% used elsewhere and is not a network error
+                    ones3 -> throw({?ENXIO, <<"Requested space is not supported on this Oneprovider.">>});
+                    _ -> handle_request_remotely(OriginalUserCtx, Request, Providers)
+                end
         end
     catch
-        Type2:Error2 ->
-            fslogic_errors:handle_error(Request, Type2, Error2)
+        Type2:Error2:Stacktrace ->
+            fslogic_errors:handle_error(Request, Type2, Error2, Stacktrace)
     end.
+
+
+%% @private
+-spec infer_eff_user_ctx(user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined) ->
+    user_ctx:ctx().
+infer_eff_user_ctx(UserCtx, Request, FilePartialCtx) ->
+    ShareId = case FilePartialCtx of
+        undefined -> undefined;
+        _ -> file_partial_ctx:get_share_id_const(FilePartialCtx)
+    end,
+
+    case {user_ctx:is_in_public_data_mode(UserCtx), ShareId} of
+        {false, undefined} ->
+            UserCtx;
+        {IsInPublicDataMode, _} ->
+            case is_operation_available_in_share_mode(Request, IsInPublicDataMode) of
+                true -> ok;
+                false -> throw(?ENOTSUP)
+            end,
+            case IsInPublicDataMode of
+                true ->
+                    UserCtx;
+                false ->
+                    % Operations concerning shares must be carried with GUEST auth
+                    case user_ctx:is_guest(UserCtx) of
+                        true -> UserCtx;
+                        false -> user_ctx:new(?GUEST_SESS_ID)
+                    end
+            end
+    end.
+
+
+%% @private
+-spec is_operation_available_in_share_mode(request(), IsInPublicDataMode :: boolean()) ->
+    boolean().
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file{flag = Flag}
+}}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file_with_extended_info{flag = Flag}
+}}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(#provider_request{
+    provider_request = #check_perms{flag = Flag}
+}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(Request, true) ->
+    lists:member(get_operation_name(Request), ?AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE);
+is_operation_available_in_share_mode(Request, false) ->
+    lists:member(get_operation_name(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
+
+
+%% @private
+-spec get_operation_name(request()) -> atom().
+get_operation_name(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
+    element(1, Req);
+get_operation_name(#fuse_request{fuse_request = Req}) ->
+    element(1, Req);
+get_operation_name(#provider_request{provider_request = Req}) ->
+    element(1, Req);
+get_operation_name(#proxyio_request{proxyio_request = Req}) ->
+    element(1, Req).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -251,24 +460,36 @@ handle_request_and_process_response(SessId, Request) ->
 %% Handle request locally and do postprocessing of the response
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request_and_process_response_locally(user_ctx:ctx(), request(),
-    file_partial_ctx:ctx() | undefined) -> response().
-handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
-    {FileCtx, SpaceID} = case FilePartialCtx of
+-spec handle_request_and_process_response_locally(
+    od_user:id(), user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined
+) ->
+    response().
+handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request, FilePartialCtx) ->
+    FileCtx1 = case FilePartialCtx of
         undefined ->
-            {undefined, undefined};
+            undefined;
         _ ->
-            file_ctx:new_by_partial_context(FilePartialCtx)
+            {FileCtx0, _SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
+            FileCtx0
     end,
-    Response = try
-        handle_request_locally(UserCtx, Request, FileCtx)
+    ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
+    try
+        case is_operation_allowed_by_special_dir_logic(FileCtx1, Request) of
+            false ->
+                throw(?ENOTSUP);
+            true ->
+                case is_storage_accessible(FileCtx1) of
+                    true ->
+                        handle_request_locally(EffUserCtx, Request, FileCtx1);
+                    false ->
+                        throw(?EAGAIN)
+                end
+        end
     catch
-        Type:Error ->
-            fslogic_errors:handle_error(Request, Type, Error)
-    end,
+        Type:Error:Stacktrace ->
+            fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
+    end.
 
-    %todo TL move this storage_sync logic out of here
-    process_response(UserCtx, Request, Response, SpaceID).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -278,15 +499,18 @@ handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
 %%--------------------------------------------------------------------
 -spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
 handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
-    file_request = Req, extended_direct_io = ExtDIO}}, FileCtx) ->
+    file_request = Req
+}}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
     ?update_counter(?EXOMETER_NAME(ReqName)),
-    Now = os:timestamp(),
-    FileCtx2 = file_ctx:set_extended_direct_io(FileCtx, ExtDIO),
-    Ans = handle_file_request(UserCtx, Req, FileCtx2),
-    Time = timer:now_diff(os:timestamp(), Now),
-    ?update_counter(?EXOMETER_TIME_NAME(ReqName), Time),
+    Stopwatch = stopwatch:start(),
+    Ans = handle_file_request(UserCtx, Req, FileCtx),
+    ?update_counter(?EXOMETER_TIME_NAME(ReqName), stopwatch:read_micros(Stopwatch)),
     Ans;
+handle_request_locally(UserCtx, #fuse_request{fuse_request = #multipart_upload_request{
+    multipart_request = Req
+}}, _FileCtx) ->
+    handle_multipart_upload_request(UserCtx, Req);
 handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
     handle_fuse_request(UserCtx, Req, FileCtx);
 handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx) ->
@@ -305,9 +529,41 @@ handle_request_locally(UserCtx, #proxyio_request{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
+handle_request_remotely(_UserCtx, _Req, []) ->
+    #fuse_response{status = #status{code = ?ENOTSUP}};
 handle_request_remotely(UserCtx, Req, Providers) ->
-    ProviderId = fslogic_remote:get_provider_to_reroute(Providers),
-    fslogic_remote:reroute(UserCtx, ProviderId, Req).
+    ProviderId = fslogic_remote:get_provider_to_route(Providers),
+    Response = fslogic_remote:route(UserCtx, ProviderId, Req),
+    note_handle_whereabouts(UserCtx, ProviderId, Req, Response),
+    Response.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Keeps track of the file handles that other providers hold on this one's
+%% behalf, so that the requests carrying them can be routed back to their
+%% holders (see fslogic_request:get_target_providers/3). A handle registered
+%% elsewhere can be released nowhere else - the local provider does not even
+%% know of it, and would silently do nothing about it.
+%% @end
+%%--------------------------------------------------------------------
+-spec note_handle_whereabouts(user_ctx:ctx(), od_provider:id(), request(), response()) -> ok.
+note_handle_whereabouts(UserCtx, ProviderId, #fuse_request{fuse_request = #file_request{
+    file_request = #open_file{}
+}}, #fuse_response{fuse_response = #file_opened{handle_id = HandleId}}) ->
+    ok = session_remote_handles:add(user_ctx:get_session_id(UserCtx), HandleId, ProviderId);
+note_handle_whereabouts(UserCtx, ProviderId, #fuse_request{fuse_request = #file_request{
+    file_request = #open_file_with_extended_info{}
+}}, #fuse_response{fuse_response = #file_opened_extended{handle_id = HandleId}}) ->
+    ok = session_remote_handles:add(user_ctx:get_session_id(UserCtx), HandleId, ProviderId);
+note_handle_whereabouts(UserCtx, _ProviderId, #fuse_request{fuse_request = #file_request{
+    file_request = #release{handle_id = HandleId}
+}}, _Response) ->
+    % the handle is gone even if its holder reported a failure, and a retry that
+    % finds no note of it is served locally, which is a no-op just the same
+    ok = session_remote_handles:remove(user_ctx:get_session_id(UserCtx), HandleId);
+note_handle_whereabouts(_UserCtx, _ProviderId, _Req, _Response) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -319,6 +575,17 @@ handle_request_remotely(UserCtx, Req, Providers) ->
     fuse_response().
 handle_fuse_request(UserCtx, #resolve_guid{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
+handle_fuse_request(UserCtx, #resolve_guid_by_canonical_path{}, FileCtx) ->
+    guid_req:resolve_guid(UserCtx, FileCtx);
+handle_fuse_request(UserCtx, #resolve_guid_by_relative_path{
+    path = Path
+}, RelRootCtx) ->
+    guid_req:resolve_guid_by_relative_path(UserCtx, RelRootCtx, Path);
+handle_fuse_request(UserCtx, #ensure_dir{
+    path = Path,
+    mode = Mode
+}, RelRootCtx) ->
+    guid_req:ensure_dir(UserCtx, RelRootCtx, Path, Mode);
 handle_fuse_request(UserCtx, #get_helper_params{
     storage_id = StorageId,
     space_id = SpaceId,
@@ -336,15 +603,20 @@ handle_fuse_request(UserCtx, #verify_storage_test_file{
     file_id = FileId,
     file_content = FileContent
 }, undefined) ->
+    Session = user_ctx:get_session_id(UserCtx),
     case storage_req:verify_storage_test_file(UserCtx, SpaceId,
         StorageId, FileId, FileContent) of
         #fuse_response{status = #status{code = ?OK}} = Ans ->
-            Session = user_ctx:get_session_id(UserCtx),
-            session:set_direct_io(Session, true),
+            session:set_direct_io(Session, SpaceId, true),
             Ans;
         Error ->
+            session:set_direct_io(Session, SpaceId, false),
             Error
-    end.
+    end;
+handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
+    attr_req:get_fs_stats(UserCtx, FileCtx).
+
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -354,24 +626,29 @@ handle_fuse_request(UserCtx, #verify_storage_test_file{
 %%--------------------------------------------------------------------
 -spec handle_file_request(user_ctx:ctx(), file_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_file_request(UserCtx, #get_file_attr{}, FileCtx) ->
-    attr_req:get_file_attr(UserCtx, FileCtx);
-handle_file_request(UserCtx, #get_child_attr{name = Name}, ParentFileCtx) ->
-    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name);
+handle_file_request(UserCtx, #get_file_attr{attributes = Attributes}, FileCtx) ->
+    attr_req:get_file_attr(UserCtx, FileCtx, Attributes);
+handle_file_request(UserCtx, #get_file_references{}, FileCtx) ->
+    attr_req:get_file_references(UserCtx, FileCtx);
+handle_file_request(UserCtx, #get_child_attr{name = Name, attributes = Attributes}, ParentFileCtx) ->
+    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, Attributes);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
     attr_req:update_times(UserCtx, FileCtx, ATime, MTime, CTime);
 handle_file_request(UserCtx, #delete_file{silent = Silent}, FileCtx) ->
     delete_req:delete(UserCtx, FileCtx, Silent);
+handle_file_request(UserCtx, #move_to_trash{emit_events = EmitEvents}, FileCtx) ->
+    delete_req:delete_using_trash(UserCtx, FileCtx, EmitEvents);
 handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCtx) ->
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
-handle_file_request(UserCtx, #get_file_children{offset = Offset, size = Size,
-    index_token = Token}, FileCtx) ->
-    dir_req:read_dir(UserCtx, FileCtx, Offset, Size, Token);
-handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
-    size = Size, index_token = Token}, FileCtx) ->
-    dir_req:read_dir_plus(UserCtx, FileCtx, Offset, Size, Token);
+handle_file_request(UserCtx, #get_file_children{listing_options = ListingOpts}, FileCtx) ->
+    dir_req:list_children(UserCtx, FileCtx, ListingOpts);
+handle_file_request(UserCtx, #get_file_children_attrs{
+    listing_options = ListingOpts,
+    attributes = Attributes
+}, FileCtx) ->
+    dir_req:list_children_attrs(UserCtx, FileCtx, ListingOpts, Attributes);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName
@@ -384,6 +661,11 @@ handle_file_request(UserCtx, #storage_file_created{}, FileCtx) ->
     file_req:storage_file_created(UserCtx, FileCtx);
 handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx) ->
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
+handle_file_request(UserCtx, #make_link{target_parent_guid = TargetParentGuid, target_name = Name}, TargetFileCtx) ->
+    TargetParentFileCtx = file_ctx:new_by_guid(TargetParentGuid),
+    file_req:make_link(UserCtx, TargetFileCtx, TargetParentFileCtx, Name);
+handle_file_request(UserCtx, #make_symlink{target_name = Name, link = Link}, ParentFileCtx) ->
+    file_req:make_symlink(UserCtx, ParentFileCtx, Name, Link);
 handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->
     file_req:open_file(UserCtx, FileCtx, Flag);
 handle_file_request(UserCtx, #open_file_with_extended_info{flag = Flag}, FileCtx) ->
@@ -392,6 +674,10 @@ handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
     file_req:release(UserCtx, FileCtx, HandleId);
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
+handle_file_request(UserCtx, #read_symlink{}, FileCtx) ->
+    symlink_req:read(UserCtx, FileCtx);
+handle_file_request(UserCtx, #resolve_symlink{}, FileCtx) ->
+    symlink_req:resolve(UserCtx, FileCtx);
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,
@@ -425,7 +711,20 @@ handle_file_request(UserCtx, #fsync{
     data_only = DataOnly,
     handle_id = HandleId
 }, FileCtx) ->
-    file_req:fsync(UserCtx, FileCtx, DataOnly, HandleId).
+    file_req:fsync(UserCtx, FileCtx, DataOnly, HandleId);
+handle_file_request(UserCtx, #report_file_written{offset = Offset, size = Size}, FileCtx) ->
+    file_req:report_file_written(UserCtx, FileCtx, Offset, Size);
+handle_file_request(UserCtx, #report_file_read{offset = Offset, size = Size}, FileCtx) ->
+    file_req:report_file_read(UserCtx, FileCtx, Offset, Size);
+handle_file_request(UserCtx, #get_recursive_file_list{
+    listing_options = Options,
+    attributes = Attributes
+}, FileCtx) ->
+    dir_req:list_recursively(UserCtx, FileCtx, Options, Attributes);
+handle_file_request(UserCtx, #get_file_attr_by_path{path = RelativePath, attributes = Attributes}, RootFileCtx) ->
+    attr_req:get_file_attr_by_path(UserCtx, RootFileCtx, RelativePath, Attributes);
+handle_file_request(UserCtx, #create_path{path = Path}, RootFileCtx) ->
+    dir_req:create_dir_at_path(UserCtx, RootFileCtx, Path).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -435,63 +734,19 @@ handle_file_request(UserCtx, #fsync{
 %%--------------------------------------------------------------------
 -spec handle_provider_request(user_ctx:ctx(), provider_request_type(), file_ctx:ctx()) ->
     provider_response().
-handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
-    sync_req:get_file_distribution(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #schedule_file_replication{
-    block = _Block, target_provider_id = TargetProviderId, callback = Callback,
-    index_name = IndexName, query_view_params = QueryViewParams
-}, FileCtx) ->
-    sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
-        Callback, IndexName, QueryViewParams
-    );
-handle_provider_request(UserCtx, #schedule_replica_invalidation{
-    source_provider_id = SourceProviderId, target_provider_id = TargetProviderId,
-    index_name = IndexName, query_view_params = QueryViewParams
-}, FileCtx) ->
-    replica_eviction_req:schedule_replica_eviction(UserCtx, FileCtx,
-        SourceProviderId, TargetProviderId, IndexName, QueryViewParams
-    );
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
     guid_req:get_file_path(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_acl{}, FileCtx) ->
     acl_req:get_acl(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #set_acl{acl = Acl}, FileCtx) ->
-    acl_req:set_acl(UserCtx, FileCtx, Acl, false, false);
+handle_provider_request(UserCtx, #set_acl{acl = #acl{value = Acl}}, FileCtx) ->
+    acl_req:set_acl(UserCtx, FileCtx, Acl);
 handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
     acl_req:remove_acl(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_transfer_encoding{}, FileCtx) ->
-    cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #set_transfer_encoding{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_transfer_encoding(UserCtx, FileCtx, Value, false, false);
-handle_provider_request(UserCtx, #get_cdmi_completion_status{}, FileCtx) ->
-    cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #set_cdmi_completion_status{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_cdmi_completion_status(UserCtx, FileCtx, Value, false, false);
-handle_provider_request(UserCtx, #get_mimetype{}, FileCtx) ->
-    cdmi_metadata_req:get_mimetype(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #set_mimetype{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Value, false, false);
-handle_provider_request(UserCtx, #get_metadata{
-    type = Type,
-    names = Names,
-    inherited = Inherited
-}, FileCtx) ->
-    metadata_req:get_metadata(UserCtx, FileCtx, Type, Names, Inherited);
-handle_provider_request(UserCtx, #set_metadata{
-    metadata = #metadata{type = Type, value = Value},
-    names = Names
-}, FileCtx) ->
-    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Names, false, false);
-handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
-    metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
-    permission_req:check_perms(UserCtx, FileCtx, Flag);
-handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
-    share_req:create_share(UserCtx, FileCtx, Name);
-handle_provider_request(UserCtx, #remove_share{}, FileCtx) ->
-    share_req:remove_share(UserCtx, FileCtx).
+    permission_req:check_perms(UserCtx, FileCtx, Flag).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -500,7 +755,7 @@ handle_provider_request(UserCtx, #remove_share{}, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_proxyio_request(user_ctx:ctx(), proxyio_request_type(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id()) -> proxyio_response().
+    HandleId :: storage_driver:handle_id()) -> proxyio_response().
 handle_proxyio_request(UserCtx, #remote_write{byte_sequence = ByteSequences}, FileCtx,
     HandleId) ->
     read_write_req:write(UserCtx, FileCtx, HandleId, ByteSequences);
@@ -508,155 +763,205 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
     HandleId) ->
     read_write_req:read(UserCtx, FileCtx, HandleId, Offset, Size).
 
+
 %%--------------------------------------------------------------------
-%% @todo refactor
 %% @private
 %% @doc
-%% Do posthook for request response
+%% Processes a multipart upload request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec process_response(user_ctx:ctx(), request(), response(),
-    od_space:id() | undefined) -> response().
-process_response(_, _, Response, undefined) ->
-    Response;
-process_response(UserCtx, Request = #fuse_request{fuse_request = #file_request{
-    file_request = #get_child_attr{name = FileName},
-    context_guid = ParentGuid
-}}, Response = #fuse_response{status = #status{code = ?ENOENT}},
-    SpaceId) ->
-    case space_strategies:is_import_on(SpaceId) of
-        true ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            Path0 = fslogic_uuid:uuid_to_path(SessId, fslogic_uuid:guid_to_uuid(ParentGuid)),
-            {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),
-            Tokens = Tokens0 ++ [FileName],
-            Path = fslogic_path:join(Tokens),
-            case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
-                {path, P} ->
-                    {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
-                    case Tokens1 of
-                        [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                            Data = #{
-                                response => Response,
-                                path => Path,
-                                ctx => UserCtx,
-                                space_id => SpaceId,
-                                request => Request
-                            },
-                            Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
-                            space_sync_worker:run(Init);
-                        _ -> Response
-                    end;
-                _ ->
-                    Response
-            end;
-        _ ->
-            Response
-    end;
-process_response(UserCtx,
-    Request = #fuse_request{fuse_request = #resolve_guid{path = Path}},
-    Response = #fuse_response{status = #status{code = ?ENOENT}}, SpaceId) ->
-    case space_strategies:is_import_on(SpaceId) of
-        true ->
-            {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
-            case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
-                {path, P} ->
-                    {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
-                    case Tokens1 of
-                        [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                            Data = #{response => Response, path => Path, ctx => UserCtx,
-                                space_id => SpaceId, request => Request},
-                            Init = space_sync_worker:init(enoent_handling,
-                                SpaceId, undefined, Data),
-                            space_sync_worker:run(Init);
-                        _ -> Response
-                    end;
-                _ ->
-                    Response
-            end;
-        _ ->
-            Response
-    end;
-process_response(_, _, Response, _) ->
-    Response.
+handle_multipart_upload_request(UserCtx, #create_multipart_upload{space_id = SpaceId, path = Path}) ->
+    multipart_upload_req:create(UserCtx, SpaceId, Path);
+handle_multipart_upload_request(_UserCtx, #upload_multipart_part{multipart_upload_id = UploadId, part = Part}) ->
+    multipart_upload_req:upload_part(UploadId, Part);
+handle_multipart_upload_request(_UserCtx, #list_multipart_parts{
+    multipart_upload_id = UploadId,
+    limit = Limit,
+    part_marker = PartMarker
+}) ->
+    multipart_upload_req:list_parts(UploadId, Limit, PartMarker);
+handle_multipart_upload_request(UserCtx, #abort_multipart_upload{multipart_upload_id = UploadId}) ->
+    multipart_upload_req:abort(UserCtx, UploadId);
+handle_multipart_upload_request(UserCtx, #complete_multipart_upload{multipart_upload_id = UploadId}) ->
+    multipart_upload_req:complete(UserCtx, UploadId);
+handle_multipart_upload_request(UserCtx, #list_multipart_uploads{
+    space_id = SpaceId,
+    limit = Limit,
+    index_token = IndexToken
+}) ->
+    multipart_upload_req:list(UserCtx, SpaceId, Limit, IndexToken).
 
--spec schedule_invalidate_permissions_cache() -> ok.
-schedule_invalidate_permissions_cache() ->
-    schedule(?INVALIDATE_PERMISSIONS_CACHE, ?INVALIDATE_PERMISSIONS_CACHE_INTERVAL).
 
+%% @private
 -spec schedule_rerun_transfers() -> ok.
 schedule_rerun_transfers() ->
     schedule(?RERUN_TRANSFERS, ?RERUN_TRANSFERS_DELAY).
 
+
+%% @private
 -spec schedule_restart_autocleaning_runs() -> ok.
 schedule_restart_autocleaning_runs() ->
     schedule(?RESTART_AUTOCLEANING_RUNS, ?RESTART_AUTOCLEANING_RUNS_DELAY).
 
--spec schedule_periodical_spaces_cleanup() -> ok.
-schedule_periodical_spaces_cleanup() ->
-    schedule(?PERIODICAL_SPACES_CLEANUP, ?PERIODICAL_SPACES_CLEANUP_INTERVAL).
 
+%% @private
+-spec schedule_periodic_spaces_autocleaning_check() -> ok.
+schedule_periodic_spaces_autocleaning_check() ->
+    schedule(?PERIODIC_SPACES_AUTOCLEANING_CHECK, ?AUTOCLEANING_PERIODIC_SPACES_CHECK_INTERVAL).
+
+
+%% @private
+-spec schedule_periodic_storages_check() -> ok.
+schedule_periodic_storages_check() ->
+    schedule(?PERIODIC_STORAGES_CHECK, ?PERIODIC_STORAGES_CHECK_INTERVAL).
+
+
+-spec schedule_periodic_times_cache_flush() -> ok.
+schedule_periodic_times_cache_flush() ->
+    schedule(?TIMES_CACHE_FLUSH, ?TIMES_CACHE_FLUSH_INTERVAL).
+
+
+%% @private
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
-    erlang:send_after(Timeout, self(), {sync_timer, Request}),
+    erlang:send_after(Timeout, ?MODULE, {sync_timer, Request}),
     ok.
 
--spec invalidate_permissions_cache() -> ok.
-invalidate_permissions_cache() ->
-    try
-        permissions_cache:invalidate()
-    catch
-        _:Reason ->
-            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
-    end.
 
--spec periodical_spaces_cleanup() -> ok.
-periodical_spaces_cleanup() ->
+%% @private
+-spec periodic_spaces_autocleaning_check() -> ok.
+periodic_spaces_autocleaning_check() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
+            MyNode = node(),
             lists:foreach(fun(SpaceId) ->
-                autocleaning_api:maybe_check_and_start_autocleaning(SpaceId)
+                case datastore_key:any_responsible_node(SpaceId) of
+                    MyNode -> autocleaning_api:check(SpaceId);
+                    _ -> ok
+                end
             end, SpaceIds);
+        ?ERR_UNREGISTERED_ONEPROVIDER ->
+            ?debug("Skipping spaces cleanup due to unregistered provider");
+        ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
+            ?debug("Skipping spaces cleanup due to no connection to Onezone");
         Error = {error, _} ->
-            ?error("Unable to trigger spaces cleanup due to: ~p", [Error])
+            ?error("Unable to trigger spaces auto-cleaning check due to: ~tp", [Error])
     catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to trigger spaces cleanup due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~tp", [{Error2, Reason}], Stacktrace)
     end.
 
+
+%% @private
 -spec rerun_transfers() -> ok.
 rerun_transfers() ->
-    try provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            lists:foreach(fun(SpaceId) ->
-                Restarted = transfer:rerun_not_ended_transfers(SpaceId),
-                ?debug("Restarted following transfers: ~p", [Restarted])
-            end, SpaceIds);
-        ?ERROR_UNREGISTERED_PROVIDER ->
-            schedule_rerun_transfers();
-        ?ERROR_NO_CONNECTION_TO_OZ ->
-            schedule_rerun_transfers();
-        Error = {error, _} ->
-            ?error("Unable to rerun transfers due to: ~p", [Error])
-    catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}])
+    case ?SHOULD_RERUN_TRANSFERS of
+        true ->
+            try provider_logic:get_spaces() of
+                {ok, SpaceIds} ->
+                    lists:foreach(fun(SpaceId) ->
+                        Restarted = transfer:rerun_not_ended_transfers(SpaceId),
+                        ?debug("Restarted following transfers: ~tp", [Restarted])
+                    end, SpaceIds);
+                ?ERR_UNREGISTERED_ONEPROVIDER ->
+                    schedule_rerun_transfers();
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
+                    schedule_rerun_transfers();
+                Error = {error, _} ->
+                    ?error("Unable to rerun transfers due to: ~tp", [Error])
+            catch
+                Error2:Reason:Stacktrace ->
+                    ?error_stacktrace("Unable to rerun transfers due to: ~tp", [{Error2, Reason}], Stacktrace)
+            end;
+        false ->
+            ok
     end.
 
+
+%% @private
 -spec restart_autocleaning_runs() -> ok.
 restart_autocleaning_runs() ->
-    try provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            lists:foreach(fun(SpaceId) ->
-                autocleaning_api:restart_autocleaning_run(SpaceId)
-            end, SpaceIds);
-        ?ERROR_UNREGISTERED_PROVIDER ->
-            schedule_restart_autocleaning_runs();
-        ?ERROR_NO_CONNECTION_TO_OZ ->
-            schedule_restart_autocleaning_runs();
-        Error = {error, _} ->
-            ?error("Unable to restart auto-cleaning runs due to: ~p", [Error])
-    catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
+    case ?SHOULD_RESTART_AUTOCLEANING_RUNS of
+        true ->
+            try provider_logic:get_spaces() of
+                {ok, SpaceIds} ->
+                    lists:foreach(fun(SpaceId) ->
+                        autocleaning_api:restart_autocleaning_run(SpaceId)
+                    end, SpaceIds);
+                ?ERR_UNREGISTERED_ONEPROVIDER ->
+                    schedule_restart_autocleaning_runs();
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
+                    schedule_restart_autocleaning_runs();
+                Error = {error, _} ->
+                    ?error("Unable to restart auto-cleaning runs due to: ~tp", [Error])
+            catch
+                Error2:Reason:Stacktrace ->
+                    ?error_stacktrace("Unable to restart autocleaning-runs due to: ~tp", [{Error2, Reason}], Stacktrace)
+            end;
+        false ->
+            ok
     end.
+
+
+%% @private
+-spec handle_periodic_storages_check() -> ok.
+handle_periodic_storages_check() ->
+    check_helpers_cache(),
+    check_rtransfer_storages_registration(),
+
+    PreviousUnhealthyStorages = worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY),
+    case storage_monitoring:perform_regular_checks(PreviousUnhealthyStorages) of
+        PreviousUnhealthyStorages ->
+            ok;
+        UnhealthyStoragesIds ->
+            worker_host:state_put(?MODULE, ?UNHEALTHY_STORAGES_KEY, UnhealthyStoragesIds)
+    end.
+
+
+%% @private
+-spec check_helpers_cache() -> ok.
+check_helpers_cache() ->
+    try
+        ok = helpers:prune_cache(),
+
+        {ok, Stats} = helpers:get_helper_cache_stats(),
+        ?debug("Helpers statistics:~n~tp", [Stats])
+    catch Class:Reason:Stacktrace ->
+        ?examine_exception("Periodic helpers check failed", Class, Reason, Stacktrace)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Converges this node's rtransfer with the storage configs - registering a
+%% changed storage in rtransfer is best effort and may have missed this node.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_rtransfer_storages_registration() -> ok.
+check_rtransfer_storages_registration() ->
+    try
+        ok = rtransfer_config:ensure_storages_registered_on_this_node()
+    catch Class:Reason:Stacktrace ->
+        ?examine_exception(
+            "Periodic rtransfer storages registration check failed", Class, Reason, Stacktrace
+        )
+    end.
+
+
+%% @private
+-spec is_operation_allowed_by_special_dir_logic(file_ctx:ctx() | undefined, request() | operation()) -> boolean().
+is_operation_allowed_by_special_dir_logic(undefined, _Request) ->
+    % FileCtx is undefined for storage related operations (get_helper_params, create_storage_test_file, verify_storage_test_file)
+    % as well as upload_multipart_part operation.
+    true;
+is_operation_allowed_by_special_dir_logic(FileCtx, #fuse_request{fuse_request = FuseRequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, FuseRequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, #file_request{file_request = FileRequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, FileRequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, #provider_request{provider_request = ProviderRequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, ProviderRequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, #proxyio_request{proxyio_request = ProxyIORequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, ProxyIORequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, Operation) ->
+    special_dirs:is_operation_supported(file_ctx:get_logical_uuid_const(FileCtx), Operation).

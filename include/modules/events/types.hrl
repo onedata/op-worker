@@ -30,7 +30,7 @@
 -record(flush_events, {
     provider_id :: oneprovider:id(),
     subscription_id :: subscription:id(),
-    context :: term(),
+    context :: binary(),
     notify :: undefined | fun((term()) -> ok)
 }).
 
@@ -69,7 +69,7 @@
 %% definition of an event triggered when file location is changed
 %% file_location - updated file location
 -record(file_location_changed_event, {
-    file_location :: #file_location{},
+    file_location :: file_location:record(),
     change_beg_offset :: undefined | non_neg_integer(),
     change_end_offset :: undefined | non_neg_integer()
 }).
@@ -98,6 +98,11 @@
 %% spaces - list of spaces for which storage quota is exceeded
 -record(quota_exceeded_event, {
     spaces = [] :: [od_space:id()]
+}).
+
+%% definition of an event triggered when storage helper params are changed
+-record(helper_params_changed_event, {
+    storage_id :: storage:id()
 }).
 
 %% definition of a monitoring event

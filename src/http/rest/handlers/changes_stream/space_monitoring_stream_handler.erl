@@ -1,0 +1,276 @@
+%%%--------------------------------------------------------------------
+%%% @author Tomasz Lichon
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2016-2025 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc
+%%% HTTP handler for space monitoring stream.
+%%%
+%%% This module is responsible for handling:
+%%% - HTTP request/response
+%%% - Authorization
+%%% - Stream lifecycle
+%%% - Event delivery
+%%%
+%%% For detailed documentation about space monitoring stream functionality,
+%%% see space_monitoring_stream.hrl.
+%%% @end
+%%%--------------------------------------------------------------------
+-module(space_monitoring_stream_handler).
+-author("Tomasz Lichon").
+-author("Bartosz Walkowicz").
+
+-include("http/space_monitoring_stream.hrl").
+-include("middleware/middleware.hrl").
+-include_lib("ctool/include/privileges.hrl").
+
+%% API
+-export([
+    init/2, terminate/3,
+    allowed_methods/2, is_authorized/2,
+    content_types_accepted/2
+]).
+
+%% resource functions
+-export([stream_space_changes/2]).
+
+%% for tests
+-export([init_stream/1]).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec init(cowboy_req:req(), term()) ->
+    {cowboy_rest, cowboy_req:req(), map()}.
+init(Req, _Opts) ->
+    {cowboy_rest, Req, #{}}.
+
+
+-spec terminate(Reason :: term(), cowboy_req:req(), map()) -> ok.
+terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
+    couchbase_changes:cancel_stream(Stream),
+    Pid ! {Ref, stream_ended};
+terminate(_, _, #{changes_stream := Stream}) ->
+    couchbase_changes:cancel_stream(Stream);
+terminate(_, _, #{}) ->
+    ok.
+
+
+-spec allowed_methods(cowboy_req:req(), map() | {error, term()}) ->
+    {[binary()], cowboy_req:req(), map()}.
+allowed_methods(Req, State) ->
+    {[<<"POST">>], Req, State}.
+
+
+-spec is_authorized(cowboy_req:req(), map()) ->
+    {true | {false, binary()} | halt, cowboy_req:req(), map()}.
+is_authorized(Req, State) ->
+    AuthCtx = #http_auth_ctx{
+        interface = rest,
+        data_access_caveats_policy = disallow_data_access_caveats
+    },
+    case http_auth:authenticate(Req, AuthCtx) of
+        {ok, ?USER(UserId, SessionId) = Auth} ->
+            case authorize(Req, Auth) of
+                ok ->
+                    {true, Req, State#{user_id => UserId, auth => SessionId}};
+                {error, _} = Error ->
+                    {stop, http_req:send_error(Error, Req), State}
+            end;
+        {ok, ?GUEST} ->
+            {stop, http_req:send_error(?ERR_UNAUTHORIZED(?err_ctx(), undefined), Req), State};
+        {error, _} = Error ->
+            {stop, http_req:send_error(Error, Req), Req}
+    end.
+
+
+-spec content_types_accepted(cowboy_req:req(), map()) ->
+    {[{binary(), atom()}], cowboy_req:req(), map()}.
+content_types_accepted(Req, State) ->
+    {[
+        {<<"application/json">>, stream_space_changes}
+    ], Req, State}.
+
+
+%%%===================================================================
+%%% Content type handler functions
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% '/api/v3/oneprovider/changes/metadata/:sid'
+%% @doc
+%% This method streams changes happening in space filtering only
+%% relevant/requested ones.
+%%
+%% HTTP method: POST
+%%
+%% @param timeout Time of inactivity after which close stream.
+%% @param last_seq
+%%--------------------------------------------------------------------
+-spec stream_space_changes(cowboy_req:req(), map()) ->
+    {term(), cowboy_req:req(), map()}.
+stream_space_changes(Req, State) ->
+    try space_monitoring_stream_req_parser:parse_request(Req) of
+        {Req2, SpaceMonitoringSpec} ->
+            State2 = State#{space_monitoring_spec => SpaceMonitoringSpec},
+            State3 = ?MODULE:init_stream(State2),
+            Req3 = cowboy_req:stream_reply(
+                ?HTTP_200_OK, #{?HDR_CONTENT_TYPE => <<"application/json">>}, Req2
+            ),
+            stream_loop(Req3, State3),
+            cowboy_req:stream_body(<<"">>, fin, Req3),
+
+            {stop, Req3, State3}
+    catch Class:Reason:Stacktrace ->
+        Error = ?examine_exception(Class, Reason, Stacktrace),
+        {stop, http_req:send_error(Error, Req), State}
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec authorize(cowboy_req:req(), aai:auth()) -> ok | errors:error().
+authorize(Req, ?USER(UserId) = Auth) ->
+    SpaceId = cowboy_req:binding(sid, Req),
+
+    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_CHANGES_STREAM) of
+        true ->
+            GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
+            ?catch_exceptions(api_auth:check_authorization(Auth, ?OP_WORKER, create, GRI));
+        false ->
+            ?ERR_FORBIDDEN(?err_ctx())
+    end.
+
+
+-spec init_stream(State :: map()) -> map().
+init_stream(State = #{space_monitoring_spec := #space_monitoring_spec{
+    start_after_seq = Since,
+    space_id = SpaceId,
+    triggers = Triggers
+}}) ->
+    ?info("[ space monitoring ]: Starting stream ~tp", [Since]),
+    Ref = make_ref(),
+    Pid = self(),
+
+    % TODO VFS-5570
+    % TODO VFS-6389 - maybe, instead of aborting http connection on Node failure
+    % (stream process will die and in turn kill this one - terminate),
+    % try to restart couchbase_changes stream on different node
+    Node = datastore_key:any_responsible_node(SpaceId),
+    {ok, Stream} = rpc:call(Node, couchbase_changes, stream, [
+        <<"onedata">>,
+        SpaceId,
+        fun(Feed) -> notify_http_conn_proc(Pid, Ref, Triggers, Feed) end,
+        [{since, Since}],
+        [Pid]
+    ]),
+
+    State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
+
+
+%% @private
+-spec stream_loop(cowboy_req:req(), map()) -> ok.
+stream_loop(Req, State = #{
+    changes_stream := Stream,
+    ref := Ref,
+    auth := SessionId,
+    space_monitoring_spec := SpaceMonitoringSpec = #space_monitoring_spec{
+        timeout = Timeout
+    }
+}) ->
+    receive
+        {Ref, stream_ended} ->
+            ok;
+        {Ref, ChangedDocs} when is_list(ChangedDocs) ->
+            Stream ! {Ref, ok},
+            UserCtx = user_ctx:new(SessionId),
+            lists:foreach(fun(ChangedDoc) ->
+                try
+                    case space_monitoring_stream_processor:process_doc(UserCtx, ChangedDoc, SpaceMonitoringSpec) of
+                        ok ->
+                            ok;
+                        {ok, Changes} ->
+                            Response = json_utils:encode(Changes),
+                            cowboy_req:stream_body(<<Response/binary, "\r\n">>, nofin, Req)
+                    end
+                catch Class:Reason:Stacktrace ->
+                    % Can appear when document connected with deleted file_meta appears
+                    ?debug_exception("Cannot stream change of ~tp", [ChangedDoc], Class, Reason, Stacktrace)
+                end
+            end, ChangedDocs),
+            stream_loop(Req, State);
+        Msg ->
+            ?log_bad_request(Msg),
+            stream_loop(Req, State)
+    after
+        Timeout ->
+            % TODO VFS-4025 - is it always ok?
+            ok
+    end.
+
+
+%% @private
+-spec notify_http_conn_proc(pid(), reference(), space_monitoring_stream_processor:triggers(),
+    {ok, [datastore:doc()] | datastore:doc() | end_of_stream} |
+    {error, couchbase_changes:since(), term()}) -> ok.
+notify_http_conn_proc(Pid, Ref, Triggers, {ok, {change, #document{} = Doc}}) ->
+    case is_observed_doc(Doc, Triggers) of
+        true ->
+            call_space_monitoring_stream_handler(Pid, Ref, [Doc]);
+        false ->
+            ok
+    end,
+    ok;
+notify_http_conn_proc(Pid, Ref, Triggers, {ok, Docs}) when is_list(Docs) ->
+    case lists:filtermap(fun({change, Doc}) ->
+        case is_observed_doc(Doc, Triggers) of
+            true -> {true, Doc};
+            false -> false
+        end
+    end, Docs) of
+        [] ->
+            ok;
+        RelevantDocs ->
+            call_space_monitoring_stream_handler(Pid, Ref, RelevantDocs)
+    end,
+    ok;
+notify_http_conn_proc(Pid, Ref, _Triggers, {ok, end_of_stream}) ->
+    Pid ! {Ref, stream_ended},
+    ok;
+notify_http_conn_proc(Pid, Ref, _Triggers, {error, _Seq, shutdown = Reason}) ->
+    ?debug("Changes stream terminated due to: ~tp", [Reason]),
+    Pid ! {Ref, stream_ended},
+    ok;
+notify_http_conn_proc(Pid, Ref, _Triggers, {error, _Seq, Reason}) ->
+    ?error("Changes stream terminated abnormally due to: ~tp", [Reason]),
+    Pid ! {Ref, stream_ended},
+    ok.
+
+
+%% @private
+-spec is_observed_doc(datastore:doc(), space_monitoring_stream_processor:triggers()) -> boolean().
+is_observed_doc(#document{value = Record}, Triggers) when is_tuple(Record) ->
+    lists:member(element(1, Record), Triggers);
+is_observed_doc(_Doc, _Triggers) ->
+    false.
+
+
+%% @private
+call_space_monitoring_stream_handler(Pid, Ref, Msg) ->
+    Pid ! {Ref, Msg},
+    receive
+        {Ref, ok} ->
+            ok
+    end,
+    ok.

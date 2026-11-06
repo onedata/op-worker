@@ -1,0 +1,73 @@
+# Name of the scenario to run
+scenario: "scenario-1oz-1op"
+
+# Path or list of paths in which look for sources (can be either relative to
+# cwd or absolute path)
+sourcesRoot: ".."
+
+# Sources are expected to be found in CWD (from where the 'up' script was run) or one dir above.
+# On bamboo all required sources will be pulled automatically.
+# NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources 
+# (by default cluster_manager provided as op_worker dependency will be used).
+sources:
+  onezone:
+    node-1:
+      - oz-worker
+      - cluster-manager
+      - oz-panel
+  oneprovider-1:
+    node-1:
+      - op-worker
+      - cluster-manager
+      - op-panel
+
+
+groups:
+  - &space_krk_group_1
+    name: space_krk_group_1
+    type: organization
+  - &space_krk_group_2
+    name: space_krk_group_2
+    type: unit
+  - &non_space_group
+    name: non_space_group
+    type: team
+
+
+users:
+  - &user1
+    name: user1
+    password: password
+    groups:
+      - group: *space_krk_group_1
+      - group: *non_space_group
+  - &user2
+    name: user2
+    password: password
+  - &user3
+    name: user3
+    password: password
+
+
+spaces:
+  - name: space_krk
+    user: *user1
+    users:
+      - user: *user2
+      - user: *user3
+    groups:
+      - group: *space_krk_group_1
+      - group: *space_krk_group_2
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "posix"
+        size: '1073741824'
+    # TODO VFS-8726 reuse space_krk in qos tests and remove space1
+  - name: space1
+    user: *user1
+    users:
+      - user: *user2
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "posix"
+        size: '1073741824'

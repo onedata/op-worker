@@ -12,142 +12,91 @@
 -module(share_req).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/privileges.hrl").
-
--define(ERROR(Error), throw({error, Error})).
-
--define(CATCH_ERRORS(Expr), try
-    Expr
-catch
-    {error, Error} -> % Catch only the errors thrown via ?ERROR macro
-        #provider_response{status = #status{code = Error}}
-end).
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_share/3, remove_share/2]).
+-export([create_share/4, remove_share/3]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @equiv create_share_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
-    fslogic_worker:provider_response().
-create_share(UserCtx, FileCtx, Name) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx, Name],
-        fun create_share_internal/3).
+-spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name(), od_share:description()) ->
+    {ok, od_share:id()} | no_return().
+create_share(UserCtx, FileCtx0, Name, Description) ->
+    FileCtx1 = file_ctx:assert_synchronization_enabled(FileCtx0),
+    data_constraints:assert_not_readonly_mode(UserCtx),
+
+    FileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx1,
+        [?TRAVERSE_ANCESTORS]
+    ),
+    create_share_internal(UserCtx, FileCtx2, Name, Description).
+
 
 %%--------------------------------------------------------------------
 %% @equiv remove_share_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-remove_share(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx],
-        fun remove_share_internal/2).
+-spec remove_share(user_ctx:ctx(), file_ctx:ctx(), od_share:id()) ->
+    ok | no_return().
+remove_share(UserCtx, FileCtx, ShareId) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    UserId = user_ctx:get_user_id(UserCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+
+    data_constraints:assert_no_constraints(UserCtx),
+    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
+    case ?check(share_logic:get_handle(SessionId, ShareId)) of
+        undefined -> ok;
+        HandleId -> ?check(handle_logic:delete(SessionId, HandleId))
+    end,
+
+    ok = file_meta:remove_share(FileCtx, ShareId),
+    ok = share_logic:delete(SessionId, ShareId),
+    ok = permissions_cache:invalidate().
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Shares a given file, catches known errors.
-%% @end
-%%--------------------------------------------------------------------
--spec create_share_internal(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
-    fslogic_worker:provider_response().
-create_share_internal(UserCtx, FileCtx, Name) ->
-    ?CATCH_ERRORS(create_share_insecure(UserCtx, FileCtx, Name)).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Stops sharing a given file, catches known errors.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_share_internal(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-remove_share_internal(UserCtx, FileCtx) ->
-    ?CATCH_ERRORS(remove_share_insecure(UserCtx, FileCtx)).
 
 %% @private
--spec create_share_insecure(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
-    fslogic_worker:provider_response().
-create_share_insecure(UserCtx, FileCtx, Name) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
-    ShareId = datastore_utils:gen_key(),
-    ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
+-spec create_share_internal(user_ctx:ctx(), file_ctx:ctx(), od_share:name(), od_share:description()) ->
+    {ok, od_share:id()} | no_return().
+create_share_internal(UserCtx, FileCtx0, Name, Description) ->
+    Guid = file_ctx:get_logical_guid_const(FileCtx0),
+    ShareId = datastore_key:new(),
+    ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
     SessionId = user_ctx:get_session_id(UserCtx),
     UserId = user_ctx:get_user_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx0),
 
-    check_is_dir(FileCtx),
-    check_can_manage_shares(SessionId, SpaceId, UserId),
+    {FileType, FileCtx1} = file_ctx:get_effective_type(FileCtx0),
+    lists:member(FileType, [?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE]) orelse throw({error, ?EINVAL}),
 
-    case share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid) of
+    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
+
+    case share_logic:create(SessionId, ShareId, Name, Description, SpaceId, ShareGuid, FileType) of
         {ok, _} ->
-            case file_meta:add_share(FileCtx, ShareId) of
-                {error, already_exists} ->
+            case file_meta:add_share(FileCtx1, ShareId) of
+                {error, _} ->
                     ok = share_logic:delete(SessionId, ShareId),
-                    ?ERROR(?EEXIST);
-                {ok, _} ->
-                    #provider_response{
-                        status = #status{code = ?OK},
-                        provider_response = #share{
-                            share_id = ShareId,
-                            share_file_guid = ShareGuid
-                        }
-                    }
+                    throw({error, ?EAGAIN});
+                ok ->
+                    {ok, ShareId}
             end;
         _ ->
-            ?ERROR(?EAGAIN)
+            throw({error, ?EAGAIN})
     end.
-
-%% @private
--spec remove_share_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-remove_share_insecure(UserCtx, FileCtx) ->
-    ShareId = file_ctx:get_share_id_const(FileCtx),
-    SessionId = user_ctx:get_session_id(UserCtx),
-    UserId = user_ctx:get_user_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-
-    check_is_dir(FileCtx),
-    check_can_manage_shares(SessionId, SpaceId, UserId),
-
-    case file_meta:remove_share(FileCtx, ShareId) of
-        {error, not_found} ->
-            ?ERROR(?ENOENT);
-        {ok, _} ->
-            ok = share_logic:delete(SessionId, ShareId),
-            ok = permissions_cache:invalidate(),
-            #provider_response{status = #status{code = ?OK}}
-    end.
-
-%% @private
--spec check_is_dir(file_ctx:ctx()) -> ok | no_return().
-check_is_dir(FileCtx) ->
-    case file_ctx:is_dir(FileCtx) of
-        {false, _} -> ?ERROR(?EINVAL);
-        _ -> ok
-    end.
-
-%% @private
--spec check_can_manage_shares(session:id(), od_space:id(), od_user:id()) ->
-    boolean() | no_return().
-check_can_manage_shares(SessionId, SpaceId, UserId) ->
-    false == space_logic:has_eff_privilege(
-        SessionId, SpaceId, UserId, ?SPACE_MANAGE_SHARES
-    ) andalso ?ERROR(?EACCES).

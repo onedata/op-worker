@@ -42,6 +42,11 @@
                     "name": "/mnt/st2"
                 },
                 {
+                    "type": "cephrados",
+                    "name": "cephrados",
+                    "pool": "onedata:8"
+                },
+                {
                     "type": "nulldevice",
                     "name": "nulldevice",
                     "latencyMin": "10",
@@ -86,7 +91,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 },
                 "worker2": {
@@ -101,7 +106,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -135,7 +140,7 @@
                             "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 },
                 "worker2": {
@@ -150,27 +155,13 @@
                             "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
         }
     },
     "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space1"
-            },
-            "user2": {
-                "default_space": "space2"
-            },
-            "user3": {
-                "default_space": "space3"
-            },
-            "user4": {
-                "default_space": "space1"
-            }
-        },
         "groups": {
         },
         "spaces": {
@@ -184,10 +175,12 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -200,7 +193,8 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -213,7 +207,8 @@
                 ],
                 "providers": {
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -226,7 +221,8 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -239,7 +235,8 @@
                 ],
                 "providers": {
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -252,10 +249,12 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "nulldevice"
+                        "storage": "nulldevice",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "nulldevice"
+                        "storage": "nulldevice",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -268,10 +267,66 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "cephrados"
+                        "storage": "cephrados",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
+                    }
+                }
+            },
+            "space8": {
+                "displayed_name": "space8",
+                "users": [
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados",
+                        "supported_size": 10000000000
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
+                    }
+                }
+            },
+            "space9": {
+                "displayed_name": "space9",
+                "users": [
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados",
+                        "supported_size": 10000
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 50000
+                    }
+                }
+            },
+            "space10": {
+                "displayed_name": "space10",
+                "users": [
+                    "user5"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados",
+                        "supported_size": 10000000000
+                    },
+                    "p2": {
+                        "storage": "cephrados",
+                        "supported_size": 10000000000
                     }
                 }
             }
