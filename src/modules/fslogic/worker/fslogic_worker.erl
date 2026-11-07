@@ -462,9 +462,7 @@ assert_request_can_be_handled_locally(FileCtx, Request) ->
 
 %% @private
 -spec can_handle_remote_space_operation(request()) -> boolean().
-can_handle_remote_space_operation(#fuse_request{fuse_request = #resolve_guid{}}) -> true;
-can_handle_remote_space_operation(#fuse_request{fuse_request = #resolve_guid_by_relative_path{}}) -> true;
-can_handle_remote_space_operation(#fuse_request{fuse_request = #ensure_dir{}}) -> true;
+% OneS3 stats the space dir of a `spaceid-` bucket before it serves the bucket
 can_handle_remote_space_operation(#fuse_request{fuse_request = #file_request{file_request = #get_file_attr{}}}) -> true;
 can_handle_remote_space_operation(_) -> false.
 
