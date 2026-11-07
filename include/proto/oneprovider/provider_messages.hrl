@@ -1,11 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @author Mateusz Paciorek
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Messages used in communication between servers and within server.
+%%% @doc Records describing datasets and archives, built by dataset_api and
+%%% archive_api.
 %%% @end
 %%%-------------------------------------------------------------------
 
