@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -207,9 +207,8 @@ restore_session_on_slave_node(SessId, NewSup, NewSupNode) ->
 -spec terminate_session(session:id()) -> ok | error().
 terminate_session(SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{supervisor = Sup, event_manager = EventManager, node = Node}}} ->
+        {ok, #document{value = #session{supervisor = Sup, node = Node}}} ->
             try
-                event_manager:handle_session_termination(EventManager),
                 supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup)
             catch
                 exit:{noproc, _} -> ok;

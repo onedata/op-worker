@@ -26,7 +26,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, handle/2, handle_session_termination/1]).
+-export([start_link/2, handle/2]).
 
 %% gen_server callbacks
 -export([
@@ -108,11 +108,6 @@ handle(Manager, Request, RetryCounter) ->
     end.
 
 
--spec handle_session_termination(pid()) -> ok.
-handle_session_termination(Manager) ->
-    call_manager(Manager, handle_session_termination).
-
-
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -156,16 +151,6 @@ init([MgrSup, SessionId]) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(ping_stream_sup, _From, #state{streams_sup = StmsSup} = State) ->
     event_stream_sup:ping(StmsSup),
-    {reply, ok, State};
-handle_call(handle_session_termination, _From, #state{} = State) ->
-    case get_collection_keys_from_memory(subscriptions) of
-        {ok, Subscriptions} ->
-            lists:foreach(fun(SubId) ->
-                cancel_subscription(#subscription_cancellation{id = SubId}, State, termination)
-            end, Subscriptions);
-        error ->
-            ok
-    end,
     {reply, ok, State};
 handle_call(Request, _From, State) ->
     Retries = op_worker:get_env(event_manager_retries, 1),
@@ -367,7 +352,7 @@ handle_in_process(#subscription{} = Sub, #state{} = State) ->
     add_subscription(Sub, State);
 
 handle_in_process(#subscription_cancellation{} = Request, #state{} = State) ->
-    cancel_subscription(Request, State, request);
+    cancel_subscription(Request, State);
 
 handle_in_process(#event{} = Evt, _State) ->
     handle_event(Evt, self(), false);
@@ -399,17 +384,13 @@ add_subscription(#subscription{id = Id} = Sub, #state{} = State) ->
 
 
 %% @private
--spec cancel_subscription(#subscription_cancellation{}, #state{}, CancellationReason :: request | termination) -> ok.
-cancel_subscription(#subscription_cancellation{id = SubId}, _State, CancellationReason) ->
+-spec cancel_subscription(#subscription_cancellation{}, #state{}) -> ok.
+cancel_subscription(#subscription_cancellation{id = SubId}, _State) ->
     case get_from_memory(subscriptions, SubId) of
         {ok, StmKey} ->
             case get_from_memory(streams, StmKey) of
                 {ok, Stm} ->
-                    case CancellationReason of
-                        request -> ok = event_stream:send(Stm, {remove_subscription, SubId});
-                        % Ignore stream errors on termination
-                        termination -> event_stream:send(Stm, {remove_subscription, SubId})
-                    end,
+                    ok = event_stream:send(Stm, {remove_subscription, SubId}),
                     remove_from_memory(subscriptions, SubId);
                 _ ->
                     ok
@@ -523,14 +504,6 @@ get_from_memory(DataType, Key) ->
 -spec get_from_memory(Manager :: pid(), data_type(), term()) -> {ok, term()} | error.
 get_from_memory(Manager, DataType, Key) ->
     ets_state:get_from_collection(?STATE_ID, Manager, DataType, Key).
-
-%% @private
--spec get_collection_keys_from_memory(data_type()) -> {ok, list()} | error.
-get_collection_keys_from_memory(DataType) ->
-    case ets_state:get_collection(?STATE_ID, self(), DataType) of
-        {ok, Collection} -> {ok, maps:keys(Collection)};
-        error -> error
-    end.
 
 %%--------------------------------------------------------------------
 %% @private
