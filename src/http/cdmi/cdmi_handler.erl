@@ -2,7 +2,7 @@
 %%% @author Piotr Ociepka
 %%% @author Tomasz Lichon
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2015-2019 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -76,7 +76,7 @@
             {true, KnownError} -> KnownError;
             false -> ?examine_exception(Class, Reason, Stacktrace)
         end,
-        {stop, http_req:send_error(Error, Req), __CdmiReq}
+        {stop, http_req:send_error(Error, __Req), __CdmiReq}
     end
 ).
 
