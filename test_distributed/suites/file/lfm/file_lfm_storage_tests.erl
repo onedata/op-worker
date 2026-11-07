@@ -270,5 +270,4 @@ stat_on_storage(Node, SDHandle) ->
 %% @private
 -spec fsync(node(), session:id(), file_id:file_guid()) -> ok | {error, term()}.
 fsync(Node, SessId, FileGuid) ->
-    lfm_proxy:fsync(Node, SessId, ?FILE_REF(FileGuid),
-        oct_background:get_provider_id(?PROVIDER_SELECTOR)).
+    lfm_proxy:fsync(Node, SessId, ?FILE_REF(FileGuid)).

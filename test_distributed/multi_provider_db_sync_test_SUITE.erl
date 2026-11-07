@@ -205,7 +205,7 @@ sparse_files_should_be_created(Config0) ->
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid8, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid8, 1, {Provider1Id, [[0, 1]]}, false),
     ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, ?FILE_REF(FileGuid8), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, ?FILE_REF(FileGuid8), Provider2Id)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, ?FILE_REF(FileGuid8))),
     verify_sparse_file(Worker1, SessId1, FileGuid8, 10, {Provider1Id, [[0, 1]]}),
 
     % Write to empty file and read by other provider

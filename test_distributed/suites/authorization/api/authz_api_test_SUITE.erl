@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020-2024 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -191,7 +191,7 @@ all() -> [
     fun lfm:create_multipart_upload/3,
     fun lfm:ensure_dir/4,
     fun lfm:fsync/1,
-    fun lfm:fsync/3,
+    fun lfm:fsync/2,
     fun lfm:get_children_count/2,
     fun lfm:get_file_location/2,
     fun lfm:get_file_references/2,
