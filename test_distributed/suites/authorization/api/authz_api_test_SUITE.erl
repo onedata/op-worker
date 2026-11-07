@@ -16,6 +16,8 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("env/space_setup_utils.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
@@ -29,6 +31,7 @@
 
 -export([
     test_all_operations_are_checked/1,
+    test_acl_changes_are_audited/1,
 
     test_mkdir/1,
     test_get_children_attrs/1,
@@ -167,6 +170,7 @@ groups() -> [
 
 all() -> [
     test_all_operations_are_checked,
+    test_acl_changes_are_audited,
     {group, authz_dir_api_tests},
     {group, authz_reg_file_api_tests},
     {group, authz_file_common_api_tests},
@@ -320,6 +324,40 @@ test_all_operations_are_checked(_Config) ->
     end, module_info(exports))),
 
     ?assertEqual([], (AllAvailableOperations -- NotYetTestedOperations) -- TestedOperations).
+
+
+% checks the audit log, not the authorization of an operation
+test_acl_changes_are_audited(tested_operations) ->
+    [];
+test_acl_changes_are_audited(Config) ->
+    Nodes = oct_background:get_provider_nodes(krakow),
+    UserId = oct_background:get_user_id(space_owner),
+    SessId = oct_background:get_user_session_id(space_owner, krakow),
+    {ok, FileGuid} = ?assertMatch({ok, _}, rpc:call(hd(Nodes), lfm, create, [
+        SessId, space_dir:guid(?config(space_id, Config)), generator:gen_name(), 8#644
+    ])),
+    Acl = [#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId,
+        name = oct_background:get_user_fullname(space_owner),
+        aceflags = ?no_flags_mask,
+        acemask = ?all_object_perms_mask
+    }],
+
+    set_file_access_audit_log_enabled(Nodes, true),
+    try
+        ?assertEqual(ok, opt_file_perms:set_acl(krakow, SessId, ?FILE_REF(FileGuid), Acl)),
+        ?assertEqual(ok, opt_file_perms:remove_acl(krakow, SessId, ?FILE_REF(FileGuid)))
+    after
+        set_file_access_audit_log_enabled(Nodes, false)
+    end,
+
+    AuditLog = read_file_access_audit_log(Nodes),
+    Uuid = file_id:guid_to_uuid(FileGuid),
+    lists:foreach(fun(RequestName) ->
+        ExpLine = <<"request: ", RequestName/binary, "; user: ", UserId/binary, "; file_uuid: ", Uuid/binary>>,
+        ?assertNotEqual(nomatch, binary:match(AuditLog, ExpLine))
+    end, [<<"acl_set_request">>, <<"acl_remove_request">>]).
 
 
 test_mkdir(tested_operations) ->
@@ -608,6 +646,30 @@ test_check_qos_status(tested_operations) ->
     [fun mi_qos:check_qos_status/2, fun mi_qos:check_qos_status/3];
 test_check_qos_status(Config) ->
     ?RUN_AUTHZ_QOS_API_TEST(Config).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec set_file_access_audit_log_enabled([node()], boolean()) -> ok.
+set_file_access_audit_log_enabled(Nodes, Enabled) ->
+    lists:foreach(fun(Node) ->
+        ?assertEqual(ok, rpc:call(Node, op_worker, set_env, [file_access_audit_log_enabled, Enabled]))
+    end, Nodes).
+
+
+%% @private
+-spec read_file_access_audit_log([node()]) -> binary().
+read_file_access_audit_log(Nodes) ->
+    iolist_to_binary(lists:map(fun(Node) ->
+        ?assertEqual(ok, rpc:call(Node, logger_std_h, filesync, [file_access_audit_log])),
+        {ok, #{config := #{file := File}}} = rpc:call(Node, logger, get_handler_config, [file_access_audit_log]),
+        {ok, Content} = rpc:call(Node, file, read_file, [File]),
+        Content
+    end, Nodes)).
 
 
 %%%===================================================================
