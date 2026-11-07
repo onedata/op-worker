@@ -353,7 +353,7 @@ handle_request_and_process_response(SessId, Request) ->
         EffLocalUserCtx = infer_eff_user_ctx(OriginalUserCtx, Request, FilePartialCtx),
 
         OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
-        handle_request_and_process_response_insecure(
+        handle_request_and_process_response_unsafe(
             OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
         )
     catch Type:Error:Stacktrace ->
@@ -419,11 +419,11 @@ get_operation_name(#proxyio_request{proxyio_request = Req}) ->
 
 
 %% @private
--spec handle_request_and_process_response_insecure(
+-spec handle_request_and_process_response_unsafe(
     od_user:id(), user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined
 ) ->
     response().
-handle_request_and_process_response_insecure(OriginalUserId, EffUserCtx, Request, FilePartialCtx) ->
+handle_request_and_process_response_unsafe(OriginalUserId, EffUserCtx, Request, FilePartialCtx) ->
     FileCtx1 = case FilePartialCtx of
         undefined ->
             undefined;

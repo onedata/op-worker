@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -85,7 +85,7 @@ handle(_Manager, Request, -1) ->
     ok;
 handle(Manager, Request, RetryCounter) ->
     try
-        handle_insecure(Request, Manager)
+        handle_unsafe(Request, Manager)
     catch
         exit:{noproc, _} ->
             ?debug("No proc to handle request ~tp, retry", [Request]),
@@ -255,12 +255,12 @@ code_change(_OldVsn, State, _Extra) ->
 %% if manager has not finished initialization.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_insecure(Request :: term(), Manager :: pid()) -> ok.
-handle_insecure(#event{} = Evt, Manager) ->
+-spec handle_unsafe(Request :: term(), Manager :: pid()) -> ok.
+handle_unsafe(#event{} = Evt, Manager) ->
     handle_event(Evt, Manager, true);
-handle_insecure(#flush_events{} = FlushRequest, Manager) ->
+handle_unsafe(#flush_events{} = FlushRequest, Manager) ->
     handle_flush(FlushRequest, Manager, true);
-handle_insecure(Request, Manager) ->
+handle_unsafe(Request, Manager) ->
     call_manager(Manager, Request).
 
 %%--------------------------------------------------------------------
