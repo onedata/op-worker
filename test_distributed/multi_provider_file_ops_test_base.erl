@@ -1,7 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @doc
@@ -2397,14 +2397,3 @@ log_replication_stats(TransferId, {ok, #document{value = #transfer{
     ct:pal("[Transfer ~tp] Bytes replicated: ~tp", [TransferId, BytesReplicated]);
 log_replication_stats(TransferId, Error = {error, _}) ->
     ct:pal("[Transfer ~tp] Failed to fetch transfer stats due to: ~tp", [TransferId, Error]).
-
-%% @private
--spec get_session_client_tokens(node(), session:id()) ->
-    {ok, auth_manager:client_tokens()} | {error, term()}.
-get_session_client_tokens(Node, SessionId) ->
-    case rpc:call(Node, session, get, [SessionId]) of
-        {ok, #document{value = #session{credentials = TokenCredentials}}} ->
-            {ok, auth_manager:get_client_tokens(TokenCredentials)};
-        {error, _} = Error ->
-            Error
-    end.
