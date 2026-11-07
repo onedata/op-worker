@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Tests of how fslogic_worker answers requests concerning a space this
-%%% provider doesn't support: it refuses them and serves the attributes of
-%%% the space dir only.
+%%% provider doesn't support: it refuses them, OneS3 with ENXIO, and serves
+%%% the attributes of the space dir only.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_unsupported_space_test_SUITE).
@@ -84,7 +84,8 @@ other_requests_are_refused_test(_Config) ->
         ssl:close(Sock)
     end, [
         {'ONECLIENT_TYPE', einval},
-        {'ONES3_TYPE', einval}
+        % OneS3 answers ENXIO by telling the S3 client the bucket is served elsewhere
+        {'ONES3_TYPE', enxio}
     ]).
 
 
