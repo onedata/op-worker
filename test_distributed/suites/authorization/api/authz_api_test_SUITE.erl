@@ -295,6 +295,9 @@ test_all_operations_are_checked(_Config) ->
                 end, Files)
         end
     end, code:get_path()),
+    % The modules are found by a wildcard over the code path; without them
+    % this test would check lfm alone.
+    ?assert(lists:member(mi_file_tree, AllMiddlewareInterfaceModules)),
 
     AllAvailableOperations = lists:usort(lists:flatmap(fun(Module) ->
         lists:filtermap(fun
