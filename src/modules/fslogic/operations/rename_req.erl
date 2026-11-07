@@ -134,6 +134,9 @@ copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
                 {error, Code} ->
                     #fuse_response{status = #status{code = Code}}
             end;
+        {error, #od_error{}} = Error ->
+            % fslogic_worker turns it into the response
+            throw(Error);
         {error, Code} ->
             #fuse_response{status = #status{code = Code}}
     end.

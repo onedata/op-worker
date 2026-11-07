@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -72,15 +72,19 @@ copy(_SessId, SourceGuid, SourceGuid, _TargetName, _Options) ->
     % attempt to copy file to itself
     {error, ?EINVAL};
 copy(SessId, SourceGuid, TargetParentGuid, TargetName, Options) ->
-    SourcePath = mi_file_tree:get_path(SessId, ?FILE_REF(SourceGuid)),
-    TargetParentPath = mi_file_tree:get_path(SessId, ?FILE_REF(TargetParentGuid)),
-    Recursive = maps:get(recursive, Options, ?DEFAULT_RECURSIVE_OPT),
-    case filepath_utils:is_equal_or_descendant(TargetParentPath, SourcePath) of
-        {true, _} when Recursive ->
-            % attempt to copy file to itself
-            {error, ?EINVAL};
-        _ ->
-            copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Options)
+    try
+        SourcePath = mi_file_tree:get_path(SessId, ?FILE_REF(SourceGuid)),
+        TargetParentPath = mi_file_tree:get_path(SessId, ?FILE_REF(TargetParentGuid)),
+        Recursive = maps:get(recursive, Options, ?DEFAULT_RECURSIVE_OPT),
+        case filepath_utils:is_equal_or_descendant(TargetParentPath, SourcePath) of
+            {true, _} when Recursive ->
+                % attempt to copy file to itself
+                {error, ?EINVAL};
+            _ ->
+                copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Options)
+        end
+    catch throw:{error, _} = Error ->
+        Error
     end.
 
 
@@ -108,7 +112,10 @@ copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Options) ->
         end
     catch
         _:{badmatch, Error2}  ->
-            Error2
+            Error2;
+        % the mi_* calls throw their errors
+        throw:{error, _} = Error3 ->
+            Error3
     end.
 
 

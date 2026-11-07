@@ -1,6 +1,6 @@
 %%%-------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -70,6 +70,7 @@
     use_supported_cdmi_version_test/1,
     use_unsupported_cdmi_version_test/1,
     copy_file_test/1,
+    copy_file_without_read_acl_permission_test/1,
     copy_dir_test/1,
     move_file_test/1,
     move_dir_test/1,
@@ -145,6 +146,7 @@ groups() -> [
         use_supported_cdmi_version_test,
         use_unsupported_cdmi_version_test,
         copy_file_test,
+        copy_file_without_read_acl_permission_test,
         copy_dir_test,
         move_file_test,
         move_dir_test,
@@ -386,6 +388,9 @@ use_unsupported_cdmi_version_test(_Config) ->
     ?RUN_BASE_TEST().
 
 copy_file_test(_Config) ->
+    ?RUN_MOVE_COPY_TEST().
+
+copy_file_without_read_acl_permission_test(_Config) ->
     ?RUN_MOVE_COPY_TEST().
 
 copy_dir_test(_Config) ->
