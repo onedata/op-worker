@@ -8,7 +8,7 @@
 %%% @doc
 %%% Tests of how fslogic_worker answers requests concerning a space this
 %%% provider doesn't support: it refuses them, OneS3 with ENXIO, and serves
-%%% the attributes of the space dir only.
+%%% the attributes of the space dir only, to the space's members.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_unsupported_space_test_SUITE).
@@ -16,6 +16,7 @@
 
 -include("env/space_setup_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -30,6 +31,7 @@
 -export([
     space_dir_attrs_are_served_test/1,
     space_dir_path_is_listed_test/1,
+    space_dir_attrs_need_membership_test/1,
     other_requests_are_refused_test/1,
     requests_rooted_at_space_dir_are_refused_test/1
 ]).
@@ -37,6 +39,7 @@
 all() -> [
     space_dir_attrs_are_served_test,
     space_dir_path_is_listed_test,
+    space_dir_attrs_need_membership_test,
     other_requests_are_refused_test,
     requests_rooted_at_space_dir_are_refused_test
 ].
@@ -44,6 +47,7 @@ all() -> [
 % supported by krakow only
 -define(UNSUPPORTED_SPACE, space_krk_p).
 -define(TEST_USER, user1).
+-define(NON_MEMBER, user2).
 
 -define(ATTEMPTS, 60).
 
@@ -87,6 +91,16 @@ space_dir_path_is_listed_test(_Config) ->
     lists:foreach(fun(#{<<"name">> := Name, <<"path">> := Path}) ->
         ?assertEqual(<<"/", Name/binary>>, Path)
     end, Children).
+
+
+% Without the name, which only a member's session resolves, nothing else
+% refuses a stat of the space dir.
+space_dir_attrs_need_membership_test(_Config) ->
+    SpaceDirGuid = space_dir:guid(oct_background:get_space_id(?UNSUPPORTED_SPACE)),
+    ?assertEqual({error, ?ENOENT}, rpc:call(
+        oct_background:get_random_provider_node(paris), lfm, stat,
+        [oct_background:get_user_session_id(?NON_MEMBER, paris), ?FILE_REF(SpaceDirGuid), [?attr_guid, ?attr_type]]
+    )).
 
 
 other_requests_are_refused_test(_Config) ->

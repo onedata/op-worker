@@ -98,6 +98,9 @@ resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
 
     FileCtx1 = case maps:get(check_perms, Opts, true) of
         true when IsNotLocallySupportedSpace ->
+            % the full check needs the space's data, which this provider lacks; membership doesn't.
+            % ENOENT, as resolving the space's name gives a non-member.
+            user_ctx:is_root(UserCtx) orelse file_ctx:is_in_user_space_const(FileCtx0, UserCtx) orelse throw(?ENOENT),
             FileCtx0;
         true ->
             RequiredPrivs = [
