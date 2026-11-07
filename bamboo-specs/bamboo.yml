@@ -134,6 +134,7 @@ stages:
         - file_registration_s3
         - file_symlinks
         - fslogic_req
+        - fslogic_unsupported_space
         - gs_atm_inventory_logic
         - gs_atm_lambda_logic
         - gs_atm_workflow_schema_logic
@@ -1066,6 +1067,13 @@ fslogic_req:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_fslogic_req.tar.gz
+
+fslogic_unsupported_space:
+  <<: *ct-onenv-job
+  key: FSLOGUNSUP
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_fslogic_unsupported_space.tar.gz
 
 gs_atm_inventory_logic:
   <<: *ct-job

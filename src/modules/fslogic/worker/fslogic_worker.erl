@@ -163,8 +163,13 @@ is_storage_accessible(FileCtx) ->
                     true;
                 false ->
                     SpaceId = file_ctx:get_space_id_const(FileCtx),
-                    {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
-                    not lists:member(StorageId, Storages)
+                    case space_logic:get_local_supporting_storage(SpaceId) of
+                        {ok, StorageId} ->
+                            not lists:member(StorageId, Storages);
+                        % a space with no local storage has none that could be unhealthy
+                        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
+                            true
+                    end
             end
     end.
 

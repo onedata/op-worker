@@ -38,7 +38,7 @@
     connect_as_provider/3, connect_as_client/4,
 
     connect_via_token/1, connect_via_token/2,
-    connect_via_token/3, connect_via_token/4,
+    connect_via_token/3, connect_via_token/4, connect_via_token/5,
 
     connect_as_user/4,
 
@@ -265,6 +265,23 @@ connect_via_token(Node, SocketOpts, Nonce) ->
 ) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
 connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
+    connect_via_token(Node, SocketOpts, Nonce, AccessToken, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node using a token, as the given type of client. With
+%% undefined, the handshake carries no client type.
+%% @end
+%%--------------------------------------------------------------------
+-spec connect_via_token(
+    Node :: node(),
+    SocketOpts :: list(),
+    Nonce :: binary(),
+    AccessToken :: tokens:serialized(),
+    ClientType :: undefined | atom()
+) ->
+    {ok, {Sock :: term(), SessId :: session:id()}}.
+connect_via_token(Node, SocketOpts, Nonce, AccessToken, ClientType) ->
     % given
     OpVersion = rpc:call(Node, op_worker, get_release_version, []),
     Resolver = compatibility:build_resolver([Node], []),
@@ -277,7 +294,8 @@ connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
             session_id = Nonce,
             macaroon = #'Macaroon'{macaroon = AccessToken},
             version = Version,
-            session_mode = 'NORMAL'
+            session_mode = 'NORMAL',
+            client_type = ClientType
         }
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
