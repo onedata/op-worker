@@ -90,8 +90,9 @@
 -spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {record(), file_ctx:ctx()}.
 resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
     % TODO VFS-12851 restrict attrs available for special dirs sub trees
-    % For spaces not supported locally (accessed by e.g. listing user root dir) effective value cache is not initialized.
-    % Fuse clients ask for ?ONECLIENT_FILE_ATTRS, which hold none of them, so they are skipped.
+    % For spaces not supported locally (accessed by e.g. listing user root dir) effective value cache is not initialized,
+    % so the effective attrs are skipped, except the path, which resolve_path/1 builds from the space name.
+    % Fuse clients ask for ?ONECLIENT_FILE_ATTRS, which hold none of them.
     IsNotLocallySupportedSpace = file_ctx:is_space_dir_const(FileCtx0) andalso
         not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx0)),
 
@@ -131,8 +132,8 @@ resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
         options = Opts#{attributes => FinalRequestedAttributes}
     },
     {FinalState, FinalFileAttrRecord} = lists:foldl(fun
-        ({_, effective, _}, {AccState, AccFileAttrRecord}) when IsNotLocallySupportedSpace ->
-            {AccState, AccFileAttrRecord};
+        ({AttrsSubset, effective, _}, Acc) when IsNotLocallySupportedSpace, AttrsSubset /= ?PATH_FILE_ATTRS ->
+            Acc;
         ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttrRecord}) ->
             {StageState, StageFileAttrRecord} = resolve_stage(AccState, AttrsSubset, StageFun),
             {StageState, merge_records(AccFileAttrRecord, StageFileAttrRecord)}
@@ -312,7 +313,14 @@ resolve_qos_eff_value_attrs(State) ->
 %% @private
 -spec resolve_path(state()) -> {state(), record()}.
 resolve_path(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
-    {Path, FileCtx2} = file_ctx:get_logical_path(FileCtx, UserCtx),
+    {Path, FileCtx2} = case file_ctx:is_space_dir_const(FileCtx) of
+        true ->
+            % without the paths cache, which a space not supported locally lacks
+            {SpaceName, FileCtx1} = file_ctx:get_space_name(FileCtx, UserCtx),
+            {filename:join(<<"/">>, SpaceName), FileCtx1};
+        false ->
+            file_ctx:get_logical_path(FileCtx, UserCtx)
+    end,
     {State#state{file_ctx = FileCtx2}, #file_attr{path = Path}}.
 
 

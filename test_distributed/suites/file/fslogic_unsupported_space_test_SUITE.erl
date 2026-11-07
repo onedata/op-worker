@@ -29,12 +29,14 @@
 
 -export([
     space_dir_attrs_are_served_test/1,
+    space_dir_path_is_listed_test/1,
     other_requests_are_refused_test/1,
     requests_rooted_at_space_dir_are_refused_test/1
 ]).
 
 all() -> [
     space_dir_attrs_are_served_test,
+    space_dir_path_is_listed_test,
     other_requests_are_refused_test,
     requests_rooted_at_space_dir_are_refused_test
 ].
@@ -66,6 +68,25 @@ space_dir_attrs_are_served_test(_Config) ->
     end,
 
     ssl:close(Sock).
+
+
+space_dir_path_is_listed_test(_Config) ->
+    UserRootDirGuid = user_root_dir:guid(oct_background:get_user_id(?TEST_USER)),
+    {ok, UserRootDirId} = file_id:guid_to_objectid(UserRootDirGuid),
+    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+        oct_background:get_random_provider_node(paris),
+        <<"data/", UserRootDirId/binary, "/children?attributes=name&attributes=path">>,
+        get,
+        [rest_test_utils:user_token_header(oct_background:get_user_access_token(?TEST_USER))],
+        <<>>
+    )),
+    #{<<"children">> := Children} = json_utils:decode(Body),
+
+    UnsupportedSpaceName = atom_to_binary(?UNSUPPORTED_SPACE),
+    ?assert(lists:any(fun(#{<<"name">> := Name}) -> Name == UnsupportedSpaceName end, Children)),
+    lists:foreach(fun(#{<<"name">> := Name, <<"path">> := Path}) ->
+        ?assertEqual(<<"/", Name/binary>>, Path)
+    end, Children).
 
 
 other_requests_are_refused_test(_Config) ->
