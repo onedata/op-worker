@@ -76,20 +76,20 @@ all() ->
     ]).
 
 db_sync_basic_opts_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {6, 1}, 120).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, 6, 120).
 
 db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {6, 1}, 300, false).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, 6, 300, false).
 
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
 db_sync_many_ops_test_base(Config) ->
     DirsNum = ?config(dirs_num, Config),
     FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {6, 1}, 120, DirsNum, FilesNum).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, 6, 120, DirsNum, FilesNum).
 
 db_sync_distributed_modification_test(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {6, 1}, 120).
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, 6, 120).
 
 file_consistency_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -133,9 +133,9 @@ multi_space_test(Config) ->
     Attempts = 120,
 
     SpaceConfigs = lists:foldl(fun({_, SN}, Acc) ->
-        {SyncNodes, NodesOfProvider} = {6, 1},
+        SyncNodes = 6,
         EC = multi_provider_file_ops_test_base:extend_config(Config, User,
-            {SyncNodes, NodesOfProvider}, Attempts),
+            SyncNodes, Attempts),
         [{SN, EC} | Acc]
     end, [], Spaces),
 
@@ -144,7 +144,7 @@ multi_space_test(Config) ->
 blocks_suiting_test(Config0) ->
     Attempts = 60,
     User = <<"user1">>,
-    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {6, 1}, Attempts),
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, 6, Attempts),
     SessId = ?config(session, Config),
     SpaceName = <<"space9">>,
     [Worker1, Worker2, Worker3, Worker4, Worker5, Worker6] = Workers = ?config(op_worker_nodes, Config0),

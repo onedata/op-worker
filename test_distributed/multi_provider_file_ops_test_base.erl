@@ -124,7 +124,7 @@ create_on_different_providers_test_base(Config) ->
     ?assertMatch(ok, lfm_proxy:unlink(W2, UserW2SessId, {path, DirPath})).
 
 synchronizer_test_base(Config0) ->
-    Config = extend_config(Config0, <<"user1">>, {2, 1}, 1),
+    Config = extend_config(Config0, <<"user1">>, 2, 1),
     FileSize = ?config(file_size_mb, Config),
     BlockSize = ?config(block_size, Config),
     BlocksCount = ?config(block_count, Config),
@@ -202,7 +202,7 @@ synchronizer_test_base(Config0) ->
         1000000 * Threads * BlocksCount / SyncTime2_2]).
 
 synchronize_stress_test_base(Config0, RandomRead) ->
-    Config = extend_config(Config0, <<"user1">>, {2, 1}, 1),
+    Config = extend_config(Config0, <<"user1">>, 2, 1),
     FileSize = ?config(file_size_gb, Config),
     BlockSize = ?config(block_size, Config),
     BlocksCount = ?config(block_per_repeat, Config),
@@ -282,7 +282,7 @@ random_read_test_base(Config) ->
     random_read_test_base(Config, false, true).
 
 random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
-    Config = extend_config(Config0, <<"user1">>, {2, 1}, 1),
+    Config = extend_config(Config0, <<"user1">>, 2, 1),
     FileSize = ?config(file_size_gb, Config),
     BlockSize = ?config(block_size, Config),
     BlocksCount = ?config(block_per_repeat, Config),
@@ -368,10 +368,10 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
             {ReadTime1 / BlocksCount, ReadTime2 / BlocksCount, OpenTime, CloseTime}
     end.
 
-rtransfer_test_base(Config0, User, {SyncNodes, NodesOfProvider},
+rtransfer_test_base(Config0, User, SyncNodes,
     Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum, BigFileParts,
     TransfersNum, TransferFileParts) ->
-    Config = extend_config(Config0, User, {SyncNodes, NodesOfProvider}, Attempts),
+    Config = extend_config(Config0, User, SyncNodes, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -459,9 +459,9 @@ rtransfer_test_base(Config0, User, {SyncNodes, NodesOfProvider},
 % Scenario in which 1 large transfer is executed and number of transfer stats
 % updates per second and file location updates per second is checked.
 % For this test, environment with 2 1-node providers is assumed.
-rtransfer_test_base2(Config0, User, {SyncNodes, NodesOfProvider},
+rtransfer_test_base2(Config0, User, SyncNodes,
     Attempts, TransferTimeout, ImportedFileSize) ->
-    Config = extend_config(Config0, User, {SyncNodes, NodesOfProvider}, Attempts),
+    Config = extend_config(Config0, User, SyncNodes, Attempts),
     SessId = ?config(session, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     Worker1 = ?config(worker1, Config),
@@ -522,9 +522,9 @@ rtransfer_test_base2(Config0, User, {SyncNodes, NodesOfProvider},
     ]),
     ok.
 
-rtransfer_blocking_test_base(Config0, User, {SyncNodes, NodesOfProvider},
+rtransfer_blocking_test_base(Config0, User, SyncNodes,
     Attempts, Timeout, TransferFileParts) ->
-    Config = extend_config(Config0, User, {SyncNodes, NodesOfProvider}, Attempts),
+    Config = extend_config(Config0, User, SyncNodes, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -634,14 +634,11 @@ rtransfer_blocking_test_cleanup(Config) ->
 
     test_utils:mock_validate_and_unload(Workers2, [replica_synchronizer, rtransfer_config]).
 
-basic_opts_test_base(Config, User, NodesDescroption, Attempts) ->
-    basic_opts_test_base(Config, User, NodesDescroption, Attempts, true).
+basic_opts_test_base(Config, User, SyncNodes, Attempts) ->
+    basic_opts_test_base(Config, User, SyncNodes, Attempts, true).
 
-basic_opts_test_base(Config0, User, {SyncNodes, NodesOfProvider}, Attempts, CheckSequences) ->
-
-%%    ct:print("Test ~tp", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
-
-    Config = extend_config(Config0, User, {SyncNodes, NodesOfProvider}, Attempts),
+basic_opts_test_base(Config0, User, SyncNodes, Attempts, CheckSequences) ->
+    Config = extend_config(Config0, User, SyncNodes, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     SpaceId = ?config(first_space_id, Config),
@@ -738,11 +735,8 @@ basic_opts_test_base(Config0, User, {SyncNodes, NodesOfProvider}, Attempts, Chec
 
     ok.
 
-create_after_del_test_base(Config0, User, {SyncNodes, NodesOfProvider}, Attempts) ->
-
-%%    ct:print("Test ~tp", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
-
-    Config = extend_config(Config0, User, {SyncNodes, NodesOfProvider}, Attempts),
+create_after_del_test_base(Config0, User, SyncNodes, Attempts) ->
+    Config = extend_config(Config0, User, SyncNodes, Attempts),
 
     delete_test_skeleton(Config, "Standard, write 1", true, false, false, false),
     delete_test_skeleton(Config, "Standard", false, false, false, false),
@@ -830,9 +824,9 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
         end, undefined, Workers ++ Workers)
     end, lists:seq(1,2)).
 
-many_ops_test_base(Config0, User, {SyncNodes, NodesOfProvider}, Attempts, DirsNum, FilesNum) ->
+many_ops_test_base(Config0, User, SyncNodes, Attempts, DirsNum, FilesNum) ->
 
-    Config = extend_config(Config0, User, {SyncNodes, NodesOfProvider}, Attempts),
+    Config = extend_config(Config0, User, SyncNodes, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -923,9 +917,9 @@ many_ops_test_base(Config0, User, {SyncNodes, NodesOfProvider}, Attempts, DirsNu
 
     ok.
 
-distributed_modification_test_base(Config0, User, {SyncNodes, NodesOfProvider}, Attempts) ->
+distributed_modification_test_base(Config0, User, SyncNodes, Attempts) ->
 
-    Config = extend_config(Config0, User, {SyncNodes, NodesOfProvider}, Attempts),
+    Config = extend_config(Config0, User, SyncNodes, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -1031,9 +1025,9 @@ distributed_modification_test_base(Config0, User, {SyncNodes, NodesOfProvider}, 
 
     ok.
 
-distributed_delete_test_base(Config0, User, {SyncNodes, NodesOfProvider}, Attempts) ->
+distributed_delete_test_base(Config0, User, SyncNodes, Attempts) ->
 
-    Config = extend_config(Config0, User, {SyncNodes, NodesOfProvider}, Attempts),
+    Config = extend_config(Config0, User, SyncNodes, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -1467,7 +1461,7 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
 
 
 mkdir_and_rmdir_loop_test_base(Config0, IterationsNum, User) ->
-    Config = extend_config(Config0, User, {0, 0}, 0),
+    Config = extend_config(Config0, User, 0, 0),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -1485,7 +1479,7 @@ mkdir_and_rmdir_loop_test_base(Config0, IterationsNum, User) ->
 
 
 create_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
-    Config = extend_config(Config0, User, {0, 0}, 0),
+    Config = extend_config(Config0, User, 0, 0),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -1501,7 +1495,7 @@ create_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
 
 
 echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
-    Config = extend_config(Config0, User, {0, 0}, 0),
+    Config = extend_config(Config0, User, 0, 0),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -1526,7 +1520,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     ct:timetrap({minutes, 240}),
 
     User1 = <<"user1">>,
-    Config = extend_config(Config0, User1, {2, 1}, 1),
+    Config = extend_config(Config0, User1, 2, 1),
     BlockSize = ?config(block_size, Config),
     BlocksCount = ?config(block_count, Config),
     UserCount = ?config(user_count, Config),
@@ -1590,7 +1584,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     ct:timetrap({minutes, 240}),
 
     User1 = <<"user1">>,
-    Config = extend_config(Config0, User1, {2, 1}, 1),
+    Config = extend_config(Config0, User1, 2, 1),
     BlockSize = ?config(block_size, Config),
     BlocksCount = ?config(block_count, Config),
     UserCount = ?config(user_count, Config),
@@ -1664,7 +1658,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
 % @TODO VFS-6617 fix fsync failing on timeout
 transfer_files_to_source_provider(Config0) ->
     ct:timetrap(timer:minutes(10)),
-    Config = extend_config(Config0, <<"user1">>, {0, 0}, 0),
+    Config = extend_config(Config0, <<"user1">>, 0, 0),
     SessionId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker = ?config(worker1, Config),
@@ -1971,7 +1965,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     storage_driver:fsync(SDHandle3, false),
     ok.
 
-extend_config(Config, User, {SyncNodes, NodesOfProvider}, Attempts) ->
+extend_config(Config, User, SyncNodes, Attempts) ->
     Workers = ?config(op_worker_nodes, Config),
     {Worker1, Workers1, WorkersNot1, Workers2} = lists:foldl(fun(W, {Acc1, Acc2, Acc3, Acc4}) ->
         {NAcc2, NAcc3} = case string:str(atom_to_list(W), "p1") of
@@ -1999,7 +1993,7 @@ extend_config(Config, User, {SyncNodes, NodesOfProvider}, Attempts) ->
     [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1}, {workers2, Workers2},
         {session, SessId}, {first_space_id, SpaceId}, {space_name, SpaceName}, {attempts, Attempts},
-        {nodes_number, {SyncNodes, 0, 0, 0, NodesOfProvider}} | Config].
+        {sync_nodes, SyncNodes} | Config].
 
 verify(Config, TestFun) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -2056,7 +2050,7 @@ verify_helper([W | Workers], TestFun, Timeout, SpawnOnWorker) ->
 verify_stats(Config, File, IsDir) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
-    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, _NodesOfProvider} = ?config(nodes_number, Config),
+    SyncNodes = ?config(sync_nodes, Config),
 
     VerAns = verify(Config, fun(W) ->
 %%        ct:print("VerifyStats ~tp", [{File, IsDir, W}]),
@@ -2077,8 +2071,8 @@ verify_stats(Config, File, IsDir) ->
     NotFoundList = lists:filter(fun({_, {error, not_found}}) -> true; (_) -> false end, VerAns),
     OKList = lists:filter(fun({_, {ok, _}}) -> true; (_) -> false end, VerAns),
 
-    ?assertEqual(ProxyNodes - ProxyNodesWritten, length(NotFoundList)),
-    ?assertEqual(SyncNodes + ProxyNodesWritten, length(OKList)),
+    ?assertEqual(0, length(NotFoundList)),
+    ?assertEqual(SyncNodes, length(OKList)),
     [{FileUuidAns, _} | _] = VerAns,
     FileUuidAns.
 
@@ -2188,8 +2182,7 @@ create_file(Config, FileBeg, {Offset, File}) ->
 verify_file(Config, FileBeg, {Offset, File}) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
-    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, _NodesOfProvider} =
-        ?config(nodes_number, Config),
+    SyncNodes = ?config(sync_nodes, Config),
 
     Offset2 = Offset rem 5 + 1,
     Size = 2*Offset2,
@@ -2222,7 +2215,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
             end, Attempts)
     end),
 
-    ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
+    ToMatch = {0, SyncNodes},
     AssertLocations = fun() ->
         VerAns = VerifyLocation(),
 %%            ct:print("Locations1 ~tp", [{Offset, File, VerAns}]),
@@ -2258,7 +2251,7 @@ verify_del(Config, {F, FileUuid, _Locations}) ->
 verify_dir_size(Config, DirToCheck, DSize) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
-    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, _NodesOfProvider} = ?config(nodes_number, Config),
+    SyncNodes = ?config(sync_nodes, Config),
 
     VerAns0 = verify(Config, fun(W) ->
         CountChilden = fun() ->
@@ -2289,9 +2282,9 @@ verify_dir_size(Config, DirToCheck, DSize) ->
     end,
     ToMatch = case DSize of
         0 ->
-            {ProxyNodes + SyncNodes, ProxyNodes + SyncNodes};
+            {SyncNodes, SyncNodes};
         _ ->
-            {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten}
+            {0, SyncNodes}
     end,
     ?match(ToMatch, AssertLinks(), Attempts).
 

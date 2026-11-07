@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -59,11 +59,11 @@ db_sync_test_base(Config) ->
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
     ct:print("db_sync_test many_ops_test"),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {2, 1}, Attempts, Dirs, Files),
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, 2, Attempts, Dirs, Files),
     ct:print("db_sync_test distributed_modification_test"),
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2, 1}, Attempts),
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, 2, Attempts),
     ct:print("db_sync_test distributed_delete_test"),
-    multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {2, 1}, Attempts).
+    multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, 2, Attempts).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

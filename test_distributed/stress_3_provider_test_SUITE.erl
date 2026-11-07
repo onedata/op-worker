@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -77,7 +77,7 @@ rtransfer_test_base(Config) ->
     TN = ?config(transfers_num, Config),
     TFP = ?config(transfer_file_parts, Config),
     multi_provider_file_ops_test_base:rtransfer_test_base(Config, <<"user1">>,
-        {6, 2}, 180, timer:minutes(5), SMN, MFN, BFN, BFP, TN, TFP).
+        6, 180, timer:minutes(5), SMN, MFN, BFN, BFP, TN, TFP).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
