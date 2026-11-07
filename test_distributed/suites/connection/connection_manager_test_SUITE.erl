@@ -33,6 +33,7 @@
     consecutive_failures_to_verify_peer_should_not_terminate_session_test/1,
     consecutive_failures_to_perform_handshake_should_not_terminate_session_test/1,
     session_should_be_terminated_when_there_are_no_common_spaces_test/1,
+    provider_record_update_should_not_start_session_without_common_spaces_test/1,
     crashed_connection_should_be_restarted_test/1
 ]).
 
@@ -40,6 +41,7 @@ all() -> [
     consecutive_failures_to_verify_peer_should_not_terminate_session_test,
     consecutive_failures_to_perform_handshake_should_not_terminate_session_test,
     session_should_be_terminated_when_there_are_no_common_spaces_test,
+    provider_record_update_should_not_start_session_without_common_spaces_test,
     crashed_connection_should_be_restarted_test
 ].
 
@@ -124,6 +126,27 @@ session_should_be_terminated_when_there_are_no_common_spaces_test(_Config) ->
     unmock_existence_of_common_spaces(KrakowNode),
 
     ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
+
+    ok.
+
+
+% Each update of a cached record of an online provider tries to connect to it.
+provider_record_update_should_not_start_session_without_common_spaces_test(_Config) ->
+    ParisId = oct_background:get_provider_id(paris),
+    [KrakowNode] = oct_background:get_provider_nodes(krakow),
+    unmock_existence_of_common_spaces(KrakowNode),
+
+    ok = test_utils:mock_new(KrakowNode, session_connections, [passthrough]),
+    try
+        ?assertMatch({ok, _}, rpc:call(KrakowNode, od_provider, update_cache, [
+            ParisId,
+            fun(Provider) -> {ok, Provider#od_provider{online = true}} end,
+            #document{key = ParisId, value = #od_provider{online = true}}
+        ])),
+        ?assertEqual(0, rpc:call(KrakowNode, meck, num_calls, [session_connections, ensure_connected, '_']))
+    after
+        test_utils:mock_unload(KrakowNode, session_connections)
+    end,
 
     ok.
 

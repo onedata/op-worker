@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @copyright (C) 2017-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -93,9 +93,16 @@ ensure_connected_to_peer(ProviderId) ->
             ?ERR_UNREGISTERED_ONEPROVIDER ->
                 ok;
             _ ->
-                SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
-                {ok, _} = session_connections:ensure_connected(SessId),
-                ok
+                % outgoing_connection_manager would stop a session to a provider
+                % sharing no space at its first renewal
+                case provider_logic:cosupports_any_space(ProviderId) of
+                    true ->
+                        SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
+                        {ok, _} = session_connections:ensure_connected(SessId),
+                        ok;
+                    false ->
+                        ok
+                end
         end
     catch Class:Reason:Stacktrace ->
         ?error_exception("Could not ensure connection to provider ~ts",
