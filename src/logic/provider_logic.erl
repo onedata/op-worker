@@ -320,7 +320,8 @@ supports_space(SpaceId) ->
 
 -spec cosupports_any_space(od_provider:id()) -> boolean().
 cosupports_any_space(ProviderId) ->
-    {ok, Spaces} = get_spaces(),
+    % Call by ?MODULE so that the envup tests' mock of get_spaces/0 applies
+    {ok, Spaces} = ?MODULE:get_spaces(),
     lists:any(fun(SpaceId) ->
         space_logic:is_supported_by(SpaceId, ProviderId)
     end, Spaces).
