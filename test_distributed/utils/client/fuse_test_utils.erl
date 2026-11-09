@@ -60,6 +60,7 @@
 -export([generate_ping_message/0, generate_ping_message/1]).
 
 -export([
+    send_fuse_request/2,
     create_file/3, create_file/5, create_777_mode_file/3,
     delete_file/2,
     make_link/4, make_link/5,
@@ -540,6 +541,30 @@ generate_proxyio_message(MsgId, Parameters, ProxyIORequest) ->
         }}
     },
     messages:encode_msg(Message).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends a fuse request and returns what the response carries. A status
+%% other than ok comes back as an error, so a test can assert it.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_fuse_request(ssl:sslsocket(), tuple()) -> ok | {ok, term()} | {error, atom()}.
+send_fuse_request(Sock, FuseRequest) ->
+    MsgId = ?MSG_ID,
+    ok = ssl:send(Sock, generate_fuse_request_message(MsgId, FuseRequest)),
+    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
+        status = #'Status'{code = Code},
+        fuse_response = Response
+    }}} = ?assertMatch(#'ServerMessage'{
+        message_id = MsgId,
+        message_body = {fuse_response, #'FuseResponse'{}}
+    }, receive_server_message()),
+    case {Code, Response} of
+        {ok, undefined} -> ok;
+        {ok, {_, Content}} -> {ok, Content};
+        _ -> {error, Code}
+    end.
 
 
 create_file(Sock, RootGuid, Filename) ->

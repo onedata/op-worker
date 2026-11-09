@@ -21,6 +21,7 @@
 
 -include("api/api_test_runner.hrl").
 -include("global_definitions.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
@@ -138,12 +139,12 @@ provider_record_update_should_not_start_session_without_common_spaces_test(_Conf
 
     ok = test_utils:mock_new(KrakowNode, session_connections, [passthrough]),
     try
-        ?assertMatch({ok, _}, rpc:call(KrakowNode, od_provider, update_cache, [
+        ?assertMatch({ok, _}, ?rpc(KrakowNode, od_provider:update_cache(
             ParisId,
             fun(Provider) -> {ok, Provider#od_provider{online = true}} end,
             #document{key = ParisId, value = #od_provider{online = true}}
-        ])),
-        ?assertEqual(0, rpc:call(KrakowNode, meck, num_calls, [session_connections, ensure_connected, '_']))
+        ))),
+        ?assertEqual(0, ?rpc(KrakowNode, meck:num_calls(session_connections, ensure_connected, '_')))
     after
         test_utils:mock_unload(KrakowNode, session_connections)
     end,

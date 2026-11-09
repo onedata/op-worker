@@ -17,8 +17,10 @@
 -include("env/space_setup_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("test_rpc.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -77,7 +79,7 @@ space_dir_attrs_are_served_test(_Config) ->
 space_dir_path_is_listed_test(_Config) ->
     UserRootDirGuid = user_root_dir:guid(oct_background:get_user_id(?TEST_USER)),
     {ok, UserRootDirId} = file_id:guid_to_objectid(UserRootDirGuid),
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+    {ok, _, _, Body} = ?assertMatch({ok, ?HTTP_200_OK, _, _}, rest_test_utils:request(
         oct_background:get_random_provider_node(paris),
         <<"data/", UserRootDirId/binary, "/children?attributes=name&attributes=path">>,
         get,
@@ -97,19 +99,19 @@ space_dir_path_is_listed_test(_Config) ->
 % refuses a stat of the space dir.
 space_dir_attrs_need_membership_test(_Config) ->
     SpaceDirGuid = space_dir:guid(oct_background:get_space_id(?UNSUPPORTED_SPACE)),
-    ?assertEqual({error, ?ENOENT}, rpc:call(
-        oct_background:get_random_provider_node(paris), lfm, stat,
-        [oct_background:get_user_session_id(?NON_MEMBER, paris), ?FILE_REF(SpaceDirGuid), [?attr_guid, ?attr_type]]
-    )).
+    SessId = oct_background:get_user_session_id(?NON_MEMBER, paris),
+    ?assertEqual({error, ?ENOENT}, ?rpc(paris, lfm:stat(
+        SessId, ?FILE_REF(SpaceDirGuid), [?attr_guid, ?attr_type]
+    ))).
 
 
 other_requests_are_refused_test(_Config) ->
     SpaceDirGuid = space_dir:guid(oct_background:get_space_id(?UNSUPPORTED_SPACE)),
     SpacePath = <<"/", (atom_to_binary(?UNSUPPORTED_SPACE))/binary>>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, rpc:call(
-        oct_background:get_random_provider_node(krakow), lfm, create,
-        [oct_background:get_user_session_id(?TEST_USER, krakow), SpaceDirGuid, generator:gen_name(), 8#644]
-    )),
+    KrakowSessId = oct_background:get_user_session_id(?TEST_USER, krakow),
+    {ok, FileGuid} = ?assertMatch({ok, _}, ?rpc(krakow, lfm:create(
+        KrakowSessId, SpaceDirGuid, generator:gen_name(), 8#644
+    ))),
 
     lists:foreach(fun({ClientType, ExpCode}) ->
         Sock = connect(ClientType),
@@ -118,16 +120,15 @@ other_requests_are_refused_test(_Config) ->
         ?assertEqual({error, ExpCode}, resolve_guid(Sock, SpacePath)),
         ssl:close(Sock)
     end, [
-        {'ONECLIENT_TYPE', einval},
+        {'ONECLIENT_TYPE', ?EINVAL},
         % OneS3 answers ENXIO by telling the S3 client the bucket is served elsewhere
-        {'ONES3_TYPE', enxio}
+        {'ONES3_TYPE', ?ENXIO}
     ]).
 
 
 % A provider whose support was just revoked may still hold permissions that let
 % a request through, so the refusal must not depend on them.
 requests_rooted_at_space_dir_are_refused_test(_Config) ->
-    ParisNode = oct_background:get_random_provider_node(paris),
     SessId = oct_background:get_user_session_id(?TEST_USER, paris),
 
     SpaceId = space_setup_utils:set_up_space(#space_spec{
@@ -141,20 +142,22 @@ requests_rooted_at_space_dir_are_refused_test(_Config) ->
         ]
     }),
     SpaceDirGuid = space_dir:guid(SpaceId),
-    ?assertMatch({ok, _}, rpc:call(ParisNode, lfm, mkdir,
-        [SessId, SpaceDirGuid, generator:gen_name(), 8#755]), ?ATTEMPTS),
+    ?assertMatch({ok, _}, ?rpc(paris, lfm:mkdir(
+        SessId, SpaceDirGuid, generator:gen_name(), 8#755
+    )), ?ATTEMPTS),
 
-    {ok, StorageId} = rpc:call(ParisNode, space_logic, get_local_supporting_storage, [SpaceId]),
-    ?assertEqual(ok, rpc:call(ParisNode, storage_logic, revoke_space_support, [StorageId, SpaceId])),
-    ?assertEqual(false, rpc:call(ParisNode, provider_logic, supports_space, [SpaceId]), ?ATTEMPTS),
+    {ok, StorageId} = ?rpc(paris, space_logic:get_local_supporting_storage(SpaceId)),
+    ?assertEqual(ok, ?rpc(paris, storage_logic:revoke_space_support(StorageId, SpaceId))),
+    ?assertEqual(false, ?rpc(paris, provider_logic:supports_space(SpaceId)), ?ATTEMPTS),
 
     Name = generator:gen_name(),
-    ?assertEqual({error, ?EINVAL}, rpc:call(ParisNode, lfm, ensure_dir,
-        [SessId, SpaceDirGuid, Name, 8#755])),
-    ?assertEqual({error, ?EINVAL}, rpc:call(ParisNode, lfm, resolve_guid_by_relative_path,
-        [SessId, SpaceDirGuid, Name])),
-    ?assertEqual({error, not_found}, rpc:call(ParisNode, file_meta_forest, get,
-        [file_id:guid_to_uuid(SpaceDirGuid), all, Name])).
+    ?assertEqual({error, ?EINVAL}, ?rpc(paris, lfm:ensure_dir(SessId, SpaceDirGuid, Name, 8#755))),
+    ?assertEqual({error, ?EINVAL}, ?rpc(paris, lfm:resolve_guid_by_relative_path(
+        SessId, SpaceDirGuid, Name
+    ))),
+    ?assertEqual({error, not_found}, ?rpc(paris, file_meta_forest:get(
+        file_id:guid_to_uuid(SpaceDirGuid), all, Name
+    ))).
 
 
 %%%===================================================================
@@ -176,7 +179,7 @@ connect(ClientType) ->
 -spec get_file_attr(ssl:sslsocket(), file_id:file_guid()) ->
     {ok, #'FileAttr'{}} | {error, atom()}.
 get_file_attr(Sock, Guid) ->
-    send_fuse_request(Sock, {file_request, #'FileRequest'{
+    fuse_test_utils:send_fuse_request(Sock, {file_request, #'FileRequest'{
         context_guid = Guid,
         file_request = {get_file_attr, #'GetFileAttr'{}}
     }}).
@@ -186,7 +189,7 @@ get_file_attr(Sock, Guid) ->
 -spec get_children_attrs(ssl:sslsocket(), file_id:file_guid()) ->
     {ok, #'FileChildrenAttrs'{}} | {error, atom()}.
 get_children_attrs(Sock, Guid) ->
-    send_fuse_request(Sock, {file_request, #'FileRequest'{
+    fuse_test_utils:send_fuse_request(Sock, {file_request, #'FileRequest'{
         context_guid = Guid,
         file_request = {get_file_children_attrs, #'GetFileChildrenAttrs'{offset = 0, size = 100}}
     }}).
@@ -195,32 +198,14 @@ get_children_attrs(Sock, Guid) ->
 %% @private
 -spec resolve_guid(ssl:sslsocket(), file_meta:path()) -> {ok, #'Uuid'{}} | {error, atom()}.
 resolve_guid(Sock, Path) ->
-    send_fuse_request(Sock, {resolve_guid, #'ResolveGuid'{path = Path}}).
-
-
-%% @private
--spec send_fuse_request(ssl:sslsocket(), tuple()) -> {ok, term()} | {error, atom()}.
-send_fuse_request(Sock, FuseRequest) ->
-    MsgId = integer_to_binary(erlang:unique_integer([positive])),
-    ok = ssl:send(Sock, messages:encode_msg(#'ClientMessage'{
-        message_id = MsgId,
-        message_body = {fuse_request, #'FuseRequest'{fuse_request = FuseRequest}}
-    })),
-    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
-        status = #'Status'{code = Code},
-        fuse_response = Response
-    }}} = fuse_test_utils:receive_server_message(),
-    case Code of
-        ok -> {ok, element(2, Response)};
-        _ -> {error, Code}
-    end.
+    fuse_test_utils:send_fuse_request(Sock, {resolve_guid, #'ResolveGuid'{path = Path}}).
 
 
 %% @private
 -spec set_unhealthy_storages([storage:id()]) -> ok.
 set_unhealthy_storages(StorageIds) ->
     lists:foreach(fun(Node) ->
-        ok = rpc:call(Node, worker_host, state_put, [fslogic_worker, unhealthy_storages, StorageIds])
+        ok = ?rpc(Node, worker_host:state_put(fslogic_worker, unhealthy_storages, StorageIds))
     end, oct_background:get_provider_nodes(paris)).
 
 

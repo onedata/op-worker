@@ -18,6 +18,7 @@
 -include("env/space_setup_utils.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("opw_panel_contracts/include/storage/common.hrl").
@@ -333,9 +334,10 @@ test_acl_changes_are_audited(Config) ->
     Nodes = oct_background:get_provider_nodes(krakow),
     UserId = oct_background:get_user_id(space_owner),
     SessId = oct_background:get_user_session_id(space_owner, krakow),
-    {ok, FileGuid} = ?assertMatch({ok, _}, rpc:call(hd(Nodes), lfm, create, [
-        SessId, space_dir:guid(?config(space_id, Config)), generator:gen_name(), 8#644
-    ])),
+    SpaceDirGuid = space_dir:guid(?config(space_id, Config)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, ?rpc(krakow, lfm:create(
+        SessId, SpaceDirGuid, generator:gen_name(), 8#644
+    ))),
     Acl = [#access_control_entity{
         acetype = ?allow_mask,
         identifier = UserId,
@@ -657,7 +659,7 @@ test_check_qos_status(Config) ->
 -spec set_file_access_audit_log_enabled([node()], boolean()) -> ok.
 set_file_access_audit_log_enabled(Nodes, Enabled) ->
     lists:foreach(fun(Node) ->
-        ?assertEqual(ok, rpc:call(Node, op_worker, set_env, [file_access_audit_log_enabled, Enabled]))
+        ?assertEqual(ok, ?rpc(Node, op_worker:set_env(file_access_audit_log_enabled, Enabled)))
     end, Nodes).
 
 
@@ -665,9 +667,9 @@ set_file_access_audit_log_enabled(Nodes, Enabled) ->
 -spec read_file_access_audit_log([node()]) -> binary().
 read_file_access_audit_log(Nodes) ->
     iolist_to_binary(lists:map(fun(Node) ->
-        ?assertEqual(ok, rpc:call(Node, logger_std_h, filesync, [file_access_audit_log])),
-        {ok, #{config := #{file := File}}} = rpc:call(Node, logger, get_handler_config, [file_access_audit_log]),
-        {ok, Content} = rpc:call(Node, file, read_file, [File]),
+        ?assertEqual(ok, ?rpc(Node, logger_std_h:filesync(file_access_audit_log))),
+        {ok, #{config := #{file := File}}} = ?rpc(Node, logger:get_handler_config(file_access_audit_log)),
+        {ok, Content} = ?rpc(Node, file:read_file(File)),
         Content
     end, Nodes)).
 
