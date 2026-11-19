@@ -186,7 +186,7 @@ get_manual_example(SpaceId) ->
         Domain = oneprovider:get_domain(),
         {ok, str_utils:format_bin(
             "curl -X POST -H \"X-Auth-Token:$TOKEN\" -H \"content-type:application/json\" \ "
-            "-d '{\"storageId\":\"~ts\", \"spaceId\":\"~ts\", \"storageFileId\":\"$STORAGE_FILE_ID\", \"destinationPath\":\"'$DESTINATION_PATH'\"}' \ "
+            "-d '{\"storageId\":\"~ts\", \"spaceId\":\"~ts\", \"storageFileId\":\"'$STORAGE_FILE_ID'\", \"destinationPath\":\"'$DESTINATION_PATH'\"}' \ "
             "https://~ts/api/v3/oneprovider/data/register",
             [StorageId, SpaceId, Domain]
         )}
