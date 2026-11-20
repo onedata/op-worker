@@ -110,26 +110,26 @@ move_to_trash(FileCtx, UserCtx) ->
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
-    {IsParentSyncEnabled, ParentCtx} = file_ctx:is_synchronization_enabled(file_ctx:get_cached_parent_const(FileCtx2)),
-    FileCtx3 = add_deletion_marker_if_applicable(ParentUuid, file_ctx:cache_parent(ParentCtx, FileCtx2)),
-    {Name, FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
-    {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
+    {SourceParentSyncMode, FileCtx3} = file_tree:get_parent_sync_mode(FileCtx2, UserCtx),
+    FileCtx4 = add_deletion_marker_if_applicable(ParentUuid, FileCtx3),
+    {Name, FileCtx5} = file_ctx:get_aliased_name(FileCtx4, UserCtx),
+    {FileDoc, FileCtx6} = file_ctx:get_file_doc(FileCtx5),
     % files moved to trash are direct children of trash directory
     % their names are suffixed with Uuid to avoid conflicts
     TrashUuid = uuid(SpaceId),
     % TODO VFS-7133 save original parent after extending file_meta !!!
-    file_qos:cleanup_reference_related_documents(FileCtx5),
+    file_qos:cleanup_reference_related_documents(FileCtx6),
     ok = qos_eff_cache:invalidate_on_all_nodes(SpaceId),
     NameInTrash = ?NAME_IN_TRASH(Name, Uuid),
-    file_meta:rename(FileDoc, ParentUuid, file_meta_forest:parent_sync_mode(IsParentSyncEnabled),
+    file_meta:rename(FileDoc, ParentUuid, SourceParentSyncMode,
         TrashUuid, synced_parent, NameInTrash),
     ok = dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
     ok = paths_cache:invalidate_on_all_nodes(SpaceId),
     TrashGuid = file_id:pack_guid(TrashUuid, SpaceId),
     permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_renamed_no_exclude(
-        FileCtx5, ParentGuid, TrashGuid, NameInTrash, Name),
-    file_ctx:reset(FileCtx5). % file_meta document and parent cached in file_ctx are invalid
+        FileCtx6, ParentGuid, TrashGuid, NameInTrash, Name),
+    file_ctx:reset(FileCtx6). % file_meta document and parent cached in file_ctx are invalid
 
 
 %%--------------------------------------------------------------------

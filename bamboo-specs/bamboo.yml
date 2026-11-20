@@ -129,7 +129,7 @@ stages:
         - file_lfm_posix
         - file_lfm_s3
         - file_lifecycle_races
-        - file_links_reconciliation_traverse
+        - file_meta_links_sync
         - file_popularity
         - file_registration_http
         - file_registration_s3
@@ -229,7 +229,6 @@ stages:
         - storage_sync_links
         - storage_traverse
         - tmp_db_error
-        - tmp_dir
         - transfer_eviction
         - transfer_migration
         - transfer_replication
@@ -1034,12 +1033,12 @@ file_lifecycle_races:
     - <<: *ct_logs
       name: ct_logs_file_lifecycle_races.tar.gz
 
-file_links_reconciliation_traverse:
+file_meta_links_sync:
   <<: *ct-onenv-job
   key: FLRECTR
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_file_links_reconciliation_traverse.tar.gz
+      name: ct_logs_file_meta_links_sync.tar.gz
   requirements: *os-agent
 
 file_popularity:
@@ -1754,14 +1753,6 @@ tmp_db_error:
     - <<: *ct_logs
       name: ct_logs_tmp_db_error.tar.gz
 
-tmp_dir:
-  <<: *ct-onenv-job
-  key: TMPDIRSYNC
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_tmp_dir.tar.gz
-  requirements: *os-agent
-
 transfer_eviction:
   <<: *ct-onenv-job
   key: TRANSEVIC
@@ -1971,7 +1962,7 @@ Coverage report:
     - artifact: ct_logs_file_lfm_posix.tar.gz
     - artifact: ct_logs_file_lfm_s3.tar.gz
     - artifact: ct_logs_file_lifecycle_races.tar.gz
-    - artifact: ct_logs_file_links_reconciliation_traverse.tar.gz
+    - artifact: ct_logs_file_meta_links_sync.tar.gz
     - artifact: ct_logs_file_popularity.tar.gz
     - artifact: ct_logs_file_registration_http.tar.gz
     - artifact: ct_logs_file_registration_s3.tar.gz
@@ -2071,7 +2062,6 @@ Coverage report:
     - artifact: ct_logs_storage_sync_links.tar.gz
     - artifact: ct_logs_storage_traverse.tar.gz
     - artifact: ct_logs_tmp_db_error.tar.gz
-    - artifact: ct_logs_tmp_dir.tar.gz
     - artifact: ct_logs_transfer_eviction.tar.gz
     - artifact: ct_logs_transfer_migration.tar.gz
     - artifact: ct_logs_transfer_replication.tar.gz

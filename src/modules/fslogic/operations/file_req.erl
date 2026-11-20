@@ -307,8 +307,8 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             catch times_api:report_file_deleted(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
-            {IsParentSyncEnabled, _} = file_ctx:is_synchronization_enabled(ParentFileCtx3),
-            file_meta:delete(FileUuid, file_meta_forest:parent_sync_mode(IsParentSyncEnabled)),
+            {ParentSyncMode, _} = file_ctx:get_sync_mode_as_parent(ParentFileCtx3),
+            file_meta:delete(FileUuid, ParentSyncMode),
             case Reason of
                 {badmatch, {error, not_found}} -> erlang:Error(?ECANCELED);
                 _ -> erlang:Error(Reason)
@@ -396,8 +396,8 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             catch times_api:report_file_deleted(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
-            {IsParentSyncEnabled, _} = file_ctx:is_synchronization_enabled(ParentFileCtx3),
-            file_meta:delete(FileUuid, file_meta_forest:parent_sync_mode(IsParentSyncEnabled)),
+            {ParentSyncMode, _} = file_ctx:get_sync_mode_as_parent(ParentFileCtx3),
+            file_meta:delete(FileUuid, ParentSyncMode),
             erlang:Class(Reason)
     end.
 
@@ -459,8 +459,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
             ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx3),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
             Owner = user_ctx:get_user_id(UserCtx),
-            {IsSyncEnabled, ParentFileCtx4} = file_ctx:is_synchronization_enabled(ParentFileCtx3),
-            ParentSyncMode = file_meta_forest:parent_sync_mode(IsSyncEnabled),
+            {ParentSyncMode, ParentFileCtx4} = file_ctx:get_sync_mode_as_parent(ParentFileCtx3),
             Doc = file_meta_symlinks:new_doc(Name, ParentUuid, SpaceId, Owner, Link, ParentSyncMode),
             {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 

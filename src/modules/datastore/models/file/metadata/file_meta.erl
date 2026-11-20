@@ -142,7 +142,9 @@ create({uuid, ParentUuid}, FileDoc = #document{
         onedata_file:is_valid_filename(FileName) orelse error({error, ?EINVAL}),
         FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
-        ParentSyncMode = get_sync_mode_as_parent(ParentDoc),
+        ParentSyncMode = file_meta_forest:parent_sync_mode(ParentDoc),
+        % a file is synced exactly when its parent's children links are
+        file_meta_forest:parent_sync_mode(FileDoc2) =:= ParentSyncMode orelse error({error, ?EINVAL}),
         {ok, ParentScopeId} = get_scope_id(ParentDoc),
         {ok, ScopeId} = get_scope_id(FileDoc2),
         ScopeId2 = utils:ensure_defined(ScopeId, ParentScopeId),
@@ -318,6 +320,12 @@ update_including_deleted(Key, Diff) ->
     datastore_model:update(?CTX#{include_deleted => true}, Key, Diff).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes file meta of a file whose parent's children links are synced
+%% (any file outside the tmp dir's subtree). See delete/2.
+%% @end
+%%--------------------------------------------------------------------
 -spec delete(uuid() | entry()) -> ok | {error, term()}.
 delete(FileEntry) ->
     delete(FileEntry, synced_parent).
@@ -522,8 +530,8 @@ get_locations_by_uuid(FileUuid) ->
 rename(SourceDoc, #document{key = SourceParentUuid} = SourceParentDoc,
     #document{key = TargetParentUuid} = TargetParentDoc, TargetName
 ) ->
-    rename(SourceDoc, SourceParentUuid, get_sync_mode_as_parent(SourceParentDoc),
-        TargetParentUuid, get_sync_mode_as_parent(TargetParentDoc), TargetName).
+    rename(SourceDoc, SourceParentUuid, file_meta_forest:parent_sync_mode(SourceParentDoc),
+        TargetParentUuid, file_meta_forest:parent_sync_mode(TargetParentDoc), TargetName).
 
 
 %%--------------------------------------------------------------------
@@ -1018,12 +1026,6 @@ get_ctx_with_remote_set(Scope, RemoteScope) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%% @private
--spec get_sync_mode_as_parent(doc()) -> file_meta_forest:parent_sync_mode().
-get_sync_mode_as_parent(#document{ignore_in_changes = false}) -> synced_parent;
-get_sync_mode_as_parent(#document{ignore_in_changes = true}) -> not_synced_parent.
-
 
 %%--------------------------------------------------------------------
 %% @private

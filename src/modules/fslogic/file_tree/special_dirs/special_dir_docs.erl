@@ -24,7 +24,7 @@
 %%% API
 %%%===================================================================
 
--spec create(od_space:id(), file_meta:doc(), add_link | add_unsynced_link | no_link) -> created | exists.
+-spec create(od_space:id(), file_meta:doc(), add_link | add_not_synced_link | no_link) -> created | exists.
 create(SpaceId, #document{key = Uuid, value = #file_meta{name = Name, parent_uuid = ParentUuid} = FM} = Doc, LinkPolicy) ->
     FinalDoc = Doc#document{value = FM#file_meta{provider_id = oneprovider:get_id()}},
     % using update with default to avoid side effects of file_meta:create/2
@@ -37,7 +37,7 @@ create(SpaceId, #document{key = Uuid, value = #file_meta{name = Name, parent_uui
     end,
     case LinkPolicy of
         add_link -> add_parent_link(ParentUuid, SpaceId, synced_parent, Name, Uuid);
-        add_unsynced_link -> add_parent_link(ParentUuid, SpaceId, not_synced_parent, Name, Uuid);
+        add_not_synced_link -> add_parent_link(ParentUuid, SpaceId, not_synced_parent, Name, Uuid);
         no_link -> ok
     end,
     Result.

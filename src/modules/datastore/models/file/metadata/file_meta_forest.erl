@@ -13,8 +13,10 @@
 %%%  * each tree in the forest is assigned to the provider supporting the space
 %%%  * the trees are identified by oneprovider:id()
 %%%  * provider is allowed to modify only its own tree
-%%%  * forest of the tmp dir is read from the local tree only, as its content
-%%%    is never synced and other providers' trees there may be stale copies
+%%%  * the tmp dir's own forest is read from the local tree only. Its links are
+%%%    never synced, so another provider's tree there can only be a stale copy
+%%%    written by a provider version that synced them. Forests of dirs below
+%%%    the tmp dir are not filtered.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_forest).
@@ -26,7 +28,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 
--export([get/3, get_local_or_remote/4, add/4, add/5, check_and_add/6]).
+-export([get/3, get_local_or_remote/4, add/5, check_and_add/6]).
 -export([delete/4, delete/5, delete_local/5, delete_remote/6]).
 -export([parent_sync_mode/1]).
 -export([list/2, list_whitelisted/3]).
@@ -127,11 +129,6 @@ get_local_or_remote(ParentUuid, FileNames, Scope, RemoteScope) ->
         resolve_tree_ids(ParentUuid, all), FileNames).
 
 
--spec add(forest(), scope(), link_name(), link_target()) -> ok | {error, term()}.
-add(ParentUuid, Scope, FileName, FileUuid) ->
-    add(ParentUuid, Scope, synced_parent, FileName, FileUuid).
-
-
 -spec add(forest(), scope(), parent_sync_mode(), link_name(), link_target()) -> ok | {error, term()}.
 add(ParentUuid, Scope, ParentSyncMode, FileName, FileUuid) ->
     ?extract_ok(datastore_model:add_links(?CTX(Scope, ParentSyncMode), ParentUuid, ?LOCAL_TREE_ID, ?LINK(FileName, FileUuid))).
@@ -144,6 +141,12 @@ check_and_add(ParentUuid, Scope, ParentSyncMode, TreesToCheck, FileName, FileUui
         resolve_tree_ids(ParentUuid, TreesToCheck), ?LINK(FileName, FileUuid))).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes a link from the forest of a parent whose children links are synced
+%% (any dir outside the tmp dir's subtree).
+%% @end
+%%--------------------------------------------------------------------
 -spec delete(forest(), scope(), link_name(), link_target()) -> ok.
 delete(ParentUuid, Scope, FileName, FileUuid) ->
     delete(ParentUuid, Scope, synced_parent, FileName, FileUuid).
@@ -191,9 +194,9 @@ delete_remote(ParentUuid, Scope, ParentSyncMode, TreeId, FileName, Revision) ->
     ok = datastore_model:mark_links_deleted(?CTX(Scope, ParentSyncMode), ParentUuid, TreeId, {FileName, Revision}).
 
 
--spec parent_sync_mode(IsParentSyncEnabled :: boolean()) -> parent_sync_mode().
-parent_sync_mode(true) -> synced_parent;
-parent_sync_mode(false) -> not_synced_parent.
+-spec parent_sync_mode(file_meta:doc()) -> parent_sync_mode().
+parent_sync_mode(#document{ignore_in_changes = false}) -> synced_parent;
+parent_sync_mode(#document{ignore_in_changes = true}) -> not_synced_parent.
 
 
 -spec list(forest(), datastore_fold_opts()) -> {ok, [link()], datastore_fold_opts()} | {error, term()}.

@@ -83,7 +83,7 @@
 
 %% Functions modifying context
 -export([
-    get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1, is_synchronization_enabled/1,
+    get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1, is_synchronization_enabled/1, get_sync_mode_as_parent/1,
     get_file_doc_including_deleted/1, get_and_cache_file_doc_including_deleted/1,
     get_cached_parent_const/1, cache_parent/2, cache_name/2,
     get_storage_file_id/1, get_storage_file_id/2,
@@ -375,6 +375,18 @@ is_synchronization_enabled(FileCtx) ->
                                               % import (imported are sync enabled)
                 _ -> throw(Error)
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns whether links of the file's children are synced.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sync_mode_as_parent(ctx()) -> {file_meta_forest:parent_sync_mode(), ctx()}.
+get_sync_mode_as_parent(FileCtx) ->
+    case is_synchronization_enabled(FileCtx) of
+        {true, FileCtx2} -> {synced_parent, FileCtx2};
+        {false, FileCtx2} -> {not_synced_parent, FileCtx2}
     end.
 
 -spec list_references_const(ctx()) -> {ok, [file_meta:uuid()]} | {error, term()}.

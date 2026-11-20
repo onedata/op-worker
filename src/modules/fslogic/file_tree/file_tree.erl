@@ -92,6 +92,7 @@
     get_parent_guid_if_not_logically_detached/2,
     get_original_parent_of_deleted_file/2,
     get_parent/2,
+    get_parent_sync_mode/2,
 
     get_child/3, list_children/3
 ]).
@@ -180,6 +181,20 @@ get_parent(FileCtx, UserCtx) ->
         ParentCtx ->
             {ParentCtx, FileCtx}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns whether links of the file's parent's children are synced and caches
+%% the parent in the returned file ctx.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent_sync_mode(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
+    {file_meta_forest:parent_sync_mode(), file_ctx:ctx()}.
+get_parent_sync_mode(FileCtx, UserCtx) ->
+    {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
+    {ParentSyncMode, ParentCtx2} = file_ctx:get_sync_mode_as_parent(ParentCtx),
+    {ParentSyncMode, file_ctx:cache_parent(ParentCtx2, FileCtx2)}.
 
 
 -spec get_child(file_ctx:ctx(), file_meta:name(), user_ctx:ctx()) ->

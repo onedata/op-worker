@@ -69,7 +69,7 @@ ensure_exists(SpaceId) ->
         ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DIRECTORY_TYPE,
         ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId), tmp_dir:uuid(SpaceId), SpaceId, true
     ),
-    case special_dir_docs:create(SpaceId, Doc, add_unsynced_link) of
+    case special_dir_docs:create(SpaceId, Doc, add_not_synced_link) of
         created ->
             ?info("Created directory for opened deleted files in space '~ts'", [SpaceId]),
             dir_size_stats:report_file_created(?DIRECTORY_TYPE, tmp_dir:guid(SpaceId));
