@@ -188,6 +188,35 @@ other_s3_endpoints_without_region_pass_test_() ->
     ].
 
 
+short_region_is_refused_at_any_endpoint_test_() ->
+    [
+        ?_assertThrow(
+            ?ERR_BAD_DATA(_, <<"region">>, <<"must be at least 5 characters long">>),
+            storage_crud_utils:verify_s3_region(s3_helper_spec(<<"https">>, Hostname, #{<<"region">> => Region}))
+        )
+        || Hostname <- [?GLOBAL_AWS_ENDPOINT, <<"s3.eu-west-3.amazonaws.com:443">>, <<"minio.example.com:9000">>],
+        Region <- [<<"a">>, <<"abcd">>]
+    ].
+
+
+region_of_minimum_length_passes_test_() ->
+    [
+        ?_assertEqual(ok, storage_crud_utils:verify_s3_region(
+            s3_helper_spec(<<"https">>, Hostname, #{<<"region">> => <<"abcde">>})
+        ))
+        || Hostname <- [?GLOBAL_AWS_ENDPOINT, <<"minio.example.com:9000">>]
+    ].
+
+
+other_s3_endpoints_with_empty_region_are_refused_test() ->
+    ?assertThrow(
+        ?ERR_BAD_VALUE_EMPTY(_, <<"region">>),
+        storage_crud_utils:verify_s3_region(
+            s3_helper_spec(<<"https">>, <<"minio.example.com:9000">>, #{<<"region">> => <<>>})
+        )
+    ).
+
+
 other_storage_types_pass_the_region_check_test() ->
     ?assertEqual(ok, storage_crud_utils:verify_s3_region(
         http_helper_spec(#{<<"credentialsType">> => <<"none">>})
@@ -217,6 +246,16 @@ update_emptying_region_at_global_aws_endpoint_is_refused_test() ->
         storage_crud_utils:verify_s3_region_update(
             s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<"eu-west-3">>}),
             s3_helper_spec(<<"https">>, ?GLOBAL_AWS_ENDPOINT, #{<<"region">> => <<>>})
+        )
+    ).
+
+
+update_to_short_region_is_refused_test() ->
+    ?assertThrow(
+        ?ERR_BAD_DATA(_, <<"region">>, _),
+        storage_crud_utils:verify_s3_region_update(
+            s3_helper_spec(<<"https">>, <<"minio.example.com:9000">>, #{<<"region">> => <<"us-east-1">>}),
+            s3_helper_spec(<<"https">>, <<"minio.example.com:9000">>, #{<<"region">> => <<"abcd">>})
         )
     ).
 
