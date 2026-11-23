@@ -41,7 +41,6 @@
 ]).
 
 -define(GLOBAL_AWS_S3_HOST, <<"s3.amazonaws.com">>).
--define(MIN_S3_REGION_LENGTH, 5).
 
 
 %%%===================================================================
@@ -130,8 +129,6 @@ verify_configuration(IdOrName, Readonly, Imported, HelperSpec) ->
 %% @doc
 %% Requires the region of an S3 storage at s3.amazonaws.com, the global AWS
 %% endpoint. Without it, each new helper first asks AWS where the bucket is.
-%% Refuses a region shorter than ?MIN_S3_REGION_LENGTH characters at any
-%% endpoint: the AWS SDK that the helper is built with throws on it.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_s3_region(helper_spec:t()) -> ok | no_return().
@@ -214,20 +211,15 @@ check_helper_against_imported_option(true, HelperSpec) ->
 %% @private
 -spec verify_s3_region_in_configuration(helper_spec:configuration()) -> ok | no_return().
 verify_s3_region_in_configuration(Configuration = #{<<"scheme">> := Scheme, <<"hostname">> := UrlWithoutScheme}) ->
-    case maps:get(<<"region">>, Configuration, undefined) of
-        undefined ->
-            case is_global_aws_endpoint(Scheme, UrlWithoutScheme) of
-                true -> throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"region">>));
-                false -> ok
-            end;
-        <<>> ->
-            throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"region">>));
-        Region when byte_size(Region) < ?MIN_S3_REGION_LENGTH ->
-            throw(?ERR_BAD_DATA(?err_ctx(), <<"region">>, str_utils:format_bin(
-                "must be at least ~B characters long", [?MIN_S3_REGION_LENGTH]
-            )));
-        _ ->
-            ok
+    case is_global_aws_endpoint(Scheme, UrlWithoutScheme) of
+        false ->
+            ok;
+        true ->
+            case maps:get(<<"region">>, Configuration, undefined) of
+                undefined -> throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"region">>));
+                <<>> -> throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"region">>));
+                _ -> ok
+            end
     end.
 
 
