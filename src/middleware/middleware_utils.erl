@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -125,11 +125,6 @@ is_shared_file_request(op_file, download_url, Scope, _) ->
 is_shared_file_request(op_file, download_status, Scope, _) ->
     Scope == public;
 is_shared_file_request(op_file, _, _, Id) when is_binary(Id) ->
-    file_id:is_share_guid(Id);
-is_shared_file_request(op_replica, As, _, Id) when
-    As =:= instance;
-    As =:= distribution
-->
     file_id:is_share_guid(Id);
 is_shared_file_request(_, _, _, _) ->
     false.

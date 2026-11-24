@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2021-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -124,7 +124,7 @@
 ]).
 
 -define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
-    % Checking perms for operations other than 'read' should result in immediate ?EPERM
+    % only for the 'read' flag (see is_operation_available_in_share_mode/1)
     check_file_access_request,
     file_parent_get_request,
     % TODO VFS-6057 resolve share path up to share not user root dir
@@ -196,6 +196,7 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
 
                 assert_has_access_to_space(UserCtx, FileCtx),
                 middleware_utils:assert_file_managed_locally(FileGuid),
+                report_file_access_operation(UserCtx, FileCtx, Operation),
                 case fslogic_worker:is_storage_accessible(FileCtx) of
                     true -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation);
                     false -> ?ERR_SERVICE_UNAVAILABLE(?err_ctx())
@@ -293,3 +294,15 @@ assert_has_access_to_space(UserCtx, FileCtx) ->
             file_ctx:is_in_user_space_const(FileCtx, UserCtx) orelse throw(?ERR_POSIX(?err_ctx(), ?EACCES)),
             ok
     end.
+
+
+%% @private
+-spec report_file_access_operation(user_ctx:ctx(), file_ctx:ctx(), operation()) -> ok.
+report_file_access_operation(UserCtx, FileCtx, Operation) when
+    is_record(Operation, acl_set_request);
+    is_record(Operation, acl_remove_request)
+->
+    % an ACL change changes access to the file, as chmod does, which fslogic_worker reports
+    fslogic_log:report_file_access_operation(Operation, user_ctx:get_user_id(UserCtx), FileCtx);
+report_file_access_operation(_UserCtx, _FileCtx, _Operation) ->
+    ok.

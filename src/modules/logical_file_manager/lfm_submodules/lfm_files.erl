@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -34,7 +34,7 @@
     open/3,
     create_and_open/4, create_and_open/5,
     monitored_open/3, monitored_release/1,
-    get_file_location/2, read_symlink/2, fsync/1, fsync/3, sync_block/4, write/3,
+    get_file_location/2, read_symlink/2, fsync/1, fsync/2, sync_block/4, write/3,
     write_without_events/3, read/3, read/4, check_size_and_read/3, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
     truncate/3, release/1
@@ -401,20 +401,13 @@ read_symlink(SessId, FileKey) ->
 fsync(Handle) ->
     SessionId = lfm_context:get_session_id(Handle),
     FileGuid = lfm_context:get_guid(Handle),
-    ProviderId = lfm_context:get_provider_id(Handle),
-    fsync(SessionId, ?FILE_REF(FileGuid), ProviderId).
+    fsync(SessionId, ?FILE_REF(FileGuid)).
 
 
--spec fsync(session:id(), lfm:file_key(), oneprovider:id()) ->
+-spec fsync(session:id(), lfm:file_key()) ->
     ok | lfm:error_reply().
-fsync(SessId, FileKey, ProviderId) ->
+fsync(SessId, FileKey) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
-    case oneprovider:is_self(ProviderId) of
-        true ->
-            ok; % flush also flushes events for provider
-        _ ->
-            lfm_event_controller:flush_event_queue(SessId, ProviderId, FileGuid)
-    end,
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #fsync{data_only = false}, fun(_) -> ok end
     ).

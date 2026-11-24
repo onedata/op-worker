@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Katarzyna Such
-%%% @copyright (C) 2023 ACK CYFRONET AGH
+%%% @copyright (C) 2023-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -28,6 +28,7 @@
 -export([
     copy_file_test/1,
     copy_dir_test/1,
+    copy_file_without_read_acl_permission_test/1,
     move_file_test/1,
     move_dir_test/1,
     moved_file_permanently_test/1,
@@ -100,6 +101,32 @@ copy_file_test(Config) ->
     ], cdmi_test_utils:get_xattrs(NewFilePath, Config), ?CDMI_ATTEMPTS
     ),
     ?assertEqual({ok, FileAcl}, cdmi_test_utils:get_acl(NewFilePath, Config), ?CDMI_ATTEMPTS).
+
+
+copy_file_without_read_acl_permission_test(Config) ->
+    #object{guid = FileGuid} = file_tree_test_utils:create_and_sync_file_tree(
+        user2,
+        node_cache:get(root_dir_guid),
+        #file_spec{name = atom_to_binary(?FUNCTION_NAME), content = <<"data">>},
+        Config#cdmi_test_config.p1_selector
+    ),
+    FilePath = ?build_test_root_path(Config),
+    % the user may read the file, but not its ACL, which the copy reads
+    ok = cdmi_test_utils:set_acl(FilePath, [#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = oct_background:get_user_id(user2),
+        name = oct_background:get_user_fullname(user2),
+        aceflags = ?no_flags_mask,
+        acemask = ?all_object_perms_mask band (bnot ?read_acl_mask)
+    }], Config),
+    NewFilePath = cdmi_test_utils:build_test_root_path(Config, atom_to_list(?FUNCTION_NAME) ++ "1"),
+
+    RequestHeaders = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
+    RequestBody = json_utils:encode(#{<<"copy">> => build_random_src_uri(FilePath, FileGuid)}),
+    {ok, Code, _, Response} = cdmi_test_utils:do_request(
+        ?CDMI_WORKERS(Config), NewFilePath, put, RequestHeaders, RequestBody
+    ),
+    ?assertEqual(rest_test_utils:get_rest_error(?ERR_POSIX(?EACCES)), {Code, json_utils:decode(Response)}).
 
 
 copy_dir_test(Config) ->

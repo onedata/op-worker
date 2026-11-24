@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2025 ACK CYFRONET AGH
+%%% @copyright (C) 2025-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -29,9 +29,8 @@
 
 -spec get_path(session:id(), lfm:file_key()) ->
     file_meta:path().
-get_path(_SessionId, {path, Path}) ->
-    Path;
-get_path(SessionId, ?FILE_REF(FileGuid)) ->
+get_path(SessionId, FileKey) ->
+    FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
     middleware_worker:check_exec(SessionId, FileGuid, #file_path_get_request{}).
 
 

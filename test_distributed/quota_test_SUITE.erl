@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -623,7 +623,6 @@ failed_gui_upload_test(Config) ->
 
     FileSize = 500*1024*1024, % 500 MB
 
-    ProviderId = initializer:domain_to_provider_id(?GET_DOMAIN(P1)),
     % Upload File1 500MB to space4
     {ok, File1Guid} = lfm_proxy:create(P1, SessId(P1), DirGuid, File1, 8#777),
     upload_file(P1, ?USER(User1, SessId(P1)), 100, 1048576, 5, File1Guid),
@@ -635,7 +634,7 @@ failed_gui_upload_test(Config) ->
     % Upload File2 800MB to space4
     {ok, File2Guid} = lfm_proxy:create(P1, SessId(P1), DirGuid, File2, 8#777),
     upload_file(P1, ?USER(User1, SessId(P1)), 160, 1048576, 5, File2Guid),
-    ok = lfm_proxy:fsync(P1, User1, f(<<"space4">>, File2), ProviderId),
+    ok = lfm_proxy:fsync(P1, User1, f(<<"space4">>, File2)),
 
     StorageFilePath1 = storage_test_utils:file_path(P1, <<"space_id4">>, File2),
     ?assertMatch(FileSize, current_size(P1, <<"space_id4">>)),

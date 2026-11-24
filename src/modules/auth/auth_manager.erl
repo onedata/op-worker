@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -36,7 +36,7 @@
     get_peer_ip/1,
     get_interface/1,
     get_data_access_caveats_policy/1,
-    get_client_tokens/1, update_client_tokens/3
+    update_client_tokens/3
 ]).
 -export([
     credentials_to_gs_auth_override/1,
@@ -123,17 +123,6 @@ get_interface(#token_credentials{interface = Interface}) ->
     data_access_caveats:policy().
 get_data_access_caveats_policy(#token_credentials{data_access_caveats_policy = Policy}) ->
     Policy.
-
-
--spec get_client_tokens(token_credentials()) -> client_tokens().
-get_client_tokens(#token_credentials{
-    access_token = AccessToken,
-    consumer_token = ConsumerToken
-}) ->
-    #client_tokens{
-        access_token = AccessToken,
-        consumer_token = ConsumerToken
-    }.
 
 
 -spec update_client_tokens(token_credentials(), access_token(), consumer_token()) ->

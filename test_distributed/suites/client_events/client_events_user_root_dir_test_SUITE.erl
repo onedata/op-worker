@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 2023 ACK CYFRONET AGH
+%%% @copyright (C) 2023-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -23,64 +23,64 @@
 
 -export([
     add_space/1,
-    add_space_proxy/1,
+    add_space_remote/1,
     add_space_duplicate_name/1,
-    add_space_duplicate_name_proxy/1,
+    add_space_duplicate_name_remote/1,
     add_user_to_existing_space/1,
-    add_user_to_existing_space_proxy/1,
+    add_user_to_existing_space_remote/1,
     add_support_to_space_with_duplicated_name/1,
-    add_support_to_space_with_duplicated_name_proxy/1,
+    add_support_to_space_with_duplicated_name_remote/1,
     remove_space/1,
-    remove_space_proxy/1,
+    remove_space_remote/1,
     remove_space_duplicate_name/1,
-    remove_space_duplicate_name_proxy/1,
+    remove_space_duplicate_name_remote/1,
     rename_space/1,
-    rename_space_proxy/1,
+    rename_space_remote/1,
     rename_space_to_existing_name/1,
-    rename_space_to_existing_name_proxy/1,
+    rename_space_to_existing_name_remote/1,
     rename_duplicated_space_name/1,
-    rename_duplicated_space_name_proxy/1,
+    rename_duplicated_space_name_remote/1,
     remove_space_during_broken_zone_connection/1,
-    remove_space_proxy_during_broken_zone_connection/1,
+    remove_space_remote_during_broken_zone_connection/1,
     remove_space_duplicate_name_during_broken_zone_connection/1,
-    remove_space_duplicate_name_proxy_during_broken_zone_connection/1,
+    remove_space_duplicate_name_remote_during_broken_zone_connection/1,
     rename_space_during_broken_zone_connection/1,
-    rename_space_proxy_during_broken_zone_connection/1,
+    rename_space_remote_during_broken_zone_connection/1,
     rename_space_to_existing_name_during_broken_zone_connection/1,
-    rename_space_to_existing_name_proxy_during_broken_zone_connection/1,
+    rename_space_to_existing_name_remote_during_broken_zone_connection/1,
     rename_duplicated_space_name_during_broken_zone_connection/1,
-    rename_duplicated_space_name_proxy_during_broken_zone_connection/1
+    rename_duplicated_space_name_remote_during_broken_zone_connection/1
 ]).
 
 all() -> ?ALL([
     add_space,
-    add_space_proxy,
+    add_space_remote,
     add_space_duplicate_name,
-    add_space_duplicate_name_proxy,
+    add_space_duplicate_name_remote,
     add_user_to_existing_space,
-    add_user_to_existing_space_proxy,
+    add_user_to_existing_space_remote,
     add_support_to_space_with_duplicated_name,
-    add_support_to_space_with_duplicated_name_proxy,
+    add_support_to_space_with_duplicated_name_remote,
     remove_space,
-    remove_space_proxy,
+    remove_space_remote,
     remove_space_duplicate_name,
-    remove_space_duplicate_name_proxy,
+    remove_space_duplicate_name_remote,
     rename_space,
-    rename_space_proxy,
+    rename_space_remote,
     rename_space_to_existing_name,
-    rename_space_to_existing_name_proxy,
+    rename_space_to_existing_name_remote,
     rename_duplicated_space_name,
-    rename_duplicated_space_name_proxy,
+    rename_duplicated_space_name_remote,
     remove_space_during_broken_zone_connection,
-    remove_space_proxy_during_broken_zone_connection,
+    remove_space_remote_during_broken_zone_connection,
     remove_space_duplicate_name_during_broken_zone_connection,
-    remove_space_duplicate_name_proxy_during_broken_zone_connection,
+    remove_space_duplicate_name_remote_during_broken_zone_connection,
     rename_space_during_broken_zone_connection,
-    rename_space_proxy_during_broken_zone_connection,
+    rename_space_remote_during_broken_zone_connection,
     rename_space_to_existing_name_during_broken_zone_connection,
-    rename_space_to_existing_name_proxy_during_broken_zone_connection,
+    rename_space_to_existing_name_remote_during_broken_zone_connection,
     rename_duplicated_space_name_during_broken_zone_connection,
-    rename_duplicated_space_name_proxy_during_broken_zone_connection
+    rename_duplicated_space_name_remote_during_broken_zone_connection
 ]).
 
 -define(ATTEMPTS, 30).
@@ -114,85 +114,85 @@ all() -> ?ALL([
 add_space(_Config) ->
     add_space_test_base(krakow).
 
-add_space_proxy(_Config) ->
+add_space_remote(_Config) ->
     add_space_test_base(paris).
 
 add_space_duplicate_name(_Config) ->
     add_space_duplicate_name_test_base(krakow).
 
-add_space_duplicate_name_proxy(_Config) ->
+add_space_duplicate_name_remote(_Config) ->
     add_space_duplicate_name_test_base(paris).
 
 add_user_to_existing_space(_Config) ->
     add_user_to_existing_space_test_base(krakow).
 
-add_user_to_existing_space_proxy(_Config) ->
+add_user_to_existing_space_remote(_Config) ->
     add_user_to_existing_space_test_base(paris).
 
 add_support_to_space_with_duplicated_name(_Config) ->
     add_support_to_space_with_duplicated_name_test_base(krakow).
 
-add_support_to_space_with_duplicated_name_proxy(_Config) ->
+add_support_to_space_with_duplicated_name_remote(_Config) ->
     add_support_to_space_with_duplicated_name_test_base(paris).
 
 remove_space(_Config) ->
     remove_space_test_base(krakow, alive).
 
-remove_space_proxy(_Config) ->
+remove_space_remote(_Config) ->
     remove_space_test_base(paris, alive).
 
 remove_space_duplicate_name(_Config) ->
     remove_space_duplicate_name_test_base(krakow, alive).
 
-remove_space_duplicate_name_proxy(_Config) ->
+remove_space_duplicate_name_remote(_Config) ->
     remove_space_duplicate_name_test_base(paris, alive).
 
 rename_space(_Config) ->
     rename_space_test_base(krakow, alive).
 
-rename_space_proxy(_Config) ->
+rename_space_remote(_Config) ->
     rename_space_test_base(paris, alive).
 
 rename_space_to_existing_name(_Config) ->
     rename_space_to_existing_name_test_base(krakow, alive).
 
-rename_space_to_existing_name_proxy(_Config) ->
+rename_space_to_existing_name_remote(_Config) ->
     rename_space_to_existing_name_test_base(paris, alive).
 
 rename_duplicated_space_name(_Config) ->
     rename_duplicated_space_name_test_base(krakow, alive).
 
-rename_duplicated_space_name_proxy(_Config) ->
+rename_duplicated_space_name_remote(_Config) ->
     rename_duplicated_space_name_test_base(paris, alive).
 
 remove_space_during_broken_zone_connection(_Config) ->
     remove_space_test_base(krakow, broken).
 
-remove_space_proxy_during_broken_zone_connection(_Config) ->
+remove_space_remote_during_broken_zone_connection(_Config) ->
     remove_space_test_base(paris, broken).
 
 remove_space_duplicate_name_during_broken_zone_connection(_Config) ->
     remove_space_duplicate_name_test_base(krakow, broken).
 
-remove_space_duplicate_name_proxy_during_broken_zone_connection(_Config) ->
+remove_space_duplicate_name_remote_during_broken_zone_connection(_Config) ->
     remove_space_duplicate_name_test_base(paris, broken).
 
 rename_space_during_broken_zone_connection(_Config) ->
     rename_space_test_base(krakow, broken).
 
-rename_space_proxy_during_broken_zone_connection(_Config) ->
+rename_space_remote_during_broken_zone_connection(_Config) ->
     rename_space_test_base(paris, broken).
 
 rename_space_to_existing_name_during_broken_zone_connection(_Config) ->
     rename_space_to_existing_name_test_base(krakow, broken).
 
-rename_space_to_existing_name_proxy_during_broken_zone_connection(_Config) ->
+rename_space_to_existing_name_remote_during_broken_zone_connection(_Config) ->
     rename_space_to_existing_name_test_base(paris, broken).
 
 rename_duplicated_space_name_during_broken_zone_connection(_Config) ->
     rename_duplicated_space_name_test_base(krakow, broken).
 
-rename_duplicated_space_name_proxy_during_broken_zone_connection(_Config) ->
+rename_duplicated_space_name_remote_during_broken_zone_connection(_Config) ->
     rename_duplicated_space_name_test_base(paris, broken).
 
 

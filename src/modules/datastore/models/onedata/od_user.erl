@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @copyright (C) 2017-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -163,9 +163,10 @@ handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces
         [] ->
             ok;
         SpacesDiff ->
-            % Local spaces are properly set up in when space doc appears (see od_space),
-            % here only essentials are created so provider proxy can work.
-            lists:foreach(fun special_dirs:set_up_for_new_proxy_space/1, SpacesDiff),
+            % Spaces supported locally are set up in full when their doc appears (see od_space);
+            % here each new space gets its space dir, which is all a space supported
+            % elsewhere needs to show in the user root dir.
+            lists:foreach(fun special_dirs:set_up_for_new_remote_space/1, SpacesDiff),
             ok = user_root_dir:report_new_spaces_appeared([UserId], SpacesDiff)
     end.
 

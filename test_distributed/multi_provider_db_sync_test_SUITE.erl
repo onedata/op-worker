@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -80,10 +80,10 @@ all() ->
     ]).
 
 db_sync_basic_opts_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4, 2}, 60).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, 4, 60).
 
 db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4, 2}, 300, false).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, 4, 300, false).
 
 db_sync_create_after_del_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -100,7 +100,7 @@ db_sync_create_after_del_test(Config) ->
         ]}
     ]).
 db_sync_create_after_del_test_base(Config) ->
-    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4, 2}, 60).
+    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, 4, 60).
 
 db_sync_create_after_deletion_links_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -118,25 +118,25 @@ db_sync_create_after_deletion_links_test(Config) ->
     ]).
 db_sync_create_after_deletion_links_test_base(Config) ->
     % The same test as db_sync_create_after_del_test but with mock (see init_per_testcase)
-    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4, 2}, 60).
+    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, 4, 60).
 
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
 db_sync_many_ops_test_base(Config) ->
     DirsNum = ?config(dirs_num, Config),
     FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4, 2}, 180, DirsNum, FilesNum).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, 4, 180, DirsNum, FilesNum).
 
 db_sync_distributed_modification_test(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4, 2}, 60).
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, 4, 60).
 
 
 db_sync_with_delays_test(Config) ->
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4, 2}, 300, 50, 50).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, 4, 300, 50, 50).
 
 sparse_files_should_be_created(Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0,
-        <<"user1">>, {4, 2}, 30),
+        <<"user1">>, 4, 30),
     Worker1 = ?config(worker1, Config),
     [Worker2 | _] = ?config(workers2, Config),
 
@@ -181,14 +181,14 @@ sparse_files_should_be_created(Config0) ->
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid5, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid5, 1, {Provider1Id, [[0, 1]]}, false),
     ?assertEqual(ok, lfm_proxy:truncate(Worker1, SessId1, ?FILE_REF(FileGuid5), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, ?FILE_REF(FileGuid5), Provider1Id)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, ?FILE_REF(FileGuid5))),
     verify_sparse_file(Worker2, SessId2, FileGuid5, 10, {Provider1Id, [[0, 1]]}),
 
     % Creation of hole using truncate on other provider on empty file
     {ok, FileGuid6} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
         <<"/space1/", (generator:gen_name())/binary>>)),
     ?assertEqual(ok, lfm_proxy:truncate(Worker1, SessId1, ?FILE_REF(FileGuid6), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, ?FILE_REF(FileGuid5), Provider1Id)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, ?FILE_REF(FileGuid5))),
     verify_sparse_file(Worker2, SessId2, FileGuid6, 10, {Provider1Id, []}),
 
     % Truncate on empty file and read by other provider
@@ -196,7 +196,7 @@ sparse_files_should_be_created(Config0) ->
         <<"/space1/", (generator:gen_name())/binary>>)),
     verify_sparse_file(Worker2, SessId2, FileGuid7, 0, {Provider1Id, []}, false),
     ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, ?FILE_REF(FileGuid7), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, ?FILE_REF(FileGuid7), Provider2Id)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, ?FILE_REF(FileGuid7))),
     verify_sparse_file(Worker1, SessId1, FileGuid7, 10, {Provider2Id, []}),
 
     % Truncate on not empty file and read by other provider
@@ -205,7 +205,7 @@ sparse_files_should_be_created(Config0) ->
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid8, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid8, 1, {Provider1Id, [[0, 1]]}, false),
     ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, ?FILE_REF(FileGuid8), 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, ?FILE_REF(FileGuid8), Provider2Id)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, ?FILE_REF(FileGuid8))),
     verify_sparse_file(Worker1, SessId1, FileGuid8, 10, {Provider1Id, [[0, 1]]}),
 
     % Write to empty file and read by other provider

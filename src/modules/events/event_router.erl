@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Michał Wrzeszcz
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -27,7 +27,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv route_message(Msg, router:effective_session_id(Msg))
+%% @equiv route_message(Msg, router:get_session_id(Msg))
 %% @end
 %%--------------------------------------------------------------------
 -spec route_message(#client_message{}) -> ok.

@@ -1,7 +1,7 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2015-2021 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -60,7 +60,7 @@ assert_granted(UserCtx, FileCtx, AccessRequirements) ->
                 false ->
                     assert_access_permitted_by_protection_flags(FileCtx, AccessRequirements);
                 true ->
-                    %% @TODO VFS-8589 - properly handle getting space dir metadata on proxy providers
+                    %% @TODO VFS-8589 - properly handle getting space dir metadata on providers not supporting the space
                     FileCtx
             end;
         false ->

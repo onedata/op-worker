@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -17,11 +17,6 @@
 
 %% API
 -export([get_routing_key/1, get_stream_key/1, get_stream/1, is_remote/1]).
--export([get_context/1]).
-
--type ctx() :: undefined | {file, file_id:file_guid()}.
-
--export_type([ctx/0]).
 
 %%%===================================================================
 %%% API
@@ -104,29 +99,6 @@ is_remote(#subscription{type = Type}) -> is_remote(Type);
 is_remote(#file_read_subscription{}) -> true;
 is_remote(#file_written_subscription{}) -> true;
 is_remote(_) -> false.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a subscription context.
-%% @end
-%%--------------------------------------------------------------------
--spec get_context(Sub :: subscription:base() | subscription:type()) -> Ctx :: ctx().
-get_context(#subscription{type = Type}) ->
-    get_context(Type);
-get_context(#file_attr_changed_subscription{file_guid = FileGuid}) ->
-    {file, FileGuid};
-get_context(#replica_status_changed_subscription{file_guid = FileGuid}) ->
-    {file, FileGuid};
-get_context(#file_location_changed_subscription{file_guid = FileGuid}) ->
-    {file, FileGuid};
-get_context(#file_perm_changed_subscription{file_guid = FileGuid}) ->
-    {file, FileGuid};
-get_context(#file_removed_subscription{file_guid = FileGuid}) ->
-    {file, FileGuid};
-get_context(#file_renamed_subscription{file_guid = FileGuid}) ->
-    {file, FileGuid};
-get_context(_) ->
-    undefined.
 
 
 %%%===================================================================

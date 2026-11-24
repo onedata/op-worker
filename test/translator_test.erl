@@ -1,7 +1,7 @@
 %%%--------------------------------------------------------------------
 %%% @author Jakub Kudzia
 %%% @author Piotr Ociepka
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -46,8 +46,8 @@ translate_status_from_protobuf_test() ->
 translate_file_block_from_protobuf_test() ->
     {Internal, Protobuf} = get_file_block(0, 0),
     {Internal2, Protobuf2} = get_file_block(32, 2048),
-    ?assertEqual(Internal, clproto_translator:from_protobuf(Protobuf)),
-    ?assertEqual(Internal2, clproto_translator:from_protobuf(Protobuf2)).
+    ?assertEqual(Internal, clproto_common_translator:from_protobuf(Protobuf)),
+    ?assertEqual(Internal2, clproto_common_translator:from_protobuf(Protobuf2)).
 
 translate_events_from_protobuf_test() ->
     {Internal, Protobuf} = get_events(5),
@@ -55,15 +55,15 @@ translate_events_from_protobuf_test() ->
 
 translate_event_from_protobuf_test() ->
     {Internal, Protobuf} = get_event(),
-    ?assertEqual(Internal, clproto_translator:from_protobuf(Protobuf)).
+    ?assertEqual(Internal, clproto_event_translator:from_protobuf(Protobuf)).
 
 translate_read_event_from_protobuf_test() ->
     {Internal, Protobuf} = get_read_event(2, 512, 100, 1024),
-    ?assertEqual(Internal, clproto_translator:from_protobuf(Protobuf)).
+    ?assertEqual(Internal, clproto_event_translator:from_protobuf(Protobuf)).
 
 translate_write_event_from_protobuf_test() ->
     {Internal, Protobuf} = get_write_event(2, 512, 2048, 100, 1024),
-    ?assertEqual(Internal, clproto_translator:from_protobuf(Protobuf)).
+    ?assertEqual(Internal, clproto_event_translator:from_protobuf(Protobuf)).
 
 translate_client_handshake_request_from_protobuf_test() ->
     Token = <<"DUMMY-TOKEN">>,
@@ -193,23 +193,18 @@ translate_events_to_protobuf_test() ->
     ).
 
 translate_event_to_protobuf_test() ->
-    ?assertEqual(#'Event'{}, clproto_translator:to_protobuf(#event{})).
-
-translate_subscription_cancellation_to_protobuf_test() ->
-    ?assertEqual({subscription_cancellation, #'SubscriptionCancellation'{id = 42}},
-        clproto_translator:to_protobuf(#subscription_cancellation{id = <<"42">>})
-    ).
+    ?assertEqual(#'Event'{}, clproto_event_translator:to_protobuf(#event{})).
 
 translate_subscription_to_protobuf_test() ->
     ?assertEqual({subscription, #'Subscription'{id = 123}},
-        clproto_translator:to_protobuf(#subscription{id = <<"123">>})
+        clproto_subscription_translator:to_protobuf(#subscription{id = <<"123">>})
     ).
 
 translate_read_subscription_to_protobuf_test() ->
     ?assertEqual({file_read, #'FileReadSubscription'{
         counter_threshold = 12,
         time_threshold = 500
-    }}, clproto_translator:to_protobuf(#file_read_subscription{
+    }}, clproto_subscription_translator:to_protobuf(#file_read_subscription{
         counter_threshold = 12,
         time_threshold = 500
     })).
@@ -218,7 +213,7 @@ translate_write_subscription_to_protobuf_test() ->
     ?assertEqual({file_written, #'FileWrittenSubscription'{
         counter_threshold = 12,
         time_threshold = 500
-    }}, clproto_translator:to_protobuf(#file_written_subscription{
+    }}, clproto_subscription_translator:to_protobuf(#file_written_subscription{
         counter_threshold = 12,
         time_threshold = 500
     })).

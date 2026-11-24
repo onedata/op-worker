@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -103,7 +103,7 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
                     ok;
                 false when TruncateToZero ->
                     ?lfm_check(lfm:truncate(SessionId, FileRef, 0)),
-                    ?lfm_check(lfm:fsync(SessionId, FileRef, oneprovider:get_id()));
+                    ?lfm_check(lfm:fsync(SessionId, FileRef));
                 false ->
                     throw(?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"file is not empty">>))
             end,

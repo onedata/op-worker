@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2015-2021 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -57,7 +57,7 @@
     create/2, create/3, create/4,
     create_and_open/4, create_and_open/5,
     open/3, monitored_open/3,
-    fsync/1, fsync/3,
+    fsync/1, fsync/2,
     sync_block/4,
     write/3, read/3,
     check_size_and_read/3,
@@ -346,10 +346,10 @@ fsync(FileHandle) ->
 %% Flushes waiting events for session connected with handler.
 %% @end
 %%--------------------------------------------------------------------
--spec fsync(session:id(), file_key(), oneprovider:id()) ->
+-spec fsync(session:id(), file_key()) ->
     ok | {error, Reason :: term()}.
-fsync(SessId, FileKey, ProviderId) ->
-    ?run(lfm_files:fsync(SessId, FileKey, ProviderId)).
+fsync(SessId, FileKey) ->
+    ?run(lfm_files:fsync(SessId, FileKey)).
 
 
 -spec sync_block(session:id(), lfm:file_key(), fslogic_blocks:block(), 0..255) ->
@@ -611,4 +611,5 @@ check_result({ok, _} = Res) -> Res;
 check_result({ok, _, _} = Res) -> Res;
 check_result({ok, _, _, _} = Res) -> Res;
 check_result(?ERROR_NOT_FOUND = ErrorNotFound) -> throw(ErrorNotFound);
+check_result({error, #od_error{}} = Error) -> throw(Error);
 check_result({error, Errno}) -> throw(?ERR_POSIX(?err_ctx(), Errno)).

@@ -1,12 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module handling translations between protobuf and internal protocol.
+%%% These records are parts of other messages and are translated in the
+%%% directions those messages travel.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_common_translator).
@@ -60,8 +62,6 @@ from_protobuf(#'IpAndPort'{
 }) ->
     {ok, IP} = inet:parse_ipv4strict_address(binary_to_list(IpString)),
     #ip_and_port{ip = IP, port = Port};
-from_protobuf(#'Dir'{uuid = UUID}) ->
-    #dir{guid = UUID};
 from_protobuf(#'Parameter'{
     key = Key,
     value = Value

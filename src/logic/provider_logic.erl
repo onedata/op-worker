@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @copyright (C) 2017-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -38,7 +38,7 @@
 -export([get_storages/0, get_storages/1]).
 -export([has_storage/1]).
 -export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
--export([supports_space/1]).
+-export([supports_space/1, cosupports_any_space/1]).
 -export([get_support_size/1]).
 -export([map_idp_user_to_onedata/2, map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
@@ -316,6 +316,15 @@ supports_space(SpaceId) ->
     % NOTE: this function is the only source of truth regarding local support
     % (combines all necessary checks)
     space_logic:is_supported_locally(SpaceId).
+
+
+-spec cosupports_any_space(od_provider:id()) -> boolean().
+cosupports_any_space(ProviderId) ->
+    % Call by ?MODULE so that the envup tests' mock of get_spaces/0 applies
+    {ok, Spaces} = ?MODULE:get_spaces(),
+    lists:any(fun(SpaceId) ->
+        space_logic:is_supported_by(SpaceId, ProviderId)
+    end, Spaces).
 
 
 -spec get_support_size(od_space:id()) -> {ok, integer()} | {error, term()}.

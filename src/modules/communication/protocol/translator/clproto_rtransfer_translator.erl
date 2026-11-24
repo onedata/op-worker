@@ -1,12 +1,15 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module handling translations between protobuf and internal protocol.
+%%% The connection secret travels between providers, and op-worker both sends
+%%% and receives it, so it is translated in both directions; a request for
+%%% node IPs is only answered.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_rtransfer_translator).

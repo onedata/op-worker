@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @copyright (C) 2017-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -20,7 +20,9 @@
 -export([report_file_access_operation/3]).
 -export([mask_data_in_message/1]).
 
--type logged_record() :: fslogic_worker:request() | fuse_request_type() | file_request_type() | proxyio_request_type().
+% ACL changes come from middleware_worker
+-type request() :: fslogic_worker:request() | middleware_worker:file_perms_operation().
+-type logged_record() :: request() | fuse_request_type() | file_request_type() | proxyio_request_type().
 
 -define(MAX_BINARY_DATA_SIZE, 32).
 
@@ -28,7 +30,7 @@
 %%% API
 %%%===================================================================
 
--spec report_file_access_operation(fslogic_worker:request(), od_user:id(), file_ctx:ctx() | undefined) ->
+-spec report_file_access_operation(request(), od_user:id(), file_ctx:ctx() | undefined) ->
     ok.
 report_file_access_operation(Request, UserId, FileCtx) ->
     case op_worker:get_env(file_access_audit_log_enabled, false) of
@@ -74,7 +76,7 @@ mask_data_in_message(Message) ->
 %%%===================================================================
 
 %% @private
--spec append_to_audit_log(fslogic_worker:request(), od_user:id(), file_ctx:ctx() | undefined) ->
+-spec append_to_audit_log(request(), od_user:id(), file_ctx:ctx() | undefined) ->
     ok.
 append_to_audit_log(Request, UserId, undefined) ->
     append_to_audit_log(Request, UserId, null, null, null);
@@ -92,7 +94,7 @@ append_to_audit_log(Request, UserId, FileCtx) ->
 
 
 -spec append_to_audit_log(
-    fslogic_worker:request(),
+    request(),
     od_user:id(),
     file_meta:uuid() | null,
     od_share:id() | null,

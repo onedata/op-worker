@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -255,7 +255,7 @@ renew_connections(#state{
     renewal_timer = undefined
 } = State0) ->
     try
-        case cosupports_any_space(PeerId) of
+        case provider_logic:cosupports_any_space(PeerId) of
             true ->
                 renew_connections_insecure(State0);
             false ->
@@ -386,12 +386,3 @@ log_error(#state{peer_id = PeerId}, ReasonString) ->
             ReasonString
         ]
     ).
-
-
-%% @private
--spec cosupports_any_space(od_provider:id()) -> boolean().
-cosupports_any_space(ProviderId) ->
-    {ok, Spaces} = provider_logic:get_spaces(),
-    lists:any(fun(SpaceId) ->
-        space_logic:is_supported_by(SpaceId, ProviderId)
-    end, Spaces).

@@ -1,14 +1,14 @@
 %%%--------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module implements worker_plugin_behaviour callbacks.
-%%% Also it decides whether request has to be handled locally or rerouted
-%%% to other provider.
+%%% Also it refuses requests concerning files of spaces this provider doesn't
+%%% support (see assert_request_can_be_handled_locally/2).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_worker).
@@ -163,8 +163,13 @@ is_storage_accessible(FileCtx) ->
                     true;
                 false ->
                     SpaceId = file_ctx:get_space_id_const(FileCtx),
-                    {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
-                    not lists:member(StorageId, Storages)
+                    case space_logic:get_local_supporting_storage(SpaceId) of
+                        {ok, StorageId} ->
+                            not lists:member(StorageId, Storages);
+                        % a space with no local storage has none that could be unhealthy
+                        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
+                            true
+                    end
             end
     end.
 
@@ -352,9 +357,8 @@ handle_request_and_process_response(SessId, Request) ->
 
         EffLocalUserCtx = infer_eff_user_ctx(OriginalUserCtx, Request, FilePartialCtx),
 
-        OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
-        handle_request_and_process_response_insecure(
-            OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
+        handle_request_and_process_response_unsafe(
+            OriginalUserCtx, EffLocalUserCtx, Request, FilePartialCtx
         )
     catch Type:Error:Stacktrace ->
         fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
@@ -419,19 +423,20 @@ get_operation_name(#proxyio_request{proxyio_request = Req}) ->
 
 
 %% @private
--spec handle_request_and_process_response_insecure(
-    od_user:id(), user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined
+-spec handle_request_and_process_response_unsafe(
+    user_ctx:ctx(), user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined
 ) ->
     response().
-handle_request_and_process_response_insecure(OriginalUserId, EffUserCtx, Request, FilePartialCtx) ->
+handle_request_and_process_response_unsafe(OriginalUserCtx, EffUserCtx, Request, FilePartialCtx) ->
     FileCtx1 = case FilePartialCtx of
         undefined ->
             undefined;
         _ ->
             {FileCtx0, _SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
-            assert_request_can_be_handled_locally(FileCtx0, Request),
+            assert_request_can_be_handled_locally(OriginalUserCtx, FileCtx0, Request),
             FileCtx0
     end,
+    OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
     ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
 
     case is_operation_allowed_by_special_dir_logic(FileCtx1, Request) of
@@ -446,20 +451,30 @@ handle_request_and_process_response_insecure(OriginalUserId, EffUserCtx, Request
 
 
 %% @private
--spec assert_request_can_be_handled_locally(file_ctx:ctx(), request()) -> ok | no_return().
-assert_request_can_be_handled_locally(FileCtx, Request) ->
+-spec assert_request_can_be_handled_locally(user_ctx:ctx(), file_ctx:ctx(), request()) ->
+    ok | no_return().
+assert_request_can_be_handled_locally(UserCtx, FileCtx, Request) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     case space_dir:is_special(guid, FileGuid) andalso can_handle_remote_space_operation(Request) of
-        true -> ok;
-        false -> middleware_utils:assert_file_managed_locally(FileGuid)
+        true ->
+            ok;
+        false ->
+            try
+                middleware_utils:assert_file_managed_locally(FileGuid)
+            catch throw:?ERR_SPACE_NOT_SUPPORTED_BY(_, _) = Error ->
+                case user_ctx:get_client_type(UserCtx) of
+                    % OneS3 tells the S3 client that the bucket is served by
+                    % another endpoint; ENXIO is used for nothing else
+                    ones3 -> throw({?ENXIO, <<"Requested space is not supported on this Oneprovider.">>});
+                    _ -> throw(Error)
+                end
+            end
     end.
 
 
 %% @private
 -spec can_handle_remote_space_operation(request()) -> boolean().
-can_handle_remote_space_operation(#fuse_request{fuse_request = #resolve_guid{}}) -> true;
-can_handle_remote_space_operation(#fuse_request{fuse_request = #resolve_guid_by_relative_path{}}) -> true;
-can_handle_remote_space_operation(#fuse_request{fuse_request = #ensure_dir{}}) -> true;
+% OneS3 stats the space dir of a `spaceid-` bucket before it serves the bucket
 can_handle_remote_space_operation(#fuse_request{fuse_request = #file_request{file_request = #get_file_attr{}}}) -> true;
 can_handle_remote_space_operation(_) -> false.
 
