@@ -85,7 +85,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid, RootDirName) ->
         track_subtree_status => true,
         children_master_jobs_mode => async,
         tune_for_large_continuous_listing  => false,
-        % NOTE: do not use RootDir path, as file is already moved to trash
+        % NOTE: do not use RootDir path, as the file may already be moved to trash
         initial_relative_path => filename:join(ParentPath, RootDirName),
         listing_errors_handling_policy => propagate_unknown,
         additional_data => #{

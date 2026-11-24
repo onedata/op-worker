@@ -16,7 +16,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([new_doc/5, readlink/1]).
+-export([new_doc/6, readlink/1]).
 
 -type symlink() :: file_meta:path().
 -export_type([symlink/0]).
@@ -26,8 +26,9 @@
 %%% API
 %%%===================================================================
 
--spec new_doc(file_meta:name(), file_meta:uuid(), od_space:id(), od_user:id(), symlink()) -> file_meta:doc().
-new_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
+-spec new_doc(file_meta:name(), file_meta:uuid(), od_space:id(), od_user:id(), symlink(),
+    file_meta_forest:parent_sync_mode()) -> file_meta:doc().
+new_doc(Name, ParentUuid, SpaceId, Owner, Link, ParentSyncMode) ->
     #document{
         key = fslogic_file_id:gen_symlink_uuid(),
         value = #file_meta{
@@ -39,7 +40,8 @@ new_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
             provider_id = oneprovider:get_id(),
             symlink_value = Link
         },
-        scope = SpaceId
+        scope = SpaceId,
+        ignore_in_changes = ParentSyncMode =:= not_synced_parent
     }.
 
 -spec readlink(file_meta:doc() | file_meta:uuid()) -> {ok, symlink()} | {error, term()}.
