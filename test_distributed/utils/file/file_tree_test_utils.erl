@@ -40,7 +40,7 @@
     gen_nested_tree_spec/2,
     create_file_tree/4,
     create_and_sync_file_tree/3, create_and_sync_file_tree/4,
-    mv_and_sync_file/3, rm_and_sync_file/2, await_file_metadata_sync/3, prepare_symlink_value/3
+    mv_and_sync_file/3, rm_and_sync_file/2, await_sync/4, await_file_metadata_sync/3, prepare_symlink_value/3
 ]).
 -export([get_object_attributes/3]).
 -type share_spec() :: #share_spec{}.
@@ -498,7 +498,6 @@ create_shares(UserId, CreationProvider, SessId, FileGuid, ShareSpecs) ->
     {lists:sort(Shares), HandlePerShare}.
 
 
-%% @private
 -spec await_sync(oct_background:entity_selector(), [oct_background:entity_selector()], od_user:id(), object()) ->
     ok | no_return().
 await_sync(CreationProvider, SyncProviders, UserId, #object{
@@ -745,8 +744,7 @@ create_symlink(Node, SessId, ParentGuid, FileName, SymlinkValue) ->
 -spec create_hardlink(node(), session:id(), file_id:file_guid(), file_meta:name(), file_id:file_guid()) ->
     {ok, #file_attr{}} | no_return().
 create_hardlink(Node, SessId, ParentGuid, FileName, TargetGuid) ->
-    {ok, ParentPath} = lfm_proxy:get_file_path(Node, SessId, ParentGuid),
-    ?assertMatch({ok, _}, lfm_proxy:make_link(Node, SessId, filename:join(ParentPath, FileName), TargetGuid)).
+    ?assertMatch({ok, _}, lfm_proxy:make_link(Node, SessId, ?FILE_REF(TargetGuid), ?FILE_REF(ParentGuid), FileName)).
 
 
 %% @private

@@ -106,7 +106,7 @@ delete_hidden_hardlink_for_opened_deleted_file(FileCtx) ->
         case file_meta_hardlinks:list_references(FileUuid) of
             {ok, [LinkUuid | _]} ->
                 file_meta_hardlinks:deregister(FileUuid, LinkUuid),
-                file_meta:delete(LinkUuid),
+                file_meta:delete(LinkUuid, not_synced_parent),
                 LinkUuid;
             {ok, []} ->
                 undefined

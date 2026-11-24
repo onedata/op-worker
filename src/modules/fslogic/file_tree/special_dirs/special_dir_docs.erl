@@ -24,7 +24,7 @@
 %%% API
 %%%===================================================================
 
--spec create(od_space:id(), file_meta:doc(), add_link | no_link) -> created | exists.
+-spec create(od_space:id(), file_meta:doc(), add_link | add_not_synced_link | no_link) -> created | exists.
 create(SpaceId, #document{key = Uuid, value = #file_meta{name = Name, parent_uuid = ParentUuid} = FM} = Doc, LinkPolicy) ->
     FinalDoc = Doc#document{value = FM#file_meta{provider_id = oneprovider:get_id()}},
     % using update with default to avoid side effects of file_meta:create/2
@@ -36,7 +36,8 @@ create(SpaceId, #document{key = Uuid, value = #file_meta{name = Name, parent_uui
             exists
     end,
     case LinkPolicy of
-        add_link -> ensure_parent_link(ParentUuid, SpaceId, Name, Uuid);
+        add_link -> add_parent_link(ParentUuid, SpaceId, synced_parent, Name, Uuid);
+        add_not_synced_link -> add_parent_link(ParentUuid, SpaceId, not_synced_parent, Name, Uuid);
         no_link -> ok
     end,
     Result.
@@ -44,9 +45,19 @@ create(SpaceId, #document{key = Uuid, value = #file_meta{name = Name, parent_uui
 
 -spec ensure_parent_link(file_meta:uuid(), od_space:id(), file_meta:name(), file_meta:uuid()) -> ok.
 ensure_parent_link(ParentUuid, SpaceId, Name, Uuid) ->
-    ok = ?ok_if_exists(?extract_ok(file_meta_forest:add(ParentUuid, SpaceId, Name, Uuid))).
+    add_parent_link(ParentUuid, SpaceId, synced_parent, Name, Uuid).
 
 
 -spec delete_parent_link(file_meta:uuid(), od_space:id(), file_meta:name(), file_meta:uuid()) -> ok.
 delete_parent_link(ParentUuid, SpaceId, Name, Uuid) ->
     ok = ?ok_if_not_found(file_meta_forest:delete(ParentUuid, SpaceId, Name, Uuid)).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec add_parent_link(file_meta:uuid(), od_space:id(), file_meta_forest:parent_sync_mode(), file_meta:name(),
+    file_meta:uuid()) -> ok.
+add_parent_link(ParentUuid, SpaceId, ParentSyncMode, Name, Uuid) ->
+    ok = ?ok_if_exists(?extract_ok(file_meta_forest:add(ParentUuid, SpaceId, ParentSyncMode, Name, Uuid))).

@@ -24,7 +24,7 @@
 -include_lib("ctool/include/onedata.hrl").
 
 -export([save/1, create/2, save/2, get/1, exists/1, update/2, update/3, update_including_deleted/2]).
--export([delete/1, delete_without_link/1]).
+-export([delete/1, delete/2, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
 -export([get_protection_flags/1]).
@@ -40,7 +40,7 @@
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    new_doc/7, new_doc/8, new_dir_doc/6, get_ancestors/1, get_locations_by_uuid/1, rename/4, ensure_synced/1,
+    new_doc/7, new_doc/8, new_dir_doc/6, get_ancestors/1, get_locations_by_uuid/1, rename/4, rename/6, ensure_synced/1,
     get_owner/1, get_type/1, get_effective_type/1, get_mode/1
 ]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, is_disambiguated/1, is_deleted/1]).
@@ -136,13 +136,15 @@ create(Parent, FileDoc) ->
 -spec create({uuid, ParentUuid :: uuid()}, doc(), datastore:tree_ids()) ->
     {ok, doc()} | {error, term()}.
 create({uuid, ParentUuid}, FileDoc = #document{
-    value = FileMeta = #file_meta{name = FileName},
-    ignore_in_changes = IgnoreInChanges
+    value = FileMeta = #file_meta{name = FileName}
 }, TreesToCheck) ->
     ?run(begin
         onedata_file:is_valid_filename(FileName) orelse error({error, ?EINVAL}),
         FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
+        ParentSyncMode = file_meta_forest:parent_sync_mode(ParentDoc),
+        % a file is synced exactly when its parent's children links are
+        file_meta_forest:parent_sync_mode(FileDoc2) =:= ParentSyncMode orelse error({error, ?EINVAL}),
         {ok, ParentScopeId} = get_scope_id(ParentDoc),
         {ok, ScopeId} = get_scope_id(FileDoc2),
         ScopeId2 = utils:ensure_defined(ScopeId, ParentScopeId),
@@ -158,7 +160,9 @@ create({uuid, ParentUuid}, FileDoc = #document{
         % (names are checked for conflicts, not uuids)
         case file_meta:save(FileDoc3) of
             {ok, FileDocFinal = #document{key = FileUuid}} ->
-                case file_meta_forest:check_and_add(ParentUuid, ParentScopeId, IgnoreInChanges, TreesToCheck, FileName, FileUuid) of
+                case file_meta_forest:check_and_add(
+                    ParentUuid, ParentScopeId, ParentSyncMode, TreesToCheck, FileName, FileUuid
+                ) of
                     ok ->
                         {ok, FileDocFinal};
                     {error, already_exists} = Eexists ->
@@ -179,7 +183,9 @@ create({uuid, ParentUuid}, FileDoc = #document{
                                                 "Stalled file_meta link ~tp from parent ~tp pointing to deleted uuid ~tp "
                                                 "detected while creating uuid ~tp. The link will be deleted",
                                                 [FileName, ParentUuid, Uuid, FileUuid]),
-                                            file_meta_forest:delete_local(ParentUuid, ParentScopeId, FileName, Rev),
+                                            file_meta_forest:delete_local(
+                                                ParentUuid, ParentScopeId, ParentSyncMode, FileName, Rev
+                                            ),
                                             false;
                                         _ ->
                                             not Deleted
@@ -316,12 +322,23 @@ update_including_deleted(Key, Diff) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes file meta.
+%% Deletes file meta of a file whose parent's children links are synced
+%% (any file outside the tmp dir's subtree). See delete/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(uuid() | entry()) -> ok | {error, term()}.
-delete({uuid, FileUuid}) ->
-    delete(FileUuid);
+delete(FileEntry) ->
+    delete(FileEntry, synced_parent).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes file meta together with its link in the parent's forest.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(uuid() | entry(), file_meta_forest:parent_sync_mode()) -> ok | {error, term()}.
+delete({uuid, FileUuid}, ParentSyncMode) ->
+    delete(FileUuid, ParentSyncMode);
 delete(#document{
     key = FileUuid,
     scope = Scope,
@@ -329,20 +346,20 @@ delete(#document{
         name = FileName,
         parent_uuid = ParentUuid
     }
-}) ->
+}, ParentSyncMode) ->
     ?run(begin
-        ok = file_meta_forest:delete(ParentUuid, Scope, FileName, FileUuid),
+        ok = file_meta_forest:delete(ParentUuid, Scope, ParentSyncMode, FileName, FileUuid),
         delete_without_link(FileUuid)
     end);
-delete({path, Path}) ->
+delete({path, Path}, ParentSyncMode) ->
     ?run(begin
         {ok, #document{} = Doc} = canonical_path:resolve(Path),
-        delete(Doc)
+        delete(Doc, ParentSyncMode)
     end);
-delete(FileUuid) ->
+delete(FileUuid, ParentSyncMode) ->
     ?run(begin
         case file_meta:get(FileUuid) of
-            {ok, #document{} = Doc} -> delete(Doc);
+            {ok, #document{} = Doc} -> delete(Doc, ParentSyncMode);
             {error, not_found} -> ok
         end
     end).
@@ -509,17 +526,32 @@ get_locations_by_uuid(FileUuid) ->
 %% Rename file_meta and change link targets
 %% @end
 %%--------------------------------------------------------------------
--spec rename(doc(), doc() | uuid(), doc() | uuid(), name()) -> ok.
-rename(SourceDoc, #document{key = SourceParentUuid}, #document{key = TargetParentUuid}, TargetName) ->
-    rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName);
-rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
+-spec rename(doc(), SourceParentDoc :: doc(), TargetParentDoc :: doc(), name()) -> ok.
+rename(SourceDoc, #document{key = SourceParentUuid} = SourceParentDoc,
+    #document{key = TargetParentUuid} = TargetParentDoc, TargetName
+) ->
+    rename(SourceDoc, SourceParentUuid, file_meta_forest:parent_sync_mode(SourceParentDoc),
+        TargetParentUuid, file_meta_forest:parent_sync_mode(TargetParentDoc), TargetName).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Rename file_meta and change link targets. Links are added/deleted according
+%% to the sync mode of the respective parent.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename(doc(), SourceParentUuid :: uuid(), SourceParentSyncMode :: file_meta_forest:parent_sync_mode(),
+    TargetParentUuid :: uuid(), TargetParentSyncMode :: file_meta_forest:parent_sync_mode(), name()) -> ok.
+rename(SourceDoc, SourceParentUuid, SourceParentSyncMode,
+    TargetParentUuid, TargetParentSyncMode, TargetName
+) ->
     #document{
         key = FileUuid,
         value = #file_meta{name = FileName, type = Type},
         scope = Scope
     } = SourceDoc,
-    ok = file_meta_forest:add(TargetParentUuid, Scope, TargetName, FileUuid),
-    ok = file_meta_forest:delete(SourceParentUuid, Scope, FileName, FileUuid),
+    ok = file_meta_forest:add(TargetParentUuid, Scope, TargetParentSyncMode, TargetName, FileUuid),
+    ok = file_meta_forest:delete(SourceParentUuid, Scope, SourceParentSyncMode, FileName, FileUuid),
     {ok, TargetDoc} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{
             name = TargetName,

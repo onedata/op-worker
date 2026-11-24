@@ -129,7 +129,7 @@ stages:
         - file_lfm_posix
         - file_lfm_s3
         - file_lifecycle_races
-        - file_links_reconciliation_traverse
+        - file_meta_links_sync
         - file_popularity
         - file_registration_http
         - file_registration_s3
@@ -1033,12 +1033,12 @@ file_lifecycle_races:
     - <<: *ct_logs
       name: ct_logs_file_lifecycle_races.tar.gz
 
-file_links_reconciliation_traverse:
+file_meta_links_sync:
   <<: *ct-onenv-job
   key: FLRECTR
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_file_links_reconciliation_traverse.tar.gz
+      name: ct_logs_file_meta_links_sync.tar.gz
   requirements: *os-agent
 
 file_popularity:
@@ -1962,7 +1962,7 @@ Coverage report:
     - artifact: ct_logs_file_lfm_posix.tar.gz
     - artifact: ct_logs_file_lfm_s3.tar.gz
     - artifact: ct_logs_file_lifecycle_races.tar.gz
-    - artifact: ct_logs_file_links_reconciliation_traverse.tar.gz
+    - artifact: ct_logs_file_meta_links_sync.tar.gz
     - artifact: ct_logs_file_popularity.tar.gz
     - artifact: ct_logs_file_registration_http.tar.gz
     - artifact: ct_logs_file_registration_s3.tar.gz
