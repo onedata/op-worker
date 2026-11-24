@@ -66,14 +66,29 @@ delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
 delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
     {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx, UserCtx),
     {Filename, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
-    FileCtx4 = trash_dir:move_to_trash(FileCtx3, UserCtx),
-    {ok, _} = trash_dir:schedule_deletion_from_trash(FileCtx4, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid), Filename),
+    FileCtx4 = move_to_trash_if_synced(FileCtx3, UserCtx),
+    {ok, _} = trash_dir:schedule_deletion_from_trash(
+        FileCtx4, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid), Filename
+    ),
     ?FUSE_OK_RESP.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec move_to_trash_if_synced(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
+move_to_trash_if_synced(FileCtx, UserCtx) ->
+    case file_ctx:is_synchronization_enabled(FileCtx) of
+        {true, FileCtx2} ->
+            trash_dir:move_to_trash(FileCtx2, UserCtx);
+        {false, FileCtx2} ->
+            % TODO VFS-12134 a not synced dir is deleted where it is, as its link in the
+            % trash would be synced - handle together with the move rework
+            FileCtx2
+    end.
 
 
 %%--------------------------------------------------------------------
